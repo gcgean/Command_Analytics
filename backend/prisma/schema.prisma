@@ -1,0 +1,432 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// USUÁRIOS → tabela: usuario
+// Colunas novas (analytics): email_analytics, senha_analytics, cargo_analytics, avatar_analytics
+// Colunas existentes: NÃO MODIFICADAS
+// ============================================================
+model Usuario {
+  id                Int      @id @map("COD_USU")
+  nomeUsu           String?  @map("NOME_USU") @db.VarChar(50)
+  nomeCompleto      String?  @map("NOME_USUARIO_COMPLETO") @db.VarChar(100)
+  nomePlataforma    String?  @map("NOME_PLATAFORMA") @db.VarChar(60)
+  senhaOriginal     String?  @map("SENHA") @db.VarChar(80)
+  codGrupo          Int?     @map("COD_GRUPO")
+  ativo             String?  @default("S") @map("ATIVO") @db.Char(1)
+  telefone          String?  @map("TELEFONE_USUARIO") @db.VarChar(100)
+  // ── Campos NOVOS adicionados para a plataforma analytics ──
+  email             String?  @unique @map("email_analytics") @db.VarChar(100)
+  senha             String?  @map("senha_analytics") @db.VarChar(255)
+  cargo             String?  @map("cargo_analytics") @db.VarChar(100)
+  avatar            String?  @map("avatar_analytics") @db.VarChar(500)
+
+  atendimentosTecnico Atendimento[]          @relation("Tecnico")
+  agendaItens         AgendaItem[]           @relation("TecnicoAgenda")
+  negocios            Negocio[]              @relation("ResponsavelNegocio")
+  comissoes           Comissao[]             @relation("VendedorComissao")
+  pipelineItems       PipelineItem[]         @relation("ResponsavelPipeline")
+  disponibilidade     TecnicoDisponibilidade?
+  agendamentosProg    AgendamentoProgramado[] @relation("TecnicoAgendamentoProg")
+
+  @@map("usuario")
+}
+
+// ============================================================
+// CLIENTES → tabela: cliente
+// ============================================================
+model Cliente {
+  id                    Int      @id @map("cod_cli")
+  nome                  String?  @map("NOME_FANTASIA") @db.VarChar(60)
+  nomeRazao             String?  @map("NOME_CLI") @db.VarChar(60)
+  cnpj                  String?  @map("CNPJ_CLI") @db.VarChar(18)
+  cidade                String?  @map("CIDRES_CLI") @db.VarChar(30)
+  uf                    String?  @map("ESTRES_CLI") @db.Char(2)
+  telefone              String?  @map("CELULAR_CLI") @db.VarChar(13)
+  email                 String?  @map("EMAIL_CLI") @db.VarChar(100)
+  ativo                 String?  @default("S") @map("ATIVO") @db.Char(1)
+  bloqueado             String?  @default("N") @map("BLOQUEADO_CLI") @db.Char(1)
+  curvaABC              String?  @map("Curva") @db.VarChar(1)
+  mensalidade           Decimal? @map("valor_mensalidade") @db.Decimal(10, 2)
+  dataContrato          DateTime? @map("DATACADASTRO_CLI") @db.Date
+  responsavel           String?  @map("nome_responsavel") @db.VarChar(100)
+  telefoneResponsavel   String?  @map("telefone_responsavel") @db.VarChar(100)
+  idSegmento            Int?     @map("id_segmento")
+  idRegime              Int?     @map("id_regime")
+  idPlano               Int?     @map("id_plano_principal")
+  contadorId            Int?     @map("COD_CON")
+  observacoes           String?  @map("OBS_CLI") @db.VarChar(20000)
+  statusInstal          Int?     @map("STATUS_INSTAL")
+
+  atendimentos     Atendimento[]
+  agendaItens      AgendaItem[]
+  assinaturas      Assinatura[]
+  pipelineItens    PipelineItem[]
+  comissoes        Comissao[]             @relation("ClienteComissao")
+  negocios         Negocio[]              @relation("ClienteNegocio")
+  contador         Contador?              @relation(fields: [contadorId], references: [id])
+  tarefas          Tarefa[]
+  agendamentosProg AgendamentoProgramado[]
+
+  @@map("cliente")
+}
+
+// ============================================================
+// ATENDIMENTOS → tabela: atendimentos
+// ============================================================
+model Atendimento {
+  id               Int      @id @default(autoincrement()) @map("id_Atend")
+  clienteId        Int?     @map("cod_cli")
+  cliente          Cliente? @relation(fields: [clienteId], references: [id])
+  tecnicoId        Int?     @map("cod_tecnico")
+  tecnico          Usuario? @relation("Tecnico", fields: [tecnicoId], references: [id])
+  departamento     Int?
+  tipoContato      Int?     @map("tipo_contato_cli")
+  status           Int?     @default(1) @map("Status_Atendimento")
+  prioridade       String?  @map("Prioridade") @db.Char(1)
+  bugSistema       String?  @default("") @map("bug_sistema") @db.Char(1)
+  foraHorario      String?  @default("") @map("Atendimento_Fora_horario") @db.Char(1)
+  observacoes      String?  @map("Obs_Atendimento") @db.VarChar(5000)
+  solucao          String?  @db.VarChar(2000)
+  dataAbertura     DateTime? @map("data_hora_lanc")
+  dataFechamento   DateTime? @map("Data_hora_finalizacao")
+  tempoAtendimento Int?     @map("TEMPO_ATEND")
+  protocolo        String?  @db.VarChar(50)
+
+  @@map("atendimentos")
+}
+
+// ============================================================
+// AGENDA → tabela: agenda
+// ============================================================
+model AgendaItem {
+  id           Int      @id @default(autoincrement()) @map("cod_agenda")
+  clienteId    Int?     @map("cod_cli")
+  cliente      Cliente? @relation(fields: [clienteId], references: [id])
+  tecnicoId    Int?     @map("cod_colaborador")
+  tecnico      Usuario? @relation("TecnicoAgenda", fields: [tecnicoId], references: [id])
+  tipo         String?  @map("Tipo") @db.VarChar(20)
+  status       Int?     @default(1) @map("Status_agendamento")
+  data         DateTime? @map("data_agendamento") @db.Date
+  horarioIni   DateTime? @map("hora_ini") @db.Time(0)
+  horarioFim   DateTime? @map("hora_fin") @db.Time(0)
+  observacoes  String?  @map("descricao") @db.VarChar(2000)
+
+  @@map("agenda")
+}
+
+// ============================================================
+// ASSINATURAS → tabela: cliente_assinaturas
+// ============================================================
+model Assinatura {
+  id             Int      @id @default(autoincrement())
+  clienteId      Int?     @map("id_cli")
+  cliente        Cliente? @relation(fields: [clienteId], references: [id])
+  formaPagamento Int?     @map("forma_pagamento")
+  valor          Decimal? @db.Decimal(18, 2)
+  vencimento     Int?     @map("dia_vencimento")
+  periodicidade  Int?
+  dataInicio     DateTime? @map("data_primeiro_vencimento") @db.Date
+  status         String?  @map("descricao") @db.VarChar(1000)
+  dataCriacao    DateTime? @map("data_hora_criacao")
+
+  @@map("cliente_assinaturas")
+}
+
+// ============================================================
+// PIPELINE / IMPLANTAÇÃO → tabela: processo_implantacao
+// ============================================================
+model PipelineItem {
+  id             Int      @id @default(autoincrement())
+  clienteId      Int?     @map("id_cli")
+  cliente        Cliente? @relation(fields: [clienteId], references: [id])
+  etapa          Int?     @map("status")
+  responsavelId  Int?     @map("id_negocio")
+  responsavel    Usuario? @relation("ResponsavelPipeline", fields: [responsavelId], references: [id])
+  observacoes    String?  @map("obs_treinamento") @db.VarChar(1000)
+
+  @@map("processo_implantacao")
+}
+
+// ============================================================
+// CRM / NEGÓCIOS → tabela: negocios
+// ============================================================
+model Negocio {
+  id              Int      @id @default(autoincrement())
+  nome            String?  @map("titulo") @db.VarChar(100)
+  clienteId       Int?     @map("id_cli")
+  cliente         Cliente? @relation("ClienteNegocio", fields: [clienteId], references: [id])
+  responsavelId   Int?     @map("id_usu")
+  responsavel     Usuario? @relation("ResponsavelNegocio", fields: [responsavelId], references: [id])
+  empresa         String?  @map("usuario") @db.VarChar(50)
+  status          Int?     @default(0)
+  dataCriacao     DateTime? @map("data_hora_inicio")
+  dataFechamento  DateTime? @map("data_hora_conclusao")
+  etapaId         Int?     @map("id_etapa")
+  etapa           String?  @db.VarChar(50)
+  funilId         Int?     @map("id_funil")
+  funil           String?  @db.VarChar(50)
+  descricao       String?  @db.VarChar(200)
+
+  @@map("negocios")
+}
+
+// ============================================================
+// LEADS → tabela: pesquisa_leads
+// ============================================================
+model Lead {
+  id           Int      @id @default(autoincrement()) @map("id_pesq_leads")
+  nome         String?  @map("nome_cliente") @db.VarChar(100)
+  cnpj         String?  @map("CNPJ_CLI") @db.VarChar(18)
+  empresa      String?  @map("nome_sistema") @db.VarChar(100)
+  contador     String?  @db.VarChar(100)
+  segmento     String?  @map("seguimento") @db.VarChar(100)
+  cidade       String?  @db.VarChar(100)
+  observacoes  String?  @map("observacao") @db.VarChar(200)
+  dataCadastro DateTime? @map("data_pesquisa") @db.Date
+
+  @@map("pesquisa_leads")
+}
+
+// ============================================================
+// FINANCEIRO / COMISSÕES → tabela: comissoes_funcionario
+// ============================================================
+model Comissao {
+  id            Int      @id @default(autoincrement())
+  vendedorId    Int?     @map("cod_func")
+  vendedor      Usuario? @relation("VendedorComissao", fields: [vendedorId], references: [id])
+  clienteId     Int?     @map("cod_cli")
+  cliente       Cliente? @relation("ClienteComissao", fields: [clienteId], references: [id])
+  descricao     String?  @db.VarChar(100)
+  valor         Float?   @map("valor_comissao")
+  valorOperacao Float?   @map("Valor_operacao")
+  dataVenda     DateTime? @map("data_venda") @db.Date
+
+  @@map("comissoes_funcionario")
+}
+
+// ============================================================
+// VÍDEOS → tabela: videos
+// ============================================================
+model Video {
+  id           Int      @id @default(autoincrement())
+  titulo       String   @db.VarChar(200)
+  descricao    String?  @db.VarChar(1000)
+  url          String   @map("link") @db.VarChar(1000)
+  tipo         Int?     @default(0)
+  categoriaId  Int?     @map("categoria_id")
+  colaboradorId Int?    @map("colaborador_id")
+  data         DateTime? @db.Date
+  // Novo campo adicionado
+  visualizacoes Int?    @default(0)
+
+  categoria    CategoriaVideo? @relation(fields: [categoriaId], references: [id])
+  colaborador  Colaborador?    @relation(fields: [colaboradorId], references: [id])
+
+  @@map("videos")
+}
+
+model CategoriaVideo {
+  id        Int     @id @default(autoincrement())
+  descricao String  @db.VarChar(100)
+  videos    Video[]
+
+  @@map("categoria_videos")
+}
+
+model Colaborador {
+  id     Int     @id @default(autoincrement())
+  nome   String  @db.VarChar(100)
+  videos Video[]
+
+  @@map("colaboradores")
+}
+
+// ============================================================
+// PLANOS → tabela: planos
+// ============================================================
+model Plano {
+  id          Int      @id @default(autoincrement())
+  descricao   String   @db.VarChar(255)
+  ativo       Boolean  @default(true)
+  valor       Decimal  @db.Decimal(18, 2)
+  valorAntigo Decimal? @map("valor_antigo") @db.Decimal(18, 2)
+  detalhes    String?  @db.VarChar(1000)
+  sistemaId   Int?     @map("sistema_id")
+  tipo        Int?     @default(0)
+  percComissao Decimal? @map("perc_comissao") @db.Decimal(18, 2)
+
+  @@map("planos")
+}
+
+// ============================================================
+// CONTADORES → tabela: contador
+// ============================================================
+model Contador {
+  id             Int      @id @map("ID_CONTADOR")
+  nome           String?  @map("RAZAO_SOCIAL") @db.VarChar(200)
+  nomeComercial  String?  @map("NOME_COMERCIAL") @db.VarChar(200)
+  cnpj           String?  @map("CNPJ_CPF") @db.VarChar(18)
+  email          String?  @map("EMAIL") @db.VarChar(200)
+  telefone       String?  @map("TELEFONE") @db.VarChar(50)
+  responsavel    String?  @map("NOME_RESP") @db.VarChar(200)
+  emailResp      String?  @map("EMAIL_RESP") @db.VarChar(200)
+  cidade         String?  @map("CIDADE") @db.VarChar(200)
+  crc            String?  @map("CRC_CONTADOR") @db.VarChar(50)
+
+  clientes       Cliente[]
+
+  @@map("contador")
+}
+
+// ============================================================
+// VERSÕES → tabela: sistema_versoes
+// ============================================================
+model Versao {
+  id             Int      @id @default(autoincrement())
+  sistemaId      Int?     @map("sistema_id")
+  versao         String   @db.VarChar(100)
+  obrigatoria    String?  @db.Char(1)
+  beta           Int?     @default(0)
+  data           DateTime? @db.Date
+
+  notas         NotaVersao[]
+  sistema       Software?  @relation(fields: [sistemaId], references: [id])
+
+  @@map("sistema_versoes")
+}
+
+model NotaVersao {
+  id          Int     @id @default(autoincrement())
+  versaoId    Int     @map("versao_id")
+  descricao   String  @db.VarChar(1000)
+  segmentoId  Int?    @map("segmento_id")
+  versao      Versao  @relation(fields: [versaoId], references: [id])
+
+  @@map("notas_atualizacao_versao")
+}
+
+model Software {
+  id        Int     @id @map("cod_sof")
+  descricao String  @db.VarChar(80)
+  versoes   Versao[]
+
+  @@map("software")
+}
+
+// ============================================================
+// SERVIDORES → tabela: servidor_nuvem
+// ============================================================
+model Servidor {
+  id              Int      @id @map("id_server_nuvem")
+  nome            String?  @map("nome_servidor") @db.VarChar(100)
+  descricao       String?  @map("descricao_nuvem") @db.VarChar(100)
+  dns             String?  @db.VarChar(100)
+  online          Boolean? @default(false) @map("disponivel")
+  cpuPercent      Decimal? @map("uso_cpu") @db.Decimal(18, 2)
+  ramPercent      Decimal? @map("uso_memoria") @db.Decimal(18, 2)
+  discoTotal      Decimal? @map("espaco_total_disco") @db.Decimal(18, 2)
+  discoLivre      Decimal? @map("espaco_livre_disco") @db.Decimal(18, 2)
+  driveDisco      String?  @map("drive_disco") @db.VarChar(10)
+  anydesk         String?  @db.VarChar(50)
+  desativado      Boolean? @default(false)
+  valor           Float?   @map("valor_nuvem")
+
+  historico HistoricoServidor[]
+
+  @@map("servidor_nuvem")
+}
+
+model HistoricoServidor {
+  id              Int      @id @map("ID_hist_servidor_nuvem")
+  servidorId      Int      @map("id_servidor")
+  online          Int?     @map("Status_on_off")
+  latencia        Decimal? @db.Decimal(18, 2)
+  usoCpu          Decimal? @map("uso_cpu") @db.Decimal(18, 2)
+  usoMemoria      Decimal? @map("uso_memoria") @db.Decimal(18, 2)
+  dataConsulta    DateTime? @map("data_hora_consulta")
+
+  servidor Servidor @relation(fields: [servidorId], references: [id])
+
+  @@map("hist_servidor_nuvem")
+}
+
+// ============================================================
+// TAREFAS → tabela: tarefa
+// ============================================================
+model Tarefa {
+  id                  Int      @id @default(autoincrement()) @map("cod_tar")
+  descricao           String   @map("descricao_tar") @db.VarChar(5000)
+  clienteId           Int?     @map("cod_cli")
+  softwareId          Int?     @map("cod_sof")
+  segmentoId          Int?     @map("cod_seg_sof")
+  prioridade          String   @default("B") @db.Char(1)
+  percentualConclusao Int?     @default(0) @map("perc_conclusao")
+  status              Int?     @default(0)
+  dataInicial         DateTime? @map("data_inicial") @db.Date
+  dataFinal           DateTime? @map("data_final") @db.Date
+  isBug               Boolean? @default(false) @map("cobrada")
+
+  cliente             Cliente? @relation(fields: [clienteId], references: [id])
+
+  @@map("tarefa")
+}
+
+// ============================================================
+// SEGMENTOS e DEPARTAMENTOS (lookup)
+// ============================================================
+model Segmento {
+  id        Int    @id @default(autoincrement())
+  descricao String @db.VarChar(100)
+
+  @@map("segmentos")
+}
+
+model GrupoUsuario {
+  id          Int    @id @map("COD_GRUPO")
+  nomeGrupo   String @map("NOME_GRUPO") @db.VarChar(50)
+  superGrupo  String? @map("SUPER_GRUPO") @db.Char(1)
+
+  @@map("grupo_usuario")
+}
+
+// ============================================================
+// DISPONIBILIDADE DE TÉCNICOS → tabela: tecnico_disponibilidade
+// ============================================================
+model TecnicoDisponibilidade {
+  id           Int     @id @default(autoincrement())
+  tecnicoId    Int     @unique @map("cod_tecnico")
+  tecnico      Usuario @relation(fields: [tecnicoId], references: [id])
+  diasSemana   String  @map("dias_semana") @db.VarChar(20) // CSV ex: "1,2,3,4,5"
+  horaInicio   String  @map("hora_inicio") @db.VarChar(5)  // "08:00"
+  horaFim      String  @map("hora_fim") @db.VarChar(5)     // "18:00"
+  intervaloMin Int     @default(60) @map("intervalo_min")
+  ativo        Boolean @default(true)
+
+  @@map("tecnico_disponibilidade")
+}
+
+// ============================================================
+// AGENDAMENTOS PROGRAMADOS → tabela: agendamento_programado
+// ============================================================
+model AgendamentoProgramado {
+  id          Int      @id @default(autoincrement())
+  tecnicoId   Int      @map("cod_tecnico")
+  tecnico     Usuario  @relation("TecnicoAgendamentoProg", fields: [tecnicoId], references: [id])
+  clienteId   Int?     @map("cod_cli")
+  cliente     Cliente? @relation(fields: [clienteId], references: [id])
+  data        DateTime @map("data_agendamento") @db.Date
+  horaInicio  String   @map("hora_inicio") @db.VarChar(5)
+  duracao     Int      @default(60) @map("duracao_min")
+  descricao   String?  @db.VarChar(500)
+  status      Int      @default(1) // 1=Agendado 2=Concluído 3=Cancelado
+  dataCriacao DateTime @default(now()) @map("data_criacao")
+
+  @@map("agendamento_programado")
+}

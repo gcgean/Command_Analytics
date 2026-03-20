@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(wc -l \"C:\\\\Projetos Web\\\\FinanceHub/src/pages\"/*.tsx)",
+      "Bash(npx tsc:*)",
+      "Bash(start \"\" \"http://localhost:5173/agenda/agendamentos\")",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 3333 -ErrorAction SilentlyContinue | Select-Object OwningProcess\")",
+      "Bash(curl -s http://localhost:3333/health)",
+      "Bash(curl -s http://localhost:59579/)",
+      "Bash(curl -sv http://localhost:59579/)",
+      "Bash(node -e \":*)",
+      "Bash(ls \"C:\\\\Projetos Web\\\\Cilos_analitic\\\\backend\\\\node_modules\\\\.prisma\\\\client 2>/dev/null | head -5; ls C:Projetos\" WebCilos_analiticbackendnode_modules@prismaclient)"
+    ]
+  }
+}
