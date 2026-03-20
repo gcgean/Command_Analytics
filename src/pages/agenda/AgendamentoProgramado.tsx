@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, AlertCircle, Trash2, Ban } from 'lucide-react'
+import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, Trash2, Ban, Pencil, CheckSquare } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -19,27 +19,41 @@ const DIAS_SEMANA = [
   { val: 6, label: 'Sáb' },
 ]
 
-const STATUS_LABEL: Record<number, string> = { 1: 'Agendado', 2: 'Concluído', 3: 'Cancelado' }
+// Status para agendamentos programados
+const STATUS_OPTS = [
+  { value: 1, label: 'Aguardando',   color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+  { value: 2, label: 'Efetuado',     color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+  { value: 3, label: 'Não efetuado', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+  { value: 4, label: 'Reagendado',   color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+] as const
+
 const STATUS_COLOR: Record<number, string> = {
-  1: 'bg-blue-500/20 text-blue-400',
+  1: 'bg-amber-500/20 text-amber-400',
   2: 'bg-emerald-500/20 text-emerald-400',
   3: 'bg-red-500/20 text-red-400',
+  4: 'bg-purple-500/20 text-purple-400',
+}
+const STATUS_LABEL: Record<number, string> = {
+  1: 'Aguardando', 2: 'Efetuado', 3: 'Não efetuado', 4: 'Reagendado',
 }
 
+// Use local date (not UTC) to avoid timezone-day-off bugs
 function today() {
-  return new Date().toISOString().split('T')[0]
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 function fmtDate(val: any) {
   if (!val) return ''
-  // Handle Date objects (MySQL returns DATE as UTC midnight Date)
   const s = val instanceof Date
     ? `${val.getUTCFullYear()}-${String(val.getUTCMonth() + 1).padStart(2, '0')}-${String(val.getUTCDate()).padStart(2, '0')}`
     : String(val).substring(0, 10)
+  if (!s || s.length < 10) return ''
   return new Date(s + 'T12:00:00').toLocaleDateString('pt-BR')
 }
 
 function addMinutes(hhmm: string, mins: number): string {
+  if (!hhmm) return ''
   const [h, m] = hhmm.split(':').map(Number)
   const total = h * 60 + m + mins
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
@@ -80,15 +94,7 @@ interface AgProg {
   status: number
 }
 
-interface Tecnico {
-  id: number
-  nome: string
-}
-
-interface Cliente {
-  id: number
-  nome: string
-}
+interface Tecnico { id: number; nome: string }
 
 interface Bloqueio {
   id: number
@@ -104,19 +110,15 @@ interface Bloqueio {
 export function AgendamentoProgramado() {
   const [activeTab, setActiveTab] = useState<'slots' | 'lista'>('slots')
 
-  // Data
   const [disponibilidades, setDisponibilidades] = useState<DispItem[]>([])
   const [allTecnicos, setAllTecnicos] = useState<Tecnico[]>([])
-  const [allClientes, setAllClientes] = useState<Cliente[]>([])
   const [agendamentos, setAgendamentos] = useState<AgProg[]>([])
   const [slotResults, setSlotResults] = useState<SlotResult[]>([])
 
-  // Filters
   const [selectedTecnico, setSelectedTecnico] = useState('')
   const [selectedDate, setSelectedDate] = useState(today())
   const [listaStatus, setListaStatus] = useState('1')
 
-  // Loading
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [loadingLista, setLoadingLista] = useState(false)
 
@@ -157,15 +159,29 @@ export function AgendamentoProgramado() {
   const [submitting, setSubmitting] = useState(false)
   const [bookError, setBookError] = useState('')
 
+  // Edit agendamento modal
+  const [editItem, setEditItem] = useState<AgProg | null>(null)
+  const [editForm, setEditForm] = useState({
+    tecnicoId: '',
+    clienteId: '',
+    data: '',
+    horaInicio: '',
+    duracao: '60',
+    descricao: '',
+  })
+  const [savingEdit, setSavingEdit] = useState(false)
+
+  // Status change modal
+  const [statusItem, setStatusItem] = useState<AgProg | null>(null)
+  const [newStatus, setNewStatus] = useState(1)
+  const [savingStatus, setSavingStatus] = useState(false)
+
   // ── Load initial data ──────────────────────────────────────────
   useEffect(() => {
     api.getDisponibilidades().then((d: any) => setDisponibilidades(d)).catch(() => {})
     api.getBloqueios().then((b: any) => setBloqueios(b)).catch(() => {})
     api.getUsuarios().then((u: any) => {
       setAllTecnicos(u.map((x: any) => ({ id: x.id, nome: x.nome || x.nomeUsu || `#${x.id}` })))
-    }).catch(() => {})
-    api.getClientes().then((c: any) => {
-      setAllClientes(c.map((x: any) => ({ id: x.id, nome: x.nome || x.nomeRazao || `#${x.id}` })))
     }).catch(() => {})
   }, [])
 
@@ -197,13 +213,7 @@ export function AgendamentoProgramado() {
       .finally(() => setLoadingLista(false))
   }
 
-  // ── Config modal helpers ───────────────────────────────────────
-  function openNewConfig() {
-    setEditingTecnico(null)
-    setConfigForm({ tecnicoId: '', diasSemana: [1, 2, 3, 4, 5], horaInicio: '08:00', horaFim: '18:00', intervaloMin: '60', dataInicio: '', dataFim: '', usarIntervalo: false, intervaloIni: '12:00', intervaloFim: '13:00' })
-    setShowConfigModal(true)
-  }
-
+  // ── Config modal ───────────────────────────────────────────────
   function openEditConfig(d: DispItem) {
     setEditingTecnico(d.tecnicoId)
     setConfigForm({
@@ -290,10 +300,57 @@ export function AgendamentoProgramado() {
     }
   }
 
-  async function cancelAgendamento(id: number) {
-    if (!confirm('Cancelar este agendamento?')) return
-    await api.cancelAgendamentoProg(id).catch(() => {})
-    fetchAgendamentos()
+  // ── Edit agendamento ───────────────────────────────────────────
+  function openEdit(ag: AgProg) {
+    setEditItem(ag)
+    const rawData = ag.data instanceof Date
+      ? `${ag.data.getUTCFullYear()}-${String(ag.data.getUTCMonth()+1).padStart(2,'0')}-${String(ag.data.getUTCDate()).padStart(2,'0')}`
+      : String(ag.data ?? '').substring(0, 10)
+    setEditForm({
+      tecnicoId: String(ag.tecnicoId),
+      clienteId: ag.clienteId ? String(ag.clienteId) : '',
+      data: rawData,
+      horaInicio: ag.horaInicio,
+      duracao: String(ag.duracao),
+      descricao: ag.descricao ?? '',
+    })
+  }
+
+  async function saveEdit() {
+    if (!editItem) return
+    setSavingEdit(true)
+    try {
+      await api.updateAgendamentoProg(editItem.id, {
+        tecnicoId: Number(editForm.tecnicoId),
+        clienteId: editForm.clienteId ? Number(editForm.clienteId) : null,
+        data: editForm.data,
+        horaInicio: editForm.horaInicio,
+        duracao: Number(editForm.duracao),
+        descricao: editForm.descricao || null,
+      })
+      setEditItem(null)
+      fetchAgendamentos()
+    } catch { } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  // ── Status change ──────────────────────────────────────────────
+  function openStatusChange(ag: AgProg) {
+    setStatusItem(ag)
+    setNewStatus(ag.status)
+  }
+
+  async function saveStatus() {
+    if (!statusItem) return
+    setSavingStatus(true)
+    try {
+      await api.updateAgendamentoProgStatus(statusItem.id, newStatus)
+      setStatusItem(null)
+      fetchAgendamentos()
+    } catch { } finally {
+      setSavingStatus(false)
+    }
   }
 
   // ── Bloqueio ───────────────────────────────────────────────────
@@ -311,6 +368,8 @@ export function AgendamentoProgramado() {
       const updated: any = await api.getBloqueios()
       setBloqueios(updated)
       setBloqueioForm({ tecnicoId: '', dataIni: today(), horaIni: '08:00', dataFim: today(), horaFim: '18:00', motivo: '' })
+      setShowBloqueioModal(false)
+      // Refresh slots after blocking period
       if (slotResults.length > 0) fetchSlots()
     } catch { } finally {
       setSavingBloqueio(false)
@@ -324,7 +383,6 @@ export function AgendamentoProgramado() {
     if (slotResults.length > 0) fetchSlots()
   }
 
-  // ── Techs with config (for display names in config modal) ──────
   const configuredTecnicoIds = new Set(disponibilidades.map(d => d.tecnicoId))
   const availableTecnicos = allTecnicos.filter(t => !configuredTecnicoIds.has(t.id))
 
@@ -332,22 +390,12 @@ export function AgendamentoProgramado() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-slate-400">Gerencie disponibilidades e agende horários com os técnicos</p>
-        </div>
+        <p className="text-sm text-slate-400">Gerencie disponibilidades e agende horários com os técnicos</p>
         <div className="flex gap-2">
-          <Button
-            variant="secondary"
-            icon={<Ban className="w-4 h-4" />}
-            onClick={() => setShowBloqueioModal(true)}
-          >
+          <Button variant="secondary" icon={<Ban className="w-4 h-4" />} onClick={() => setShowBloqueioModal(true)}>
             Bloqueios
           </Button>
-          <Button
-            variant="secondary"
-            icon={<Settings className="w-4 h-4" />}
-            onClick={() => setShowConfigModal(true)}
-          >
+          <Button variant="secondary" icon={<Settings className="w-4 h-4" />} onClick={() => setShowConfigModal(true)}>
             Disponibilidades
           </Button>
         </div>
@@ -361,9 +409,7 @@ export function AgendamentoProgramado() {
             onClick={() => setActiveTab(tab)}
             className={clsx(
               'px-4 py-2 text-sm font-medium border-b-2 transition-colors',
-              activeTab === tab
-                ? 'border-blue-500 text-blue-400'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
+              activeTab === tab ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'
             )}
           >
             {tab === 'slots' ? 'Horários Disponíveis' : 'Lista de Agendamentos'}
@@ -374,7 +420,6 @@ export function AgendamentoProgramado() {
       {/* ── Tab: Horários Disponíveis ── */}
       {activeTab === 'slots' && (
         <div className="space-y-4">
-          {/* Filters */}
           <Card>
             <div className="flex flex-wrap gap-4 items-end">
               <div className="flex-1 min-w-[180px]">
@@ -389,30 +434,20 @@ export function AgendamentoProgramado() {
                 />
               </div>
               <div className="flex-1 min-w-[160px]">
-                <Input
-                  label="Data"
-                  type="date"
-                  value={selectedDate}
-                  onChange={e => setSelectedDate(e.target.value)}
-                />
+                <Input label="Data" type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
               </div>
-              <Button onClick={fetchSlots} icon={<Calendar className="w-4 h-4" />}>
-                Buscar Horários
-              </Button>
+              <Button onClick={fetchSlots} icon={<Calendar className="w-4 h-4" />}>Buscar Horários</Button>
             </div>
           </Card>
 
-          {/* Slot results */}
-          {loadingSlots && (
-            <div className="text-center py-10 text-slate-400 text-sm">Buscando horários...</div>
-          )}
+          {loadingSlots && <div className="text-center py-10 text-slate-400 text-sm">Buscando horários...</div>}
 
           {!loadingSlots && slotResults.length === 0 && (
             <div className="text-center py-12 text-slate-500">
               <Clock className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p className="text-sm">Selecione um técnico e data e clique em Buscar Horários.</p>
               {disponibilidades.length === 0 && (
-                <p className="text-xs mt-2 text-amber-400">Nenhuma disponibilidade configurada ainda. Clique em "Disponibilidades" para adicionar.</p>
+                <p className="text-xs mt-2 text-amber-400">Nenhuma disponibilidade configurada ainda.</p>
               )}
             </div>
           )}
@@ -434,13 +469,11 @@ export function AgendamentoProgramado() {
                   {tech.slotsDisponiveis.length === 0 && tech.slotsOcupados.length === 0 && (
                     <p className="text-xs text-slate-500 text-center py-4">Sem agenda neste dia da semana.</p>
                   )}
-
                   {tech.slotsDisponiveis.length === 0 && tech.slotsOcupados.length > 0 && (
                     <p className="text-xs text-amber-400 text-center py-2">Todos os horários estão ocupados.</p>
                   )}
 
                   <div className="flex flex-wrap gap-2">
-                    {/* Available slots */}
                     {tech.slotsDisponiveis.map(hora => (
                       <button
                         key={hora}
@@ -450,13 +483,8 @@ export function AgendamentoProgramado() {
                         {hora}
                       </button>
                     ))}
-                    {/* Occupied slots */}
                     {tech.slotsOcupados.map(hora => (
-                      <span
-                        key={hora}
-                        className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-500 text-sm font-medium cursor-not-allowed line-through"
-                        title="Horário ocupado"
-                      >
+                      <span key={hora} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-500 text-sm font-medium cursor-not-allowed line-through" title="Horário ocupado">
                         {hora}
                       </span>
                     ))}
@@ -483,12 +511,13 @@ export function AgendamentoProgramado() {
                 label="Status"
                 options={[
                   { value: '', label: 'Todos' },
-                  { value: '1', label: 'Agendado' },
-                  { value: '2', label: 'Concluído' },
-                  { value: '3', label: 'Cancelado' },
+                  { value: '1', label: 'Aguardando' },
+                  { value: '2', label: 'Efetuado' },
+                  { value: '3', label: 'Não efetuado' },
+                  { value: '4', label: 'Reagendado' },
                 ]}
                 value={listaStatus}
-                onChange={e => { setListaStatus(e.target.value); }}
+                onChange={e => setListaStatus(e.target.value)}
               />
             </div>
             <div className="w-48">
@@ -542,20 +571,37 @@ export function AgendamentoProgramado() {
                       <span className={clsx('text-xs px-2 py-1 rounded-full', STATUS_COLOR[ag.status] ?? 'bg-slate-500/20 text-slate-400')}>
                         {STATUS_LABEL[ag.status] ?? '—'}
                       </span>
-                      {ag.status === 1 && (
-                        <button
-                          onClick={() => cancelAgendamento(ag.id)}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                          title="Cancelar"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      )}
+                      {/* Alterar Status */}
+                      <button
+                        onClick={() => openStatusChange(ag)}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                        title="Alterar Status"
+                      >
+                        <CheckSquare className="w-4 h-4" />
+                      </button>
+                      {/* Editar */}
+                      <button
+                        onClick={() => openEdit(ag)}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                        title="Alterar Agendamento"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      {/* Cancelar */}
+                      <button
+                        onClick={async () => {
+                          if (!confirm('Cancelar este agendamento?')) return
+                          await api.cancelAgendamentoProg(ag.id).catch(() => {})
+                          fetchAgendamentos()
+                        }}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Cancelar"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                  {ag.descricao && (
-                    <p className="text-xs text-slate-500 mt-2 ml-0">{ag.descricao}</p>
-                  )}
+                  {ag.descricao && <p className="text-xs text-slate-500 mt-2">{ag.descricao}</p>}
                 </Card>
               ))}
             </div>
@@ -568,7 +614,6 @@ export function AgendamentoProgramado() {
         <div className="space-y-6">
           <p className="text-xs text-slate-400">Bloqueios impedem novos agendamentos programados nos horários definidos. Não afetam agendamentos já existentes.</p>
 
-          {/* Lista de bloqueios ativos */}
           {bloqueios.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Bloqueios Ativos</p>
@@ -584,10 +629,7 @@ export function AgendamentoProgramado() {
                       </p>
                       {b.motivo && <p className="text-xs text-slate-500 mt-0.5">{b.motivo}</p>}
                     </div>
-                    <button
-                      onClick={() => removeBloqueio(b.id)}
-                      className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/20 transition-colors"
-                    >
+                    <button onClick={() => removeBloqueio(b.id)} className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/20 transition-colors">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -596,7 +638,6 @@ export function AgendamentoProgramado() {
             </div>
           )}
 
-          {/* Formulário novo bloqueio */}
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Novo Bloqueio</p>
             <div className="space-y-4">
@@ -637,7 +678,6 @@ export function AgendamentoProgramado() {
       {/* ── Modal: Gerenciar Disponibilidades ── */}
       <Modal isOpen={showConfigModal} onClose={() => setShowConfigModal(false)} title="Disponibilidades dos Técnicos" size="lg">
         <div className="space-y-6">
-          {/* List of configured tecnicos */}
           {disponibilidades.length > 0 && (
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Técnicos Configurados</p>
@@ -648,10 +688,7 @@ export function AgendamentoProgramado() {
                       <p className="text-sm font-medium text-slate-200">{d.tecnicoNome}</p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {d.diasSemana.split(',').map(n => DIAS_SEMANA.find(x => x.val === Number(n))?.label).join(', ')}
-                        {' · '}
-                        {d.horaInicio} – {d.horaFim}
-                        {' · '}
-                        a cada {d.intervaloMin} min
+                        {' · '}{d.horaInicio} – {d.horaFim}{' · '}a cada {d.intervaloMin} min
                         {d.intervaloIni && d.intervaloFim && ` · almoço ${d.intervaloIni}–${d.intervaloFim}`}
                       </p>
                       {(d.dataInicio || d.dataFim) && (
@@ -661,16 +698,10 @@ export function AgendamentoProgramado() {
                       )}
                     </div>
                     <div className="flex gap-1">
-                      <button
-                        onClick={() => openEditConfig(d)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors text-xs"
-                      >
+                      <button onClick={() => openEditConfig(d)} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors text-xs">
                         Editar
                       </button>
-                      <button
-                        onClick={() => deleteConfig(d.tecnicoId)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      >
+                      <button onClick={() => deleteConfig(d.tecnicoId)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -680,7 +711,6 @@ export function AgendamentoProgramado() {
             </div>
           )}
 
-          {/* Form to add/edit */}
           <div>
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
               {editingTecnico ? 'Editar Disponibilidade' : 'Adicionar Técnico'}
@@ -698,7 +728,6 @@ export function AgendamentoProgramado() {
                 onChange={e => setConfigForm(f => ({ ...f, tecnicoId: e.target.value }))}
               />
 
-              {/* Days of week */}
               <div>
                 <p className="text-sm font-medium text-slate-300 mb-2">Dias da semana</p>
                 <div className="flex gap-2 flex-wrap">
@@ -720,18 +749,8 @@ export function AgendamentoProgramado() {
               </div>
 
               <div className="grid grid-cols-3 gap-4">
-                <Input
-                  label="Hora início"
-                  type="time"
-                  value={configForm.horaInicio}
-                  onChange={e => setConfigForm(f => ({ ...f, horaInicio: e.target.value }))}
-                />
-                <Input
-                  label="Hora fim"
-                  type="time"
-                  value={configForm.horaFim}
-                  onChange={e => setConfigForm(f => ({ ...f, horaFim: e.target.value }))}
-                />
+                <Input label="Hora início" type="time" value={configForm.horaInicio} onChange={e => setConfigForm(f => ({ ...f, horaInicio: e.target.value }))} />
+                <Input label="Hora fim" type="time" value={configForm.horaFim} onChange={e => setConfigForm(f => ({ ...f, horaFim: e.target.value }))} />
                 <Select
                   label="Intervalo de slot"
                   options={[
@@ -745,26 +764,16 @@ export function AgendamentoProgramado() {
                 />
               </div>
 
-              {/* Período de validade */}
               <div>
-                <p className="text-sm font-medium text-slate-300 mb-2">Período de validade <span className="text-slate-500 text-xs font-normal">(opcional — deixe em branco para sempre)</span></p>
+                <p className="text-sm font-medium text-slate-300 mb-2">
+                  Período de validade <span className="text-slate-500 text-xs font-normal">(opcional — deixe em branco para sempre)</span>
+                </p>
                 <div className="grid grid-cols-2 gap-4">
-                  <Input
-                    label="Data início"
-                    type="date"
-                    value={configForm.dataInicio}
-                    onChange={e => setConfigForm(f => ({ ...f, dataInicio: e.target.value }))}
-                  />
-                  <Input
-                    label="Data fim"
-                    type="date"
-                    value={configForm.dataFim}
-                    onChange={e => setConfigForm(f => ({ ...f, dataFim: e.target.value }))}
-                  />
+                  <Input label="Data início" type="date" value={configForm.dataInicio} onChange={e => setConfigForm(f => ({ ...f, dataInicio: e.target.value }))} />
+                  <Input label="Data fim" type="date" value={configForm.dataFim} onChange={e => setConfigForm(f => ({ ...f, dataFim: e.target.value }))} />
                 </div>
               </div>
 
-              {/* Intervalo de almoço */}
               <div>
                 <label className="flex items-center gap-2 cursor-pointer mb-2">
                   <input
@@ -777,26 +786,14 @@ export function AgendamentoProgramado() {
                 </label>
                 {configForm.usarIntervalo && (
                   <div className="grid grid-cols-2 gap-4 mt-2">
-                    <Input
-                      label="Início do almoço"
-                      type="time"
-                      value={configForm.intervaloIni}
-                      onChange={e => setConfigForm(f => ({ ...f, intervaloIni: e.target.value }))}
-                    />
-                    <Input
-                      label="Fim do almoço"
-                      type="time"
-                      value={configForm.intervaloFim}
-                      onChange={e => setConfigForm(f => ({ ...f, intervaloFim: e.target.value }))}
-                    />
+                    <Input label="Início do almoço" type="time" value={configForm.intervaloIni} onChange={e => setConfigForm(f => ({ ...f, intervaloIni: e.target.value }))} />
+                    <Input label="Fim do almoço" type="time" value={configForm.intervaloFim} onChange={e => setConfigForm(f => ({ ...f, intervaloFim: e.target.value }))} />
                   </div>
                 )}
               </div>
 
               <div className="flex justify-end gap-3">
-                <Button variant="secondary" onClick={() => { setShowConfigModal(false); setEditingTecnico(null) }}>
-                  Fechar
-                </Button>
+                <Button variant="secondary" onClick={() => { setShowConfigModal(false); setEditingTecnico(null) }}>Fechar</Button>
                 <Button onClick={saveConfig} disabled={!configForm.tecnicoId || !configForm.diasSemana.length}>
                   {savingConfig ? 'Salvando...' : 'Salvar Disponibilidade'}
                 </Button>
@@ -806,7 +803,7 @@ export function AgendamentoProgramado() {
         </div>
       </Modal>
 
-      {/* ── Modal: Novo Agendamento ── */}
+      {/* ── Modal: Novo Agendamento (booking slot) ── */}
       <Modal
         isOpen={showBookModal}
         onClose={() => setShowBookModal(false)}
@@ -816,19 +813,16 @@ export function AgendamentoProgramado() {
         <div className="space-y-4">
           <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
             <Clock className="w-4 h-4 text-blue-400 flex-shrink-0" />
-            <div>
-              <p className="text-sm font-medium text-slate-200">
-                {bookSlot?.tecnicoNome} — {bookSlot?.hora} em {fmtDate(selectedDate)}
-              </p>
-            </div>
+            <p className="text-sm font-medium text-slate-200">
+              {bookSlot?.tecnicoNome} — {bookSlot?.hora} em {fmtDate(selectedDate)}
+            </p>
           </div>
 
-          <Select
+          <ClienteSearch
             label="Cliente *"
-            options={allClientes.map(c => ({ value: String(c.id), label: c.nome }))}
-            placeholder="Selecione o cliente"
             value={bookForm.clienteId}
-            onChange={e => setBookForm(f => ({ ...f, clienteId: e.target.value }))}
+            onChange={id => setBookForm(f => ({ ...f, clienteId: id }))}
+            required
           />
 
           <Select
@@ -852,7 +846,6 @@ export function AgendamentoProgramado() {
 
           {bookError && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
               {bookError}
             </div>
           )}
@@ -861,6 +854,84 @@ export function AgendamentoProgramado() {
             <Button variant="secondary" onClick={() => setShowBookModal(false)}>Cancelar</Button>
             <Button onClick={saveBook} disabled={submitting || !bookForm.clienteId}>
               {submitting ? 'Salvando...' : 'Confirmar Agendamento'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Modal: Alterar Agendamento ── */}
+      <Modal isOpen={!!editItem} onClose={() => setEditItem(null)} title="Alterar Agendamento" size="md">
+        <div className="space-y-4">
+          <Select
+            label="Técnico"
+            options={allTecnicos.map(t => ({ value: String(t.id), label: t.nome }))}
+            placeholder="Selecione o técnico"
+            value={editForm.tecnicoId}
+            onChange={e => setEditForm(f => ({ ...f, tecnicoId: e.target.value }))}
+          />
+          <ClienteSearch
+            label="Cliente"
+            value={editForm.clienteId}
+            onChange={id => setEditForm(f => ({ ...f, clienteId: id }))}
+          />
+          <div className="grid grid-cols-2 gap-4">
+            <Input label="Data" type="date" value={editForm.data} onChange={e => setEditForm(f => ({ ...f, data: e.target.value }))} />
+            <Input label="Hora início" type="time" value={editForm.horaInicio} onChange={e => setEditForm(f => ({ ...f, horaInicio: e.target.value }))} />
+          </div>
+          <Select
+            label="Duração"
+            options={[
+              { value: '30', label: '30 minutos' },
+              { value: '60', label: '1 hora' },
+              { value: '90', label: '1h 30min' },
+              { value: '120', label: '2 horas' },
+            ]}
+            value={editForm.duracao}
+            onChange={e => setEditForm(f => ({ ...f, duracao: e.target.value }))}
+          />
+          <Input
+            label="Descrição"
+            placeholder="Descrição..."
+            value={editForm.descricao}
+            onChange={e => setEditForm(f => ({ ...f, descricao: e.target.value }))}
+          />
+          <div className="flex justify-end gap-3 pt-1">
+            <Button variant="secondary" onClick={() => setEditItem(null)}>Cancelar</Button>
+            <Button onClick={saveEdit} disabled={savingEdit}>
+              {savingEdit ? 'Salvando...' : 'Salvar Alterações'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* ── Modal: Alterar Status ── */}
+      <Modal isOpen={!!statusItem} onClose={() => setStatusItem(null)} title="Alterar Status" size="sm">
+        <div className="space-y-4">
+          {statusItem && (
+            <p className="text-sm text-slate-400">
+              {statusItem.clienteNome || statusItem.tecnicoNome} · {statusItem.horaInicio} em {fmtDate(statusItem.data)}
+            </p>
+          )}
+          <div className="grid grid-cols-2 gap-2">
+            {STATUS_OPTS.map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setNewStatus(opt.value)}
+                className={clsx(
+                  'px-3 py-2.5 rounded-lg text-sm font-medium border transition-all',
+                  newStatus === opt.value
+                    ? opt.color + ' ring-2 ring-offset-2 ring-offset-slate-900 ring-current'
+                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500'
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-end gap-3 pt-1">
+            <Button variant="secondary" onClick={() => setStatusItem(null)}>Cancelar</Button>
+            <Button onClick={saveStatus} disabled={savingStatus}>
+              {savingStatus ? 'Salvando...' : 'Confirmar'}
             </Button>
           </div>
         </div>

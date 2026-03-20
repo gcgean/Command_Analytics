@@ -23,6 +23,7 @@ import { versoesRoutes } from './routes/versoes'
 import { servidoresRoutes } from './routes/servidores'
 import { dashboardRoutes } from './routes/dashboard'
 import { usuariosRoutes } from './routes/usuarios'
+import { gruposRoutes } from './routes/grupos'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
 
@@ -90,6 +91,7 @@ app.register(contadoresRoutes, { prefix: '/contadores' })
 app.register(versoesRoutes,    { prefix: '/versoes' })
 app.register(servidoresRoutes, { prefix: '/servidores' })
 app.register(dashboardRoutes,  { prefix: '/dashboard' })
+app.register(gruposRoutes,     { prefix: '/grupos' })
 
 // ─── Start ─────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT) || 3333

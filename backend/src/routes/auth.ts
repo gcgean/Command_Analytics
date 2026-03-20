@@ -2,8 +2,9 @@ import type { FastifyInstance } from 'fastify'
 import bcrypt from 'bcryptjs'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
+import { getUserPermissions } from './grupos'
 
-function formatUser(u: any) {
+function formatUser(u: any, permissoes: string[] = ['*']) {
   return {
     id: u.id,
     nome: u.nomeCompleto || u.nomeUsu || 'Usuário',
@@ -12,7 +13,7 @@ function formatUser(u: any) {
     departamento: '',
     avatar: u.avatar ?? null,
     ativo: u.ativo === 'S',
-    permissoes: ['all'],
+    permissoes,
   }
 }
 
@@ -46,7 +47,8 @@ export async function authRoutes(app: FastifyInstance) {
       if (!senhaOk) {
         return reply.status(401).send({ error: 'Credenciais inválidas.' })
       }
-      const user = formatUser(usuario)
+      const permissoes = await getUserPermissions(usuario.id)
+      const user = formatUser(usuario, permissoes)
       const token = app.jwt.sign({ id: usuario.id, email: usuario.email, nome: user.nome })
       return { token, user }
     }
@@ -59,7 +61,8 @@ export async function authRoutes(app: FastifyInstance) {
       const payload = request.user as { id: number }
       const usuario = await prisma.usuario.findUnique({ where: { id: payload.id } })
       if (!usuario) return reply.status(404).send({ error: 'Usuário não encontrado.' })
-      return formatUser(usuario)
+      const permissoes = await getUserPermissions(payload.id)
+      return formatUser(usuario, permissoes)
     }
   )
 

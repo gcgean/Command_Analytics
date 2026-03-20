@@ -7,15 +7,17 @@ import {
   Code2, Tag, Video, Target, Server,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
-  ShoppingBag, Megaphone, Clock, Settings, User, Receipt
+  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '../../store/authStore'
+import { usePermissions } from '../../contexts/PermissionsContext'
 
 interface NavItem {
   label: string
   icon: React.ReactNode
   to?: string
+  recurso?: string
   children?: NavItem[]
 }
 
@@ -23,54 +25,54 @@ const navGroups: { group: string; items: NavItem[] }[] = [
   {
     group: 'OPERACIONAL',
     items: [
-      { label: 'Dashboard', icon: <LayoutDashboard className="w-4 h-4" />, to: '/dashboard' },
+      { label: 'Dashboard',            icon: <LayoutDashboard className="w-4 h-4" />, to: '/dashboard',      recurso: 'dashboard' },
       {
-        label: 'Atendimentos', icon: <Headphones className="w-4 h-4" />, children: [
+        label: 'Atendimentos', icon: <Headphones className="w-4 h-4" />, recurso: 'atendimentos', children: [
           { label: 'Todos Atendimentos', icon: <ClipboardList className="w-4 h-4" />, to: '/atendimentos' },
-          { label: 'Novo Atendimento', icon: <MessageSquare className="w-4 h-4" />, to: '/atendimentos/novo' },
-          { label: 'Histórico', icon: <FileText className="w-4 h-4" />, to: '/atendimentos/historico' },
-          { label: 'Mapa', icon: <Map className="w-4 h-4" />, to: '/atendimentos/mapa' },
+          { label: 'Novo Atendimento',   icon: <MessageSquare className="w-4 h-4" />, to: '/atendimentos/novo' },
+          { label: 'Histórico',          icon: <FileText className="w-4 h-4" />,      to: '/atendimentos/historico' },
+          { label: 'Mapa',               icon: <Map className="w-4 h-4" />,           to: '/atendimentos/mapa' },
         ]
       },
       {
         label: 'Agenda', icon: <Calendar className="w-4 h-4" />, children: [
-          { label: 'Calendário', icon: <Calendar className="w-4 h-4" />, to: '/agenda' },
-          { label: 'Agendamentos', icon: <ClipboardList className="w-4 h-4" />, to: '/agenda/agendamentos' },
+          { label: 'Calendário',    icon: <Calendar className="w-4 h-4" />,     to: '/agenda',              recurso: 'agenda' },
+          { label: 'Agendamentos', icon: <ClipboardList className="w-4 h-4" />, to: '/agenda/agendamentos', recurso: 'agenda-agendamentos' },
         ]
       },
-      { label: 'Monitor Atendimentos', icon: <Monitor className="w-4 h-4" />, to: '/monitor' },
+      { label: 'Monitor Atendimentos', icon: <Monitor className="w-4 h-4" />, to: '/monitor', recurso: 'monitor' },
     ]
   },
   {
     group: 'CLIENTES',
     items: [
-      { label: 'Clientes', icon: <Users className="w-4 h-4" />, to: '/clientes' },
-      { label: 'Monitor Clientes', icon: <BarChart3 className="w-4 h-4" />, to: '/clientes/monitor' },
+      { label: 'Clientes',         icon: <Users className="w-4 h-4" />,    to: '/clientes',         recurso: 'clientes' },
+      { label: 'Monitor Clientes', icon: <BarChart3 className="w-4 h-4" />,to: '/clientes/monitor', recurso: 'monitor-clientes' },
       {
-        label: 'Implantação', icon: <GitBranch className="w-4 h-4" />, children: [
-          { label: 'Pipeline', icon: <GitBranch className="w-4 h-4" />, to: '/implantacao' },
-          { label: 'Acompanhamento', icon: <ClipboardList className="w-4 h-4" />, to: '/implantacao/acompanhamento' },
-          { label: 'Orçamento', icon: <Receipt className="w-4 h-4" />, to: '/implantacao/orcamento' },
+        label: 'Implantação', icon: <GitBranch className="w-4 h-4" />, recurso: 'implantacao', children: [
+          { label: 'Pipeline',       icon: <GitBranch className="w-4 h-4" />,    to: '/implantacao',                  recurso: 'implantacao' },
+          { label: 'Acompanhamento', icon: <ClipboardList className="w-4 h-4" />,to: '/implantacao/acompanhamento',   recurso: 'implantacao-acompanhamento' },
+          { label: 'Orçamento',      icon: <Receipt className="w-4 h-4" />,      to: '/implantacao/orcamento',        recurso: 'implantacao-orcamento' },
         ]
       },
       {
         label: 'CRM / Negócios', icon: <Briefcase className="w-4 h-4" />, children: [
-          { label: 'Negócios', icon: <TrendingUp className="w-4 h-4" />, to: '/crm' },
-          { label: 'Pesquisa de Leads', icon: <BookUser className="w-4 h-4" />, to: '/crm/leads' },
+          { label: 'Negócios',          icon: <TrendingUp className="w-4 h-4" />, to: '/crm',       recurso: 'crm' },
+          { label: 'Pesquisa de Leads', icon: <BookUser className="w-4 h-4" />,   to: '/crm/leads', recurso: 'crm-leads' },
         ]
       },
-      { label: 'Contadores', icon: <BookUser className="w-4 h-4" />, to: '/contadores' },
+      { label: 'Contadores', icon: <BookUser className="w-4 h-4" />, to: '/contadores', recurso: 'contadores' },
     ]
   },
   {
     group: 'FINANCEIRO',
     items: [
-      { label: 'Análise Financeira', icon: <DollarSign className="w-4 h-4" />, to: '/financeiro' },
-      { label: 'Comissões', icon: <Award className="w-4 h-4" />, to: '/comissoes' },
+      { label: 'Análise Financeira', icon: <DollarSign className="w-4 h-4" />, to: '/financeiro', recurso: 'financeiro' },
+      { label: 'Comissões',          icon: <Award className="w-4 h-4" />,      to: '/comissoes',  recurso: 'comissoes' },
       {
-        label: 'Planos', icon: <Package className="w-4 h-4" />, children: [
+        label: 'Planos', icon: <Package className="w-4 h-4" />, recurso: 'planos', children: [
           { label: 'Catálogo de Planos', icon: <ShoppingBag className="w-4 h-4" />, to: '/planos' },
-          { label: 'Assinaturas', icon: <FileText className="w-4 h-4" />, to: '/planos/assinaturas' },
+          { label: 'Assinaturas',        icon: <FileText className="w-4 h-4" />,    to: '/planos/assinaturas' },
         ]
       },
     ]
@@ -78,37 +80,55 @@ const navGroups: { group: string; items: NavItem[] }[] = [
   {
     group: 'DESENVOLVIMENTO',
     items: [
-      { label: 'Tarefas Dev', icon: <Code2 className="w-4 h-4" />, to: '/desenvolvimento' },
-      { label: 'Versões e Licenças', icon: <Tag className="w-4 h-4" />, to: '/versoes' },
+      { label: 'Tarefas Dev',       icon: <Code2 className="w-4 h-4" />, to: '/desenvolvimento', recurso: 'desenvolvimento' },
+      { label: 'Versões e Licenças',icon: <Tag className="w-4 h-4" />,   to: '/versoes',         recurso: 'versoes' },
     ]
   },
   {
     group: 'MARKETING',
     items: [
-      { label: 'Campanhas', icon: <Megaphone className="w-4 h-4" />, to: '/campanhas' },
-      { label: 'Vídeos', icon: <Video className="w-4 h-4" />, to: '/videos' },
+      { label: 'Campanhas', icon: <Megaphone className="w-4 h-4" />, to: '/campanhas', recurso: 'campanhas' },
+      { label: 'Vídeos',    icon: <Video className="w-4 h-4" />,     to: '/videos',    recurso: 'videos' },
     ]
   },
   {
     group: 'METAS',
     items: [
-      { label: 'Metas e NPS', icon: <Target className="w-4 h-4" />, to: '/metas' },
+      { label: 'Metas e NPS', icon: <Target className="w-4 h-4" />, to: '/metas', recurso: 'metas' },
     ]
   },
   {
     group: 'RH',
     items: [
-      { label: 'Banco de Horas', icon: <Clock className="w-4 h-4" />, to: '/banco-horas' },
+      { label: 'Banco de Horas', icon: <Clock className="w-4 h-4" />, to: '/banco-horas', recurso: 'banco-horas' },
     ]
   },
   {
     group: 'INFRAESTRUTURA',
     items: [
-      { label: 'Servidores em Nuvem', icon: <Server className="w-4 h-4" />, to: '/servidores' },
-      { label: 'Configurações', icon: <Settings className="w-4 h-4" />, to: '/configuracoes' },
+      { label: 'Servidores em Nuvem', icon: <Server className="w-4 h-4" />,      to: '/servidores',    recurso: 'servidores' },
+      { label: 'Grupos de Acesso',    icon: <ShieldCheck className="w-4 h-4" />, to: '/grupos-acesso', recurso: 'grupos-acesso' },
+      { label: 'Configurações',       icon: <Settings className="w-4 h-4" />,    to: '/configuracoes', recurso: 'configuracoes' },
     ]
   },
 ]
+
+function filterItems(items: NavItem[], can: (r: string) => boolean): NavItem[] {
+  return items
+    .filter(item => !item.recurso || can(item.recurso))
+    .map(item => {
+      if (!item.children) return item
+      const filteredChildren = filterItems(item.children, can)
+      return { ...item, children: filteredChildren }
+    })
+    .filter(item => !item.children || item.children.length > 0)
+}
+
+function filterGroups(groups: typeof navGroups, can: (r: string) => boolean) {
+  return groups
+    .map(g => ({ ...g, items: filterItems(g.items, can) }))
+    .filter(g => g.items.length > 0)
+}
 
 function NavItemComponent({ item, depth = 0 }: { item: NavItem; depth?: number }) {
   const [open, setOpen] = useState(false)
@@ -118,10 +138,7 @@ function NavItemComponent({ item, depth = 0 }: { item: NavItem; depth?: number }
       <div>
         <button
           onClick={() => setOpen(!open)}
-          className={clsx(
-            'sidebar-link w-full',
-            depth > 0 && 'pl-6'
-          )}
+          className={clsx('sidebar-link w-full', depth > 0 && 'pl-6')}
         >
           {item.icon}
           <span className="flex-1 text-left">{item.label}</span>
@@ -129,7 +146,7 @@ function NavItemComponent({ item, depth = 0 }: { item: NavItem; depth?: number }
         </button>
         {open && (
           <div className="mt-0.5 ml-3 pl-3 border-l border-slate-700">
-            {item.children.map((child) => (
+            {item.children.map(child => (
               <NavItemComponent key={child.label} item={child} depth={depth + 1} />
             ))}
           </div>
@@ -160,6 +177,9 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const logout = useAuthStore(s => s.logout)
   const user = useAuthStore(s => s.user)
   const navigate = useNavigate()
+  const { can } = usePermissions()
+
+  const visibleGroups = filterGroups(navGroups, can)
 
   const handleLogout = () => {
     logout()
@@ -175,12 +195,8 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   return (
     <>
-      {/* Mobile overlay */}
       {!collapsed && (
-        <div
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
-          onClick={onToggle}
-        />
+        <div className="fixed inset-0 bg-black/50 z-20 lg:hidden" onClick={onToggle} />
       )}
 
       <aside
@@ -210,7 +226,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-4">
-          {navGroups.map((group) => (
+          {visibleGroups.map(group => (
             <div key={group.group}>
               {!collapsed && (
                 <p className="px-3 mb-1 text-xs font-semibold text-slate-600 uppercase tracking-widest">
@@ -218,7 +234,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 </p>
               )}
               <div className="space-y-0.5">
-                {group.items.map((item) => (
+                {group.items.map(item =>
                   collapsed ? (
                     item.to ? (
                       <NavLink
@@ -235,18 +251,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                         {item.icon}
                       </NavLink>
                     ) : (
-                      <div
-                        key={item.label}
-                        title={item.label}
-                        className="flex items-center justify-center p-2.5 rounded-lg text-slate-400"
-                      >
+                      <div key={item.label} title={item.label} className="flex items-center justify-center p-2.5 rounded-lg text-slate-400">
                         {item.icon}
                       </div>
                     )
                   ) : (
                     <NavItemComponent key={item.label} item={item} />
                   )
-                ))}
+                )}
               </div>
             </div>
           ))}

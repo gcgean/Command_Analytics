@@ -108,6 +108,10 @@ export const api = {
   createAgendamentoProg: (data: { tecnicoId: number; clienteId?: number; data: string; horaInicio: string; duracao?: number; descricao?: string }) =>
     fetchApi('/agenda/agendamentos-prog', { method: 'POST', body: JSON.stringify(data) }),
   cancelAgendamentoProg: (id: number) => fetchApi(`/agenda/agendamentos-prog/${id}`, { method: 'DELETE' }),
+  updateAgendamentoProg: (id: number, data: { tecnicoId?: number; clienteId?: number | null; data?: string; horaInicio?: string; duracao?: number; descricao?: string | null }) =>
+    fetchApi(`/agenda/agendamentos-prog/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateAgendamentoProgStatus: (id: number, status: number) =>
+    fetchApi(`/agenda/agendamentos-prog/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
 
   // ─── Bloqueios ─────────────────────────────────────────────
   getBloqueios: (params?: Record<string, string>) => {
@@ -198,6 +202,22 @@ export const api = {
   getUsuarios: () => fetchApi('/usuarios'),
   updateUsuario: (id: number, data: Record<string, unknown>) =>
     fetchApi(`/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ─── Grupos de Acesso ────────────────────────────────────
+  getGrupos: () => fetchApi<any[]>('/grupos'),
+  getGruposRecursos: () => fetchApi<any[]>('/grupos/recursos'),
+  getGrupoById: (id: number) => fetchApi<any>(`/grupos/${id}`),
+  createGrupo: (data: { nome: string; descricao?: string; superGrupo?: boolean }) =>
+    fetchApi('/grupos', { method: 'POST', body: JSON.stringify(data) }),
+  updateGrupo: (id: number, data: { nome?: string; descricao?: string; superGrupo?: boolean; ativo?: boolean }) =>
+    fetchApi(`/grupos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteGrupo: (id: number) => fetchApi(`/grupos/${id}`, { method: 'DELETE' }),
+  setGrupoPermissoes: (id: number, recursos: string[]) =>
+    fetchApi(`/grupos/${id}/permissoes`, { method: 'PUT', body: JSON.stringify({ recursos }) }),
+  addUserToGrupo: (id: number, usuarioId: number) =>
+    fetchApi(`/grupos/${id}/usuarios`, { method: 'POST', body: JSON.stringify({ usuarioId }) }),
+  removeUserFromGrupo: (id: number, usuarioId: number) =>
+    fetchApi(`/grupos/${id}/usuarios/${usuarioId}`, { method: 'DELETE' }),
 }
 
 // ============================================================

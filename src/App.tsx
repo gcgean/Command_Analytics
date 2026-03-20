@@ -76,6 +76,9 @@ import { Configuracoes } from './pages/configuracoes/Configuracoes'
 // Perfil
 import { Perfil } from './pages/perfil/Perfil'
 
+// Grupos de Acesso
+import { GruposAcesso } from './pages/grupos/GruposAcesso'
+
 // 404
 import { NotFound } from './pages/NotFound'
 
@@ -143,6 +146,7 @@ export default function App() {
 
         <Route path="banco-horas" element={<BancoHoras />} />
         <Route path="configuracoes" element={<Configuracoes />} />
+        <Route path="grupos-acesso" element={<GruposAcesso />} />
         <Route path="perfil" element={<Perfil />} />
       </Route>
 

@@ -2,24 +2,18 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "Command Analytics — API (Fastify)",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["../backend/node_modules/tsx/dist/cli.mjs", "../backend/src/server.ts"],
-      "cwd": "backend",
+      "name": "backend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "C:\\Projetos Web\\Command_Analytics\\backend",
       "port": 3333
     },
     {
-      "name": "Command Analytics — Dev (Vite)",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--host"],
-      "port": 5173,
-      "autoPort": true
-    },
-    {
-      "name": "Command Analytics — Preview (Vite Build)",
-      "runtimeExecutable": "node",
-      "runtimeArgs": ["node_modules/vite/bin/vite.js", "preview", "--port", "4173", "--host"],
-      "port": 4173
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "C:\\Projetos Web\\Command_Analytics",
+      "port": 5173
     }
   ]
 }

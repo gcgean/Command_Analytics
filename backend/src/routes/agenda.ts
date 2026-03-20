@@ -292,6 +292,21 @@ export async function agendaRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
+  // PUT /agenda/agendamentos-prog/:id (full update)
+  app.put('/agendamentos-prog/:id', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request) => {
+    const { id } = request.params as { id: string }
+    const { tecnicoId, clienteId, data, horaInicio, duracao, descricao } = request.body as {
+      tecnicoId?: number; clienteId?: number | null; data?: string; horaInicio?: string; duracao?: number; descricao?: string | null
+    }
+    if (tecnicoId !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET cod_tecnico = ${tecnicoId} WHERE id = ${Number(id)}`
+    if (clienteId !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET cod_cli = ${clienteId ?? null} WHERE id = ${Number(id)}`
+    if (data !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET data_agendamento = ${data} WHERE id = ${Number(id)}`
+    if (horaInicio !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET hora_inicio = ${horaInicio} WHERE id = ${Number(id)}`
+    if (duracao !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET duracao_min = ${duracao} WHERE id = ${Number(id)}`
+    if (descricao !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET descricao = ${descricao ?? null} WHERE id = ${Number(id)}`
+    return { ok: true }
+  })
+
   // DELETE /agenda/agendamentos-prog/:id (soft delete → status 3)
   app.delete('/agendamentos-prog/:id', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
     const { id } = request.params as { id: string }
