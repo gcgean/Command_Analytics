@@ -94,6 +94,10 @@ export const api = {
     fetchApi<AgendaItem>(`/agenda/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAgendaItem: (id: number) => fetchApi(`/agenda/${id}`, { method: 'DELETE' }),
 
+  // ─── Auditoria ─────────────────────────────────────────────
+  getAuditoria: (tabela: string, registroId: number) =>
+    fetchApi<any[]>(`/auditoria?tabela=${tabela}&registroId=${registroId}`),
+
   // ─── Disponibilidade de Técnicos ───────────────────────────────
   getDisponibilidades: () => fetchApi<any[]>('/agenda/disponibilidade'),
   saveDisponibilidade: (data: { tecnicoId: number; diasSemana: string; horaInicio: string; horaFim: string; intervaloMin: number; dataInicio?: string | null; dataFim?: string | null; intervaloIni?: string | null; intervaloFim?: string | null }) =>

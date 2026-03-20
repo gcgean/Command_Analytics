@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
+import { registrarAuditoria } from '../utils/auditoria'
 
 const nomeTecnico = (u: any) => u?.nomeCompleto || u?.nomeUsu || 'Usuário'
 
@@ -32,19 +34,74 @@ export async function agendaRoutes(app: FastifyInstance) {
       }
     }
 
-    const items = await prisma.agendaItem.findMany({
-      where,
-      include: {
-        cliente: { select: { id: true, nome: true } },
-        tecnico: { select: { id: true, nomeUsu: true, nomeCompleto: true } },
-      },
-      orderBy: [{ data: 'asc' }, { horarioIni: 'asc' }],
-    })
+    // Build dynamic WHERE conditions for agenda table
+    const condA: Prisma.Sql[] = []
+    if (tecnicoId) condA.push(Prisma.sql`a.cod_colaborador = ${Number(tecnicoId)}`)
+    if (clienteId) condA.push(Prisma.sql`a.cod_cli = ${Number(clienteId)}`)
+    if (status !== undefined) condA.push(Prisma.sql`a.Status_agendamento = ${Number(status)}`)
+    if (tipo) condA.push(Prisma.sql`a.Tipo = ${tipo}`)
+    if (data) {
+      condA.push(Prisma.sql`a.data_agendamento = ${new Date(data + 'T12:00:00Z')}`)
+    } else {
+      if (dataInicio) condA.push(Prisma.sql`a.data_agendamento >= ${new Date(dataInicio + 'T00:00:00Z')}`)
+      if (dataFim) condA.push(Prisma.sql`a.data_agendamento <= ${new Date(dataFim + 'T23:59:59Z')}`)
+    }
+    const whereA = condA.length > 0 ? Prisma.sql`WHERE ${Prisma.join(condA, ' AND ')}` : Prisma.empty
 
-    return items.map(({ cliente, tecnico, ...a }) => ({
+    // Build dynamic WHERE conditions for agendamento_programado table
+    const condP: Prisma.Sql[] = [Prisma.sql`p.status <> 3`]  // exclude cancelled
+    if (tecnicoId) condP.push(Prisma.sql`p.cod_tecnico = ${Number(tecnicoId)}`)
+    if (clienteId) condP.push(Prisma.sql`p.cod_cli = ${Number(clienteId)}`)
+    if (data) {
+      condP.push(Prisma.sql`p.data_agendamento = ${new Date(data + 'T12:00:00Z')}`)
+    } else {
+      if (dataInicio) condP.push(Prisma.sql`p.data_agendamento >= ${new Date(dataInicio + 'T00:00:00Z')}`)
+      if (dataFim) condP.push(Prisma.sql`p.data_agendamento <= ${new Date(dataFim + 'T23:59:59Z')}`)
+    }
+    const whereP = Prisma.sql`WHERE ${Prisma.join(condP, ' AND ')}`
+
+    const items: any[] = await prisma.$queryRaw`
+      SELECT a.cod_agenda AS id, a.cod_cli AS clienteId, a.cod_colaborador AS tecnicoId,
+             a.Tipo AS tipo, a.Status_agendamento AS status,
+             a.data_agendamento AS data, a.hora_ini AS horarioIni, a.hora_fin AS horarioFim,
+             a.descricao AS observacoes,
+             a.criado_por AS criadoPorId, a.data_criacao AS dataCriacao,
+             COALESCE(cli.NOME_FANTASIA, cli.NOME_CLI) AS clienteNome,
+             COALESCE(tec.NOME_USUARIO_COMPLETO, tec.NOME_USU) AS tecnicoNome,
+             COALESCE(cri.NOME_USUARIO_COMPLETO, cri.NOME_USU) AS criadoPorNome,
+             'agenda' AS origem
+      FROM agenda a
+      LEFT JOIN cliente cli ON cli.COD_CLI = a.cod_cli
+      LEFT JOIN usuario tec ON tec.COD_USU = a.cod_colaborador
+      LEFT JOIN usuario cri ON cri.COD_USU = a.criado_por
+      ${whereA}
+
+      UNION ALL
+
+      SELECT p.id AS id, p.cod_cli AS clienteId, p.cod_tecnico AS tecnicoId,
+             'Agendamento' AS tipo, p.status AS status,
+             p.data_agendamento AS data, p.hora_inicio AS horarioIni, NULL AS horarioFim,
+             p.descricao AS observacoes,
+             NULL AS criadoPorId, p.data_criacao AS dataCriacao,
+             COALESCE(cliP.NOME_FANTASIA, cliP.NOME_CLI) AS clienteNome,
+             COALESCE(tecP.NOME_USUARIO_COMPLETO, tecP.NOME_USU) AS tecnicoNome,
+             NULL AS criadoPorNome,
+             'programado' AS origem
+      FROM agendamento_programado p
+      LEFT JOIN cliente cliP ON cliP.COD_CLI = p.cod_cli
+      LEFT JOIN usuario tecP ON tecP.COD_USU = p.cod_tecnico
+      ${whereP}
+
+      ORDER BY data ASC, horarioIni ASC
+    `
+
+    return items.map(a => ({
       ...a,
-      clienteNome: cliente?.nome ?? '',
-      tecnicoNome: nomeTecnico(tecnico),
+      id: Number(a.id),
+      clienteId: a.clienteId ? Number(a.clienteId) : null,
+      tecnicoId: a.tecnicoId ? Number(a.tecnicoId) : null,
+      criadoPorId: a.criadoPorId ? Number(a.criadoPorId) : null,
+      status: a.status != null ? Number(a.status) : null,
     }))
   })
 
@@ -245,9 +302,18 @@ export async function agendaRoutes(app: FastifyInstance) {
       LEFT JOIN cliente c ON c.cod_cli = ap.cod_cli
       ORDER BY ap.data_agendamento ASC, ap.hora_inicio ASC
     `
-    let result = rows
-    if (tecnicoId) result = result.filter(r => Number(r.tecnicoId) === Number(tecnicoId))
-    if (status !== undefined) result = result.filter(r => Number(r.status) === Number(status))
+    // Convert BigInt fields returned by $queryRaw
+    const normalized = rows.map(r => ({
+      ...r,
+      id: Number(r.id),
+      tecnicoId: r.tecnicoId != null ? Number(r.tecnicoId) : null,
+      clienteId: r.clienteId != null ? Number(r.clienteId) : null,
+      duracao: r.duracao != null ? Number(r.duracao) : null,
+      status: r.status != null ? Number(r.status) : null,
+    }))
+    let result = normalized
+    if (tecnicoId) result = result.filter(r => r.tecnicoId === Number(tecnicoId))
+    if (status !== undefined) result = result.filter(r => r.status === Number(status))
     return result
   })
 
@@ -256,6 +322,7 @@ export async function agendaRoutes(app: FastifyInstance) {
     const { tecnicoId, clienteId, data, horaInicio, duracao, descricao } = request.body as {
       tecnicoId: number; clienteId?: number; data: string; horaInicio: string; duracao?: number; descricao?: string
     }
+    const payload = request.user as { id: number }
 
     const conflitoProg: any[] = await prisma.$queryRaw`
       SELECT id FROM agendamento_programado
@@ -281,6 +348,17 @@ export async function agendaRoutes(app: FastifyInstance) {
       VALUES
         (${tecnicoId}, ${clienteId ?? null}, ${data}, ${horaInicio}, ${duracao ?? 60}, ${descricao ?? null}, 1)
     `
+
+    const [inserted]: any[] = await prisma.$queryRaw`SELECT LAST_INSERT_ID() AS id`
+    const newId = Number(inserted?.id ?? 0)
+    if (newId > 0) {
+      registrarAuditoria({
+        tabela: 'agendamento_programado', registroId: newId, acao: 'CRIACAO', usuarioId: payload.id,
+        dadosAntes: null,
+        dadosDepois: { tecnicoId, clienteId: clienteId ?? null, data, horaInicio, duracao: duracao ?? 60, descricao: descricao ?? null },
+      })
+    }
+
     return reply.status(201).send({ ok: true })
   })
 
@@ -288,7 +366,20 @@ export async function agendaRoutes(app: FastifyInstance) {
   app.patch('/agendamentos-prog/:id/status', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request) => {
     const { id } = request.params as { id: string }
     const { status } = request.body as { status: number }
+    const payload = request.user as { id: number }
+
+    const [before]: any[] = await prisma.$queryRaw`
+      SELECT status FROM agendamento_programado WHERE id = ${Number(id)}`
+    const statusAntes = before?.status != null ? Number(before.status) : null
+
     await prisma.$executeRaw`UPDATE agendamento_programado SET status = ${status} WHERE id = ${Number(id)}`
+
+    registrarAuditoria({
+      tabela: 'agendamento_programado', registroId: Number(id), acao: 'STATUS', usuarioId: payload.id,
+      dadosAntes: { status: statusAntes },
+      dadosDepois: { status },
+    })
+
     return { ok: true }
   })
 
@@ -298,19 +389,73 @@ export async function agendaRoutes(app: FastifyInstance) {
     const { tecnicoId, clienteId, data, horaInicio, duracao, descricao } = request.body as {
       tecnicoId?: number; clienteId?: number | null; data?: string; horaInicio?: string; duracao?: number; descricao?: string | null
     }
+    const payload = request.user as { id: number }
+
+    const [before]: any[] = await prisma.$queryRaw`
+      SELECT cod_tecnico AS tecnicoId, cod_cli AS clienteId,
+             DATE_FORMAT(data_agendamento, '%Y-%m-%d') AS data,
+             hora_inicio AS horaInicio, duracao_min AS duracao, descricao
+      FROM agendamento_programado WHERE id = ${Number(id)}
+    `
+    const dadosAntes = before ? {
+      tecnicoId: before.tecnicoId != null ? Number(before.tecnicoId) : null,
+      clienteId: before.clienteId != null ? Number(before.clienteId) : null,
+      data: before.data ?? null,
+      horaInicio: before.horaInicio ?? null,
+      duracao: before.duracao != null ? Number(before.duracao) : null,
+      descricao: before.descricao ?? null,
+    } : null
+
     if (tecnicoId !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET cod_tecnico = ${tecnicoId} WHERE id = ${Number(id)}`
     if (clienteId !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET cod_cli = ${clienteId ?? null} WHERE id = ${Number(id)}`
     if (data !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET data_agendamento = ${data} WHERE id = ${Number(id)}`
     if (horaInicio !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET hora_inicio = ${horaInicio} WHERE id = ${Number(id)}`
     if (duracao !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET duracao_min = ${duracao} WHERE id = ${Number(id)}`
     if (descricao !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET descricao = ${descricao ?? null} WHERE id = ${Number(id)}`
+
+    registrarAuditoria({
+      tabela: 'agendamento_programado', registroId: Number(id), acao: 'ALTERACAO', usuarioId: payload.id,
+      dadosAntes,
+      dadosDepois: {
+        tecnicoId: tecnicoId !== undefined ? tecnicoId : dadosAntes?.tecnicoId,
+        clienteId: clienteId !== undefined ? clienteId : dadosAntes?.clienteId,
+        data: data !== undefined ? data : dadosAntes?.data,
+        horaInicio: horaInicio !== undefined ? horaInicio : dadosAntes?.horaInicio,
+        duracao: duracao !== undefined ? duracao : dadosAntes?.duracao,
+        descricao: descricao !== undefined ? descricao : dadosAntes?.descricao,
+      },
+    })
+
     return { ok: true }
   })
 
   // DELETE /agenda/agendamentos-prog/:id (soft delete → status 3)
   app.delete('/agendamentos-prog/:id', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
     const { id } = request.params as { id: string }
+    const payload = request.user as { id: number }
+
+    const [before]: any[] = await prisma.$queryRaw`
+      SELECT cod_tecnico AS tecnicoId, cod_cli AS clienteId,
+             DATE_FORMAT(data_agendamento, '%Y-%m-%d') AS data,
+             hora_inicio AS horaInicio, descricao, status
+      FROM agendamento_programado WHERE id = ${Number(id)}
+    `
+
     await prisma.$executeRaw`UPDATE agendamento_programado SET status = 3 WHERE id = ${Number(id)}`
+
+    registrarAuditoria({
+      tabela: 'agendamento_programado', registroId: Number(id), acao: 'EXCLUSAO', usuarioId: payload.id,
+      dadosAntes: before ? {
+        tecnicoId: before.tecnicoId != null ? Number(before.tecnicoId) : null,
+        clienteId: before.clienteId != null ? Number(before.clienteId) : null,
+        data: before.data ?? null,
+        horaInicio: before.horaInicio ?? null,
+        descricao: before.descricao ?? null,
+        status: before.status != null ? Number(before.status) : null,
+      } : null,
+      dadosDepois: null,
+    })
+
     return reply.status(204).send()
   })
 
@@ -368,29 +513,137 @@ export async function agendaRoutes(app: FastifyInstance) {
 
   // POST /agenda
   app.post('/', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
-    const body = request.body as Record<string, unknown>
-    const item = await prisma.agendaItem.create({ data: body as never })
-    return reply.status(201).send(item)
+    const { clienteId, tecnicoId, tipo, data, horario, observacoes } = request.body as any
+    const payload = request.user as { id: number }
+    const item = await prisma.agendaItem.create({
+      data: {
+        clienteId: clienteId ? Number(clienteId) : null,
+        tecnicoId: tecnicoId ? Number(tecnicoId) : null,
+        tipo: tipo || null,
+        data: data ? new Date(data + 'T12:00:00Z') : null,
+        horarioIni: horario ? new Date(`1970-01-01T${horario}:00Z`) : null,
+        observacoes: observacoes || null,
+      } as any,
+    })
+    // Save criado_por and data_criacao via raw since not in schema
+    await prisma.$executeRaw`UPDATE agenda SET criado_por = ${payload.id}, data_criacao = NOW() WHERE cod_agenda = ${Number(item.id)}`
+    registrarAuditoria({
+      tabela: 'agenda', registroId: Number(item.id), acao: 'CRIACAO', usuarioId: payload.id,
+      dadosAntes: null,
+      dadosDepois: {
+        clienteId: clienteId ? Number(clienteId) : null,
+        tecnicoId: tecnicoId ? Number(tecnicoId) : null,
+        tipo: tipo || null,
+        data: data || null,
+        horarioIni: horario || null,
+        observacoes: observacoes || null,
+      },
+    })
+    return reply.status(201).send({ ...item, id: Number(item.id) })
   })
 
   // PUT /agenda/:id
   app.put('/:id', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request) => {
     const { id } = request.params as { id: string }
-    const body = request.body as Record<string, unknown>
-    return prisma.agendaItem.update({ where: { id: Number(id) }, data: body as never })
+    const { clienteId, tecnicoId, tipo, data, horario, observacoes } = request.body as any
+    const payload = request.user as { id: number }
+
+    // Capture before state for audit
+    const [before]: any[] = await prisma.$queryRaw`
+      SELECT cod_cli AS clienteId, cod_colaborador AS tecnicoId, Tipo AS tipo,
+             Status_agendamento AS status,
+             DATE_FORMAT(data_agendamento, '%Y-%m-%d') AS data,
+             TIME_FORMAT(hora_ini, '%H:%i') AS horarioIni,
+             descricao AS observacoes
+      FROM agenda WHERE cod_agenda = ${Number(id)}
+    `
+    const dadosAntes = before ? {
+      clienteId: before.clienteId != null ? Number(before.clienteId) : null,
+      tecnicoId: before.tecnicoId != null ? Number(before.tecnicoId) : null,
+      tipo: before.tipo ?? null,
+      data: before.data ?? null,
+      horarioIni: before.horarioIni ?? null,
+      observacoes: before.observacoes ?? null,
+    } : null
+
+    await prisma.agendaItem.update({
+      where: { id: Number(id) },
+      data: {
+        ...(clienteId !== undefined && { clienteId: clienteId ? Number(clienteId) : null }),
+        ...(tecnicoId !== undefined && { tecnicoId: tecnicoId ? Number(tecnicoId) : null }),
+        ...(tipo !== undefined && { tipo: tipo || null }),
+        ...(data !== undefined && { data: data ? new Date(data + 'T12:00:00Z') : null }),
+        ...(horario !== undefined && { horarioIni: horario ? new Date(`1970-01-01T${horario}:00Z`) : null }),
+        ...(observacoes !== undefined && { observacoes: observacoes || null }),
+      },
+    })
+
+    registrarAuditoria({
+      tabela: 'agenda', registroId: Number(id), acao: 'ALTERACAO', usuarioId: payload.id,
+      dadosAntes,
+      dadosDepois: {
+        clienteId: clienteId !== undefined ? (clienteId ? Number(clienteId) : null) : dadosAntes?.clienteId,
+        tecnicoId: tecnicoId !== undefined ? (tecnicoId ? Number(tecnicoId) : null) : dadosAntes?.tecnicoId,
+        tipo: tipo !== undefined ? (tipo || null) : dadosAntes?.tipo,
+        data: data !== undefined ? (data || null) : dadosAntes?.data,
+        horarioIni: horario !== undefined ? (horario || null) : dadosAntes?.horarioIni,
+        observacoes: observacoes !== undefined ? (observacoes || null) : dadosAntes?.observacoes,
+      },
+    })
+
+    return { ok: true }
   })
 
   // PATCH /agenda/:id/status
   app.patch('/:id/status', { preHandler: authMiddleware, schema: { tags: ['Agenda'], summary: 'Atualizar status do agendamento' } }, async (request) => {
     const { id } = request.params as { id: string }
     const { status } = request.body as { status: number }
-    return prisma.agendaItem.update({ where: { id: Number(id) }, data: { status } })
+    const payload = request.user as { id: number }
+
+    const [before]: any[] = await prisma.$queryRaw`
+      SELECT Status_agendamento AS status FROM agenda WHERE cod_agenda = ${Number(id)}`
+    const statusAntes = before?.status != null ? Number(before.status) : null
+
+    const result = await prisma.agendaItem.update({ where: { id: Number(id) }, data: { status } })
+
+    registrarAuditoria({
+      tabela: 'agenda', registroId: Number(id), acao: 'STATUS', usuarioId: payload.id,
+      dadosAntes: { status: statusAntes },
+      dadosDepois: { status },
+    })
+
+    return result
   })
 
   // DELETE /agenda/:id
   app.delete('/:id', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
     const { id } = request.params as { id: string }
+    const payload = request.user as { id: number }
+
+    const [before]: any[] = await prisma.$queryRaw`
+      SELECT cod_cli AS clienteId, cod_colaborador AS tecnicoId, Tipo AS tipo,
+             Status_agendamento AS status,
+             DATE_FORMAT(data_agendamento, '%Y-%m-%d') AS data,
+             TIME_FORMAT(hora_ini, '%H:%i') AS horarioIni,
+             descricao AS observacoes
+      FROM agenda WHERE cod_agenda = ${Number(id)}
+    `
+
     await prisma.agendaItem.delete({ where: { id: Number(id) } })
+
+    registrarAuditoria({
+      tabela: 'agenda', registroId: Number(id), acao: 'EXCLUSAO', usuarioId: payload.id,
+      dadosAntes: before ? {
+        clienteId: before.clienteId != null ? Number(before.clienteId) : null,
+        tecnicoId: before.tecnicoId != null ? Number(before.tecnicoId) : null,
+        tipo: before.tipo ?? null,
+        data: before.data ?? null,
+        horarioIni: before.horarioIni ?? null,
+        observacoes: before.observacoes ?? null,
+      } : null,
+      dadosDepois: null,
+    })
+
     return reply.status(204).send()
   })
 }

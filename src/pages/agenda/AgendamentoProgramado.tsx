@@ -152,12 +152,18 @@ export function AgendamentoProgramado() {
   })
   const [savingBloqueio, setSavingBloqueio] = useState(false)
 
-  // Booking modal
+  // Booking modal — suporta múltiplos slots do mesmo técnico
   const [showBookModal, setShowBookModal] = useState(false)
-  const [bookSlot, setBookSlot] = useState<{ tecnicoId: number; tecnicoNome: string; hora: string } | null>(null)
+  const [bookTecnico, setBookTecnico] = useState<{ tecnicoId: number; tecnicoNome: string } | null>(null)
+  const [selectedSlots, setSelectedSlots] = useState<string[]>([])
   const [bookForm, setBookForm] = useState({ clienteId: '', descricao: '', duracao: '60' })
   const [submitting, setSubmitting] = useState(false)
   const [bookError, setBookError] = useState('')
+
+  // Legacy compat shim
+  const bookSlot = bookTecnico && selectedSlots.length > 0
+    ? { tecnicoId: bookTecnico.tecnicoId, tecnicoNome: bookTecnico.tecnicoNome, hora: selectedSlots[0] }
+    : null
 
   // Edit agendamento modal
   const [editItem, setEditItem] = useState<AgProg | null>(null)
@@ -271,28 +277,55 @@ export function AgendamentoProgramado() {
 
   // ── Booking ────────────────────────────────────────────────────
   function openBook(tecnicoId: number, tecnicoNome: string, hora: string) {
-    setBookSlot({ tecnicoId, tecnicoNome, hora })
+    setBookTecnico({ tecnicoId, tecnicoNome })
+    setSelectedSlots([hora])
     setBookForm({ clienteId: '', descricao: '', duracao: '60' })
     setBookError('')
     setShowBookModal(true)
   }
 
+  function toggleSlotSelection(tech: SlotResult, hora: string) {
+    // If no tecnico selected yet, start fresh
+    if (!bookTecnico || bookTecnico.tecnicoId !== tech.tecnicoId) {
+      setBookTecnico({ tecnicoId: tech.tecnicoId, tecnicoNome: tech.tecnicoNome })
+      setSelectedSlots([hora])
+      setBookForm({ clienteId: '', descricao: '', duracao: '60' })
+      setBookError('')
+      setShowBookModal(false) // just highlight, modal opens on confirm
+      return
+    }
+    setSelectedSlots(prev =>
+      prev.includes(hora) ? prev.filter(h => h !== hora) : [...prev, hora].sort()
+    )
+  }
+
+  function openBookModal() {
+    if (!bookTecnico || selectedSlots.length === 0) return
+    setBookError('')
+    setShowBookModal(true)
+  }
+
   async function saveBook() {
-    if (!bookSlot || !bookForm.clienteId) { setBookError('Selecione um cliente.'); return }
+    if (!bookTecnico || selectedSlots.length === 0 || !bookForm.clienteId) { setBookError('Selecione um cliente.'); return }
     setSubmitting(true)
     setBookError('')
     try {
-      await api.createAgendamentoProg({
-        tecnicoId: bookSlot.tecnicoId,
-        clienteId: Number(bookForm.clienteId),
-        data: selectedDate,
-        horaInicio: bookSlot.hora,
-        duracao: Number(bookForm.duracao),
-        descricao: bookForm.descricao || undefined,
-      })
+      for (const hora of selectedSlots) {
+        await api.createAgendamentoProg({
+          tecnicoId: bookTecnico.tecnicoId,
+          clienteId: Number(bookForm.clienteId),
+          data: selectedDate,
+          horaInicio: hora,
+          duracao: Number(bookForm.duracao),
+          descricao: bookForm.descricao || undefined,
+        })
+      }
       setShowBookModal(false)
+      setSelectedSlots([])
+      setBookTecnico(null)
       fetchSlots()
-      if (activeTab === 'lista') fetchAgendamentos()
+      fetchAgendamentos()
+      setActiveTab('lista')
     } catch (e: any) {
       setBookError(e.message || 'Erro ao salvar agendamento.')
     } finally {
@@ -453,51 +486,89 @@ export function AgendamentoProgramado() {
           )}
 
           {!loadingSlots && slotResults.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-              {slotResults.map(tech => (
-                <Card key={tech.tecnicoId}>
-                  <div className="flex items-center gap-2 mb-4">
-                    <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                      <User className="w-4 h-4 text-white" />
+            <>
+              {/* Barra de seleção múltipla */}
+              {bookTecnico && selectedSlots.length > 0 && (
+                <div className="flex items-center justify-between p-3 rounded-xl bg-blue-600/10 border border-blue-500/30">
+                  <div className="flex items-center gap-3">
+                    <div className="flex gap-1 flex-wrap">
+                      {selectedSlots.map(h => (
+                        <span key={h} className="px-2 py-0.5 rounded-lg bg-blue-600 text-white text-xs font-medium">{h}</span>
+                      ))}
                     </div>
-                    <div>
-                      <p className="text-sm font-semibold text-slate-100">{tech.tecnicoNome}</p>
-                      <p className="text-xs text-slate-500">{fmtDate(selectedDate)}</p>
-                    </div>
+                    <span className="text-sm text-slate-300">
+                      {selectedSlots.length} horário{selectedSlots.length > 1 ? 's' : ''} selecionado{selectedSlots.length > 1 ? 's' : ''} — {bookTecnico.tecnicoNome}
+                    </span>
                   </div>
-
-                  {tech.slotsDisponiveis.length === 0 && tech.slotsOcupados.length === 0 && (
-                    <p className="text-xs text-slate-500 text-center py-4">Sem agenda neste dia da semana.</p>
-                  )}
-                  {tech.slotsDisponiveis.length === 0 && tech.slotsOcupados.length > 0 && (
-                    <p className="text-xs text-amber-400 text-center py-2">Todos os horários estão ocupados.</p>
-                  )}
-
-                  <div className="flex flex-wrap gap-2">
-                    {tech.slotsDisponiveis.map(hora => (
-                      <button
-                        key={hora}
-                        onClick={() => openBook(tech.tecnicoId, tech.tecnicoNome, hora)}
-                        className="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors"
-                      >
-                        {hora}
-                      </button>
-                    ))}
-                    {tech.slotsOcupados.map(hora => (
-                      <span key={hora} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-500 text-sm font-medium cursor-not-allowed line-through" title="Horário ocupado">
-                        {hora}
-                      </span>
-                    ))}
+                  <div className="flex gap-2">
+                    <Button variant="secondary" onClick={() => { setSelectedSlots([]); setBookTecnico(null) }}>Limpar</Button>
+                    <Button onClick={openBookModal} icon={<Plus className="w-4 h-4" />}>Agendar</Button>
                   </div>
+                </div>
+              )}
 
-                  {tech.slotsDisponiveis.length > 0 && (
-                    <p className="text-xs text-slate-500 mt-3">
-                      {tech.slotsDisponiveis.length} horário{tech.slotsDisponiveis.length > 1 ? 's' : ''} disponível{tech.slotsDisponiveis.length > 1 ? 'is' : ''}
-                    </p>
-                  )}
-                </Card>
-              ))}
-            </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {slotResults.map(tech => {
+                  const isActiveTecnico = bookTecnico?.tecnicoId === tech.tecnicoId
+                  return (
+                    <Card key={tech.tecnicoId}>
+                      <div className="flex items-center gap-2 mb-4">
+                        <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                          <User className="w-4 h-4 text-white" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-100">{tech.tecnicoNome}</p>
+                          <p className="text-xs text-slate-500">{fmtDate(selectedDate)}</p>
+                        </div>
+                        {isActiveTecnico && selectedSlots.length > 0 && (
+                          <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-blue-600/20 text-blue-400 border border-blue-500/30">
+                            {selectedSlots.length} selecionado{selectedSlots.length > 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+
+                      {tech.slotsDisponiveis.length === 0 && tech.slotsOcupados.length === 0 && (
+                        <p className="text-xs text-slate-500 text-center py-4">Sem agenda neste dia da semana.</p>
+                      )}
+                      {tech.slotsDisponiveis.length === 0 && tech.slotsOcupados.length > 0 && (
+                        <p className="text-xs text-amber-400 text-center py-2">Todos os horários estão ocupados.</p>
+                      )}
+
+                      <div className="flex flex-wrap gap-2">
+                        {tech.slotsDisponiveis.map(hora => {
+                          const isSelected = isActiveTecnico && selectedSlots.includes(hora)
+                          return (
+                            <button
+                              key={hora}
+                              onClick={() => toggleSlotSelection(tech, hora)}
+                              className={clsx(
+                                'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                                isSelected
+                                  ? 'bg-blue-500 text-white ring-2 ring-blue-400 ring-offset-1 ring-offset-slate-900'
+                                  : 'bg-blue-600 hover:bg-blue-500 text-white'
+                              )}
+                            >
+                              {hora}
+                            </button>
+                          )
+                        })}
+                        {tech.slotsOcupados.map(hora => (
+                          <span key={hora} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-500 text-sm font-medium cursor-not-allowed line-through" title="Horário ocupado">
+                            {hora}
+                          </span>
+                        ))}
+                      </div>
+
+                      {tech.slotsDisponiveis.length > 0 && (
+                        <p className="text-xs text-slate-500 mt-3">
+                          Clique nos horários para selecionar · {tech.slotsDisponiveis.length} disponível{tech.slotsDisponiveis.length > 1 ? 'is' : ''}
+                        </p>
+                      )}
+                    </Card>
+                  )
+                })}
+              </div>
+            </>
           )}
         </div>
       )}
@@ -807,15 +878,20 @@ export function AgendamentoProgramado() {
       <Modal
         isOpen={showBookModal}
         onClose={() => setShowBookModal(false)}
-        title={bookSlot ? `Agendar — ${bookSlot.tecnicoNome} às ${bookSlot.hora}` : 'Novo Agendamento'}
+        title={bookTecnico ? `Agendar — ${bookTecnico.tecnicoNome}` : 'Novo Agendamento'}
         size="md"
       >
         <div className="space-y-4">
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
-            <Clock className="w-4 h-4 text-blue-400 flex-shrink-0" />
-            <p className="text-sm font-medium text-slate-200">
-              {bookSlot?.tecnicoNome} — {bookSlot?.hora} em {fmtDate(selectedDate)}
-            </p>
+          <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <Clock className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-medium text-slate-200">{bookTecnico?.tecnicoNome} · {fmtDate(selectedDate)}</p>
+              <div className="flex gap-1 flex-wrap mt-1.5">
+                {selectedSlots.map(h => (
+                  <span key={h} className="px-2 py-0.5 rounded-lg bg-blue-600 text-white text-xs font-medium">{h}</span>
+                ))}
+              </div>
+            </div>
           </div>
 
           <ClienteSearch

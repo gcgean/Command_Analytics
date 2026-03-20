@@ -69,10 +69,11 @@ export function ClienteSearch({ label, value, onChange, placeholder = 'Digite pa
 
   const filtered = query.trim().length < 1 ? [] : allClientes.filter(c => {
     const q = query.toLowerCase()
+    const qDigits = q.replace(/\D/g, '')
     return (
       c.nome?.toLowerCase().includes(q) ||
       c.nomeRazao?.toLowerCase().includes(q) ||
-      c.cnpj?.replace(/\D/g, '').includes(q.replace(/\D/g, '')) ||
+      (qDigits.length > 0 && c.cnpj?.replace(/\D/g, '').includes(qDigits)) ||
       c.cidade?.toLowerCase().includes(q)
     )
   }).slice(0, 30)

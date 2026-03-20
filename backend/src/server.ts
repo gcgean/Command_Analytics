@@ -24,6 +24,8 @@ import { servidoresRoutes } from './routes/servidores'
 import { dashboardRoutes } from './routes/dashboard'
 import { usuariosRoutes } from './routes/usuarios'
 import { gruposRoutes } from './routes/grupos'
+import { auditoriaRoutes } from './routes/auditoria'
+import { initAuditoria } from './utils/auditoria'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
 
@@ -60,6 +62,7 @@ app.register(swagger, {
       { name: 'Servidores', description: 'Infraestrutura em nuvem' },
       { name: 'Dashboard', description: 'KPIs do dashboard' },
       { name: 'Usuários', description: 'Gestão de usuários' },
+      { name: 'Auditoria', description: 'Histórico de alterações' },
     ],
   },
 })
@@ -92,13 +95,18 @@ app.register(versoesRoutes,    { prefix: '/versoes' })
 app.register(servidoresRoutes, { prefix: '/servidores' })
 app.register(dashboardRoutes,  { prefix: '/dashboard' })
 app.register(gruposRoutes,     { prefix: '/grupos' })
+app.register(auditoriaRoutes,  { prefix: '/auditoria' })
 
 // ─── Start ─────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT) || 3333
 
-app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
+app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   if (err) { app.log.error(err); process.exit(1) }
   console.log(`\n🚀 Command Analytics API rodando em http://localhost:${PORT}`)
   console.log(`📖 Documentação Swagger: http://localhost:${PORT}/docs`)
   console.log(`💾 Banco de dados: SQLite (${process.env.DATABASE_URL})`)
+  // Garante que a tabela de auditoria existe
+  initAuditoria()
+    .then(() => console.log('✓ Tabela de auditoria verificada'))
+    .catch(e => console.warn('⚠ Auditoria init:', e.message))
 })

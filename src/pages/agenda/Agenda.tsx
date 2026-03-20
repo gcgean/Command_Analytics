@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Plus, Clock, User, Search, Calendar, Pencil, CheckSquare } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Clock, User, Search, Calendar, Pencil, CheckSquare, Trash2, History } from 'lucide-react'
+import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -40,7 +41,10 @@ function getStatusLabel(status: number | null | undefined): string {
 
 function formatTime(t: any): string {
   if (!t) return ''
+  // If it's already a string "HH:MM:SS" or "HH:MM"
+  if (typeof t === 'string' && t.includes(':')) return t.substring(0, 5)
   const d = new Date(t)
+  if (isNaN(d.getTime())) return ''
   return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
 }
 
@@ -101,6 +105,12 @@ export function Agenda() {
   })
   const [savingEdit, setSavingEdit] = useState(false)
 
+  // New appointment saving state
+  const [saving, setSaving] = useState(false)
+
+  // Audit modal
+  const [auditoriaItem, setAuditoriaItem] = useState<{ tabela: string; registroId: number; label: string } | null>(null)
+
   // Status change modal
   const [statusItem, setStatusItem] = useState<AgendaItem | null>(null)
   const [newStatus, setNewStatus] = useState(0)
@@ -155,6 +165,28 @@ export function Agenda() {
     buscar(newFilters)
   }
 
+  async function saveAgendamento() {
+    setSaving(true)
+    try {
+      await api.createAgendaItem({
+        clienteId: form.clienteId ? Number(form.clienteId) : undefined,
+        tecnicoId: form.tecnicoId ? Number(form.tecnicoId) : undefined,
+        tipo: form.tipo || undefined,
+        data: form.data || undefined,
+        horario: form.horario || undefined,
+        observacoes: form.observacoes || undefined,
+      } as any)
+      setShowModal(false)
+      setForm({ clienteId: '', tecnicoId: '', tipo: 'Instalação', data: todayStr(), horario: '09:00', observacoes: '' })
+      buscar()
+      loadMonthData()
+    } catch (e: any) {
+      alert(e?.message || 'Erro ao salvar agendamento.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   function openEdit(item: AgendaItem) {
     setEditItem(item)
     setEditForm({
@@ -171,13 +203,25 @@ export function Agenda() {
     if (!editItem) return
     setSavingEdit(true)
     try {
-      await api.updateAgendaItem(editItem.id, {
-        clienteId: editForm.clienteId ? Number(editForm.clienteId) : null,
-        tecnicoId: editForm.tecnicoId ? Number(editForm.tecnicoId) : null,
-        tipo: editForm.tipo || null,
-        data: editForm.data || null,
-        observacoes: editForm.observacoes || null,
-      } as any)
+      const isProg = (editItem as any).origem === 'programado'
+      if (isProg) {
+        await api.updateAgendamentoProg(editItem.id, {
+          tecnicoId: editForm.tecnicoId ? Number(editForm.tecnicoId) : undefined,
+          clienteId: editForm.clienteId ? Number(editForm.clienteId) : null,
+          data: editForm.data || undefined,
+          horaInicio: editForm.horario || undefined,
+          descricao: editForm.observacoes || null,
+        })
+      } else {
+        await api.updateAgendaItem(editItem.id, {
+          clienteId: editForm.clienteId ? Number(editForm.clienteId) : null,
+          tecnicoId: editForm.tecnicoId ? Number(editForm.tecnicoId) : null,
+          tipo: editForm.tipo || null,
+          data: editForm.data || null,
+          horario: editForm.horario || null,
+          observacoes: editForm.observacoes || null,
+        } as any)
+      }
       setEditItem(null)
       buscar()
     } catch { } finally {
@@ -194,7 +238,11 @@ export function Agenda() {
     if (!statusItem) return
     setSavingStatus(true)
     try {
-      await api.updateAgendaStatus(statusItem.id, newStatus)
+      if ((statusItem as any).origem === 'programado') {
+        await api.updateAgendamentoProgStatus(statusItem.id, newStatus)
+      } else {
+        await api.updateAgendaStatus(statusItem.id, newStatus)
+      }
       setStatusItem(null)
       buscar()
     } catch { } finally {
@@ -365,11 +413,11 @@ export function Agenda() {
             <div className="grid grid-cols-12 gap-2 px-3 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
               <div className="col-span-2">Horário</div>
               <div className="col-span-1">Data</div>
-              <div className="col-span-3">Cliente / Descrição</div>
+              <div className="col-span-2">Cliente / Descrição</div>
               <div className="col-span-2">Técnico</div>
               <div className="col-span-1">Tipo</div>
               <div className="col-span-2">Status</div>
-              <div className="col-span-1"></div>
+              <div className="col-span-2"></div>
             </div>
 
             {results.map(item => {
@@ -395,25 +443,48 @@ export function Agenda() {
                     <span className="text-sm font-mono text-slate-300 text-xs">{timeStr}</span>
                   </div>
                   <div className="col-span-1 text-xs text-slate-400">{dateStr}</div>
-                  <div className="col-span-3 min-w-0">
+                  <div className="col-span-2 min-w-0">
                     <p className="text-sm font-medium text-slate-200 truncate">{item.clienteNome || '—'}</p>
                     {descricao && <p className="text-xs text-slate-500 truncate mt-0.5">{descricao}</p>}
+                    {(item as any).criadoPorNome && (
+                      <p className="text-xs text-slate-600 mt-0.5 truncate">
+                        por {(item as any).criadoPorNome}
+                        {(item as any).dataCriacao ? ` · ${new Date((item as any).dataCriacao).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
+                      </p>
+                    )}
                   </div>
                   <div className="col-span-2 flex items-center gap-1">
                     <User className="w-3 h-3 text-slate-500 flex-shrink-0" />
                     <span className="text-xs text-slate-400 truncate">{item.tecnicoNome || '—'}</span>
                   </div>
                   <div className="col-span-1">
-                    <span className={clsx('text-xs px-2 py-0.5 rounded-full border', tipoClass)}>
-                      {tipoKey || '—'}
-                    </span>
+                    {(item as any).origem === 'programado' ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full border bg-indigo-500/20 text-indigo-400 border-indigo-500/30">
+                        Programado
+                      </span>
+                    ) : (
+                      <span className={clsx('text-xs px-2 py-0.5 rounded-full border', tipoClass)}>
+                        {tipoKey || '—'}
+                      </span>
+                    )}
                   </div>
                   <div className="col-span-2">
                     <span className={clsx('text-xs px-2 py-0.5 rounded-full', statusColors[statusLabel] ?? '')}>
                       {statusLabel}
                     </span>
                   </div>
-                  <div className="col-span-1 flex gap-1 justify-end">
+                  <div className="col-span-2 flex gap-1 justify-end">
+                    <button
+                      onClick={() => setAuditoriaItem({
+                        tabela: (item as any).origem === 'programado' ? 'agendamento_programado' : 'agenda',
+                        registroId: item.id,
+                        label: item.clienteNome || `#${item.id}`,
+                      })}
+                      title="Histórico de auditoria"
+                      className="p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-violet-500/10 transition-colors"
+                    >
+                      <History className="w-3.5 h-3.5" />
+                    </button>
                     <button
                       onClick={() => openStatusChange(item)}
                       title="Alterar Status"
@@ -427,6 +498,22 @@ export function Agenda() {
                       className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
                     >
                       <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!confirm('Excluir este agendamento?')) return
+                        if ((item as any).origem === 'programado') {
+                          await api.cancelAgendamentoProg(item.id).catch(() => {})
+                        } else {
+                          await api.deleteAgendaItem(item.id).catch(() => {})
+                        }
+                        buscar()
+                        loadMonthData()
+                      }}
+                      title="Excluir"
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -485,7 +572,9 @@ export function Agenda() {
           />
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Button>
-            <Button onClick={() => setShowModal(false)}>Salvar Agendamento</Button>
+            <Button onClick={saveAgendamento} disabled={saving}>
+              {saving ? 'Salvando...' : 'Salvar Agendamento'}
+            </Button>
           </div>
         </div>
       </Modal>
@@ -538,6 +627,16 @@ export function Agenda() {
           </div>
         </div>
       </Modal>
+
+      {/* Audit Timeline */}
+      {auditoriaItem && (
+        <AuditoriaTimeline
+          tabela={auditoriaItem.tabela}
+          registroId={auditoriaItem.registroId}
+          titulo={auditoriaItem.label}
+          onClose={() => setAuditoriaItem(null)}
+        />
+      )}
 
       {/* Status Change Modal */}
       <Modal isOpen={!!statusItem} onClose={() => setStatusItem(null)} title="Alterar Status" size="sm">
