@@ -130,10 +130,21 @@ function filterGroups(groups: typeof navGroups, can: (r: string) => boolean) {
     .filter(g => g.items.length > 0)
 }
 
-function NavItemComponent({ item, depth = 0 }: { item: NavItem; depth?: number }) {
+function NavItemComponent({
+  item,
+  depth = 0,
+  collapsed,
+  onNavigate,
+}: {
+  item: NavItem
+  depth?: number
+  collapsed: boolean
+  onNavigate: () => void
+}) {
   const [open, setOpen] = useState(false)
 
   if (item.children) {
+    if (collapsed) return null
     return (
       <div>
         <button
@@ -147,7 +158,13 @@ function NavItemComponent({ item, depth = 0 }: { item: NavItem; depth?: number }
         {open && (
           <div className="mt-0.5 ml-3 pl-3 border-l border-slate-700">
             {item.children.map(child => (
-              <NavItemComponent key={child.label} item={child} depth={depth + 1} />
+              <NavItemComponent
+                key={child.label}
+                item={child}
+                depth={depth + 1}
+                collapsed={collapsed}
+                onNavigate={onNavigate}
+              />
             ))}
           </div>
         )}
@@ -155,9 +172,28 @@ function NavItemComponent({ item, depth = 0 }: { item: NavItem; depth?: number }
     )
   }
 
+  if (collapsed) {
+    return (
+      <NavLink
+        to={item.to!}
+        title={item.label}
+        onClick={onNavigate}
+        className={({ isActive }) =>
+          clsx(
+            'flex items-center justify-center p-2.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all duration-200',
+            isActive && 'text-white bg-blue-600 hover:bg-blue-600'
+          )
+        }
+      >
+        {item.icon}
+      </NavLink>
+    )
+  }
+
   return (
     <NavLink
       to={item.to!}
+      onClick={onNavigate}
       className={({ isActive }) =>
         clsx('sidebar-link', isActive && 'active', depth > 0 && 'text-xs py-2')
       }
@@ -169,15 +205,20 @@ function NavItemComponent({ item, depth = 0 }: { item: NavItem; depth?: number }
 }
 
 interface SidebarProps {
-  collapsed: boolean
+  open: boolean
   onToggle: () => void
+  onNavigate: () => void
 }
 
-export function Sidebar({ collapsed, onToggle }: SidebarProps) {
+export function Sidebar({ open, onToggle, onNavigate }: SidebarProps) {
   const logout = useAuthStore(s => s.logout)
   const user = useAuthStore(s => s.user)
   const navigate = useNavigate()
   const { can } = usePermissions()
+
+  // On desktop: open=true → full, open=false → icon-only
+  // On mobile:  open=true → drawer over content, open=false → hidden
+  const collapsed = !open
 
   const visibleGroups = filterGroups(navGroups, can)
 
@@ -195,14 +236,20 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
 
   return (
     <>
-      {!collapsed && (
-        <div className="fixed inset-0 bg-black/50 z-20 lg:hidden" onClick={onToggle} />
+      {/* Mobile overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+          onClick={onToggle}
+        />
       )}
 
       <aside
         className={clsx(
           'fixed top-0 left-0 h-full bg-slate-900 border-r border-slate-800 z-30 flex flex-col transition-all duration-300',
-          collapsed ? '-translate-x-full lg:translate-x-0 lg:w-16' : 'translate-x-0 w-64'
+          open
+            ? 'translate-x-0 w-64'
+            : '-translate-x-full lg:translate-x-0 lg:w-16'
         )}
       >
         {/* Logo */}
@@ -218,7 +265,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           )}
           <button
             onClick={onToggle}
-            className="ml-auto text-slate-400 hover:text-slate-100 p-1 rounded lg:flex hidden"
+            className="ml-auto text-slate-400 hover:text-slate-100 p-1 rounded hidden lg:flex"
           >
             {collapsed ? <Menu className="w-4 h-4" /> : <X className="w-4 h-4" />}
           </button>
@@ -234,31 +281,14 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
                 </p>
               )}
               <div className="space-y-0.5">
-                {group.items.map(item =>
-                  collapsed ? (
-                    item.to ? (
-                      <NavLink
-                        key={item.label}
-                        to={item.to}
-                        title={item.label}
-                        className={({ isActive }) =>
-                          clsx(
-                            'flex items-center justify-center p-2.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all duration-200',
-                            isActive && 'text-white bg-blue-600 hover:bg-blue-600'
-                          )
-                        }
-                      >
-                        {item.icon}
-                      </NavLink>
-                    ) : (
-                      <div key={item.label} title={item.label} className="flex items-center justify-center p-2.5 rounded-lg text-slate-400">
-                        {item.icon}
-                      </div>
-                    )
-                  ) : (
-                    <NavItemComponent key={item.label} item={item} />
-                  )
-                )}
+                {group.items.map(item => (
+                  <NavItemComponent
+                    key={item.label}
+                    item={item}
+                    collapsed={collapsed}
+                    onNavigate={onNavigate}
+                  />
+                ))}
               </div>
             </div>
           ))}
@@ -267,7 +297,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         {/* Footer */}
         <div className="p-2 border-t border-slate-800 flex items-center gap-2">
           <button
-            onClick={() => navigate('/perfil')}
+            onClick={() => { navigate('/perfil'); onNavigate() }}
             title="Meu Perfil"
             className={clsx(
               'flex items-center gap-2 px-2 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all duration-200',

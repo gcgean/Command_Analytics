@@ -408,7 +408,8 @@ export function Agenda() {
 
         {/* Results list */}
         {!loading && results.length > 0 && (
-          <div className="space-y-1">
+          <div className="overflow-x-auto -mx-1">
+          <div className="min-w-[680px] space-y-1 px-1">
             {/* Table header */}
             <div className="grid grid-cols-12 gap-2 px-3 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
               <div className="col-span-2">Horário</div>
@@ -519,6 +520,7 @@ export function Agenda() {
                 </div>
               )
             })}
+          </div>
           </div>
         )}
 
