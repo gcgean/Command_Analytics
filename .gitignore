@@ -1,0 +1,33 @@
+# Dependências
+node_modules/
+backend/node_modules/
+
+# Build
+dist/
+backend/dist/
+dev-dist/
+
+# Ambiente (NUNCA subir para o Git)
+.env
+.env.local
+.env.production
+backend/.env
+backend/.env.local
+
+# PM2
+ecosystem.config.cjs
+serve-web.cjs
+
+# Logs
+*.log
+npm-debug.log*
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.suo
+*.user
