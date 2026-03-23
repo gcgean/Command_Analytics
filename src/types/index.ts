@@ -139,6 +139,7 @@ export interface AgendaItem {
   tipo: string | null
   status: number | null          // int: 1=Aguardando, 2=Realizado, etc.
   data: string | null            // date string
+  dataFim?: string | null        // date string
   horarioIni: string | null      // time (may come as DateTime)
   horarioFim?: string | null
   observacoes?: string | null

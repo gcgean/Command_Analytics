@@ -72,6 +72,7 @@ import { BancoHoras } from './pages/rh/BancoHoras'
 
 // Configurações
 import { Configuracoes } from './pages/configuracoes/Configuracoes'
+import { Usuarios } from './pages/configuracoes/Usuarios'
 
 // Perfil
 import { Perfil } from './pages/perfil/Perfil'
@@ -146,6 +147,7 @@ export default function App() {
 
         <Route path="banco-horas" element={<BancoHoras />} />
         <Route path="configuracoes" element={<Configuracoes />} />
+        <Route path="usuarios" element={<Usuarios />} />
         <Route path="grupos-acesso" element={<GruposAcesso />} />
         <Route path="perfil" element={<Perfil />} />
       </Route>

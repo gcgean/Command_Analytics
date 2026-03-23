@@ -20,13 +20,9 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       login: async (usuario: string, password: string) => {
-        try {
-          const { user, token } = await api.login(usuario, password) as { user: Usuario; token: string }
-          set({ user, token, isAuthenticated: true })
-          return true
-        } catch {
-          return false
-        }
+        const { user, token } = await api.login(usuario, password) as { user: Usuario; token: string }
+        set({ user, token, isAuthenticated: true })
+        return true
       },
 
       logout: () => {

@@ -107,6 +107,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
     group: 'INFRAESTRUTURA',
     items: [
       { label: 'Servidores em Nuvem', icon: <Server className="w-4 h-4" />,      to: '/servidores',    recurso: 'servidores' },
+      { label: 'Usuários',            icon: <Users className="w-4 h-4" />,       to: '/usuarios',      recurso: 'usuarios' },
       { label: 'Grupos de Acesso',    icon: <ShieldCheck className="w-4 h-4" />, to: '/grupos-acesso', recurso: 'grupos-acesso' },
       { label: 'Configurações',       icon: <Settings className="w-4 h-4" />,    to: '/configuracoes', recurso: 'configuracoes' },
     ]

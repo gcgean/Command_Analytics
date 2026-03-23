@@ -16,11 +16,16 @@ function getToken(): string | null {
 
 async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
+  const baseHeaders: Record<string, string> = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+  if (options.body !== undefined) {
+    baseHeaders['Content-Type'] = 'application/json'
+  }
   const res = await fetch(`${BASE_URL}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...baseHeaders,
       ...options.headers,
     },
   })
@@ -203,9 +208,13 @@ export const api = {
   getServidores: () => fetchApi<Servidor[]>('/servidores'),
 
   // ─── Usuários ──────────────────────────────────────────────
-  getUsuarios: () => fetchApi('/usuarios'),
-  updateUsuario: (id: number, data: Record<string, unknown>) =>
-    fetchApi(`/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getUsuarios: () => fetchApi<Usuario[]>('/usuarios'),
+  getUsuariosTodos: () => fetchApi<Usuario[]>('/usuarios/todos'),
+  createUsuario: (data: Partial<Usuario> & { senha?: string }) =>
+    fetchApi<Usuario>('/usuarios', { method: 'POST', body: JSON.stringify(data) }),
+  updateUsuario: (id: number, data: Partial<Usuario> & { senha?: string }) =>
+    fetchApi<Usuario>(`/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleUsuario: (id: number) => fetchApi<Usuario>(`/usuarios/${id}/toggle`, { method: 'PATCH' }),
 
   // ─── Grupos de Acesso ────────────────────────────────────
   getGrupos: () => fetchApi<any[]>('/grupos'),

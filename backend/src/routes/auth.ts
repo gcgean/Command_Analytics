@@ -10,7 +10,7 @@ function formatUser(u: any, permissoes: string[] = ['*']) {
     nome: u.nomeCompleto || u.nomeUsu || 'Usuário',
     email: u.email ?? '',
     cargo: u.cargo ?? '',
-    departamento: '',
+    departamento: u.departamento ?? '',
     avatar: u.avatar ?? null,
     ativo: u.ativo === 'S',
     permissoes,

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, Trash2, Ban, Pencil, CheckSquare } from 'lucide-react'
+
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
@@ -19,7 +20,7 @@ const DIAS_SEMANA = [
   { val: 6, label: 'Sáb' },
 ]
 
-// Status para agendamentos programados
+// Status para agendamentos programados 
 const STATUS_OPTS = [
   { value: 1, label: 'Aguardando',   color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
   { value: 2, label: 'Efetuado',     color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
@@ -37,7 +38,7 @@ const STATUS_LABEL: Record<number, string> = {
   1: 'Aguardando', 2: 'Efetuado', 3: 'Não efetuado', 4: 'Reagendado',
 }
 
-// Use local date (not UTC) to avoid timezone-day-off bugs
+// Use local date (not UTC) to avoid timezone bugs
 function today() {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -50,6 +51,23 @@ function fmtDate(val: any) {
     : String(val).substring(0, 10)
   if (!s || s.length < 10) return ''
   return new Date(s + 'T12:00:00').toLocaleDateString('pt-BR')
+}
+
+function formatTime(t: any): string {
+  if (!t) return ''
+  
+  if (typeof t === 'string') {
+    if (t.startsWith('1970-') && (!t.includes('T') || t.includes('T00:00:00'))) return ''
+    if (t.includes('T')) {
+      const match = t.match(/T(\d{2}:\d{2})/)
+      if (match) return match[1]
+    }
+    if (t.includes(':')) return t.substring(0, 5)
+  }
+  
+  const d = new Date(t)
+  if (isNaN(d.getTime())) return ''
+  return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
 }
 
 function addMinutes(hhmm: string, mins: number): string {
@@ -160,10 +178,7 @@ export function AgendamentoProgramado() {
   const [submitting, setSubmitting] = useState(false)
   const [bookError, setBookError] = useState('')
 
-  // Legacy compat shim
-  const bookSlot = bookTecnico && selectedSlots.length > 0
-    ? { tecnicoId: bookTecnico.tecnicoId, tecnicoNome: bookTecnico.tecnicoNome, hora: selectedSlots[0] }
-    : null
+
 
   // Edit agendamento modal
   const [editItem, setEditItem] = useState<AgProg | null>(null)
@@ -343,7 +358,7 @@ export function AgendamentoProgramado() {
       tecnicoId: String(ag.tecnicoId),
       clienteId: ag.clienteId ? String(ag.clienteId) : '',
       data: rawData,
-      horaInicio: ag.horaInicio,
+      horaInicio: formatTime(ag.horaInicio),
       duracao: String(ag.duracao),
       descricao: ag.descricao ?? '',
     })
@@ -629,7 +644,7 @@ export function AgendamentoProgramado() {
                       <div>
                         <p className="text-xs text-slate-500">Data / Hora</p>
                         <p className="text-sm font-medium text-slate-200">
-                          {fmtDate(ag.data)} · {ag.horaInicio} – {addMinutes(ag.horaInicio, ag.duracao)}
+                          {String(ag.data).startsWith('1970') ? '—' : fmtDate(ag.data)} · {formatTime(ag.horaInicio)} – {addMinutes(formatTime(ag.horaInicio), ag.duracao)}
                         </p>
                       </div>
                       <div>

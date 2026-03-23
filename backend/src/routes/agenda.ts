@@ -63,7 +63,7 @@ export async function agendaRoutes(app: FastifyInstance) {
     const items: any[] = await prisma.$queryRaw`
       SELECT a.cod_agenda AS id, a.cod_cli AS clienteId, a.cod_colaborador AS tecnicoId,
              a.Tipo AS tipo, a.Status_agendamento AS status,
-             a.data_agendamento AS data, a.hora_ini AS horarioIni, a.hora_fin AS horarioFim,
+             a.data_agendamento AS data, a.hora_ini AS horarioIni, a.data_fin_agendamento AS dataFim, a.hora_fin AS horarioFim,
              a.descricao AS observacoes,
              a.criado_por AS criadoPorId, a.data_criacao AS dataCriacao,
              COALESCE(cli.NOME_FANTASIA, cli.NOME_CLI) AS clienteNome,
@@ -80,7 +80,7 @@ export async function agendaRoutes(app: FastifyInstance) {
 
       SELECT p.id AS id, p.cod_cli AS clienteId, p.cod_tecnico AS tecnicoId,
              'Agendamento' AS tipo, p.status AS status,
-             p.data_agendamento AS data, p.hora_inicio AS horarioIni, NULL AS horarioFim,
+             p.data_agendamento AS data, p.hora_inicio AS horarioIni, p.data_agendamento AS dataFim, NULL AS horarioFim,
              p.descricao AS observacoes,
              NULL AS criadoPorId, p.data_criacao AS dataCriacao,
              COALESCE(cliP.NOME_FANTASIA, cliP.NOME_CLI) AS clienteNome,
@@ -513,7 +513,7 @@ export async function agendaRoutes(app: FastifyInstance) {
 
   // POST /agenda
   app.post('/', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
-    const { clienteId, tecnicoId, tipo, data, horario, observacoes } = request.body as any
+    const { clienteId, tecnicoId, tipo, data, horario, dataFim, horarioFim, observacoes } = request.body as any
     const payload = request.user as { id: number }
     const item = await prisma.agendaItem.create({
       data: {
@@ -522,6 +522,8 @@ export async function agendaRoutes(app: FastifyInstance) {
         tipo: tipo || null,
         data: data ? new Date(data + 'T12:00:00Z') : null,
         horarioIni: horario ? new Date(`1970-01-01T${horario}:00Z`) : null,
+        dataFim: dataFim ? new Date(dataFim + 'T12:00:00Z') : null,
+        horarioFim: horarioFim ? new Date(`1970-01-01T${horarioFim}:00Z`) : null,
         observacoes: observacoes || null,
       } as any,
     })
@@ -536,6 +538,8 @@ export async function agendaRoutes(app: FastifyInstance) {
         tipo: tipo || null,
         data: data || null,
         horarioIni: horario || null,
+        dataFim: dataFim || null,
+        horarioFim: horarioFim || null,
         observacoes: observacoes || null,
       },
     })
@@ -545,7 +549,7 @@ export async function agendaRoutes(app: FastifyInstance) {
   // PUT /agenda/:id
   app.put('/:id', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request) => {
     const { id } = request.params as { id: string }
-    const { clienteId, tecnicoId, tipo, data, horario, observacoes } = request.body as any
+    const { clienteId, tecnicoId, tipo, data, horario, dataFim, horarioFim, observacoes } = request.body as any
     const payload = request.user as { id: number }
 
     // Capture before state for audit
@@ -554,6 +558,8 @@ export async function agendaRoutes(app: FastifyInstance) {
              Status_agendamento AS status,
              DATE_FORMAT(data_agendamento, '%Y-%m-%d') AS data,
              TIME_FORMAT(hora_ini, '%H:%i') AS horarioIni,
+             DATE_FORMAT(data_fin_agendamento, '%Y-%m-%d') AS dataFim,
+             TIME_FORMAT(hora_fin, '%H:%i') AS horarioFim,
              descricao AS observacoes
       FROM agenda WHERE cod_agenda = ${Number(id)}
     `
@@ -563,6 +569,8 @@ export async function agendaRoutes(app: FastifyInstance) {
       tipo: before.tipo ?? null,
       data: before.data ?? null,
       horarioIni: before.horarioIni ?? null,
+      dataFim: before.dataFim ?? null,
+      horarioFim: before.horarioFim ?? null,
       observacoes: before.observacoes ?? null,
     } : null
 
@@ -574,6 +582,8 @@ export async function agendaRoutes(app: FastifyInstance) {
         ...(tipo !== undefined && { tipo: tipo || null }),
         ...(data !== undefined && { data: data ? new Date(data + 'T12:00:00Z') : null }),
         ...(horario !== undefined && { horarioIni: horario ? new Date(`1970-01-01T${horario}:00Z`) : null }),
+        ...(dataFim !== undefined && { dataFim: dataFim ? new Date(dataFim + 'T12:00:00Z') : null }),
+        ...(horarioFim !== undefined && { horarioFim: horarioFim ? new Date(`1970-01-01T${horarioFim}:00Z`) : null }),
         ...(observacoes !== undefined && { observacoes: observacoes || null }),
       },
     })
@@ -587,6 +597,8 @@ export async function agendaRoutes(app: FastifyInstance) {
         tipo: tipo !== undefined ? (tipo || null) : dadosAntes?.tipo,
         data: data !== undefined ? (data || null) : dadosAntes?.data,
         horarioIni: horario !== undefined ? (horario || null) : dadosAntes?.horarioIni,
+        dataFim: dataFim !== undefined ? (dataFim || null) : dadosAntes?.dataFim,
+        horarioFim: horarioFim !== undefined ? (horarioFim || null) : dadosAntes?.horarioFim,
         observacoes: observacoes !== undefined ? (observacoes || null) : dadosAntes?.observacoes,
       },
     })

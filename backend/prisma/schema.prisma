@@ -114,6 +114,7 @@ model AgendaItem {
   tipo         String?  @map("Tipo") @db.VarChar(20)
   status       Int?     @default(1) @map("Status_agendamento")
   data         DateTime? @map("data_agendamento") @db.Date
+  dataFim      DateTime? @map("data_fin_agendamento") @db.Date
   horarioIni   DateTime? @map("hora_ini") @db.Time(0)
   horarioFim   DateTime? @map("hora_fin") @db.Time(0)
   observacoes  String?  @map("descricao") @db.VarChar(2000)

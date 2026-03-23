@@ -36,7 +36,20 @@ const tipoContatoIcons: Record<string, string> = {
 
 function formatTime(t: any): string {
   if (!t) return ''
+  
+  if (typeof t === 'string') {
+    // Se a string contiver a data e a hora "1970-01-01T09:00:00.000Z", extraímos a hora
+    if (t.startsWith('1970-') && (!t.includes('T') || t.includes('T00:00:00'))) return ''
+    if (t.includes('T')) {
+      const match = t.match(/T(\d{2}:\d{2})/)
+      if (match) return match[1]
+    }
+    // Se for string no formato "HH:MM:SS" ou "HH:MM", retornar
+    if (t.includes(':')) return t.substring(0, 5)
+  }
+  
   const d = new Date(t)
+  if (isNaN(d.getTime())) return ''
   return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
 }
 
@@ -217,6 +230,11 @@ export function Dashboard() {
                   <div key={a.id} className="flex items-start gap-3 py-2 border-b border-slate-700 last:border-0">
                     <div className="flex-shrink-0 text-center">
                       <span className="block text-xs font-bold text-blue-400">{formatTime(a.horarioIni)}</span>
+                      {String(a.data).startsWith('1970') ? null : (
+                        <span className="block text-[10px] text-slate-500 mt-0.5">
+                          {new Date(String(a.data) + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                        </span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-200 truncate">{a.clienteNome}</p>

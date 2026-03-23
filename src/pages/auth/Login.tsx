@@ -23,8 +23,8 @@ export function Login() {
     try {
       await login(usuario, password)
       navigate('/dashboard')
-    } catch {
-      setError('Credenciais inválidas. Tente novamente.')
+    } catch (err: any) {
+      setError(err?.message || 'Credenciais inválidas. Tente novamente.')
     } finally {
       setLoading(false)
     }

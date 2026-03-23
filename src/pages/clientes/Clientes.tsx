@@ -35,6 +35,8 @@ export function Clientes() {
   const [filterStatus, setFilterStatus] = useState('')
   const [filterSegmento, setFilterSegmento] = useState('')
   const [filterCurva, setFilterCurva] = useState('')
+  const LIMIT = 50
+  const [page, setPage] = useState(1)
 
   useEffect(() => {
     api.getClientes().then(d => { setClientes(d); setLoading(false) })
@@ -51,25 +53,17 @@ export function Clientes() {
     return matchSearch && matchStatus && matchSeg && matchCurva
   })
 
-  const totalMRR = filtered.reduce((s, c) => s + Number(c.mensalidade ?? 0), 0)
+  useEffect(() => {
+    setPage(1)
+  }, [search, filterStatus, filterSegmento, filterCurva])
+
+  const pages = Math.max(Math.ceil(filtered.length / LIMIT), 1)
+  const start = (page - 1) * LIMIT
+  const end = start + LIMIT
+  const paginated = filtered.slice(start, end)
 
   return (
     <div className="space-y-6">
-      {/* Summary */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          { label: 'Total', value: filtered.length, color: 'text-slate-100' },
-          { label: 'Ativos', value: filtered.filter(c => getClienteStatus(c) === 'Ativo').length, color: 'text-emerald-400' },
-          { label: 'Bloqueados', value: filtered.filter(c => getClienteStatus(c) === 'Bloqueado').length, color: 'text-red-400' },
-          { label: 'MRR filtrado', value: `R$ ${totalMRR.toLocaleString('pt-BR')}`, color: 'text-blue-400' },
-        ].map(s => (
-          <div key={s.label} className="bg-slate-800 rounded-xl border border-slate-700 p-4">
-            <p className="text-xs text-slate-500">{s.label}</p>
-            <p className={clsx('text-2xl font-bold mt-1', s.color)}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-end">
         <div className="w-64">
@@ -135,7 +129,7 @@ export function Clientes() {
                 {filtered.length === 0 ? (
                   <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500">Nenhum cliente encontrado.</td></tr>
                 ) : (
-                  filtered.map(c => (
+                  paginated.map(c => (
                     <tr
                       key={c.id}
                       className="table-row cursor-pointer"
@@ -180,6 +174,31 @@ export function Clientes() {
                 )}
               </tbody>
             </table>
+            {pages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700">
+                <p className="text-xs text-slate-400">
+                  Página {page} de {pages} — {filtered.length.toLocaleString('pt-BR')} registros
+                </p>
+                <div className="flex gap-1 items-center">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={page <= 1}
+                    onClick={() => setPage(p => Math.max(p - 1, 1))}
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={page >= pages}
+                    onClick={() => setPage(p => Math.min(p + 1, pages))}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

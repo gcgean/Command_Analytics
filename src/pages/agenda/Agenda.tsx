@@ -39,12 +39,34 @@ function getStatusLabel(status: number | null | undefined): string {
   return 'Aguardando'
 }
 
+// Função para formatar tempo garantindo que string válida seja usada
 function formatTime(t: any): string {
   if (!t) return ''
-  // If it's already a string "HH:MM:SS" or "HH:MM"
-  if (typeof t === 'string' && t.includes(':')) return t.substring(0, 5)
+  
+  if (typeof t === 'string') {
+    // Se for string apenas "1970-01-01" ou equivalente sem hora, retorna vazio
+    if (t.startsWith('1970-') && (!t.includes('T') || t.includes('T00:00:00'))) return ''
+    
+    // Se a string contiver a data e a hora "1970-01-01T09:00:00.000Z", extraímos a hora
+    if (t.includes('T')) {
+      const match = t.match(/T(\d{2}:\d{2})/)
+      if (match) return match[1]
+    }
+    // Se for string no formato "HH:MM:SS" ou "HH:MM", retornar
+    if (t.includes(':')) return t.substring(0, 5)
+  }
+  
   const d = new Date(t)
   if (isNaN(d.getTime())) return ''
+  
+  // Ignore fallback date (1970) sem parte de hora se isso ocorrer
+  // Normalmente o Prisma manda a Time como um DateTime UTC em 1970
+  // Então d.getUTCHours() é a hora correta.
+  
+  // Porém se for apenas "1970-01-01" sem tempo nenhum, e horas for 00:00, podemos ignorar em alguns casos,
+  // mas como o banco tem default para meia noite se omitido, não podemos bloquear 00:00.
+  // Como as horas do banco Time vem com `1970-01-01T09:00:00.000Z`, o getUTCHours() extrai 9.
+  
   return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
 }
 
@@ -90,6 +112,8 @@ export function Agenda() {
     tipo: 'Instalação',
     data: todayStr(),
     horario: '09:00',
+    dataFim: todayStr(),
+    horarioFim: '10:00',
     observacoes: '',
   })
 
@@ -101,6 +125,8 @@ export function Agenda() {
     tipo: '',
     data: '',
     horario: '',
+    dataFim: '',
+    horarioFim: '',
     observacoes: '',
   })
   const [savingEdit, setSavingEdit] = useState(false)
@@ -174,10 +200,12 @@ export function Agenda() {
         tipo: form.tipo || undefined,
         data: form.data || undefined,
         horario: form.horario || undefined,
+        dataFim: form.dataFim || undefined,
+        horarioFim: form.horarioFim || undefined,
         observacoes: form.observacoes || undefined,
       } as any)
       setShowModal(false)
-      setForm({ clienteId: '', tecnicoId: '', tipo: 'Instalação', data: todayStr(), horario: '09:00', observacoes: '' })
+      setForm({ clienteId: '', tecnicoId: '', tipo: 'Instalação', data: todayStr(), horario: '09:00', dataFim: todayStr(), horarioFim: '10:00', observacoes: '' })
       buscar()
       loadMonthData()
     } catch (e: any) {
@@ -189,12 +217,28 @@ export function Agenda() {
 
   function openEdit(item: AgendaItem) {
     setEditItem(item)
+    
+    // Safety checks for dates
+    let dataIniStr = ''
+    if (item.data) {
+      const parsedData = String(item.data).substring(0, 10)
+      if (parsedData !== 'null' && parsedData !== 'undefined' && !parsedData.startsWith('1970')) dataIniStr = parsedData
+    }
+    
+    let dataFimStr = ''
+    if ((item as any).dataFim) {
+      const parsedDataFim = String((item as any).dataFim).substring(0, 10)
+      if (parsedDataFim !== 'null' && parsedDataFim !== 'undefined' && !parsedDataFim.startsWith('1970')) dataFimStr = parsedDataFim
+    }
+    
     setEditForm({
       clienteId: String(item.clienteId ?? ''),
       tecnicoId: String(item.tecnicoId ?? ''),
       tipo: item.tipo ?? '',
-      data: String(item.data ?? '').substring(0, 10),
-      horario: formatTime(item.horarioIni),
+      data: dataIniStr,
+      horario: formatTime((item as any).horario || item.horarioIni || (item as any).horaInicio),
+      dataFim: dataFimStr,
+      horarioFim: (item as any).horarioFim ? formatTime((item as any).horarioFim) : '',
       observacoes: (item as any).observacoes ?? '',
     })
   }
@@ -219,6 +263,8 @@ export function Agenda() {
           tipo: editForm.tipo || null,
           data: editForm.data || null,
           horario: editForm.horario || null,
+          dataFim: editForm.dataFim || null,
+          horarioFim: editForm.horarioFim || null,
           observacoes: editForm.observacoes || null,
         } as any)
       }
@@ -260,7 +306,7 @@ export function Agenda() {
 
   const agendaByDate = agendaMes.reduce<Record<string, number>>((acc, a) => {
     const key = getAgendaDateKey(a)
-    if (!key) return acc
+    if (!key || key === 'null' || key === 'undefined') return acc
     acc[key] = (acc[key] || 0) + 1
     return acc
   }, {})
@@ -425,13 +471,32 @@ export function Agenda() {
               const statusLabel = getStatusLabel(item.status)
               const tipoKey = item.tipo ?? ''
               const tipoClass = tipoColors[tipoKey] ?? defaultTipoColor
-              const ini = formatTime(item.horarioIni)
-              const fim = formatTime((item as any).horarioFim)
-              const timeStr = ini ? (fim ? `${ini} – ${fim}` : ini) : '—'
+              
+              const ini = formatTime((item as any).horario || item.horarioIni || (item as any).horaInicio)
+              // Handle horarioFim being null or undefined
+              const rawFim = (item as any).horarioFim
+              let fim = ''
+              if (rawFim) {
+                 fim = formatTime(rawFim)
+              }
+              
+              // Se o horário final for igual ao inicial, não mostramos
+              const timeStr = ini ? (fim && fim !== ini ? `${ini} – ${fim}` : ini) : (fim || '—')
+              
               const rawDate = String(item.data ?? '').substring(0, 10)
-              const dateStr = rawDate
-                ? new Date(rawDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
-                : '—'
+              let dateStr = '—'
+              if (rawDate && rawDate !== 'null' && rawDate !== 'undefined') {
+                 // Check if rawDate is exactly "1970-01-01" which usually means invalid/missing date from db
+                 if (!rawDate.startsWith('1970')) {
+                   dateStr = new Date(rawDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                 }
+              }
+              
+              const rawDateFim = String((item as any).dataFim ?? '').substring(0, 10)
+              if (rawDateFim && rawDateFim !== 'null' && rawDateFim !== 'undefined' && !rawDateFim.startsWith('1970') && rawDateFim !== rawDate) {
+                 const dateFimStr = new Date(rawDateFim + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                 dateStr = dateStr !== '—' ? `${dateStr} – ${dateFimStr}` : dateFimStr
+              }
               const descricao = (item as any).observacoes as string | null | undefined
 
               return (
@@ -553,19 +618,36 @@ export function Agenda() {
               value={form.tipo}
               onChange={e => setForm(f => ({ ...f, tipo: e.target.value }))}
             />
+            <div className="hidden"></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Horário"
+              label="Data Inicial"
+              type="date"
+              value={form.data}
+              onChange={e => setForm(f => ({ ...f, data: e.target.value }))}
+            />
+            <Input
+              label="Horário Inicial"
               type="time"
               value={form.horario}
               onChange={e => setForm(f => ({ ...f, horario: e.target.value }))}
             />
           </div>
-          <Input
-            label="Data"
-            type="date"
-            value={form.data}
-            onChange={e => setForm(f => ({ ...f, data: e.target.value }))}
-          />
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Data Final"
+              type="date"
+              value={form.dataFim}
+              onChange={e => setForm(f => ({ ...f, dataFim: e.target.value }))}
+            />
+            <Input
+              label="Horário Final"
+              type="time"
+              value={form.horarioFim}
+              onChange={e => setForm(f => ({ ...f, horarioFim: e.target.value }))}
+            />
+          </div>
           <Input
             label="Observações"
             placeholder="Observações do agendamento..."
@@ -602,19 +684,36 @@ export function Agenda() {
               value={editForm.tipo}
               onChange={e => setEditForm(f => ({ ...f, tipo: e.target.value }))}
             />
+            <div className="hidden"></div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
             <Input
-              label="Horário"
+              label="Data Inicial"
+              type="date"
+              value={editForm.data}
+              onChange={e => setEditForm(f => ({ ...f, data: e.target.value }))}
+            />
+            <Input
+              label="Horário Inicial"
               type="time"
               value={editForm.horario}
               onChange={e => setEditForm(f => ({ ...f, horario: e.target.value }))}
             />
           </div>
-          <Input
-            label="Data"
-            type="date"
-            value={editForm.data}
-            onChange={e => setEditForm(f => ({ ...f, data: e.target.value }))}
-          />
+          <div className="grid grid-cols-2 gap-4">
+            <Input
+              label="Data Final"
+              type="date"
+              value={editForm.dataFim}
+              onChange={e => setEditForm(f => ({ ...f, dataFim: e.target.value }))}
+            />
+            <Input
+              label="Horário Final"
+              type="time"
+              value={editForm.horarioFim}
+              onChange={e => setEditForm(f => ({ ...f, horarioFim: e.target.value }))}
+            />
+          </div>
           <Input
             label="Observações"
             placeholder="Observações do agendamento..."

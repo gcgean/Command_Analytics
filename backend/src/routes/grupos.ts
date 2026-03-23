@@ -33,9 +33,10 @@ export const SYSTEM_RESOURCES = [
   { id: 'metas',                    label: 'Metas e NPS',                     grupo: 'METAS' },
   // RH
   { id: 'banco-horas',              label: 'Banco de Horas',                  grupo: 'RH' },
-  // INFRAESTRUTURA
+  // SISTEMA
   { id: 'servidores',               label: 'Servidores em Nuvem',             grupo: 'INFRAESTRUTURA' },
   { id: 'configuracoes',            label: 'Configurações',                   grupo: 'INFRAESTRUTURA' },
+  { id: 'usuarios',                 label: 'Usuários',                        grupo: 'INFRAESTRUTURA' },
   { id: 'grupos-acesso',            label: 'Grupos de Acesso',                grupo: 'INFRAESTRUTURA' },
 ]
 

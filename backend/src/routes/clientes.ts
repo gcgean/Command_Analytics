@@ -39,18 +39,40 @@ function fmt(c: any) {
 export async function clientesRoutes(app: FastifyInstance) {
   // GET /clientes
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Clientes'], summary: 'Listar clientes' } }, async (request) => {
-    const { ativo, bloqueado, curvaABC, search, idSegmento, idRegime, idPlano } = request.query as Record<string, string>
+    const { ativo, bloqueado, curvaABC, search, idSegmento, idRegime, idPlano, page, limit } = request.query as Record<string, string>
+
+    const where = {
+      ...(ativo !== undefined && { ativo }),
+      ...(bloqueado !== undefined && { bloqueado }),
+      ...(curvaABC && { curvaABC }),
+      ...(search && { nome: { contains: search } }),
+      ...(idSegmento && { idSegmento: Number(idSegmento) }),
+      ...(idRegime && { idRegime: Number(idRegime) }),
+      ...(idPlano && { idPlano: Number(idPlano) }),
+    }
+
+    const pg = page ? Math.max(Number(page), 1) : undefined
+    const lm = limit ? Math.max(Number(limit), 1) : undefined
+
+    if (pg && lm) {
+      const total = await prisma.cliente.count({ where })
+      const pages = Math.max(Math.ceil(total / lm), 1)
+      const data = await prisma.cliente.findMany({
+        where,
+        include: {
+          contador: {
+            select: { id: true, nome: true, nomeComercial: true, email: true, telefone: true },
+          },
+        },
+        orderBy: { nome: 'asc' },
+        skip: (pg - 1) * lm,
+        take: lm,
+      })
+      return { total, page: pg, limit: lm, pages, data: data.map(fmt) }
+    }
 
     const clientes = await prisma.cliente.findMany({
-      where: {
-        ...(ativo !== undefined && { ativo }),
-        ...(bloqueado !== undefined && { bloqueado }),
-        ...(curvaABC && { curvaABC }),
-        ...(search && { nome: { contains: search } }),
-        ...(idSegmento && { idSegmento: Number(idSegmento) }),
-        ...(idRegime && { idRegime: Number(idRegime) }),
-        ...(idPlano && { idPlano: Number(idPlano) }),
-      },
+      where,
       include: {
         contador: {
           select: { id: true, nome: true, nomeComercial: true, email: true, telefone: true },
@@ -58,7 +80,6 @@ export async function clientesRoutes(app: FastifyInstance) {
       },
       orderBy: { nome: 'asc' },
     })
-
     return clientes.map(fmt)
   })
 
