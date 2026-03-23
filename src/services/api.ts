@@ -8,7 +8,13 @@ import type {
 // ============================================================
 // CONFIGURAÇÃO BASE
 // ============================================================
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3333'
+const BASE_URL = (() => {
+  const envUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333'
+  if (typeof window !== 'undefined' && window.location?.protocol === 'https:' && envUrl.startsWith('http://')) {
+    return envUrl.replace('http://', 'https://')
+  }
+  return envUrl
+})()
 
 function getToken(): string | null {
   return localStorage.getItem('auth_token')
@@ -22,13 +28,18 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
   if (options.body !== undefined) {
     baseHeaders['Content-Type'] = 'application/json'
   }
-  const res = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: {
-      ...baseHeaders,
-      ...options.headers,
-    },
-  })
+  let res: Response
+  try {
+    res = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      headers: {
+        ...baseHeaders,
+        ...options.headers,
+      },
+    })
+  } catch (err: any) {
+    throw new Error('Falha de conexão com a API. Verifique sua rede, CORS ou disponibilidade do servidor.')
+  }
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Erro desconhecido' }))
     throw new Error(err.error || `HTTP ${res.status}`)
@@ -42,6 +53,7 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
 // ============================================================
 export const api = {
   // ─── Auth ──────────────────────────────────────────────────
+  health: async () => fetchApi('/health'),
   login: async (usuario: string, senha: string) => {
     const data = await fetchApi<{ token: string; user: Record<string, unknown> }>('/auth/login', {
       method: 'POST',

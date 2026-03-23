@@ -1,7 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Command, Eye, EyeOff, Lock, User, Loader2 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
+import { api } from '../../services/api'
 
 export function Login() {
   const navigate = useNavigate()
@@ -11,6 +12,24 @@ export function Login() {
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [healthChecking, setHealthChecking] = useState(true)
+  const [healthError, setHealthError] = useState('')
+
+  const runHealthCheck = async () => {
+    setHealthChecking(true)
+    setHealthError('')
+    try {
+      await api.health()
+    } catch (err: any) {
+      setHealthError(err?.message || 'API indisponível no momento. Verifique sua rede ou disponibilidade do servidor.')
+    } finally {
+      setHealthChecking(false)
+    }
+  }
+
+  useEffect(() => {
+    runHealthCheck()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -89,6 +108,31 @@ export function Login() {
           </div>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-5">
+            {healthError && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg px-4 py-3">
+                <p className="text-sm text-amber-400">
+                  {healthError}
+                </p>
+                <div className="mt-2 text-xs text-amber-300">
+                  <span>Passos sugeridos:</span>
+                  <ul className="list-disc ml-4 mt-1">
+                    <li>Confirme internet e tente novamente.</li>
+                    <li>Se esta página estiver em HTTPS, a API deve responder em HTTPS.</li>
+                    <li>Se usar Cloudflare, verifique status da origem (porta 443) e firewall.</li>
+                  </ul>
+                </div>
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    onClick={runHealthCheck}
+                    className="text-xs px-2 py-1 rounded bg-amber-500/20 text-amber-200 hover:bg-amber-500/30"
+                    disabled={healthChecking}
+                  >
+                    {healthChecking ? 'Verificando...' : 'Tentar novamente'}
+                  </button>
+                </div>
+              </div>
+            )}
             {error && (
               <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3">
                 <p className="text-sm text-red-400">{error}</p>
