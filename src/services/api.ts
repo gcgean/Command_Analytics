@@ -9,7 +9,10 @@ import type {
 // CONFIGURAÇÃO BASE
 // ============================================================
 const BASE_URL = (() => {
-  const envUrl = import.meta.env.VITE_API_URL || 'http://localhost:3333'
+  const envUrl = import.meta.env.VITE_API_URL
+    || (typeof window !== 'undefined' && window.location?.hostname === 'controle.cilos.com.br'
+      ? 'https://controle.cilos.com.br/api'
+      : 'http://localhost:3333')
   if (typeof window !== 'undefined' && window.location?.protocol === 'https:' && envUrl.startsWith('http://')) {
     return envUrl.replace('http://', 'https://')
   }
