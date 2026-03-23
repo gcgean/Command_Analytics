@@ -36,7 +36,16 @@ export async function authRoutes(app: FastifyInstance) {
     },
     async (request, reply) => {
       const { usuario: nomeUsu, senha } = request.body as { usuario: string; senha: string }
-      const usuario = await prisma.usuario.findFirst({ where: { nomeUsu } })
+      const entrada = (nomeUsu ?? '').trim()
+      const usuario = await prisma.usuario.findFirst({
+        where: {
+          OR: [
+            { nomeUsu: entrada },
+            { nomeUsu: entrada.toUpperCase() },
+            { nomeUsu: entrada.toLowerCase() },
+          ],
+        },
+      })
       if (!usuario || usuario.ativo !== 'S') {
         return reply.status(401).send({ error: 'Credenciais inválidas.' })
       }
