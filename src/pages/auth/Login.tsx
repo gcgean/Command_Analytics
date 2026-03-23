@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Command, Eye, EyeOff, Lock, User, Loader2 } from 'lucide-react'
 import { useAuthStore } from '../../store/authStore'
-import { api } from '../../services/api'
+import { api, API_BASE_URL } from '../../services/api'
 
 export function Login() {
   const navigate = useNavigate()
@@ -14,12 +14,18 @@ export function Login() {
   const [error, setError] = useState('')
   const [healthChecking, setHealthChecking] = useState(true)
   const [healthError, setHealthError] = useState('')
+  const [healthDetails, setHealthDetails] = useState<{ endpoint: string; status: number; statusText: string } | null>(null)
+  const [showDiag, setShowDiag] = useState(false)
 
   const runHealthCheck = async () => {
     setHealthChecking(true)
     setHealthError('')
     try {
-      await api.health()
+      const res = await api.healthRaw()
+      setHealthDetails({ endpoint: `${API_BASE_URL}/health`, status: res.status ?? 0, statusText: res.statusText ?? '' })
+      if (!res.ok) {
+        throw new Error('Falha de conexão com a API. Verifique sua rede, CORS ou disponibilidade do servidor.')
+      }
     } catch (err: any) {
       setHealthError(err?.message || 'API indisponível no momento. Verifique sua rede ou disponibilidade do servidor.')
     } finally {
@@ -28,7 +34,17 @@ export function Login() {
   }
 
   useEffect(() => {
-    runHealthCheck()
+    const delays = [0, 2000, 4000, 8000]
+    let cancelled = false
+    ;(async () => {
+      for (let i = 0; i < delays.length; i++) {
+        if (cancelled) break
+        if (delays[i] > 0) await new Promise(r => setTimeout(r, delays[i]))
+        await runHealthCheck()
+        if (!healthError) break
+      }
+    })()
+    return () => { cancelled = true }
   }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -113,6 +129,11 @@ export function Login() {
                 <p className="text-sm text-amber-400">
                   {healthError}
                 </p>
+                {healthDetails && (
+                  <p className="mt-1 text-xs text-amber-300">
+                    Endpoint: {healthDetails.endpoint} — Status: {healthDetails.status} {healthDetails.statusText}
+                  </p>
+                )}
                 <div className="mt-2 text-xs text-amber-300">
                   <span>Passos sugeridos:</span>
                   <ul className="list-disc ml-4 mt-1">
@@ -129,6 +150,13 @@ export function Login() {
                     disabled={healthChecking}
                   >
                     {healthChecking ? 'Verificando...' : 'Tentar novamente'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDiag(true)}
+                    className="ml-2 text-xs px-2 py-1 rounded bg-slate-700/50 text-slate-200 hover:bg-slate-700"
+                  >
+                    Abrir diagnóstico
                   </button>
                 </div>
               </div>
@@ -203,6 +231,36 @@ export function Login() {
               )}
             </button>
           </form>
+          {showDiag && (
+            <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center">
+              <div className="bg-slate-800 border border-slate-700 rounded-xl w-full max-w-lg p-6">
+                <h3 className="text-slate-100 font-semibold">Diagnóstico de conexão</h3>
+                <div className="mt-3 text-sm text-slate-300 space-y-2">
+                  <p>1) Verifique se a API responde em HTTPS e a origem está acessível na porta 443.</p>
+                  <p>2) Se usar Cloudflare, libere os ranges de IP e confirme que a origem está ativa.</p>
+                  <p>3) Desative DNS seguro/DoH temporariamente e teste novamente.</p>
+                  <p>4) Teste em janela anônima e limpe dados do site.</p>
+                </div>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowDiag(false)}
+                    className="px-3 py-2 rounded bg-slate-700 text-slate-200 hover:bg-slate-600 text-sm"
+                  >
+                    Fechar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={runHealthCheck}
+                    className="px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 text-sm"
+                    disabled={healthChecking}
+                  >
+                    {healthChecking ? 'Verificando...' : 'Reexecutar health check'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           <p className="mt-8 text-center text-xs text-slate-600">
             Command Analytics v1.0.0 — Cilos Sistema © 2026

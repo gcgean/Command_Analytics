@@ -16,6 +16,8 @@ const BASE_URL = (() => {
   return envUrl
 })()
 
+export const API_BASE_URL = BASE_URL
+
 function getToken(): string | null {
   return localStorage.getItem('auth_token')
 }
@@ -54,6 +56,18 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
 export const api = {
   // ─── Auth ──────────────────────────────────────────────────
   health: async () => fetchApi('/health'),
+  healthRaw: async () => {
+    const token = getToken()
+    const headers: Record<string, string> = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
+    try {
+      const res = await fetch(`${BASE_URL}/health`, { headers })
+      return { ok: res.ok, status: res.status, statusText: res.statusText }
+    } catch {
+      return { ok: false, status: 0, statusText: 'network_error' }
+    }
+  },
   login: async (usuario: string, senha: string) => {
     const data = await fetchApi<{ token: string; user: Record<string, unknown> }>('/auth/login', {
       method: 'POST',
