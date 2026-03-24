@@ -25,6 +25,7 @@ import { dashboardRoutes } from './routes/dashboard'
 import { usuariosRoutes } from './routes/usuarios'
 import { gruposRoutes } from './routes/grupos'
 import { auditoriaRoutes } from './routes/auditoria'
+import { telegramRoutes } from './routes/telegram'
 import { initAuditoria } from './utils/auditoria'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
@@ -98,6 +99,7 @@ app.register(async (api) => {
   api.register(dashboardRoutes,    { prefix: '/dashboard' })
   api.register(gruposRoutes,       { prefix: '/grupos' })
   api.register(auditoriaRoutes,    { prefix: '/auditoria' })
+  api.register(telegramRoutes,     { prefix: '/telegram' })
 }, { prefix: '/api' })
 
 // ─── Start ─────────────────────────────────────────────────────

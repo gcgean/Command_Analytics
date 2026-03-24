@@ -137,9 +137,9 @@ export function HistoricoAtendimentos() {
                         </span>
                       </td>
                       <td className="table-cell"><StatusBadge status={a.status as StatusAtendimento} /></td>
-                      <td className="table-cell text-xs text-slate-400">{new Date(a.dataAbertura).toLocaleDateString('pt-BR')}</td>
+                      <td className="table-cell text-xs text-slate-400">{new Date(a.dataAbertura).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
                       <td className="table-cell text-xs text-slate-400">
-                        {a.dataFechamento ? new Date(a.dataFechamento).toLocaleDateString('pt-BR') : '—'}
+                        {a.dataFechamento ? new Date(a.dataFechamento).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                       </td>
                       <td className="table-cell text-xs text-slate-400">
                         {a.tempoAtendimento ? `${a.tempoAtendimento}min` : '—'}

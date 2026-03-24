@@ -15,6 +15,7 @@ function fmt(u: any) {
     cargo: u.cargo ?? '',
     departamento: u.departamento ?? '',
     avatar: u.avatar ?? null,
+    idTelegram: u.idTelegram ?? '',
     ativo: u.ativo === 'S',
     permissoes: ['all'],
   }
@@ -57,6 +58,7 @@ export async function usuariosRoutes(app: FastifyInstance) {
         nomeCompleto: body.nomeCompleto || body.nome || '',
         email: body.email,
         cargo: body.cargo,
+        idTelegram: body.idTelegram,
         ativo: body.ativo === false || body.ativo === 'N' ? 'N' : 'S',
       }
       if (senhaHash) data.senha = senhaHash

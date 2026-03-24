@@ -285,7 +285,7 @@ export function Atendimentos() {
                           <StatusBadge status={(a.status ?? 1) as StatusAtendimento} />
                         </td>
                         <td className="table-cell text-slate-400 text-xs">
-                          {a.dataAbertura ? new Date(a.dataAbertura).toLocaleDateString('pt-BR') : '—'}
+                          {a.dataAbertura ? new Date(a.dataAbertura).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                         </td>
                         <td className="table-cell text-slate-400 text-xs">
                           {a.tempoAtendimento ? `${a.tempoAtendimento}min` : '—'}

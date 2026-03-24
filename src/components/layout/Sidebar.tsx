@@ -157,7 +157,7 @@ function NavItemComponent({
           {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
         </button>
         {open && (
-          <div className="mt-0.5 ml-3 pl-3 border-l border-slate-700">
+          <div className="mt-0.5 ml-3 pl-3 border-l border-slate-200 dark:border-slate-700">
             {item.children.map(child => (
               <NavItemComponent
                 key={child.label}
@@ -247,26 +247,26 @@ export function Sidebar({ open, onToggle, onNavigate }: SidebarProps) {
 
       <aside
         className={clsx(
-          'fixed top-0 left-0 h-full bg-slate-900 border-r border-slate-800 z-30 flex flex-col transition-all duration-300',
+          'fixed top-0 left-0 h-full bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30 flex flex-col transition-all duration-300',
           open
             ? 'translate-x-0 w-64'
             : '-translate-x-full lg:translate-x-0 lg:w-16'
         )}
       >
         {/* Logo */}
-        <div className="flex items-center gap-3 p-4 border-b border-slate-800 min-h-[64px]">
+        <div className="flex items-center gap-3 p-4 border-b border-slate-200 dark:border-slate-800 min-h-[64px]">
           <div className="flex-shrink-0 w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center">
             <Command className="w-5 h-5 text-white" />
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-slate-100 truncate">Command Analytics</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">Command Analytics</p>
               <p className="text-xs text-slate-500 truncate">Cilos Sistema</p>
             </div>
           )}
           <button
             onClick={onToggle}
-            className="ml-auto text-slate-400 hover:text-slate-100 p-1 rounded hidden lg:flex"
+            className="ml-auto text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 p-1 rounded hidden lg:flex"
           >
             {collapsed ? <Menu className="w-4 h-4" /> : <X className="w-4 h-4" />}
           </button>
@@ -296,12 +296,12 @@ export function Sidebar({ open, onToggle, onNavigate }: SidebarProps) {
         </nav>
 
         {/* Footer */}
-        <div className="p-2 border-t border-slate-800 flex items-center gap-2">
+        <div className="p-2 border-t border-slate-200 dark:border-slate-800 flex flex-col gap-1">
           <button
             onClick={() => { navigate('/perfil'); onNavigate() }}
             title="Meu Perfil"
             className={clsx(
-              'flex items-center gap-2 px-2 py-2 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all duration-200',
+              'flex items-center gap-2 px-2 py-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all duration-200',
               collapsed && 'w-full justify-center'
             )}
           >
@@ -314,7 +314,7 @@ export function Sidebar({ open, onToggle, onNavigate }: SidebarProps) {
             onClick={handleLogout}
             title="Sair"
             className={clsx(
-              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 text-sm font-medium',
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-red-500/10 transition-all duration-200 text-sm font-medium',
               collapsed ? 'w-full justify-center' : 'flex-1'
             )}
           >

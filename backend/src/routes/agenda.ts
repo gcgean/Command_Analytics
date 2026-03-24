@@ -3,8 +3,68 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { registrarAuditoria } from '../utils/auditoria'
+import { TelegramService } from '../services/telegram'
 
 const nomeTecnico = (u: any) => u?.nomeCompleto || u?.nomeUsu || 'Usuário'
+
+/**
+ * Envia notificação de agendamento via Telegram para o técnico
+ */
+async function enviarNotificacaoAgendamento(data: {
+  tecnicoId: number,
+  clienteId?: number | null,
+  data: string,
+  horaIni: string,
+  horaFim?: string | null,
+  descricao?: string | null,
+  tipo?: string | null,
+  isProgramado?: boolean,
+  observacao?: string | null
+}) {
+  try {
+    const config = await prisma.configuracaoTelegram.findFirst({ where: { ativo: true } })
+    if (!config) return
+
+    const tecnico = await prisma.usuario.findUnique({ 
+      where: { id: data.tecnicoId },
+      select: { id: true, nomeCompleto: true, nomeUsu: true, idTelegram: true }
+    })
+    
+    // Prioriza o idTelegram do técnico, se não houver usa o padrão da configuração
+    const targetUserId = tecnico?.idTelegram || config.userIdPadrao
+    if (!targetUserId) return
+
+    let clienteNome = 'Cliente não informado'
+    if (data.clienteId) {
+      const cliente = await prisma.cliente.findUnique({ 
+        where: { id: data.clienteId },
+        select: { nome: true }
+      })
+      if (cliente) clienteNome = cliente.nome || clienteNome
+    }
+
+    const dataFormatada = new Date(data.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    const titulo = data.isProgramado ? '📅 AGENDAMENTO PROGRAMADO' : '📅 NOVO AGENDAMENTO'
+    
+    const msg = [
+      `======== ${titulo} ========`,
+      `👤 Técnico: ${tecnico?.nomeCompleto || tecnico?.nomeUsu || 'N/A'}`,
+      `🏢 Cliente: ${clienteNome}`,
+      `🗓️ Data: ${dataFormatada}`,
+      `⏰ Horário: ${data.horaIni}${data.horaFim ? ` ATÉ ${data.horaFim}` : ''}`,
+      `📝 Tipo: ${data.tipo || 'N/A'}`,
+      data.descricao || data.observacao ? `🗒️ Obs: ${data.descricao || data.observacao}` : '',
+      `===============================`
+    ].filter(Boolean).join('\n')
+
+    await TelegramService.enviar({
+      userId: targetUserId,
+      mensagem: msg
+    })
+  } catch (error) {
+    console.error('Falha ao enviar notificação Telegram:', error)
+  }
+}
 
 export async function agendaRoutes(app: FastifyInstance) {
   // GET /agenda
@@ -152,10 +212,27 @@ export async function agendaRoutes(app: FastifyInstance) {
 
   // ─── SLOTS DISPONÍVEIS ────────────────────────────────────────
 
-  // GET /agenda/slots?tecnicoId=1&data=2026-03-20
+  // GET /agenda/slots?tecnicoId=1&dataInicio=2026-03-20&dataFim=2026-03-22
   app.get('/slots', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
-    const { tecnicoId, data } = request.query as { tecnicoId?: string; data?: string }
-    if (!data) return reply.status(400).send({ error: 'data é obrigatório' })
+    const { tecnicoId, data, dataInicio, dataFim } = request.query as { tecnicoId?: string; data?: string; dataInicio?: string; dataFim?: string }
+    
+    const startStr = dataInicio || data
+    const endStr = dataFim || startStr
+    
+    if (!startStr) return reply.status(400).send({ error: 'Data é obrigatória' })
+
+    const dates: string[] = []
+    const dStart = new Date(startStr + 'T12:00:00')
+    const dEnd = new Date(endStr + 'T12:00:00')
+    
+    // Limit range to 31 days to avoid infinite loops or memory issues
+    let current = new Date(dStart)
+    let limit = 0
+    while (current <= dEnd && limit < 31) {
+      dates.push(current.toISOString().substring(0, 10))
+      current.setDate(current.getDate() + 1)
+      limit++
+    }
 
     const dispRows: any[] = tecnicoId
       ? await prisma.$queryRaw`
@@ -178,10 +255,6 @@ export async function agendaRoutes(app: FastifyInstance) {
 
     if (!dispRows.length) return []
 
-    const [y, m, d] = data.split('-').map(Number)
-    const dataObj = new Date(y, m - 1, d)
-    const diaSemana = dataObj.getDay()
-
     // Helper: parse "HH:MM" or Date (UTC) to minutes since midnight
     const strToMin = (val: any): number | null => {
       if (!val) return null
@@ -193,103 +266,120 @@ export async function agendaRoutes(app: FastifyInstance) {
       return h * 60 + min
     }
 
-    const result = []
+    const finalResult = []
 
-    for (const disp of dispRows) {
-      // Filter by validity period if set
-      if (disp.data_inicio) {
-        const ini = new Date(disp.data_inicio)
-        if (dataObj < ini) continue
+    for (const dataStr of dates) {
+      const [y, m, d] = dataStr.split('-').map(Number)
+      const dataObj = new Date(y, m - 1, d)
+      const diaSemana = dataObj.getDay()
+      const dayResult: any[] = []
+
+      for (const disp of dispRows) {
+        // Filter by validity period if set
+        if (disp.data_inicio) {
+          const ini = new Date(disp.data_inicio)
+          if (dataObj < ini) continue
+        }
+        if (disp.data_fim) {
+          const fim = new Date(disp.data_fim)
+          fim.setHours(23, 59, 59)
+          if (dataObj > fim) continue
+        }
+
+        const dias = String(disp.dias_semana).split(',').map(Number)
+        if (!dias.includes(diaSemana)) continue
+
+        const [hIni, mIni] = String(disp.hora_inicio).split(':').map(Number)
+        const [hFim, mFim] = String(disp.hora_fim).split(':').map(Number)
+        const startMin = hIni * 60 + mIni
+        const endMin = hFim * 60 + (mFim || 0)
+        const intervalo = Number(disp.intervalo_min) || 60
+
+        // Lunch break range (if configured)
+        const lunchIni = strToMin(disp.intervalo_ini)
+        const lunchFim = strToMin(disp.intervalo_fim)
+
+        const allSlots: string[] = []
+        for (let min = startMin; min < endMin; min += intervalo) {
+          if (lunchIni !== null && lunchFim !== null && min >= lunchIni && min < lunchFim) continue
+          allSlots.push(`${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`)
+        }
+
+        const tId = Number(disp.cod_tecnico)
+
+        const agendaItems: any[] = await prisma.$queryRaw`
+          SELECT hora_ini, hora_fin FROM agenda
+          WHERE cod_colaborador = ${tId} AND DATE(data_agendamento) = ${dataStr} AND hora_ini IS NOT NULL
+        `
+
+        const programados: any[] = await prisma.$queryRaw`
+          SELECT hora_inicio, duracao_min FROM agendamento_programado
+          WHERE cod_tecnico = ${tId} AND DATE(data_agendamento) = ${dataStr} AND status = 1
+        `
+
+        const bloqueios: any[] = await prisma.$queryRaw`
+          SELECT hora_ini, hora_fim FROM agendamento_bloqueio
+          WHERE ativo = 1
+            AND (cod_tecnico = ${tId} OR cod_tecnico IS NULL)
+            AND data_ini <= ${dataStr} AND data_fim >= ${dataStr}
+        `
+
+        const ranges: Array<{ iniMin: number; finMin: number }> = []
+        for (const item of agendaItems) {
+          const iniMin = strToMin(item.hora_ini)
+          if (iniMin === null) continue
+          const finMin = strToMin(item.hora_fin) ?? (iniMin + intervalo)
+          ranges.push({ iniMin, finMin: finMin > iniMin ? finMin : iniMin + intervalo })
+        }
+        for (const ap of programados) {
+          const iniMin = strToMin(ap.hora_inicio)
+          if (iniMin === null) continue
+          const finMin = iniMin + (Number(ap.duracao_min) || 60)
+          ranges.push({ iniMin, finMin })
+        }
+        for (const bl of bloqueios) {
+          const iniMin = strToMin(bl.hora_ini)
+          const finMin = strToMin(bl.hora_fim)
+          if (iniMin === null || finMin === null) continue
+          ranges.push({ iniMin, finMin })
+        }
+
+        const isOccupied = (slot: string) => {
+          const [h, m] = slot.split(':').map(Number)
+          const slotMin = h * 60 + m
+          return ranges.some(r => slotMin >= r.iniMin && slotMin < r.finMin)
+        }
+
+        dayResult.push({
+          tecnicoId: tId,
+          tecnicoNome: disp.tecnicoNome,
+          data: dataStr,
+          slotsDisponiveis: allSlots.filter(s => !isOccupied(s)),
+          slotsOcupados: allSlots.filter(s => isOccupied(s)),
+        })
       }
-      if (disp.data_fim) {
-        const fim = new Date(disp.data_fim)
-        fim.setHours(23, 59, 59)
-        if (dataObj > fim) continue
+      if (dayResult.length > 0) {
+        finalResult.push(...dayResult)
       }
-
-      const dias = String(disp.dias_semana).split(',').map(Number)
-      if (!dias.includes(diaSemana)) continue
-
-      const [hIni, mIni] = String(disp.hora_inicio).split(':').map(Number)
-      const [hFim, mFim] = String(disp.hora_fim).split(':').map(Number)
-      const startMin = hIni * 60 + mIni
-      const endMin = hFim * 60 + (mFim || 0)
-      const intervalo = Number(disp.intervalo_min) || 60
-
-      // Lunch break range (if configured)
-      const lunchIni = strToMin(disp.intervalo_ini)
-      const lunchFim = strToMin(disp.intervalo_fim)
-
-      const allSlots: string[] = []
-      for (let min = startMin; min < endMin; min += intervalo) {
-        // Skip slots that fall within the lunch break
-        if (lunchIni !== null && lunchFim !== null && min >= lunchIni && min < lunchFim) continue
-        allSlots.push(`${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`)
-      }
-
-      const tId = Number(disp.cod_tecnico)
-
-      const agendaItems: any[] = await prisma.$queryRaw`
-        SELECT hora_ini, hora_fin FROM agenda
-        WHERE cod_colaborador = ${tId} AND DATE(data_agendamento) = ${data} AND hora_ini IS NOT NULL
-      `
-
-      const programados: any[] = await prisma.$queryRaw`
-        SELECT hora_inicio, duracao_min FROM agendamento_programado
-        WHERE cod_tecnico = ${tId} AND DATE(data_agendamento) = ${data} AND status = 1
-      `
-
-      // Bloqueios ativos para este técnico nesta data (bloqueio geral ou específico)
-      const bloqueios: any[] = await prisma.$queryRaw`
-        SELECT hora_ini, hora_fim FROM agendamento_bloqueio
-        WHERE ativo = 1
-          AND (cod_tecnico = ${tId} OR cod_tecnico IS NULL)
-          AND data_ini <= ${data} AND data_fim >= ${data}
-      `
-
-      // Build occupied ranges [iniMin, finMin)
-      const ranges: Array<{ iniMin: number; finMin: number }> = []
-      for (const item of agendaItems) {
-        const iniMin = strToMin(item.hora_ini)
-        if (iniMin === null) continue
-        const finMin = strToMin(item.hora_fin) ?? (iniMin + intervalo)
-        ranges.push({ iniMin, finMin: finMin > iniMin ? finMin : iniMin + intervalo })
-      }
-      for (const ap of programados) {
-        const iniMin = strToMin(ap.hora_inicio)
-        if (iniMin === null) continue
-        const finMin = iniMin + (Number(ap.duracao_min) || 60)
-        ranges.push({ iniMin, finMin })
-      }
-      for (const bl of bloqueios) {
-        const iniMin = strToMin(bl.hora_ini)
-        const finMin = strToMin(bl.hora_fim)
-        if (iniMin === null || finMin === null) continue
-        ranges.push({ iniMin, finMin })
-      }
-
-      const isOccupied = (slot: string) => {
-        const [h, m] = slot.split(':').map(Number)
-        const slotMin = h * 60 + m
-        return ranges.some(r => slotMin >= r.iniMin && slotMin < r.finMin)
-      }
-
-      result.push({
-        tecnicoId: tId,
-        tecnicoNome: disp.tecnicoNome,
-        slotsDisponiveis: allSlots.filter(s => !isOccupied(s)),
-        slotsOcupados: allSlots.filter(s => isOccupied(s)),
-      })
     }
 
-    return result
+    return finalResult
   })
 
   // ─── AGENDAMENTOS PROGRAMADOS ─────────────────────────────────
 
   // GET /agenda/agendamentos-prog
   app.get('/agendamentos-prog', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request) => {
-    const { tecnicoId, status } = request.query as Record<string, string>
+    const { tecnicoId, status, dataInicio, dataFim } = request.query as Record<string, string>
+
+    const conds: Prisma.Sql[] = []
+    if (tecnicoId) conds.push(Prisma.sql`ap.cod_tecnico = ${Number(tecnicoId)}`)
+    if (status !== undefined && status !== '') conds.push(Prisma.sql`ap.status = ${Number(status)}`)
+    if (dataInicio) conds.push(Prisma.sql`ap.data_agendamento >= ${dataInicio}`)
+    if (dataFim) conds.push(Prisma.sql`ap.data_agendamento <= ${dataFim}`)
+
+    const where = conds.length > 0 ? Prisma.sql`WHERE ${Prisma.join(conds, ' AND ')}` : Prisma.empty
+
     const rows: any[] = await prisma.$queryRaw`
       SELECT ap.id, ap.cod_tecnico AS tecnicoId, ap.cod_cli AS clienteId,
              ap.data_agendamento AS data, ap.hora_inicio AS horaInicio,
@@ -300,10 +390,11 @@ export async function agendaRoutes(app: FastifyInstance) {
       FROM agendamento_programado ap
       LEFT JOIN usuario u ON u.COD_USU = ap.cod_tecnico
       LEFT JOIN cliente c ON c.cod_cli = ap.cod_cli
+      ${where}
       ORDER BY ap.data_agendamento ASC, ap.hora_inicio ASC
     `
     // Convert BigInt fields returned by $queryRaw
-    const normalized = rows.map(r => ({
+    return rows.map(r => ({
       ...r,
       id: Number(r.id),
       tecnicoId: r.tecnicoId != null ? Number(r.tecnicoId) : null,
@@ -311,10 +402,6 @@ export async function agendaRoutes(app: FastifyInstance) {
       duracao: r.duracao != null ? Number(r.duracao) : null,
       status: r.status != null ? Number(r.status) : null,
     }))
-    let result = normalized
-    if (tecnicoId) result = result.filter(r => r.tecnicoId === Number(tecnicoId))
-    if (status !== undefined) result = result.filter(r => r.status === Number(status))
-    return result
   })
 
   // POST /agenda/agendamentos-prog
@@ -348,6 +435,17 @@ export async function agendaRoutes(app: FastifyInstance) {
       VALUES
         (${tecnicoId}, ${clienteId ?? null}, ${data}, ${horaInicio}, ${duracao ?? 60}, ${descricao ?? null}, 1)
     `
+
+    // Enviar notificação via Telegram
+    enviarNotificacaoAgendamento({
+      tecnicoId,
+      clienteId,
+      data,
+      horaIni: horaInicio,
+      tipo: 'PROGRAMADO',
+      observacao: descricao,
+      isProgramado: true
+    })
 
     const [inserted]: any[] = await prisma.$queryRaw`SELECT LAST_INSERT_ID() AS id`
     const newId = Number(inserted?.id ?? 0)
@@ -529,6 +627,18 @@ export async function agendaRoutes(app: FastifyInstance) {
     })
     // Save criado_por and data_criacao via raw since not in schema
     await prisma.$executeRaw`UPDATE agenda SET criado_por = ${payload.id}, data_criacao = NOW() WHERE cod_agenda = ${Number(item.id)}`
+
+    // Enviar notificação via Telegram
+    enviarNotificacaoAgendamento({
+      tecnicoId: Number(tecnicoId),
+      clienteId: clienteId ? Number(clienteId) : null,
+      data,
+      horaIni: horario,
+      horaFim: horarioFim,
+      tipo: tipo || 'REUNIÃO',
+      observacao: observacoes,
+      isProgramado: false
+    })
     registrarAuditoria({
       tabela: 'agenda', registroId: Number(item.id), acao: 'CRIACAO', usuarioId: payload.id,
       dadosAntes: null,

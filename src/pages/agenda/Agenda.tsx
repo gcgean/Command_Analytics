@@ -6,7 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
-import { Input } from '../../components/ui/Input'
+import { Input, Textarea } from '../../components/ui/Input'
 import { api } from '../../services/api'
 import type { AgendaItem } from '../../types'
 import clsx from 'clsx'
@@ -79,6 +79,25 @@ function getAgendaDateKey(a: AgendaItem): string {
   return String(a.data).substring(0, 10)
 }
 
+// Helpers for dd/mm/yyyy
+function toBRDate(iso: string) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+function fromBRDate(br: string) {
+  if (!br) return ''
+  const [d, m, y] = br.split('/')
+  if (!d || !m || !y) return ''
+  return `${y}-${m}-${d}`
+}
+function maskDate(val: string) {
+  const v = val.replace(/\D/g, '').slice(0, 8)
+  if (v.length <= 2) return v
+  if (v.length <= 4) return `${v.slice(0, 2)}/${v.slice(2)}`
+  return `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`
+}
+
 export function Agenda() {
   const [currentMonth, setCurrentMonth] = useState(() => {
     const t = new Date()
@@ -95,8 +114,8 @@ export function Agenda() {
 
   // Filters
   const [filters, setFilters] = useState({
-    dataInicio: todayStr(),
-    dataFim: todayStr(),
+    dataInicio: toBRDate(todayStr()),
+    dataFim: toBRDate(todayStr()),
     tecnicoId: '',
     tipo: '',
   })
@@ -110,9 +129,9 @@ export function Agenda() {
     clienteId: '',
     tecnicoId: '',
     tipo: 'Instalação',
-    data: todayStr(),
+    data: toBRDate(todayStr()),
     horario: '09:00',
-    dataFim: todayStr(),
+    dataFim: toBRDate(todayStr()),
     horarioFim: '10:00',
     observacoes: '',
   })
@@ -172,11 +191,15 @@ export function Agenda() {
 
   function buscar(overrides?: typeof filters) {
     const f = overrides ?? filters
+    const dIni = fromBRDate(f.dataInicio)
+    const dFim = fromBRDate(f.dataFim)
+    if (!dIni || !dFim) return
+
     setLoading(true)
     setSearched(true)
     const params: Record<string, string> = {}
-    if (f.dataInicio) params.dataInicio = f.dataInicio
-    if (f.dataFim) params.dataFim = f.dataFim
+    if (dIni) params.dataInicio = dIni
+    if (dFim) params.dataFim = dFim
     if (f.tecnicoId) params.tecnicoId = f.tecnicoId
     if (f.tipo) params.tipo = f.tipo
     api.getAgenda(params)
@@ -186,7 +209,8 @@ export function Agenda() {
   }
 
   function handleDayClick(dateKey: string) {
-    const newFilters = { ...filters, dataInicio: dateKey, dataFim: dateKey }
+    const brDate = toBRDate(dateKey)
+    const newFilters = { ...filters, dataInicio: brDate, dataFim: brDate }
     setFilters(newFilters)
     buscar(newFilters)
   }
@@ -198,14 +222,14 @@ export function Agenda() {
         clienteId: form.clienteId ? Number(form.clienteId) : undefined,
         tecnicoId: form.tecnicoId ? Number(form.tecnicoId) : undefined,
         tipo: form.tipo || undefined,
-        data: form.data || undefined,
+        data: fromBRDate(form.data) || undefined,
         horario: form.horario || undefined,
-        dataFim: form.dataFim || undefined,
+        dataFim: fromBRDate(form.dataFim) || undefined,
         horarioFim: form.horarioFim || undefined,
         observacoes: form.observacoes || undefined,
       } as any)
       setShowModal(false)
-      setForm({ clienteId: '', tecnicoId: '', tipo: 'Instalação', data: todayStr(), horario: '09:00', dataFim: todayStr(), horarioFim: '10:00', observacoes: '' })
+      setForm({ clienteId: '', tecnicoId: '', tipo: 'Instalação', data: toBRDate(todayStr()), horario: '09:00', dataFim: toBRDate(todayStr()), horarioFim: '10:00', observacoes: '' })
       buscar()
       loadMonthData()
     } catch (e: any) {
@@ -235,9 +259,9 @@ export function Agenda() {
       clienteId: String(item.clienteId ?? ''),
       tecnicoId: String(item.tecnicoId ?? ''),
       tipo: item.tipo ?? '',
-      data: dataIniStr,
+      data: dataIniStr ? toBRDate(dataIniStr) : '',
       horario: formatTime((item as any).horario || item.horarioIni || (item as any).horaInicio),
-      dataFim: dataFimStr,
+      dataFim: dataFimStr ? toBRDate(dataFimStr) : '',
       horarioFim: (item as any).horarioFim ? formatTime((item as any).horarioFim) : '',
       observacoes: (item as any).observacoes ?? '',
     })
@@ -252,7 +276,7 @@ export function Agenda() {
         await api.updateAgendamentoProg(editItem.id, {
           tecnicoId: editForm.tecnicoId ? Number(editForm.tecnicoId) : undefined,
           clienteId: editForm.clienteId ? Number(editForm.clienteId) : null,
-          data: editForm.data || undefined,
+          data: fromBRDate(editForm.data) || undefined,
           horaInicio: editForm.horario || undefined,
           descricao: editForm.observacoes || null,
         })
@@ -261,9 +285,9 @@ export function Agenda() {
           clienteId: editForm.clienteId ? Number(editForm.clienteId) : null,
           tecnicoId: editForm.tecnicoId ? Number(editForm.tecnicoId) : null,
           tipo: editForm.tipo || null,
-          data: editForm.data || null,
+          data: fromBRDate(editForm.data) || null,
           horario: editForm.horario || null,
-          dataFim: editForm.dataFim || null,
+          dataFim: fromBRDate(editForm.dataFim) || null,
           horarioFim: editForm.horarioFim || null,
           observacoes: editForm.observacoes || null,
         } as any)
@@ -357,7 +381,8 @@ export function Agenda() {
             const day = i + 1
             const dateKey = formatDateKey(day)
             const count = agendaByDate[dateKey] || 0
-            const isSelected = filters.dataInicio === dateKey && filters.dataFim === dateKey
+            const brDateKey = toBRDate(dateKey)
+            const isSelected = filters.dataInicio === brDateKey && filters.dataFim === brDateKey
             const isToday = dateKey === today
 
             return (
@@ -394,17 +419,17 @@ export function Agenda() {
           <div className="flex-1 min-w-[130px]">
             <Input
               label="Data início"
-              type="date"
+              placeholder="dd/mm/aaaa"
               value={filters.dataInicio}
-              onChange={e => setFilters(f => ({ ...f, dataInicio: e.target.value }))}
+              onChange={e => setFilters(f => ({ ...f, dataInicio: maskDate(e.target.value) }))}
             />
           </div>
           <div className="flex-1 min-w-[130px]">
             <Input
               label="Data fim"
-              type="date"
+              placeholder="dd/mm/aaaa"
               value={filters.dataFim}
-              onChange={e => setFilters(f => ({ ...f, dataFim: e.target.value }))}
+              onChange={e => setFilters(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
             />
           </div>
           <div className="flex-1 min-w-[150px]">
@@ -488,13 +513,13 @@ export function Agenda() {
               if (rawDate && rawDate !== 'null' && rawDate !== 'undefined') {
                  // Check if rawDate is exactly "1970-01-01" which usually means invalid/missing date from db
                  if (!rawDate.startsWith('1970')) {
-                   dateStr = new Date(rawDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                   dateStr = new Date(rawDate + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
                  }
               }
               
               const rawDateFim = String((item as any).dataFim ?? '').substring(0, 10)
               if (rawDateFim && rawDateFim !== 'null' && rawDateFim !== 'undefined' && !rawDateFim.startsWith('1970') && rawDateFim !== rawDate) {
-                 const dateFimStr = new Date(rawDateFim + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+                 const dateFimStr = new Date(rawDateFim + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
                  dateStr = dateStr !== '—' ? `${dateStr} – ${dateFimStr}` : dateFimStr
               }
               const descricao = (item as any).observacoes as string | null | undefined
@@ -623,9 +648,9 @@ export function Agenda() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Data Inicial"
-              type="date"
+              placeholder="dd/mm/aaaa"
               value={form.data}
-              onChange={e => setForm(f => ({ ...f, data: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, data: maskDate(e.target.value) }))}
             />
             <Input
               label="Horário Inicial"
@@ -637,9 +662,9 @@ export function Agenda() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Data Final"
-              type="date"
+              placeholder="dd/mm/aaaa"
               value={form.dataFim}
-              onChange={e => setForm(f => ({ ...f, dataFim: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
             />
             <Input
               label="Horário Final"
@@ -648,11 +673,13 @@ export function Agenda() {
               onChange={e => setForm(f => ({ ...f, horarioFim: e.target.value }))}
             />
           </div>
-          <Input
+          <Textarea
             label="Observações"
             placeholder="Observações do agendamento..."
             value={form.observacoes}
             onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
+            maxLength={2000}
+            rows={4}
           />
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Button>
@@ -689,9 +716,9 @@ export function Agenda() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Data Inicial"
-              type="date"
+              placeholder="dd/mm/aaaa"
               value={editForm.data}
-              onChange={e => setEditForm(f => ({ ...f, data: e.target.value }))}
+              onChange={e => setEditForm(f => ({ ...f, data: maskDate(e.target.value) }))}
             />
             <Input
               label="Horário Inicial"
@@ -703,9 +730,9 @@ export function Agenda() {
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Data Final"
-              type="date"
+              placeholder="dd/mm/aaaa"
               value={editForm.dataFim}
-              onChange={e => setEditForm(f => ({ ...f, dataFim: e.target.value }))}
+              onChange={e => setEditForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
             />
             <Input
               label="Horário Final"
@@ -714,11 +741,13 @@ export function Agenda() {
               onChange={e => setEditForm(f => ({ ...f, horarioFim: e.target.value }))}
             />
           </div>
-          <Input
+          <Textarea
             label="Observações"
             placeholder="Observações do agendamento..."
             value={editForm.observacoes}
             onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))}
+            maxLength={2000}
+            rows={4}
           />
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setEditItem(null)}>Cancelar</Button>

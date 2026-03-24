@@ -252,7 +252,7 @@ export function NovoAtendimento() {
                     <Calendar className="w-4 h-4 text-blue-400 flex-shrink-0" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-slate-200">{a.tipo}</p>
-                      <p className="text-xs text-slate-500">{new Date(a.data).toLocaleDateString('pt-BR')} às {a.horario} · {a.tecnicoNome}</p>
+                      <p className="text-xs text-slate-500">{new Date(a.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} às {a.horario} · {a.tecnicoNome}</p>
                     </div>
                     <span className={clsx(
                       'text-xs px-2 py-0.5 rounded-full',

@@ -292,6 +292,13 @@ export const api = {
     fetchApi(`/grupos/${id}/usuarios`, { method: 'POST', body: JSON.stringify({ usuarioId }) }),
   removeUserFromGrupo: (id: number, usuarioId: number) =>
     fetchApi(`/grupos/${id}/usuarios/${usuarioId}`, { method: 'DELETE' }),
+
+  // ─── Telegram ──────────────────────────────────────────────
+  getTelegramConfig: () => fetchApi<any>('/telegram/config'),
+  updateTelegramConfig: (data: any) =>
+    fetchApi('/telegram/config', { method: 'PUT', body: JSON.stringify(data) }),
+  sendTelegramMessage: (data: { userId: string; mensagem: string }) =>
+    fetchApi('/telegram/enviar', { method: 'POST', body: JSON.stringify(data) }),
 }
 
 // ============================================================

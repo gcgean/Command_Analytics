@@ -1,9 +1,10 @@
-import { useState } from 'react'
-import { Save, Loader2, Plus, X, CheckCircle, Wifi } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Save, Loader2, Plus, X, CheckCircle, Wifi, Send } from 'lucide-react'
 import { useToast } from '../../components/ui/Toast'
+import { api } from '../../services/api'
 import clsx from 'clsx'
 
-type Aba = 'geral' | 'whatsapp' | 'email' | 'parametros'
+type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'parametros'
 
 interface TokenWhats {
   id: number
@@ -62,6 +63,68 @@ export function Configuracoes() {
     diasCarencia: '5',
   })
 
+  // Telegram
+  const [telegram, setTelegram] = useState({
+    ativo: true,
+    nomeBot: '',
+    userIdPadrao: '',
+    tokenApi: '',
+  })
+  const [msgTeste, setMsgTeste] = useState('')
+  const [enviandoTeste, setEnviandoTeste] = useState(false)
+
+  useEffect(() => {
+    if (aba === 'telegram') {
+      carregarConfigTelegram()
+    }
+  }, [aba])
+
+  const carregarConfigTelegram = async () => {
+    try {
+      const config = await api.getTelegramConfig()
+      setTelegram({
+        ativo: config.ativo,
+        nomeBot: config.nomeBot || '',
+        userIdPadrao: config.userIdPadrao || '',
+        tokenApi: config.tokenApi || '',
+      })
+    } catch (error) {
+      toast.error('Erro ao carregar configurações do Telegram.')
+    }
+  }
+
+  const handleSalvarTelegram = async () => {
+    setLoading(true)
+    try {
+      await api.updateTelegramConfig(telegram)
+      toast.success('Configurações do Telegram salvas!')
+    } catch {
+      toast.error('Erro ao salvar configurações do Telegram.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleEnviarTesteTelegram = async () => {
+    if (!telegram.userIdPadrao || !msgTeste) {
+      toast.warn('Informe o User ID e a mensagem de teste.')
+      return
+    }
+    setEnviandoTeste(true)
+    try {
+      await api.sendTelegramMessage({
+        userId: telegram.userIdPadrao,
+        mensagem: msgTeste
+      })
+      toast.success('Mensagem de teste enviada!')
+      setMsgTeste('')
+    } catch (error: any) {
+      toast.error('Falha ao enviar teste: ' + (error.message || 'Erro desconhecido'))
+    } finally {
+      setEnviandoTeste(false)
+    }
+  }
+
   const handleSalvar = async () => {
     setLoading(true)
     try {
@@ -95,6 +158,7 @@ export function Configuracoes() {
     { key: 'geral', label: 'Geral' },
     { key: 'whatsapp', label: 'WhatsApp' },
     { key: 'email', label: 'E-mail' },
+    { key: 'telegram', label: 'Telegram' },
     { key: 'parametros', label: 'Parâmetros' },
   ]
 
@@ -231,6 +295,85 @@ export function Configuracoes() {
           <button className="btn-secondary w-full justify-center">
             <Plus size={15} /> Adicionar Conta SMTP
           </button>
+        </div>
+      )}
+
+      {/* Aba Telegram */}
+      {aba === 'telegram' && (
+        <div className="space-y-5 max-w-2xl">
+          <div className="card space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-200">Configuração do Bot</h3>
+              <div className="flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  id="telegram-ativo" 
+                  checked={telegram.ativo} 
+                  onChange={e => setTelegram(p => ({ ...p, ativo: e.target.checked }))}
+                  className="rounded border-slate-700 bg-slate-800 text-blue-600" 
+                />
+                <label htmlFor="telegram-ativo" className="text-xs text-slate-400">Ativar Integração</label>
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Nome do Bot</label>
+                <input 
+                  className="input-field" 
+                  value={telegram.nomeBot} 
+                  onChange={e => setTelegram(p => ({ ...p, nomeBot: e.target.value }))}
+                  placeholder="Ex: CommandBot"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">User ID Padrão (Destino)</label>
+                <input 
+                  className="input-field font-mono text-xs" 
+                  value={telegram.userIdPadrao} 
+                  onChange={e => setTelegram(p => ({ ...p, userIdPadrao: e.target.value }))}
+                  placeholder="Ex: 12345678"
+                />
+              </div>
+              <div className="col-span-2">
+                <label className="text-xs text-slate-400 block mb-1">Token API (Relay)</label>
+                <input 
+                  type="password"
+                  className="input-field font-mono text-xs" 
+                  value={telegram.tokenApi} 
+                  onChange={e => setTelegram(p => ({ ...p, tokenApi: e.target.value }))}
+                  placeholder="Deixe em branco para usar o padrão"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">A autenticação básica do Command System é usada por padrão.</p>
+              </div>
+            </div>
+
+            <button onClick={handleSalvarTelegram} disabled={loading} className="btn-primary disabled:opacity-60">
+              {loading ? <><Loader2 size={15} className="animate-spin" /> Salvando...</> : <><Save size={15} /> Salvar Configurações</>}
+            </button>
+          </div>
+
+          <div className="card space-y-4">
+            <h3 className="text-sm font-semibold text-slate-200">Teste de Envio</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400 block mb-1">Mensagem de Teste</label>
+                <textarea 
+                  className="input-field min-h-[80px] resize-none" 
+                  value={msgTeste} 
+                  onChange={e => setMsgTeste(e.target.value)}
+                  placeholder="Digite uma mensagem para testar o envio..."
+                />
+              </div>
+              <button 
+                onClick={handleEnviarTesteTelegram} 
+                disabled={enviandoTeste || !telegram.userIdPadrao} 
+                className="btn-secondary w-full justify-center disabled:opacity-50"
+              >
+                {enviandoTeste ? <><Loader2 size={15} className="animate-spin" /> Enviando...</> : <><Send size={15} /> Enviar Mensagem de Teste</>}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

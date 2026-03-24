@@ -28,6 +28,7 @@ export function Usuarios() {
     senha: '',
     cargo: '',
     departamento: 'Suporte',
+    idTelegram: '',
   })
 
   useEffect(() => {
@@ -79,6 +80,7 @@ export function Usuarios() {
       senha: '',
       cargo: '',
       departamento: 'Suporte',
+      idTelegram: '',
     })
     setShowModal(true)
   }
@@ -92,6 +94,7 @@ export function Usuarios() {
       senha: '', // don't load password
       cargo: u.cargo || '',
       departamento: u.departamento || 'Suporte',
+      idTelegram: u.idTelegram || '',
     })
     setShowModal(true)
   }
@@ -290,6 +293,15 @@ export function Usuarios() {
                   value={form.departamento}
                   onChange={e => setForm({ ...form, departamento: e.target.value })}
                   options={DEPARTAMENTOS.map(d => ({ value: d, label: d }))}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  label="ID Telegram (para notificações)"
+                  value={form.idTelegram}
+                  onChange={e => setForm({ ...form, idTelegram: e.target.value })}
+                  placeholder="Ex: 12345678"
                 />
               </div>
 

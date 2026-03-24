@@ -128,7 +128,7 @@ export function DetalheCliente() {
                 { label: 'CNPJ', value: cliente.cnpj ?? '—' },
                 { label: 'Segmento', value: cliente.idSegmento ? `Segmento ${cliente.idSegmento}` : '—' },
                 { label: 'Regime Tributário', value: cliente.idRegime ? `Regime ${cliente.idRegime}` : '—' },
-                { label: 'Data Contrato', value: cliente.dataContrato ? new Date(cliente.dataContrato).toLocaleDateString('pt-BR') : '—' },
+                { label: 'Data Contrato', value: cliente.dataContrato ? new Date(cliente.dataContrato).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—' },
                 { label: 'Responsável', value: cliente.responsavel ?? '—' },
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between gap-4">
@@ -169,7 +169,7 @@ export function DetalheCliente() {
                   {cliente.idPlano ? `Plano ${cliente.idPlano}` : '—'}
                 </p>
                 <p className="text-sm text-slate-400 mt-1">
-                  Vigência desde {cliente.dataContrato ? new Date(cliente.dataContrato).toLocaleDateString('pt-BR') : '—'}
+                  Vigência desde {cliente.dataContrato ? new Date(cliente.dataContrato).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                 </p>
               </div>
               <div className="text-right">
@@ -196,7 +196,7 @@ export function DetalheCliente() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-slate-200 line-clamp-1">{a.observacoes ?? '—'}</p>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {a.tecnicoNome} · Depto {a.departamento ?? '—'} · {a.dataAbertura ? new Date(a.dataAbertura).toLocaleDateString('pt-BR') : '—'}
+                    {a.tecnicoNome} · Depto {a.departamento ?? '—'} · {a.dataAbertura ? new Date(a.dataAbertura).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                   </p>
                 </div>
                 <StatusBadge status={a.status as StatusAtendimento} />

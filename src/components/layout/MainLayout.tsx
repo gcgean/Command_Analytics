@@ -20,7 +20,7 @@ export function MainLayout() {
 
   return (
     <PermissionsProvider>
-      <div className="flex h-screen bg-slate-900 overflow-hidden">
+      <div className="flex h-screen bg-slate-50 dark:bg-slate-900 overflow-hidden transition-colors duration-300">
         <Sidebar
           open={sidebarOpen}
           onToggle={toggleSidebar}

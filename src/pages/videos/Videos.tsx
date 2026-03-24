@@ -19,7 +19,7 @@ interface VideoItem {
 
 function formatData(iso: string | null): string {
   if (!iso) return '—'
-  try { return new Date(iso).toLocaleDateString('pt-BR') } catch { return '—' }
+  try { return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) } catch { return '—' }
 }
 
 export function Videos() {

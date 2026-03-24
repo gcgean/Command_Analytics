@@ -4,10 +4,12 @@
 export interface Usuario {
   id: number
   nome: string
+  nomeUsu?: string
   email: string
   cargo: string
   departamento: Departamento
   avatar?: string
+  idTelegram?: string
   ativo: boolean
   permissoes: string[]
 }

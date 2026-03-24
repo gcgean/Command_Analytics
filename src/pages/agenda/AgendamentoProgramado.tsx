@@ -5,7 +5,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
-import { Input } from '../../components/ui/Input'
+import { Input, Textarea } from '../../components/ui/Input'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
 import { api } from '../../services/api'
 import clsx from 'clsx'
@@ -46,11 +46,27 @@ function today() {
 
 function fmtDate(val: any) {
   if (!val) return ''
+  
+  // Se já estiver no formato BR, apenas retorna
+  if (typeof val === 'string' && /^\d{2}\/\d{2}\/\d{4}$/.test(val)) return val
+
   const s = val instanceof Date
     ? `${val.getUTCFullYear()}-${String(val.getUTCMonth() + 1).padStart(2, '0')}-${String(val.getUTCDate()).padStart(2, '0')}`
     : String(val).substring(0, 10)
-  if (!s || s.length < 10) return ''
-  return new Date(s + 'T12:00:00').toLocaleDateString('pt-BR')
+  
+  if (!s || s.length < 10 || s === 'null' || s === 'undefined') return ''
+  
+  // Se for ISO yyyy-mm-dd
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const [y, m, d] = s.split('-')
+    return `${d}/${m}/${y}`
+  }
+
+  try {
+    return new Date(s + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  } catch {
+    return s
+  }
 }
 
 function formatTime(t: any): string {
@@ -95,6 +111,7 @@ interface DispItem {
 interface SlotResult {
   tecnicoId: number
   tecnicoNome: string
+  data: string
   slotsDisponiveis: string[]
   slotsOcupados: string[]
 }
@@ -125,6 +142,25 @@ interface Bloqueio {
   motivo: string | null
 }
 
+// Helpers for dd/mm/yyyy
+function toBRDate(iso: string) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  return `${d}/${m}/${y}`
+}
+function fromBRDate(br: string) {
+  if (!br) return ''
+  const [d, m, y] = br.split('/')
+  if (!d || !m || !y) return ''
+  return `${y}-${m}-${d}`
+}
+function maskDate(val: string) {
+  const v = val.replace(/\D/g, '').slice(0, 8)
+  if (v.length <= 2) return v
+  if (v.length <= 4) return `${v.slice(0, 2)}/${v.slice(2)}`
+  return `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`
+}
+
 export function AgendamentoProgramado() {
   const [activeTab, setActiveTab] = useState<'slots' | 'lista'>('slots')
 
@@ -134,8 +170,11 @@ export function AgendamentoProgramado() {
   const [slotResults, setSlotResults] = useState<SlotResult[]>([])
 
   const [selectedTecnico, setSelectedTecnico] = useState('')
-  const [selectedDate, setSelectedDate] = useState(today())
+  const [selectedDate, setSelectedDate] = useState(toBRDate(today()))
+  const [selectedDateEnd, setSelectedDateEnd] = useState(toBRDate(today()))
   const [listaStatus, setListaStatus] = useState('1')
+  const [listaDataInicio, setListaDataInicio] = useState(toBRDate(today()))
+  const [listaDataFim, setListaDataFim] = useState(toBRDate(today()))
 
   const [loadingSlots, setLoadingSlots] = useState(false)
   const [loadingLista, setLoadingLista] = useState(false)
@@ -162,9 +201,9 @@ export function AgendamentoProgramado() {
   const [bloqueios, setBloqueios] = useState<Bloqueio[]>([])
   const [bloqueioForm, setBloqueioForm] = useState({
     tecnicoId: '',
-    dataIni: today(),
+    dataIni: toBRDate(today()),
     horaIni: '08:00',
-    dataFim: today(),
+    dataFim: toBRDate(today()),
     horaFim: '18:00',
     motivo: '',
   })
@@ -172,7 +211,7 @@ export function AgendamentoProgramado() {
 
   // Booking modal — suporta múltiplos slots do mesmo técnico
   const [showBookModal, setShowBookModal] = useState(false)
-  const [bookTecnico, setBookTecnico] = useState<{ tecnicoId: number; tecnicoNome: string } | null>(null)
+  const [bookTecnico, setBookTecnico] = useState<{ tecnicoId: number; tecnicoNome: string; data: string } | null>(null)
   const [selectedSlots, setSelectedSlots] = useState<string[]>([])
   const [bookForm, setBookForm] = useState({ clienteId: '', descricao: '', duracao: '60' })
   const [submitting, setSubmitting] = useState(false)
@@ -208,13 +247,20 @@ export function AgendamentoProgramado() {
 
   useEffect(() => {
     if (activeTab === 'lista') fetchAgendamentos()
-  }, [activeTab, listaStatus])
+  }, [activeTab, listaStatus, listaDataInicio, listaDataFim, selectedTecnico])
 
   // ── Fetch slots ────────────────────────────────────────────────
   function fetchSlots() {
+    const dIni = fromBRDate(selectedDate)
+    const dFim = fromBRDate(selectedDateEnd)
+    if (!dIni || !dFim) return
+
     setLoadingSlots(true)
     setSlotResults([])
-    const params: Record<string, string> = { data: selectedDate }
+    const params: Record<string, string> = { 
+      dataInicio: dIni,
+      dataFim: dFim 
+    }
     if (selectedTecnico) params.tecnicoId = selectedTecnico
     api.getSlots(params)
       .then((r: any) => setSlotResults(r))
@@ -224,10 +270,17 @@ export function AgendamentoProgramado() {
 
   // ── Fetch agendamentos ─────────────────────────────────────────
   function fetchAgendamentos() {
+    const dIni = fromBRDate(listaDataInicio)
+    const dFim = fromBRDate(listaDataFim)
+    if (!dIni || !dFim) return
+
     setLoadingLista(true)
     const params: Record<string, string> = {}
     if (listaStatus) params.status = listaStatus
     if (selectedTecnico) params.tecnicoId = selectedTecnico
+    if (dIni) params.dataInicio = dIni
+    if (dFim) params.dataFim = dFim
+
     api.getAgendamentosProg(params)
       .then((r: any) => setAgendamentos(r))
       .catch(() => {})
@@ -243,8 +296,8 @@ export function AgendamentoProgramado() {
       horaInicio: d.horaInicio,
       horaFim: d.horaFim,
       intervaloMin: String(d.intervaloMin),
-      dataInicio: d.dataInicio ? String(d.dataInicio).substring(0, 10) : '',
-      dataFim: d.dataFim ? String(d.dataFim).substring(0, 10) : '',
+      dataInicio: d.dataInicio ? toBRDate(String(d.dataInicio).substring(0, 10)) : '',
+      dataFim: d.dataFim ? toBRDate(String(d.dataFim).substring(0, 10)) : '',
       usarIntervalo: !!(d.intervaloIni && d.intervaloFim),
       intervaloIni: d.intervaloIni ? String(d.intervaloIni).substring(0, 5) : '12:00',
       intervaloFim: d.intervaloFim ? String(d.intervaloFim).substring(0, 5) : '13:00',
@@ -271,8 +324,8 @@ export function AgendamentoProgramado() {
         horaInicio: configForm.horaInicio,
         horaFim: configForm.horaFim,
         intervaloMin: Number(configForm.intervaloMin),
-        dataInicio: configForm.dataInicio || null,
-        dataFim: configForm.dataFim || null,
+        dataInicio: fromBRDate(configForm.dataInicio) || null,
+        dataFim: fromBRDate(configForm.dataFim) || null,
         intervaloIni: configForm.usarIntervalo ? configForm.intervaloIni : null,
         intervaloFim: configForm.usarIntervalo ? configForm.intervaloFim : null,
       })
@@ -291,8 +344,8 @@ export function AgendamentoProgramado() {
   }
 
   // ── Booking ────────────────────────────────────────────────────
-  function openBook(tecnicoId: number, tecnicoNome: string, hora: string) {
-    setBookTecnico({ tecnicoId, tecnicoNome })
+  function openBook(tecnicoId: number, tecnicoNome: string, data: string, hora: string) {
+    setBookTecnico({ tecnicoId, tecnicoNome, data })
     setSelectedSlots([hora])
     setBookForm({ clienteId: '', descricao: '', duracao: '60' })
     setBookError('')
@@ -300,13 +353,12 @@ export function AgendamentoProgramado() {
   }
 
   function toggleSlotSelection(tech: SlotResult, hora: string) {
-    // If no tecnico selected yet, start fresh
-    if (!bookTecnico || bookTecnico.tecnicoId !== tech.tecnicoId) {
-      setBookTecnico({ tecnicoId: tech.tecnicoId, tecnicoNome: tech.tecnicoNome })
+    // If no tecnico or different date selected yet, start fresh
+    if (!bookTecnico || bookTecnico.tecnicoId !== tech.tecnicoId || bookTecnico.data !== tech.data) {
+      setBookTecnico({ tecnicoId: tech.tecnicoId, tecnicoNome: tech.tecnicoNome, data: tech.data })
       setSelectedSlots([hora])
       setBookForm({ clienteId: '', descricao: '', duracao: '60' })
       setBookError('')
-      setShowBookModal(false) // just highlight, modal opens on confirm
       return
     }
     setSelectedSlots(prev =>
@@ -329,7 +381,7 @@ export function AgendamentoProgramado() {
         await api.createAgendamentoProg({
           tecnicoId: bookTecnico.tecnicoId,
           clienteId: Number(bookForm.clienteId),
-          data: selectedDate,
+          data: bookTecnico.data,
           horaInicio: hora,
           duracao: Number(bookForm.duracao),
           descricao: bookForm.descricao || undefined,
@@ -357,7 +409,7 @@ export function AgendamentoProgramado() {
     setEditForm({
       tecnicoId: String(ag.tecnicoId),
       clienteId: ag.clienteId ? String(ag.clienteId) : '',
-      data: rawData,
+      data: toBRDate(rawData),
       horaInicio: formatTime(ag.horaInicio),
       duracao: String(ag.duracao),
       descricao: ag.descricao ?? '',
@@ -366,12 +418,15 @@ export function AgendamentoProgramado() {
 
   async function saveEdit() {
     if (!editItem) return
+    const dVal = fromBRDate(editForm.data)
+    if (!dVal) return
+
     setSavingEdit(true)
     try {
       await api.updateAgendamentoProg(editItem.id, {
         tecnicoId: Number(editForm.tecnicoId),
         clienteId: editForm.clienteId ? Number(editForm.clienteId) : null,
-        data: editForm.data,
+        data: dVal,
         horaInicio: editForm.horaInicio,
         duracao: Number(editForm.duracao),
         descricao: editForm.descricao || null,
@@ -403,19 +458,23 @@ export function AgendamentoProgramado() {
 
   // ── Bloqueio ───────────────────────────────────────────────────
   async function saveBloqueio() {
+    const dIni = fromBRDate(bloqueioForm.dataIni)
+    const dFim = fromBRDate(bloqueioForm.dataFim)
+    if (!dIni || !dFim) return
+
     setSavingBloqueio(true)
     try {
       await api.createBloqueio({
         tecnicoId: bloqueioForm.tecnicoId ? Number(bloqueioForm.tecnicoId) : null,
-        dataIni: bloqueioForm.dataIni,
+        dataIni: dIni,
         horaIni: bloqueioForm.horaIni,
-        dataFim: bloqueioForm.dataFim,
+        dataFim: dFim,
         horaFim: bloqueioForm.horaFim,
         motivo: bloqueioForm.motivo || undefined,
       })
       const updated: any = await api.getBloqueios()
       setBloqueios(updated)
-      setBloqueioForm({ tecnicoId: '', dataIni: today(), horaIni: '08:00', dataFim: today(), horaFim: '18:00', motivo: '' })
+      setBloqueioForm({ tecnicoId: '', dataIni: toBRDate(today()), horaIni: '08:00', dataFim: toBRDate(today()), horaFim: '18:00', motivo: '' })
       setShowBloqueioModal(false)
       // Refresh slots after blocking period
       if (slotResults.length > 0) fetchSlots()
@@ -482,7 +541,10 @@ export function AgendamentoProgramado() {
                 />
               </div>
               <div className="flex-1 min-w-[160px]">
-                <Input label="Data" type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
+                <Input label="Data Início" placeholder="dd/mm/aaaa" value={selectedDate} onChange={e => setSelectedDate(maskDate(e.target.value))} />
+              </div>
+              <div className="flex-1 min-w-[160px]">
+                <Input label="Data Fim" placeholder="dd/mm/aaaa" value={selectedDateEnd} onChange={e => setSelectedDateEnd(maskDate(e.target.value))} />
               </div>
               <Button onClick={fetchSlots} icon={<Calendar className="w-4 h-4" />}>Buscar Horários</Button>
             </div>
@@ -522,66 +584,79 @@ export function AgendamentoProgramado() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {slotResults.map(tech => {
-                  const isActiveTecnico = bookTecnico?.tecnicoId === tech.tecnicoId
-                  return (
-                    <Card key={tech.tecnicoId}>
-                      <div className="flex items-center gap-2 mb-4">
-                        <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-                          <User className="w-4 h-4 text-white" />
-                        </div>
-                        <div>
-                          <p className="text-sm font-semibold text-slate-100">{tech.tecnicoNome}</p>
-                          <p className="text-xs text-slate-500">{fmtDate(selectedDate)}</p>
-                        </div>
-                        {isActiveTecnico && selectedSlots.length > 0 && (
-                          <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-blue-600/20 text-blue-400 border border-blue-500/30">
-                            {selectedSlots.length} selecionado{selectedSlots.length > 1 ? 's' : ''}
-                          </span>
-                        )}
-                      </div>
-
-                      {tech.slotsDisponiveis.length === 0 && tech.slotsOcupados.length === 0 && (
-                        <p className="text-xs text-slate-500 text-center py-4">Sem agenda neste dia da semana.</p>
-                      )}
-                      {tech.slotsDisponiveis.length === 0 && tech.slotsOcupados.length > 0 && (
-                        <p className="text-xs text-amber-400 text-center py-2">Todos os horários estão ocupados.</p>
-                      )}
-
-                      <div className="flex flex-wrap gap-2">
-                        {tech.slotsDisponiveis.map(hora => {
-                          const isSelected = isActiveTecnico && selectedSlots.includes(hora)
-                          return (
-                            <button
-                              key={hora}
-                              onClick={() => toggleSlotSelection(tech, hora)}
-                              className={clsx(
-                                'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                                isSelected
-                                  ? 'bg-blue-500 text-white ring-2 ring-blue-400 ring-offset-1 ring-offset-slate-900'
-                                  : 'bg-blue-600 hover:bg-blue-500 text-white'
+              <div className="space-y-8">
+                {Object.entries(slotResults.reduce<Record<string, SlotResult[]>>((acc, r) => {
+                  (acc[r.data] = acc[r.data] || []).push(r)
+                  return acc
+                }, {})).sort(([a], [b]) => a.localeCompare(b)).map(([date, results]) => (
+                  <div key={date} className="space-y-4">
+                    <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />
+                      {fmtDate(date)}
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {results.map(tech => {
+                        const isActiveTecnico = bookTecnico?.tecnicoId === tech.tecnicoId
+                        return (
+                          <Card key={tech.tecnicoId + '-' + tech.data}>
+                            <div className="flex items-center gap-2 mb-4">
+                              <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+                                <User className="w-4 h-4 text-white" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-slate-100">{tech.tecnicoNome}</p>
+                                <p className="text-xs text-slate-500">{fmtDate(tech.data)}</p>
+                              </div>
+                              {isActiveTecnico && selectedSlots.length > 0 && (
+                                <span className="ml-auto text-xs px-2 py-0.5 rounded-full bg-blue-600/20 text-blue-400 border border-blue-500/30">
+                                  {selectedSlots.length} selecionado{selectedSlots.length > 1 ? 's' : ''}
+                                </span>
                               )}
-                            >
-                              {hora}
-                            </button>
-                          )
-                        })}
-                        {tech.slotsOcupados.map(hora => (
-                          <span key={hora} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-500 text-sm font-medium cursor-not-allowed line-through" title="Horário ocupado">
-                            {hora}
-                          </span>
-                        ))}
-                      </div>
+                            </div>
 
-                      {tech.slotsDisponiveis.length > 0 && (
-                        <p className="text-xs text-slate-500 mt-3">
-                          Clique nos horários para selecionar · {tech.slotsDisponiveis.length} disponível{tech.slotsDisponiveis.length > 1 ? 'is' : ''}
-                        </p>
-                      )}
-                    </Card>
-                  )
-                })}
+                            {tech.slotsDisponiveis.length === 0 && tech.slotsOcupados.length === 0 && (
+                              <p className="text-xs text-slate-500 text-center py-4">Sem agenda neste dia da semana.</p>
+                            )}
+                            {tech.slotsDisponiveis.length === 0 && tech.slotsOcupados.length > 0 && (
+                              <p className="text-xs text-amber-400 text-center py-2">Todos os horários estão ocupados.</p>
+                            )}
+
+                            <div className="flex flex-wrap gap-2">
+                              {tech.slotsDisponiveis.map(hora => {
+                                const isSelected = isActiveTecnico && selectedSlots.includes(hora)
+                                return (
+                                  <button
+                                    key={hora}
+                                    onClick={() => toggleSlotSelection(tech, hora)}
+                                    className={clsx(
+                                      'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                                      isSelected
+                                        ? 'bg-blue-500 text-white ring-2 ring-blue-400 ring-offset-1 ring-offset-slate-900'
+                                        : 'bg-blue-600 hover:bg-blue-500 text-white'
+                                    )}
+                                  >
+                                    {hora}
+                                  </button>
+                                )
+                              })}
+                              {tech.slotsOcupados.map(hora => (
+                                <span key={hora} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-500 text-sm font-medium cursor-not-allowed line-through" title="Horário ocupado">
+                                  {hora}
+                                </span>
+                              ))}
+                            </div>
+
+                            {tech.slotsDisponiveis.length > 0 && (
+                              <p className="text-xs text-slate-500 mt-3">
+                                Clique nos horários para selecionar · {tech.slotsDisponiveis.length} disponível{tech.slotsDisponiveis.length > 1 ? 'is' : ''}
+                              </p>
+                            )}
+                          </Card>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             </>
           )}
@@ -592,6 +667,12 @@ export function AgendamentoProgramado() {
       {activeTab === 'lista' && (
         <div className="space-y-4">
           <div className="flex flex-wrap gap-4 items-end">
+            <div className="w-48">
+              <Input label="Data Início" placeholder="dd/mm/aaaa" value={listaDataInicio} onChange={e => setListaDataInicio(maskDate(e.target.value))} />
+            </div>
+            <div className="w-48">
+              <Input label="Data Fim" placeholder="dd/mm/aaaa" value={listaDataFim} onChange={e => setListaDataFim(maskDate(e.target.value))} />
+            </div>
             <div className="w-48">
               <Select
                 label="Status"
@@ -737,11 +818,11 @@ export function AgendamentoProgramado() {
                 onChange={e => setBloqueioForm(f => ({ ...f, tecnicoId: e.target.value }))}
               />
               <div className="grid grid-cols-2 gap-4">
-                <Input label="Data início" type="date" value={bloqueioForm.dataIni} onChange={e => setBloqueioForm(f => ({ ...f, dataIni: e.target.value }))} />
+                <Input label="Data início" placeholder="dd/mm/aaaa" value={bloqueioForm.dataIni} onChange={e => setBloqueioForm(f => ({ ...f, dataIni: maskDate(e.target.value) }))} />
                 <Input label="Hora início" type="time" value={bloqueioForm.horaIni} onChange={e => setBloqueioForm(f => ({ ...f, horaIni: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Input label="Data fim" type="date" value={bloqueioForm.dataFim} onChange={e => setBloqueioForm(f => ({ ...f, dataFim: e.target.value }))} />
+                <Input label="Data fim" placeholder="dd/mm/aaaa" value={bloqueioForm.dataFim} onChange={e => setBloqueioForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))} />
                 <Input label="Hora fim" type="time" value={bloqueioForm.horaFim} onChange={e => setBloqueioForm(f => ({ ...f, horaFim: e.target.value }))} />
               </div>
               <Input
@@ -855,8 +936,8 @@ export function AgendamentoProgramado() {
                   Período de validade <span className="text-slate-500 text-xs font-normal">(opcional — deixe em branco para sempre)</span>
                 </p>
                 <div className="grid grid-cols-2 gap-4">
-                  <Input label="Data início" type="date" value={configForm.dataInicio} onChange={e => setConfigForm(f => ({ ...f, dataInicio: e.target.value }))} />
-                  <Input label="Data fim" type="date" value={configForm.dataFim} onChange={e => setConfigForm(f => ({ ...f, dataFim: e.target.value }))} />
+                  <Input label="Data início" placeholder="dd/mm/aaaa" value={configForm.dataInicio} onChange={e => setConfigForm(f => ({ ...f, dataInicio: maskDate(e.target.value) }))} />
+                  <Input label="Data fim" placeholder="dd/mm/aaaa" value={configForm.dataFim} onChange={e => setConfigForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))} />
                 </div>
               </div>
 
@@ -928,11 +1009,13 @@ export function AgendamentoProgramado() {
             onChange={e => setBookForm(f => ({ ...f, duracao: e.target.value }))}
           />
 
-          <Input
+          <Textarea
             label="Descrição (opcional)"
             placeholder="Descreva o objetivo do agendamento..."
             value={bookForm.descricao}
             onChange={e => setBookForm(f => ({ ...f, descricao: e.target.value }))}
+            maxLength={2000}
+            rows={4}
           />
 
           {bookError && (
@@ -966,7 +1049,7 @@ export function AgendamentoProgramado() {
             onChange={id => setEditForm(f => ({ ...f, clienteId: id }))}
           />
           <div className="grid grid-cols-2 gap-4">
-            <Input label="Data" type="date" value={editForm.data} onChange={e => setEditForm(f => ({ ...f, data: e.target.value }))} />
+            <Input label="Data" placeholder="dd/mm/aaaa" value={editForm.data} onChange={e => setEditForm(f => ({ ...f, data: maskDate(e.target.value) }))} />
             <Input label="Hora início" type="time" value={editForm.horaInicio} onChange={e => setEditForm(f => ({ ...f, horaInicio: e.target.value }))} />
           </div>
           <Select
@@ -980,11 +1063,13 @@ export function AgendamentoProgramado() {
             value={editForm.duracao}
             onChange={e => setEditForm(f => ({ ...f, duracao: e.target.value }))}
           />
-          <Input
+          <Textarea
             label="Descrição"
             placeholder="Descrição..."
             value={editForm.descricao}
             onChange={e => setEditForm(f => ({ ...f, descricao: e.target.value }))}
+            maxLength={2000}
+            rows={4}
           />
           <div className="flex justify-end gap-3 pt-1">
             <Button variant="secondary" onClick={() => setEditItem(null)}>Cancelar</Button>
