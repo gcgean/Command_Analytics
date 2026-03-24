@@ -72,30 +72,33 @@ app.register(swaggerUi, {
   uiConfig: { docExpansion: 'list', deepLinking: true },
 })
 
-// ─── Health Check ──────────────────────────────────────────────
-app.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' }))
+// ─── API prefix ────────────────────────────────────────────────
+app.register(async (api) => {
+  // Health check dentro do prefixo
+  api.get('/health', async () => ({ status: 'ok', timestamp: new Date().toISOString(), version: '1.0.0' }))
 
-// ─── Routes ────────────────────────────────────────────────────
-app.register(authRoutes,       { prefix: '/auth' })
-app.register(usuariosRoutes,   { prefix: '/usuarios' })
-app.register(clientesRoutes,   { prefix: '/clientes' })
-app.register(atendimentosRoutes, { prefix: '/atendimentos' })
-app.register(agendaRoutes,     { prefix: '/agenda' })
-app.register(planosRoutes,     { prefix: '/planos' })
-app.register(pipelineRoutes,   { prefix: '/pipeline' })
-app.register(crmRoutes,        { prefix: '/crm' })
-app.register(financeiroRoutes, { prefix: '/financeiro' })
-app.register(tarefasRoutes,    { prefix: '/tarefas' })
-app.register(videosRoutes,     { prefix: '/videos' })
-app.register(metasRoutes,      { prefix: '/metas' })
-app.register(monitorRoutes,    { prefix: '/monitor' })
-app.register(campanhasRoutes,  { prefix: '/campanhas' })
-app.register(contadoresRoutes, { prefix: '/contadores' })
-app.register(versoesRoutes,    { prefix: '/versoes' })
-app.register(servidoresRoutes, { prefix: '/servidores' })
-app.register(dashboardRoutes,  { prefix: '/dashboard' })
-app.register(gruposRoutes,     { prefix: '/grupos' })
-app.register(auditoriaRoutes,  { prefix: '/auditoria' })
+  // Rotas da aplicação
+  api.register(authRoutes,         { prefix: '/auth' })
+  api.register(usuariosRoutes,     { prefix: '/usuarios' })
+  api.register(clientesRoutes,     { prefix: '/clientes' })
+  api.register(atendimentosRoutes, { prefix: '/atendimentos' })
+  api.register(agendaRoutes,       { prefix: '/agenda' })
+  api.register(planosRoutes,       { prefix: '/planos' })
+  api.register(pipelineRoutes,     { prefix: '/pipeline' })
+  api.register(crmRoutes,          { prefix: '/crm' })
+  api.register(financeiroRoutes,   { prefix: '/financeiro' })
+  api.register(tarefasRoutes,      { prefix: '/tarefas' })
+  api.register(videosRoutes,       { prefix: '/videos' })
+  api.register(metasRoutes,        { prefix: '/metas' })
+  api.register(monitorRoutes,      { prefix: '/monitor' })
+  api.register(campanhasRoutes,    { prefix: '/campanhas' })
+  api.register(contadoresRoutes,   { prefix: '/contadores' })
+  api.register(versoesRoutes,      { prefix: '/versoes' })
+  api.register(servidoresRoutes,   { prefix: '/servidores' })
+  api.register(dashboardRoutes,    { prefix: '/dashboard' })
+  api.register(gruposRoutes,       { prefix: '/grupos' })
+  api.register(auditoriaRoutes,    { prefix: '/auditoria' })
+}, { prefix: '/api' })
 
 // ─── Start ─────────────────────────────────────────────────────
 const PORT = Number(process.env.PORT) || 3333
