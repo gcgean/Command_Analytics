@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Search, Plus, RefreshCw } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
@@ -29,6 +29,7 @@ const statusColors: Record<StatusCliente, string> = {
 
 export function Clientes() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -39,8 +40,10 @@ export function Clientes() {
   const [page, setPage] = useState(1)
 
   useEffect(() => {
-    api.getClientes().then(d => { setClientes(d); setLoading(false) })
-  }, [])
+    const qs = new URLSearchParams(location.search)
+    const contadorId = qs.get('contadorId') || ''
+    api.getClientes(contadorId ? { contadorId } : undefined).then(d => { setClientes(d); setLoading(false) })
+  }, [location.search])
 
   const filtered = clientes.filter(c => {
     const matchSearch = !search ||

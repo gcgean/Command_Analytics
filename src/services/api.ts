@@ -116,7 +116,7 @@ export const api = {
   getDashboardKPIs: () => fetchApi('/dashboard/kpis'),
 
   // ─── Clientes ──────────────────────────────────────────────
-  getClientes: (params?: { status?: string; segmento?: string; curvaABC?: string; search?: string }) => {
+  getClientes: (params?: { status?: string; segmento?: string; curvaABC?: string; search?: string; contadorId?: string; page?: string; limit?: string }) => {
     const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
     return fetchApi<Cliente[]>(`/clientes${qs}`)
   },
@@ -250,9 +250,15 @@ export const api = {
     fetchApi<Campanha>(`/campanhas/${id}/toggle`, { method: 'PATCH' }),
 
   // ─── Contadores ────────────────────────────────────────────
-  getContadores: () => fetchApi<Contador[]>('/contadores'),
-  createContador: (data: Partial<Contador>) =>
-    fetchApi<Contador>('/contadores', { method: 'POST', body: JSON.stringify(data) }),
+  getContadores: (params?: { page?: string; limit?: string; search?: string; cidade?: string }) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi(`/contadores${qs}`)
+  },
+  getContador: (id: number) => fetchApi(`/contadores/${id}`),
+  createContador: (data: Partial<Contador> | Record<string, unknown>) =>
+    fetchApi('/contadores', { method: 'POST', body: JSON.stringify(data) }),
+  updateContador: (id: number, data: Partial<Contador> | Record<string, unknown>) =>
+    fetchApi(`/contadores/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
 
   // ─── Versões ───────────────────────────────────────────────
   getVersoes: () => fetchApi<Versao[]>('/versoes'),

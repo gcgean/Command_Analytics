@@ -280,10 +280,26 @@ model Contador {
   emailResp      String?  @map("EMAIL_RESP") @db.VarChar(200)
   cidade         String?  @map("CIDADE") @db.VarChar(200)
   crc            String?  @map("CRC_CONTADOR") @db.VarChar(50)
+  descricao      String?  @map("DESCRICAO_ESCRITORIO") @db.VarChar(1000)
+  perfilContador String?  @map("PERFIL_CONTADOR") @db.VarChar(200)
+  chavePix       String?  @map("CHAVE_PIX") @db.VarChar(200)
+  emailEnvio     String?  @map("EMAIL_ENVIO_ARQUIVOS") @db.VarChar(200)
+  sistemaContador String? @map("SISTEMA_CONTADOR") @db.VarChar(200)
+  melhorDiaEnvio Int?     @map("MELHOR_DIA_ENVIO_ARQUIVOS")
+  usaPlataforma  String?  @map("USA_PLATAFORMA_DO_CONTADOR") @db.VarChar(3)
+  cpfContador    String?  @map("CPF_CONTADOR") @db.VarChar(14)
 
   clientes       Cliente[]
 
   @@map("contador")
+}
+
+model ContadorCliente {
+  idReg      Int  @id @default(autoincrement()) @map("ID_REG")
+  contadorId Int? @map("COD_CONTADOR")
+  clienteId  Int? @map("COD_CLIENTE")
+
+  @@map("contador_cliente")
 }
 
 // ============================================================

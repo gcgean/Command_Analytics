@@ -39,9 +39,9 @@ function fmt(c: any) {
 export async function clientesRoutes(app: FastifyInstance) {
   // GET /clientes
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Clientes'], summary: 'Listar clientes' } }, async (request) => {
-    const { ativo, bloqueado, curvaABC, search, idSegmento, idRegime, idPlano, page, limit } = request.query as Record<string, string>
+    const { ativo, bloqueado, curvaABC, search, idSegmento, idRegime, idPlano, contadorId, page, limit } = request.query as Record<string, string>
 
-    const where = {
+    const where: any = {
       ...(ativo !== undefined && { ativo }),
       ...(bloqueado !== undefined && { bloqueado }),
       ...(curvaABC && { curvaABC }),
@@ -49,6 +49,15 @@ export async function clientesRoutes(app: FastifyInstance) {
       ...(idSegmento && { idSegmento: Number(idSegmento) }),
       ...(idRegime && { idRegime: Number(idRegime) }),
       ...(idPlano && { idPlano: Number(idPlano) }),
+    }
+
+    if (contadorId) {
+      const links = await prisma.contadorCliente.findMany({
+        where: { contadorId: Number(contadorId) },
+        select: { clienteId: true },
+      })
+      const clientIds = links.map(l => l.clienteId).filter(id => id !== null) as number[]
+      where.id = { in: clientIds }
     }
 
     const pg = page ? Math.max(Number(page), 1) : undefined
