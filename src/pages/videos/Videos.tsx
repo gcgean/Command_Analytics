@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Play, Search, BookOpen, Loader2 } from 'lucide-react'
 import { api } from '../../services/api'
 import { useToast } from '../../components/ui/Toast'
@@ -29,13 +29,61 @@ export function Videos() {
   const [catFiltro, setCatFiltro] = useState('Todos')
   const [busca, setBusca] = useState('')
   const [videoAberto, setVideoAberto] = useState<number | null>(null)
+  const LIMIT = 24
+  const [page, setPage] = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+
+  const loadPage = async (pg: number, reset = false) => {
+    if (loadingMore) return
+    setLoadingMore(true)
+    try {
+      const params: Record<string, string> = { page: String(pg), limit: String(LIMIT) }
+      if (busca) params.search = busca
+      // Observação: se houver mapeamento de descrição -> id, usar categoriaId
+      const resp: any = await api.getVideos(params)
+      const data: VideoItem[] = resp?.data ?? (Array.isArray(resp) ? resp : [])
+      setVideos(prev => reset ? data : [...prev, ...data])
+      const pages = resp?.pages ?? 1
+      setHasMore(pg < pages)
+      setPage(pg)
+    } catch {
+      // falha silenciosa para não quebrar scroll
+    } finally {
+      setLoading(false)
+      setLoadingMore(false)
+    }
+  }
 
   useEffect(() => {
-    api.getVideos().then((data: any) => {
-      setVideos(Array.isArray(data) ? data : [])
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    setLoading(true)
+    loadPage(1, true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setPage(1)
+      setHasMore(true)
+      loadPage(1, true)
+    }, 300)
+    return () => clearTimeout(handler)
+  }, [busca, catFiltro])
+
+  const onIntersect = useCallback((entries: IntersectionObserverEntry[]) => {
+    if (entries[0].isIntersecting && hasMore && !loadingMore && !loading) {
+      loadPage(page + 1)
+    }
+  }, [hasMore, loadingMore, loading, page])
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    const obs = new IntersectionObserver(onIntersect, { root: null, rootMargin: '200px', threshold: 0 })
+    obs.observe(el)
+    return () => obs.disconnect()
+  }, [onIntersect])
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -110,43 +158,54 @@ export function Videos() {
       </div>
 
       {/* Grid de vídeos */}
-      {filtrados.length === 0 ? (
+      {filtrados.length === 0 && !loading ? (
         <div className="card text-center py-12">
           <p className="text-slate-500">Nenhum vídeo encontrado para os filtros selecionados.</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtrados.map(v => (
-            <div
-              key={v.id}
-              className="card p-0 overflow-hidden cursor-pointer hover:border-slate-600 border border-slate-700 transition-colors"
-              onClick={() => setVideoAberto(v.id)}
-            >
-              <div className="bg-slate-900 h-36 flex items-center justify-center relative group">
-                <div className="w-14 h-14 bg-blue-600/80 rounded-full flex items-center justify-center group-hover:bg-blue-600 transition-colors">
-                  <Play size={24} className="text-white fill-white ml-1" />
-                </div>
-                {v.categoriaDescricao && (
-                  <span className="absolute top-2 left-2 badge bg-blue-600/80 text-white text-xs">
-                    {v.categoriaDescricao}
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filtrados.map(v => (
+              <div
+                key={v.id}
+                className="card p-0 overflow-hidden cursor-pointer hover:border-slate-600 border border-slate-700 transition-colors"
+                onClick={() => setVideoAberto(v.id)}
+              >
+                <div className="bg-slate-900 h-36 flex items-center justify-center relative group">
+                  <div className="w-14 h-14 bg-blue-600/80 rounded-full flex items-center justify-center group-hover:bg-blue-600 transition-colors">
+                    <Play size={24} className="text-white fill-white ml-1" />
+                  </div>
+                  {v.categoriaDescricao && (
+                    <span className="absolute top-2 left-2 badge bg-blue-600/80 text-white text-xs">
+                      {v.categoriaDescricao}
+                    </span>
+                  )}
+                  <span className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                    {v.visualizacoes} views
                   </span>
-                )}
-                <span className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
-                  {v.visualizacoes} views
-                </span>
-              </div>
-              <div className="p-3">
-                <p className="text-sm font-semibold text-slate-100 leading-tight mb-1 line-clamp-2">
-                  {v.titulo ?? 'Sem título'}
-                </p>
-                <div className="flex items-center justify-between text-xs text-slate-500">
-                  <span>{v.colaboradorNome ?? '—'}</span>
-                  <span>{formatData(v.data)}</span>
+                </div>
+                <div className="p-3">
+                  <p className="text-sm font-semibold text-slate-100 leading-tight mb-1 line-clamp-2">
+                    {v.titulo ?? 'Sem título'}
+                  </p>
+                  <div className="flex items-center justify-between text-xs text-slate-500">
+                    <span>{v.colaboradorNome ?? '—'}</span>
+                    <span>{formatData(v.data)}</span>
+                  </div>
                 </div>
               </div>
+            ))}
+          </div>
+          {(loading || loadingMore) && (
+            <div className="flex items-center justify-center py-6">
+              <Loader2 className="w-6 h-6 text-blue-500 animate-spin" />
             </div>
-          ))}
-        </div>
+          )}
+          <div ref={sentinelRef} style={{ height: 1 }} />
+          {!hasMore && videos.length > 0 && (
+            <div className="text-center text-xs text-slate-500 py-4">Fim da lista</div>
+          )}
+        </>
       )}
 
       {/* Modal de vídeo */}

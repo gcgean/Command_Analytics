@@ -16,6 +16,15 @@ export function Login() {
   const [healthError, setHealthError] = useState('')
   const [healthDetails, setHealthDetails] = useState<{ endpoint: string; status: number; statusText: string } | null>(null)
   const [showDiag, setShowDiag] = useState(false)
+  const applyApiFix = () => {
+    if (typeof window === 'undefined') return
+    const host = window.location.hostname
+    const suggested = (host === 'localhost' || host === '127.0.0.1')
+      ? 'http://localhost:3333/api'
+      : `${window.location.origin}/api`
+    localStorage.setItem('api_base_override', suggested)
+    window.location.reload()
+  }
 
   const runHealthCheck = async () => {
     setHealthChecking(true)
@@ -158,6 +167,15 @@ export function Login() {
                   >
                     Abrir diagnóstico
                   </button>
+                  {healthDetails && healthDetails.status === 404 && !healthDetails.endpoint.includes('/api/') && (
+                    <button
+                      type="button"
+                      onClick={applyApiFix}
+                      className="ml-2 text-xs px-2 py-1 rounded bg-blue-600 text-white hover:bg-blue-700"
+                    >
+                      Aplicar /api e recarregar
+                    </button>
+                  )}
                 </div>
               </div>
             )}

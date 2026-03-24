@@ -21,22 +21,39 @@ function fmt(v: any) {
 export async function videosRoutes(app: FastifyInstance) {
   // GET /videos
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Vídeos'] } }, async (request) => {
-    const { categoriaId, tipo, search } = request.query as Record<string, string>
+    const { categoriaId, tipo, search, page, limit } = request.query as Record<string, string>
 
-    const videos = await prisma.video.findMany({
-      where: {
-        ...(categoriaId && { categoriaId: Number(categoriaId) }),
-        ...(tipo !== undefined && { tipo: Number(tipo) }),
-        ...(search && { titulo: { contains: search } }),
-      },
-      include: {
-        categoria: { select: { id: true, descricao: true } },
-        colaborador: { select: { id: true, nome: true } },
-      },
-      orderBy: { visualizacoes: 'desc' },
-    })
+    const take = Math.min(Number(limit) || 24, 100)
+    const currentPage = Math.max(Number(page) || 1, 1)
+    const skip = (currentPage - 1) * take
 
-    return videos.map(fmt)
+    const where = {
+      ...(categoriaId && { categoriaId: Number(categoriaId) }),
+      ...(tipo !== undefined && { tipo: Number(tipo) }),
+      ...(search && { titulo: { contains: search, mode: 'insensitive' } }),
+    }
+
+    const [total, items] = await Promise.all([
+      prisma.video.count({ where }),
+      prisma.video.findMany({
+        where,
+        include: {
+          categoria: { select: { id: true, descricao: true } },
+          colaborador: { select: { id: true, nome: true } },
+        },
+        orderBy: { visualizacoes: 'desc' },
+        take,
+        skip,
+      }),
+    ])
+
+    return {
+      total,
+      page: currentPage,
+      limit: take,
+      pages: Math.max(Math.ceil(total / take), 1),
+      data: items.map(fmt),
+    }
   })
 
   // GET /videos/:id

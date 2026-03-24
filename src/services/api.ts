@@ -9,14 +9,37 @@ import type {
 // CONFIGURAÇÃO BASE
 // ============================================================
 const BASE_URL = (() => {
-  const envUrl = import.meta.env.VITE_API_URL
-    || (typeof window !== 'undefined' && window.location?.hostname === 'controle.cilos.com.br'
-      ? 'https://controle.cilos.com.br/api'
-      : 'http://localhost:3333')
-  if (typeof window !== 'undefined' && window.location?.protocol === 'https:' && envUrl.startsWith('http://')) {
-    return envUrl.replace('http://', 'https://')
+  // 1) Query-string override: ?api=https://example.com/api
+  if (typeof window !== 'undefined') {
+    const qsApi = new URLSearchParams(window.location.search).get('api')
+    if (qsApi) return qsApi
   }
-  return envUrl
+  // 2) LocalStorage override (útil para testes): api_base_override
+  const lsOverride = typeof window !== 'undefined' ? localStorage.getItem('api_base_override') : null
+  if (lsOverride) return lsOverride
+  // 3) VITE_API_URL (se definido)
+  const envUrl = import.meta.env.VITE_API_URL as string | undefined
+  if (envUrl) {
+    if (typeof window !== 'undefined' && window.location?.protocol === 'https:' && envUrl.startsWith('http://')) {
+      // Em páginas HTTPS, evitar conteúdo misto
+      return envUrl.replace('http://', 'https://')
+    }
+    return envUrl
+  }
+  // 4) Autodetecção por domínio
+  if (typeof window !== 'undefined') {
+    const { origin, hostname, protocol } = window.location
+    // Ambiente local
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return 'http://localhost:3333/api'
+    }
+    // Produção: usar o mesmo domínio com prefixo /api
+    const base = `${origin}/api`
+    // Se por alguma razão estiver em HTTP, manter; em HTTPS, já é seguro
+    return base
+  }
+  // Fallback (build sem window)
+  return 'http://localhost:3333/api'
 })()
 
 export const API_BASE_URL = BASE_URL
@@ -199,7 +222,10 @@ export const api = {
     fetchApi<Tarefa>(`/tarefas/${id}/progresso`, { method: 'PATCH', body: JSON.stringify({ percentualConclusao, status }) }),
 
   // ─── Vídeos ────────────────────────────────────────────────
-  getVideos: () => fetchApi<Video[]>('/videos'),
+  getVideos: (params?: { page?: string; limit?: string; categoriaId?: string; tipo?: string; search?: string }) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi(`/videos${qs}`)
+  },
   createVideo: (data: Partial<Video>) =>
     fetchApi<Video>('/videos', { method: 'POST', body: JSON.stringify(data) }),
   visualizarVideo: (id: number) => fetchApi(`/videos/${id}/visualizar`, { method: 'POST' }),
