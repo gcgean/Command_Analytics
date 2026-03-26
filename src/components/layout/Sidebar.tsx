@@ -94,7 +94,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
   {
     group: 'METAS',
     items: [
-      { label: 'Metas e NPS', icon: <Target className="w-4 h-4" />, to: '/metas', recurso: 'metas' },
+      { label: 'Boletim Comercial', icon: <Target className="w-4 h-4" />, to: '/metas', recurso: 'metas' },
     ]
   },
   {

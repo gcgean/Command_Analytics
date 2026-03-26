@@ -1,129 +1,386 @@
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Target, ThumbsUp, ThumbsDown, Minus, Loader2 } from 'lucide-react'
+import {
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Cell, Legend,
+} from 'recharts'
+import {
+  TrendingUp, TrendingDown, Users, Target, ChevronLeft,
+  ChevronRight, Zap, Award, AlertTriangle, CheckCircle2,
+  Building2, Loader2, RefreshCw,
+} from 'lucide-react'
 import { api } from '../../services/api'
-import type { Meta, AvaliacaoNPS } from '../../types'
+import clsx from 'clsx'
 
-const npsData = [
-  { setor: 'Suporte', promotores: 62, neutros: 20, detratores: 18, nps: 44 },
-  { setor: 'Fiscal', promotores: 71, neutros: 15, detratores: 14, nps: 57 },
-  { setor: 'Financeiro', promotores: 55, neutros: 25, detratores: 20, nps: 35 },
-  { setor: 'Comercial', promotores: 80, neutros: 10, detratores: 10, nps: 70 },
-  { setor: 'Treinamento', promotores: 75, neutros: 18, detratores: 7, nps: 68 },
-]
+// ── tipos ──────────────────────────────────────────────────────────
+interface Resumo {
+  totalAtivos: number; qtdNovos: number; valorClientesNovos: number
+  qtdPerdidos: number; receitaPerdida: number; valorUpgrades: number
+  receitaNova: number; receitaLiquida: number; percMeta: number
+}
+interface Filial {
+  nome: string; codCon: number; qtd: number
+  valor: number; meta: number; perc: number
+}
+interface EvoMes { mes: string; receitaNova: number; clientesNovos: number; meta: number }
+interface DadosComercial {
+  periodo: { ano: number; mes: number; inicio: string; fim: string; diasRestantes: number; label: string }
+  meta: { geral: number; limoeiro: number; aracati: number }
+  resumo: Resumo
+  porFilial: Filial[]
+  evolucao: EvoMes[]
+}
 
-const notaCor = (n: number) => n >= 9 ? 'text-emerald-400' : n >= 7 ? 'text-amber-400' : 'text-red-400'
-const notaIcone = (n: number) => n >= 9 ? ThumbsUp : n >= 7 ? Minus : ThumbsDown
+// ── helpers ────────────────────────────────────────────────────────
+const brl = (v: number) =>
+  v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0, maximumFractionDigits: 0 })
 
+const percColor = (p: number) =>
+  p >= 100 ? 'text-emerald-400' : p >= 75 ? 'text-blue-400' : p >= 50 ? 'text-amber-400' : 'text-red-400'
+
+const percBg = (p: number) =>
+  p >= 100 ? 'bg-emerald-500' : p >= 75 ? 'bg-blue-500' : p >= 50 ? 'bg-amber-500' : 'bg-red-500'
+
+const percGradient = (p: number) =>
+  p >= 100 ? 'from-emerald-600 to-emerald-400'
+    : p >= 75 ? 'from-blue-600 to-blue-400'
+    : p >= 50 ? 'from-amber-600 to-amber-400'
+    : 'from-red-600 to-red-400'
+
+function ProgressBar({ perc, height = 'h-3' }: { perc: number; height?: string }) {
+  const w = Math.min(perc, 100)
+  return (
+    <div className={`w-full bg-slate-700/60 rounded-full ${height} overflow-hidden`}>
+      <div
+        className={`${height} rounded-full bg-gradient-to-r ${percGradient(perc)} transition-all duration-700`}
+        style={{ width: `${w}%` }}
+      />
+    </div>
+  )
+}
+
+// ── custom tooltip ─────────────────────────────────────────────────
+function ChartTooltip({ active, payload, label }: any) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 shadow-2xl text-sm">
+      <p className="font-semibold text-slate-200 mb-2">{label}</p>
+      {payload.map((p: any) => (
+        <div key={p.name} className="flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+          <span className="text-slate-400">{p.name}:</span>
+          <span className="text-slate-100 font-medium">
+            {p.name === 'Clientes' ? p.value : brl(p.value)}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+// ── componente principal ───────────────────────────────────────────
 export function Metas() {
-  const [metas, setMetas] = useState<Meta[]>([])
-  const [nps, setNps] = useState<AvaliacaoNPS[]>([])
+  const now = new Date()
+  const [ano, setAno]   = useState(now.getFullYear())
+  const [mes, setMes]   = useState(now.getMonth() + 1)
+  const [dados, setDados] = useState<DadosComercial | null>(null)
   const [loading, setLoading] = useState(true)
+  const [erro, setErro] = useState(false)
+
+  const mesPad = String(mes).padStart(2, '0')
+  const mesKey = `${ano}-${mesPad}`
+
+  const navegar = (delta: number) => {
+    let m = mes + delta, a = ano
+    if (m < 1) { m = 12; a-- }
+    if (m > 12) { m = 1;  a++ }
+    setMes(m); setAno(a)
+  }
 
   useEffect(() => {
-    Promise.all([api.getMetas(), api.getNPS()]).then(([metasData, npsApiData]: any[]) => {
-      setMetas(Array.isArray(metasData) ? metasData : [])
-      setNps(Array.isArray(npsApiData) ? npsApiData : [])
-      setLoading(false)
-    }).catch(() => setLoading(false))
-  }, [])
+    setLoading(true); setErro(false)
+    ;(api.getMetasComercial as any)(mesKey)
+      .then((d: DadosComercial) => { setDados(d); setLoading(false) })
+      .catch(() => { setErro(true); setLoading(false) })
+  }, [mesKey])
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-slate-400">Carregando...</p>
+        <p className="text-sm text-slate-400">Carregando boletim comercial...</p>
       </div>
     </div>
   )
 
+  if (erro || !dados) return (
+    <div className="flex flex-col items-center justify-center h-64 gap-4">
+      <AlertTriangle className="w-12 h-12 text-amber-400" />
+      <p className="text-slate-400 text-sm">Erro ao carregar os dados</p>
+      <button onClick={() => { setLoading(true); setErro(false) }}
+        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm">
+        <RefreshCw className="w-4 h-4" /> Tentar novamente
+      </button>
+    </div>
+  )
+
+  const { periodo, meta, resumo, porFilial, evolucao } = dados
+  const perc = resumo.percMeta
+  const faltaMeta = Math.max(0, meta.geral - resumo.receitaNova)
+  const isMesAtual = ano === now.getFullYear() && mes === now.getMonth() + 1
+
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-100">Metas e NPS</h1>
-        <p className="text-slate-400 text-sm mt-1">Acompanhamento de metas da equipe e satisfação dos clientes</p>
-      </div>
+    <div className="space-y-5 pb-6">
 
-      {/* Metas */}
-      <div>
-        <h2 className="text-base font-semibold text-slate-200 mb-3 flex items-center gap-2">
-          <Target size={18} className="text-blue-400" /> Metas do Período — Março 2026
-        </h2>
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          {metas.map(m => {
-            const perc = Math.min((m.realizado / m.metaValor) * 100, 100)
-            const cor = perc >= 100 ? 'bg-emerald-500' : perc >= 70 ? 'bg-amber-500' : 'bg-red-500'
-            const textCor = perc >= 100 ? 'text-emerald-400' : perc >= 70 ? 'text-amber-400' : 'text-red-400'
-            return (
-              <div key={m.id} className="card">
-                <p className="text-xs text-slate-400 mb-0.5">{m.departamento}</p>
-                <p className="text-sm font-medium text-slate-200 mb-2">{m.descricao}</p>
-                <div className="flex items-end justify-between mb-2">
-                  <p className={`text-2xl font-bold ${textCor}`}>{m.realizado}</p>
-                  <p className="text-xs text-slate-500">/ {m.metaValor} {m.unidade}</p>
-                </div>
-                <div className="w-full bg-slate-700 rounded-full h-2 mb-1">
-                  <div className={`h-2 rounded-full transition-all ${cor}`} style={{ width: `${perc}%` }} />
-                </div>
-                <p className={`text-xs font-semibold ${textCor}`}>{perc.toFixed(0)}% — {m.status}</p>
-              </div>
-            )
-          })}
+      {/* ── Cabeçalho ─────────────────────────────────────────────── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-blue-400" />
+            Boletim Comercial
+          </h1>
+          <p className="text-slate-400 text-sm mt-0.5 capitalize">{periodo.label}</p>
+        </div>
+        <div className="flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-xl px-3 py-2">
+          <button onClick={() => navegar(-1)}
+            className="p-1 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-slate-100 transition-colors">
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-sm font-medium text-slate-200 min-w-[110px] text-center capitalize">
+            {new Date(ano, mes - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
+          </span>
+          <button onClick={() => navegar(1)} disabled={isMesAtual}
+            className="p-1 rounded-lg hover:bg-slate-700 text-slate-400 hover:text-slate-100 transition-colors disabled:opacity-30">
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
       </div>
 
-      {/* NPS por departamento */}
-      <div className="card">
-        <h2 className="text-base font-semibold text-slate-200 mb-4">NPS por Departamento</h2>
-        <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={npsData} layout="vertical">
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" horizontal={false} />
-            <XAxis type="number" domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 11 }} />
-            <YAxis dataKey="setor" type="category" tick={{ fill: '#94a3b8', fontSize: 12 }} width={90} />
-            <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#f1f5f9' }} />
-            <Bar dataKey="promotores" name="Promotores (9-10)" fill="#10b981" radius={[0, 4, 4, 0]} stackId="a" />
-            <Bar dataKey="neutros" name="Neutros (7-8)" fill="#f59e0b" stackId="a" />
-            <Bar dataKey="detratores" name="Detratores (0-6)" fill="#ef4444" radius={[0, 4, 4, 0]} stackId="a" />
-          </BarChart>
-        </ResponsiveContainer>
-        <div className="grid grid-cols-5 gap-2 mt-4">
-          {npsData.map(n => (
-            <div key={n.setor} className="text-center">
-              <p className="text-xs text-slate-400">{n.setor}</p>
-              <p className={`text-lg font-bold ${n.nps >= 50 ? 'text-emerald-400' : n.nps >= 0 ? 'text-amber-400' : 'text-red-400'}`}>{n.nps}</p>
-              <p className="text-xs text-slate-500">NPS</p>
+      {/* ── Hero — Meta Geral ─────────────────────────────────────── */}
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Meta do Período</p>
+            <div className="flex items-baseline gap-3">
+              <span className={`text-4xl font-black ${percColor(perc)}`}>
+                {perc.toFixed(0)}%
+              </span>
+              <span className="text-slate-400 text-sm">de {brl(meta.geral)}</span>
             </div>
-          ))}
+            <p className={`text-sm mt-1 font-medium ${percColor(perc)}`}>
+              {perc >= 100
+                ? '🎉 Meta batida!'
+                : perc >= 75
+                ? `🔥 Faltam ${brl(faltaMeta)} para bater a meta`
+                : perc >= 50
+                ? `⚠️ Faltam ${brl(faltaMeta)} — acelere!`
+                : `🚨 Faltam ${brl(faltaMeta)} — situação crítica`}
+            </p>
+          </div>
+          <div className="flex gap-3">
+            <div className="text-right">
+              <p className="text-xs text-slate-500 mb-0.5">Realizado</p>
+              <p className="text-xl font-bold text-slate-100">{brl(resumo.receitaNova)}</p>
+            </div>
+            {isMesAtual && (
+              <div className="text-right border-l border-slate-700 pl-3">
+                <p className="text-xs text-slate-500 mb-0.5">Dias restantes</p>
+                <p className={`text-xl font-bold ${periodo.diasRestantes <= 5 ? 'text-amber-400' : 'text-slate-100'}`}>
+                  {periodo.diasRestantes}d
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+        <ProgressBar perc={perc} height="h-4" />
+        <div className="flex justify-between mt-1.5">
+          <span className="text-xs text-slate-500">R$ 0</span>
+          <span className="text-xs text-slate-500">{brl(meta.geral)}</span>
+        </div>
+
+        {/* sub-metas */}
+        {resumo.valorUpgrades > 0 && (
+          <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-700">
+            <div>
+              <p className="text-xs text-slate-500 mb-1">📦 Clientes Novos</p>
+              <p className="text-sm font-semibold text-slate-200">{brl(resumo.valorClientesNovos)}</p>
+              <div className="mt-1"><ProgressBar perc={(resumo.valorClientesNovos / meta.geral) * 100} height="h-1.5" /></div>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">⚡ Upgrades</p>
+              <p className="text-sm font-semibold text-slate-200">{brl(resumo.valorUpgrades)}</p>
+              <div className="mt-1"><ProgressBar perc={(resumo.valorUpgrades / meta.geral) * 100} height="h-1.5" /></div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── KPI Cards ─────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-slate-500">Total Ativos</p>
+            <Users className="w-4 h-4 text-blue-400" />
+          </div>
+          <p className="text-2xl font-black text-slate-100">{resumo.totalAtivos.toLocaleString('pt-BR')}</p>
+          <p className="text-xs text-slate-500 mt-0.5">clientes</p>
+        </div>
+
+        <div className="bg-slate-800 border border-emerald-500/20 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-slate-500">Novos</p>
+            <TrendingUp className="w-4 h-4 text-emerald-400" />
+          </div>
+          <p className="text-2xl font-black text-emerald-400">{resumo.qtdNovos}</p>
+          <p className="text-xs text-slate-500 mt-0.5">{brl(resumo.valorClientesNovos)}</p>
+        </div>
+
+        <div className={clsx(
+          'bg-slate-800 rounded-xl p-4 border',
+          resumo.qtdPerdidos > 0 ? 'border-red-500/20' : 'border-slate-700'
+        )}>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-slate-500">Perdidos</p>
+            <TrendingDown className={`w-4 h-4 ${resumo.qtdPerdidos > 0 ? 'text-red-400' : 'text-slate-500'}`} />
+          </div>
+          <p className={`text-2xl font-black ${resumo.qtdPerdidos > 0 ? 'text-red-400' : 'text-slate-400'}`}>
+            {resumo.qtdPerdidos}
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">{resumo.qtdPerdidos > 0 ? `-${brl(resumo.receitaPerdida)}` : '—'}</p>
+        </div>
+
+        <div className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-slate-500">Upgrades</p>
+            <Zap className="w-4 h-4 text-amber-400" />
+          </div>
+          <p className="text-2xl font-black text-amber-400">{brl(resumo.valorUpgrades)}</p>
+          <p className="text-xs text-slate-500 mt-0.5">comissões</p>
+        </div>
+
+        <div className={clsx(
+          'bg-slate-800 rounded-xl p-4 border col-span-2 sm:col-span-1',
+          resumo.receitaLiquida >= 0 ? 'border-emerald-500/20' : 'border-red-500/20'
+        )}>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-slate-500">Saldo Líquido</p>
+            {resumo.receitaLiquida >= 0
+              ? <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              : <AlertTriangle className="w-4 h-4 text-red-400" />
+            }
+          </div>
+          <p className={`text-2xl font-black ${resumo.receitaLiquida >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+            {brl(resumo.receitaLiquida)}
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">nova − perdida</p>
         </div>
       </div>
 
-      {/* Avaliações NPS */}
-      <div>
-        <h2 className="text-base font-semibold text-slate-200 mb-3">Pesquisas Recentes</h2>
-        <div className="space-y-3">
-          {nps.map(r => {
-            const Icone = notaIcone(r.nota)
-            return (
-              <div key={r.id} className="card flex items-start gap-4">
-                <div className={`p-2 rounded-lg bg-slate-700 flex-shrink-0 ${notaCor(r.nota)}`}><Icone size={18} /></div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-sm font-medium text-slate-200">{r.clienteNome}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-slate-500">{r.departamento}</span>
-                      <span className={`badge ${r.nota >= 9 ? 'bg-emerald-500/20 text-emerald-400' : r.nota >= 7 ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}`}>
-                        Nota {r.nota}
-                      </span>
-                    </div>
+      {/* ── Filiais ───────────────────────────────────────────────── */}
+      {porFilial.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Building2 className="w-4 h-4" /> Desempenho por Filial
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {porFilial.map(f => (
+              <div key={f.codCon} className="bg-slate-800 border border-slate-700 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="font-semibold text-slate-200">{f.nome}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{f.qtd} clientes novos</p>
                   </div>
-                  {r.comentario && <p className="text-sm text-slate-400 italic">"{r.comentario}"</p>}
-                  <p className="text-xs text-slate-600 mt-1">{r.data.split('-').reverse().join('/')}</p>
+                  <div className="text-right">
+                    <p className={`text-lg font-black ${percColor(f.perc)}`}>{f.perc.toFixed(0)}%</p>
+                    {f.meta > 0 && <p className="text-xs text-slate-500">meta {brl(f.meta)}</p>}
+                  </div>
+                </div>
+                <ProgressBar perc={f.perc} height="h-2.5" />
+                <div className="flex justify-between mt-1.5">
+                  <span className="text-xs text-slate-400 font-medium">{brl(f.valor)}</span>
+                  {f.meta > 0 && <span className="text-xs text-slate-500">{brl(f.meta)}</span>}
                 </div>
               </div>
-            )
-          })}
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Evolução Mensal ───────────────────────────────────────── */}
+      <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+            <Award className="w-4 h-4 text-blue-400" /> Evolução dos Últimos 6 Meses
+          </h2>
+          <div className="flex items-center gap-4 text-xs text-slate-500">
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-3 rounded bg-blue-500 inline-block" /> Receita Nova
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-1 rounded bg-amber-400 inline-block" /> Meta
+            </span>
+          </div>
+        </div>
+        <ResponsiveContainer width="100%" height={220}>
+          <ComposedChart data={evolucao} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+            <XAxis dataKey="mes" tick={{ fill: '#64748b', fontSize: 11 }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fill: '#64748b', fontSize: 10 }} axisLine={false} tickLine={false}
+              tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} />
+            <Tooltip content={<ChartTooltip />} />
+            <Bar dataKey="receitaNova" name="Receita Nova" radius={[4, 4, 0, 0]} maxBarSize={48}>
+              {evolucao.map((e, i) => (
+                <Cell key={i} fill={
+                  i === evolucao.length - 1 ? '#3b82f6'
+                    : e.receitaNova >= e.meta ? '#10b981'
+                    : e.receitaNova >= e.meta * 0.75 ? '#3b82f6'
+                    : '#475569'
+                } />
+              ))}
+            </Bar>
+            <Line dataKey="meta" name="Meta" stroke="#f59e0b" strokeWidth={2}
+              strokeDasharray="6 3" dot={false} />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* ── Ranking do mês ────────────────────────────────────────── */}
+      <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 rounded-2xl p-5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Resumo do Período</p>
+            <p className="text-slate-200 text-sm">
+              {perc >= 100
+                ? 'Meta alcançada! Excelente desempenho da equipe comercial.'
+                : perc >= 75
+                ? 'Ótimo ritmo! Continue o esforço para bater a meta.'
+                : perc >= 50
+                ? 'Em andamento. Intensifique os esforços de vendas.'
+                : 'Período desafiador. Revise a estratégia comercial.'
+              }
+            </p>
+          </div>
+          <div className="flex gap-6 flex-shrink-0">
+            <div className="text-center">
+              <p className="text-2xl font-black text-emerald-400">+{resumo.qtdNovos}</p>
+              <p className="text-xs text-slate-500">entraram</p>
+            </div>
+            <div className="text-center">
+              <p className={`text-2xl font-black ${resumo.qtdPerdidos > 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                -{resumo.qtdPerdidos}
+              </p>
+              <p className="text-xs text-slate-500">saíram</p>
+            </div>
+            <div className="text-center">
+              <p className={`text-2xl font-black ${resumo.qtdNovos - resumo.qtdPerdidos >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                {resumo.qtdNovos - resumo.qtdPerdidos >= 0 ? '+' : ''}{resumo.qtdNovos - resumo.qtdPerdidos}
+              </p>
+              <p className="text-xs text-slate-500">saldo</p>
+            </div>
+          </div>
         </div>
       </div>
+
     </div>
   )
 }

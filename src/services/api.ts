@@ -234,6 +234,7 @@ export const api = {
   getMetas: () => fetchApi<Meta[]>('/metas'),
   getNPS: () => fetchApi<AvaliacaoNPS[]>('/metas/nps'),
   getNPSKpi: () => fetchApi('/metas/nps/kpi'),
+  getMetasComercial: (mes?: string) => fetchApi(`/metas/comercial${mes ? `?mes=${mes}` : ''}`),
   createNPS: (data: Partial<AvaliacaoNPS>) =>
     fetchApi<AvaliacaoNPS>('/metas/nps', { method: 'POST', body: JSON.stringify(data) }),
 
