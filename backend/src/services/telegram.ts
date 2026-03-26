@@ -29,10 +29,7 @@ export class TelegramService {
           
           if ('buffer' in anexo) {
             // Se for um buffer (comum no backend)
-            const bytes =
-              anexo.buffer instanceof Uint8Array
-                ? anexo.buffer
-                : Uint8Array.from(anexo.buffer as Buffer)
+            const bytes = Uint8Array.from(anexo.buffer)
 
             const blob = new Blob([bytes], {
               type: anexo.contentType || 'application/octet-stream',
