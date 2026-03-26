@@ -147,6 +147,62 @@ export async function metasRoutes(app: FastifyInstance) {
       }
     })
 
+    // Detalhes de clientes novos
+    const clientesNovosDetail = await prisma.$queryRaw<any[]>`
+      SELECT c.cod_cli AS codigo, c.razao_social AS nome, c.valor_mensalidade AS valor,
+             COALESCE(c.CIDADE, 'N/A') AS cidade,
+             CAST(c.DATACADASTRO_CLI AS DATE) AS data_cadastro
+      FROM cliente c
+      WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
+        AND c.ATIVO = 'S'
+        AND c.DATACADASTRO_CLI BETWEEN ${dataIni} AND ${dataFim}
+        AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
+      ORDER BY c.DATACADASTRO_CLI DESC
+      LIMIT 100
+    `.catch(() => [] as any[])
+
+    // Detalhes de clientes perdidos
+    const clientesPerdidosDetail = await prisma.$queryRaw<any[]>`
+      SELECT DISTINCT c.cod_cli AS codigo, c.razao_social AS nome, c.valor_mensalidade AS valor,
+             COALESCE(c.CIDADE, 'N/A') AS cidade,
+             CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) AS data_desativacao
+      FROM historico_bloqueio_cliente hb
+      INNER JOIN cliente c ON c.cod_cli = hb.cod_cli
+      WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
+        AND CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) BETWEEN ${dataIni} AND ${dataFim}
+        AND c.cod_cla <> 30 AND hb.tipo = 'D'
+      ORDER BY hb.data_hora_bloqueio_desbloqueio DESC
+      LIMIT 100
+    `.catch(() => [] as any[])
+
+    // Detalhes de upgrades
+    const upgradesDetail = await prisma.$queryRaw<any[]>`
+      SELECT f.nome AS vendedor, c.razao_social AS cliente, co.Descricao AS descricao,
+             co.Valor_operacao AS valor,
+             CAST(co.data_venda AS DATE) AS data_venda
+      FROM comissoes_funcionario co
+      INNER JOIN cliente c ON c.cod_cli = co.cod_cli
+      INNER JOIN funcionario f ON f.cod_func = co.cod_func
+      WHERE CAST(co.data_venda AS DATE) BETWEEN ${dataIni} AND ${dataFim}
+        AND c.cod_cli NOT IN (1,6,7,8) AND c.cod_cla <> 30
+      ORDER BY co.data_venda DESC
+      LIMIT 100
+    `.catch(() => [] as any[])
+
+    // Novos clientes por cidade
+    const novosPorCidade = await prisma.$queryRaw<any[]>`
+      SELECT COALESCE(c.CIDADE, 'N/A') AS cidade,
+             COUNT(c.cod_cli) AS qtd,
+             COALESCE(SUM(c.valor_mensalidade), 0) AS valor
+      FROM cliente c
+      WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
+        AND c.ATIVO = 'S'
+        AND c.DATACADASTRO_CLI BETWEEN ${dataIni} AND ${dataFim}
+        AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
+      GROUP BY c.CIDADE
+      ORDER BY valor DESC
+    `.catch(() => [] as any[])
+
     return {
       periodo: { ano, mes: mesNum, inicio: dataIni, fim: dataFim, diasRestantes, label: labelMes },
       meta: { geral: META_GERAL, limoeiro: META_LIMOEIRO, aracati: META_ARACATI },
@@ -157,6 +213,32 @@ export async function metasRoutes(app: FastifyInstance) {
       },
       porFilial,
       evolucao,
+      clientesNovos: clientesNovosDetail.map((c: any) => ({
+        codigo: n(c.codigo),
+        nome: c.nome,
+        valor: n(c.valor),
+        cidade: c.cidade,
+        data_cadastro: c.data_cadastro,
+      })),
+      clientesPerdidos: clientesPerdidosDetail.map((c: any) => ({
+        codigo: n(c.codigo),
+        nome: c.nome,
+        valor: n(c.valor),
+        cidade: c.cidade,
+        data_desativacao: c.data_desativacao,
+      })),
+      upgrades: upgradesDetail.map((u: any) => ({
+        vendedor: u.vendedor,
+        cliente: u.cliente,
+        descricao: u.descricao,
+        valor: n(u.valor),
+        data_venda: u.data_venda,
+      })),
+      novosPorCidade: novosPorCidade.map((nc: any) => ({
+        cidade: nc.cidade,
+        qtd: n(nc.qtd),
+        valor: n(nc.valor),
+      })),
     }
   })
 

@@ -22,12 +22,20 @@ interface Filial {
   valor: number; meta: number; perc: number
 }
 interface EvoMes { mes: string; receitaNova: number; clientesNovos: number; meta: number }
+interface ClienteNovo { codigo: number; nome: string; valor: number; cidade: string; data_cadastro: string }
+interface ClientePerdido { codigo: number; nome: string; valor: number; cidade: string; data_desativacao: string }
+interface Upgrade { vendedor: string; cliente: string; descricao: string; valor: number; data_venda: string }
+interface CidadeResumo { cidade: string; qtd: number; valor: number }
 interface DadosComercial {
   periodo: { ano: number; mes: number; inicio: string; fim: string; diasRestantes: number; label: string }
   meta: { geral: number; limoeiro: number; aracati: number }
   resumo: Resumo
   porFilial: Filial[]
   evolucao: EvoMes[]
+  clientesNovos: ClienteNovo[]
+  clientesPerdidos: ClientePerdido[]
+  upgrades: Upgrade[]
+  novosPorCidade: CidadeResumo[]
 }
 
 // ── helpers ────────────────────────────────────────────────────────
@@ -380,6 +388,106 @@ export function Metas() {
           </div>
         </div>
       </div>
+
+      {/* ── Clientes Novos Detalhado ──────────────────────────────── */}
+      {dados.clientesNovos.length > 0 && (
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 overflow-x-auto">
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Users className="w-4 h-4" /> Clientes Novos ({dados.clientesNovos.length})
+          </h2>
+          <table className="w-full text-sm min-w-[500px]">
+            <thead><tr className="border-b border-slate-700">
+              <th className="text-left px-3 py-2 text-slate-400">Cliente</th>
+              <th className="text-right px-3 py-2 text-slate-400">Valor Mensal</th>
+              <th className="text-left px-3 py-2 text-slate-400">Cidade</th>
+              <th className="text-center px-3 py-2 text-slate-400">Cadastro</th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-700">{dados.clientesNovos.slice(0, 15).map((c, i) => (
+              <tr key={i} className="hover:bg-slate-700/30">
+                <td className="px-3 py-2 text-slate-200">{c.nome}</td>
+                <td className="text-right px-3 py-2 text-emerald-400 font-semibold">{brl(c.valor)}</td>
+                <td className="px-3 py-2 text-slate-400">{c.cidade}</td>
+                <td className="text-center px-3 py-2 text-slate-500 text-xs">{new Date(c.data_cadastro).toLocaleDateString('pt-BR')}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Upgrades Detalhado ────────────────────────────────────── */}
+      {dados.upgrades.length > 0 && (
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 overflow-x-auto">
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Zap className="w-4 h-4" /> Upgrades ({dados.upgrades.length})
+          </h2>
+          <table className="w-full text-sm min-w-[600px]">
+            <thead><tr className="border-b border-slate-700">
+              <th className="text-left px-3 py-2 text-slate-400">Vendedor</th>
+              <th className="text-left px-3 py-2 text-slate-400">Cliente</th>
+              <th className="text-left px-3 py-2 text-slate-400">Descrição</th>
+              <th className="text-right px-3 py-2 text-slate-400">Valor</th>
+              <th className="text-center px-3 py-2 text-slate-400">Data</th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-700">{dados.upgrades.slice(0, 15).map((u, i) => (
+              <tr key={i} className="hover:bg-slate-700/30">
+                <td className="px-3 py-2 text-slate-200">{u.vendedor}</td>
+                <td className="px-3 py-2 text-slate-300">{u.cliente}</td>
+                <td className="px-3 py-2 text-slate-400 text-xs">{u.descricao}</td>
+                <td className="text-right px-3 py-2 text-amber-400 font-semibold">{brl(u.valor)}</td>
+                <td className="text-center px-3 py-2 text-slate-500 text-xs">{new Date(u.data_venda).toLocaleDateString('pt-BR')}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Clientes Perdidos Detalhado ───────────────────────────── */}
+      {dados.clientesPerdidos.length > 0 && (
+        <div className="bg-slate-800 border border-red-500/20 rounded-2xl p-5 overflow-x-auto">
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <TrendingDown className="w-4 h-4 text-red-400" /> Clientes Perdidos ({dados.clientesPerdidos.length})
+          </h2>
+          <table className="w-full text-sm min-w-[500px]">
+            <thead><tr className="border-b border-slate-700">
+              <th className="text-left px-3 py-2 text-slate-400">Cliente</th>
+              <th className="text-right px-3 py-2 text-slate-400">Valor Mensal</th>
+              <th className="text-left px-3 py-2 text-slate-400">Cidade</th>
+              <th className="text-center px-3 py-2 text-slate-400">Desativação</th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-700">{dados.clientesPerdidos.slice(0, 15).map((c, i) => (
+              <tr key={i} className="hover:bg-slate-700/30">
+                <td className="px-3 py-2 text-slate-200">{c.nome}</td>
+                <td className="text-right px-3 py-2 text-red-400 font-semibold">{brl(c.valor)}</td>
+                <td className="px-3 py-2 text-slate-400">{c.cidade}</td>
+                <td className="text-center px-3 py-2 text-slate-500 text-xs">{new Date(c.data_desativacao).toLocaleDateString('pt-BR')}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Novos Clientes por Cidade ─────────────────────────────── */}
+      {dados.novosPorCidade.length > 0 && (
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 overflow-x-auto">
+          <h2 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Building2 className="w-4 h-4" /> Novos por Cidade
+          </h2>
+          <table className="w-full text-sm min-w-[400px]">
+            <thead><tr className="border-b border-slate-700">
+              <th className="text-left px-3 py-2 text-slate-400">Cidade</th>
+              <th className="text-center px-3 py-2 text-slate-400">Quantidade</th>
+              <th className="text-right px-3 py-2 text-slate-400">Valor Total</th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-700">{dados.novosPorCidade.map((c, i) => (
+              <tr key={i} className="hover:bg-slate-700/30">
+                <td className="px-3 py-2 text-slate-200">{c.cidade}</td>
+                <td className="text-center px-3 py-2 text-blue-400 font-semibold">{c.qtd}</td>
+                <td className="text-right px-3 py-2 text-emerald-400 font-semibold">{brl(c.valor)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
 
     </div>
   )

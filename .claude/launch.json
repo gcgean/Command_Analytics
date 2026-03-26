@@ -2,17 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "backend",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "cwd": "C:\\Projetos Web\\Command_Analytics\\backend",
-      "port": 3333
-    },
-    {
       "name": "frontend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "cwd": "C:\\Projetos Web\\Command_Analytics",
       "port": 5173
     }
   ]
