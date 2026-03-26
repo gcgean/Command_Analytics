@@ -402,7 +402,7 @@ export function Metas() {
               <th className="text-left px-3 py-2 text-slate-400">Cidade</th>
               <th className="text-center px-3 py-2 text-slate-400">Cadastro</th>
             </tr></thead>
-            <tbody className="divide-y divide-slate-700">{dados.clientesNovos.slice(0, 15).map((c, i) => (
+            <tbody className="divide-y divide-slate-700">{dados.clientesNovos.map((c, i) => (
               <tr key={i} className="hover:bg-slate-700/30">
                 <td className="px-3 py-2 text-slate-200">{c.nome}</td>
                 <td className="text-right px-3 py-2 text-emerald-400 font-semibold">{brl(c.valor)}</td>
@@ -428,7 +428,7 @@ export function Metas() {
               <th className="text-right px-3 py-2 text-slate-400">Valor</th>
               <th className="text-center px-3 py-2 text-slate-400">Data</th>
             </tr></thead>
-            <tbody className="divide-y divide-slate-700">{dados.upgrades.slice(0, 15).map((u, i) => (
+            <tbody className="divide-y divide-slate-700">{dados.upgrades.map((u, i) => (
               <tr key={i} className="hover:bg-slate-700/30">
                 <td className="px-3 py-2 text-slate-200">{u.vendedor}</td>
                 <td className="px-3 py-2 text-slate-300">{u.cliente}</td>
@@ -454,7 +454,7 @@ export function Metas() {
               <th className="text-left px-3 py-2 text-slate-400">Cidade</th>
               <th className="text-center px-3 py-2 text-slate-400">Desativação</th>
             </tr></thead>
-            <tbody className="divide-y divide-slate-700">{dados.clientesPerdidos.slice(0, 15).map((c, i) => (
+            <tbody className="divide-y divide-slate-700">{dados.clientesPerdidos.map((c, i) => (
               <tr key={i} className="hover:bg-slate-700/30">
                 <td className="px-3 py-2 text-slate-200">{c.nome}</td>
                 <td className="text-right px-3 py-2 text-red-400 font-semibold">{brl(c.valor)}</td>

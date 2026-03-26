@@ -158,8 +158,7 @@ export async function metasRoutes(app: FastifyInstance) {
         AND c.DATACADASTRO_CLI BETWEEN ${dataIni} AND ${dataFim}
         AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
       ORDER BY c.DATACADASTRO_CLI DESC
-      LIMIT 100
-    `.catch(() => [] as any[])
+    `.catch((err) => { console.error('Erro clientes novos:', err); return [] as any[] })
 
     // Detalhes de clientes perdidos
     const clientesPerdidosDetail = await prisma.$queryRaw<any[]>`
@@ -172,8 +171,7 @@ export async function metasRoutes(app: FastifyInstance) {
         AND CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) BETWEEN ${dataIni} AND ${dataFim}
         AND c.cod_cla <> 30 AND hb.tipo = 'D'
       ORDER BY hb.data_hora_bloqueio_desbloqueio DESC
-      LIMIT 100
-    `.catch(() => [] as any[])
+    `.catch((err) => { console.error('Erro clientes perdidos:', err); return [] as any[] })
 
     // Detalhes de upgrades
     const upgradesDetail = await prisma.$queryRaw<any[]>`
@@ -186,8 +184,7 @@ export async function metasRoutes(app: FastifyInstance) {
       WHERE CAST(co.data_venda AS DATE) BETWEEN ${dataIni} AND ${dataFim}
         AND c.cod_cli NOT IN (1,6,7,8) AND c.cod_cla <> 30
       ORDER BY co.data_venda DESC
-      LIMIT 100
-    `.catch(() => [] as any[])
+    `.catch((err) => { console.error('Erro upgrades:', err); return [] as any[] })
 
     // Novos clientes por cidade
     const novosPorCidade = await prisma.$queryRaw<any[]>`
@@ -201,7 +198,7 @@ export async function metasRoutes(app: FastifyInstance) {
         AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
       GROUP BY c.CIDADE
       ORDER BY valor DESC
-    `.catch(() => [] as any[])
+    `.catch((err) => { console.error('Erro cidades:', err); return [] as any[] })
 
     return {
       periodo: { ano, mes: mesNum, inicio: dataIni, fim: dataFim, diasRestantes, label: labelMes },
