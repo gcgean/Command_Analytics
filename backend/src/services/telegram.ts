@@ -29,7 +29,14 @@ export class TelegramService {
           
           if ('buffer' in anexo) {
             // Se for um buffer (comum no backend)
-            const blob = new Blob([anexo.buffer], { type: anexo.contentType })
+            const bytes =
+              anexo.buffer instanceof Uint8Array
+                ? anexo.buffer
+                : Uint8Array.from(anexo.buffer as Buffer)
+
+            const blob = new Blob([bytes], {
+              type: anexo.contentType || 'application/octet-stream',
+            })
             formData.append(`anexo${i}`, blob, anexo.filename)
           } else {
             // Se for um File ou Blob (comum no frontend ou via streams)
