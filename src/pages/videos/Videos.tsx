@@ -89,7 +89,7 @@ export function Videos() {
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-slate-400">Carregando...</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">Carregando...</p>
       </div>
     </div>
   )
@@ -117,8 +117,8 @@ export function Videos() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Biblioteca de Vídeos</h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Biblioteca de Vídeos</h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
             {videos.length} vídeos · {categorias.length - 1} categorias
           </p>
         </div>
@@ -130,7 +130,7 @@ export function Videos() {
       {/* Busca */}
       <div className="flex gap-3">
         <div className="relative flex-1 max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-400" />
           <input
             className="input-field pl-9"
             placeholder="Buscar vídeo..."
@@ -149,7 +149,7 @@ export function Videos() {
             className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
               catFiltro === c
                 ? 'bg-blue-600 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
+                : 'bg-white dark:bg-slate-800 text-slate-400 hover:text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
             }`}
           >
             {c}
@@ -168,7 +168,7 @@ export function Videos() {
             {filtrados.map(v => (
               <div
                 key={v.id}
-                className="card p-0 overflow-hidden cursor-pointer hover:border-slate-600 border border-slate-700 transition-colors"
+                className="card p-0 overflow-hidden cursor-pointer hover:border-slate-600 border border-slate-200 dark:border-slate-700 transition-colors"
                 onClick={() => setVideoAberto(v.id)}
               >
                 <div className="bg-slate-900 h-36 flex items-center justify-center relative group">
@@ -185,7 +185,7 @@ export function Videos() {
                   </span>
                 </div>
                 <div className="p-3">
-                  <p className="text-sm font-semibold text-slate-100 leading-tight mb-1 line-clamp-2">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 leading-tight mb-1 line-clamp-2">
                     {v.titulo ?? 'Sem título'}
                   </p>
                   <div className="flex items-center justify-between text-xs text-slate-500">
@@ -218,11 +218,11 @@ export function Videos() {
             <div className="bg-slate-900 h-48 rounded-lg flex items-center justify-center mb-4">
               <Play size={48} className="text-blue-400 fill-blue-400" />
             </div>
-            <h3 className="text-base font-semibold text-slate-100 mb-1">
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">
               {videoModal.titulo ?? 'Sem título'}
             </h3>
             {videoModal.descricao && (
-              <p className="text-sm text-slate-400 mb-3">{videoModal.descricao}</p>
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-3">{videoModal.descricao}</p>
             )}
             <div className="flex gap-3 text-xs text-slate-500 mb-4">
               <span>{videoModal.colaboradorNome ?? '—'}</span>

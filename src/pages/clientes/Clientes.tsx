@@ -112,9 +112,9 @@ export function Clientes() {
       </div>
 
       {/* Table */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center h-40 text-slate-400">
+          <div className="flex items-center justify-center h-40 text-slate-500 dark:text-slate-400">
             <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-3" />
             Carregando clientes...
           </div>
@@ -138,15 +138,15 @@ export function Clientes() {
                       className="table-row cursor-pointer"
                       onClick={() => navigate(`/clientes/${c.id}`)}
                     >
-                      <td className="table-cell font-mono text-slate-400 text-xs">{c.id}</td>
+                      <td className="table-cell font-mono text-slate-500 dark:text-slate-400 text-xs">{c.id}</td>
                       <td className="table-cell">
                         <div>
-                          <p className="font-medium text-slate-200 truncate max-w-[200px]">{c.nome ?? '—'}</p>
+                          <p className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px]">{c.nome ?? '—'}</p>
                           <p className="text-xs text-slate-500 truncate">{c.responsavel ?? ''}</p>
                         </div>
                       </td>
-                      <td className="table-cell font-mono text-xs text-slate-400">{c.cnpj ?? '—'}</td>
-                      <td className="table-cell text-slate-300">{c.cidade ?? '—'}/{c.uf ?? '—'}</td>
+                      <td className="table-cell font-mono text-xs text-slate-500 dark:text-slate-400">{c.cnpj ?? '—'}</td>
+                      <td className="table-cell text-slate-700 dark:text-slate-300">{c.cidade ?? '—'}/{c.uf ?? '—'}</td>
                       <td className="table-cell">
                         <span className="text-xs text-slate-400">—</span>
                       </td>
@@ -155,7 +155,7 @@ export function Clientes() {
                           {c.idPlano ? `Plano ${c.idPlano}` : '—'}
                         </span>
                       </td>
-                      <td className="table-cell font-medium text-slate-200">
+                      <td className="table-cell font-medium text-slate-800 dark:text-slate-200">
                         R$ {Number(c.mensalidade ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </td>
                       <td className="table-cell">
@@ -178,8 +178,8 @@ export function Clientes() {
               </tbody>
             </table>
             {pages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700">
-                <p className="text-xs text-slate-400">
+              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 dark:border-slate-700">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
                   Página {page} de {pages} — {filtered.length.toLocaleString('pt-BR')} registros
                 </p>
                 <div className="flex gap-1 items-center">

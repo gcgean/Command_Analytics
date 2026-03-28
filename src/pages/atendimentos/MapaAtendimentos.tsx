@@ -49,7 +49,7 @@ export function MapaAtendimentos() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-40 text-slate-400">
+      <div className="flex items-center justify-center h-40 text-slate-600 dark:text-slate-400">
         <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-3" />
         Carregando mapa...
       </div>
@@ -61,7 +61,7 @@ export function MapaAtendimentos() {
       {/* Chart por Departamento */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card>
-          <h3 className="text-sm font-semibold text-slate-100 mb-4">Atendimentos por Departamento</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Atendimentos por Departamento</h3>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={deptChartData} margin={{ left: -20, right: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -78,7 +78,7 @@ export function MapaAtendimentos() {
 
         {/* Status Overview */}
         <Card>
-          <h3 className="text-sm font-semibold text-slate-100 mb-4">Distribuição por Status</h3>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Distribuição por Status</h3>
           <div className="space-y-3">
             {[0, 1, 2, 3, 4, 7, 13].map(s => {
               const count = atendimentos.filter(a => a.status === s).length
@@ -88,10 +88,10 @@ export function MapaAtendimentos() {
                   <div className="w-32 flex-shrink-0">
                     <StatusBadge status={s as StatusAtendimento} />
                   </div>
-                  <div className="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+                  <div className="flex-1 h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                     <div className="h-full bg-blue-500 rounded-full" style={{ width: `${pct}%` }} />
                   </div>
-                  <span className="text-xs text-slate-400 w-6 text-right">{count}</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-400 w-6 text-right">{count}</span>
                 </div>
               )
             })}
@@ -101,7 +101,7 @@ export function MapaAtendimentos() {
 
       {/* Cards por Técnico */}
       <div>
-        <h3 className="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
           <Users className="w-4 h-4" />
           Atendimentos por Técnico
         </h3>
@@ -112,11 +112,11 @@ export function MapaAtendimentos() {
                 <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
                   <span className="text-xs font-bold text-white">{(t.nome || '?').split(' ').map((n: string) => n[0] ?? '').join('').slice(0, 2)}</span>
                 </div>
-                <p className="text-sm font-medium text-slate-200 truncate">{t.nome}</p>
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{t.nome}</p>
               </div>
               <div className="flex justify-between">
                 <div className="text-center">
-                  <p className="text-xl font-bold text-slate-100">{t.count}</p>
+                  <p className="text-xl font-bold text-slate-900 dark:text-slate-100">{t.count}</p>
                   <p className="text-xs text-slate-500">Total</p>
                 </div>
                 <div className="text-center">
@@ -128,7 +128,7 @@ export function MapaAtendimentos() {
                   <p className="text-xs text-slate-500">Concluídos</p>
                 </div>
               </div>
-              <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+              <div className="h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-emerald-500 rounded-full"
                   style={{ width: t.count > 0 ? `${(t.concluidos / t.count) * 100}%` : '0%' }}
@@ -141,14 +141,14 @@ export function MapaAtendimentos() {
 
       {/* Departamento cards */}
       <div>
-        <h3 className="text-sm font-semibold text-slate-100 mb-4 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
           <Headphones className="w-4 h-4" />
           Distribuição por Departamento
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
           {Object.entries(byDept).map(([dept, count]) => (
             <Card key={dept} padding="sm" className="text-center">
-              <p className="text-2xl font-bold text-slate-100">{count}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-slate-100">{count}</p>
               <span className={clsx('mt-1 text-xs font-medium px-2 py-0.5 rounded-full inline-block', departamentoColors[dept])}>
                 {dept}
               </span>

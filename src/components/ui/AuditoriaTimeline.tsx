@@ -65,16 +65,16 @@ export function AuditoriaTimeline({ tabela, registroId, titulo, onClose }: Props
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-slate-700 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-2">
-            <Clock className="w-4 h-4 text-slate-400" />
-            <h2 className="text-sm font-semibold text-slate-100">
+            <Clock className="w-4 h-4 text-slate-500 dark:text-slate-400" />
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
               Histórico de auditoria{titulo ? ` · ${titulo}` : ''}
             </h2>
           </div>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300 transition-colors">
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors">
             <X className="w-4 h-4" />
           </button>
         </div>
@@ -97,7 +97,7 @@ export function AuditoriaTimeline({ tabela, registroId, titulo, onClose }: Props
           {!loading && items.length > 0 && (
             <div className="relative">
               {/* Vertical line */}
-              <div className="absolute left-[11px] top-2 bottom-2 w-px bg-slate-700" />
+              <div className="absolute left-[11px] top-2 bottom-2 w-px bg-slate-200 dark:bg-slate-700" />
 
               <div className="space-y-5">
                 {items.map((item, idx) => {
@@ -121,13 +121,13 @@ export function AuditoriaTimeline({ tabela, registroId, titulo, onClose }: Props
                           <span className={clsx('text-xs font-semibold uppercase tracking-wide', cfg.color)}>
                             {cfg.label}
                           </span>
-                          <span className="text-xs text-slate-500 whitespace-nowrap">
+                          <span className="text-xs text-slate-500 dark:text-slate-500 whitespace-nowrap">
                             {dateStr} {timeStr}
                           </span>
                         </div>
 
                         {item.usuarioNome && (
-                          <p className="text-xs text-slate-400 mt-0.5">por {item.usuarioNome}</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">por {item.usuarioNome}</p>
                         )}
 
                         {/* Field diffs for ALTERACAO / STATUS */}
@@ -135,13 +135,13 @@ export function AuditoriaTimeline({ tabela, registroId, titulo, onClose }: Props
                           <div className="mt-2 space-y-1.5">
                             {item.camposAlterados.map(campo => (
                               <div key={campo} className="text-xs">
-                                <span className="text-slate-500 font-medium">
+                                <span className="text-slate-600 dark:text-slate-500 font-medium">
                                   {FIELD_LABELS[campo] ?? campo}:
                                 </span>
                                 <span className="text-red-400 line-through ml-1.5">
                                   {formatValue(campo, item.dadosAntes?.[campo])}
                                 </span>
-                                <span className="text-slate-500 mx-1">→</span>
+                                <span className="text-slate-600 dark:text-slate-500 mx-1">→</span>
                                 <span className="text-emerald-400">
                                   {formatValue(campo, item.dadosDepois?.[campo])}
                                 </span>
@@ -157,8 +157,8 @@ export function AuditoriaTimeline({ tabela, registroId, titulo, onClose }: Props
                               .filter(([, v]) => v !== null && v !== undefined)
                               .map(([k, v]) => (
                                 <div key={k} className="text-xs">
-                                  <span className="text-slate-500">{FIELD_LABELS[k] ?? k}:</span>
-                                  <span className="text-slate-300 ml-1.5">{formatValue(k, v)}</span>
+                                  <span className="text-slate-600 dark:text-slate-500">{FIELD_LABELS[k] ?? k}:</span>
+                                  <span className="text-slate-700 dark:text-slate-300 ml-1.5">{formatValue(k, v)}</span>
                                 </div>
                               ))}
                           </div>
@@ -171,7 +171,7 @@ export function AuditoriaTimeline({ tabela, registroId, titulo, onClose }: Props
                               .filter(([, v]) => v !== null && v !== undefined)
                               .map(([k, v]) => (
                                 <div key={k} className="text-xs">
-                                  <span className="text-slate-500">{FIELD_LABELS[k] ?? k}:</span>
+                                  <span className="text-slate-600 dark:text-slate-500">{FIELD_LABELS[k] ?? k}:</span>
                                   <span className="text-red-400 line-through ml-1.5">{formatValue(k, v)}</span>
                                 </div>
                               ))}

@@ -13,7 +13,7 @@ const FORMA_LABEL: Record<number, { label: string; cor: string; Icon: React.Elem
 }
 
 function getForma(f: number | null) {
-  return f != null && FORMA_LABEL[f] ? FORMA_LABEL[f] : { label: `Forma ${f ?? '—'}`, cor: 'text-slate-400 bg-slate-700', Icon: CreditCard }
+  return f != null && FORMA_LABEL[f] ? FORMA_LABEL[f] : { label: `Forma ${f ?? '—'}`, cor: 'text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-700', Icon: CreditCard }
 }
 
 interface AssinaturaItem {
@@ -50,7 +50,7 @@ export function AssinaturaCliente() {
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-slate-400">Carregando...</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">Carregando...</p>
       </div>
     </div>
   )
@@ -71,8 +71,8 @@ export function AssinaturaCliente() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Assinaturas de Clientes</h1>
-          <p className="text-slate-400 text-sm mt-1">Gestão de recorrências e cobranças</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Assinaturas de Clientes</h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Gestão de recorrências e cobranças</p>
         </div>
         <button className="btn-primary flex items-center gap-2" onClick={handleNova}>
           <Plus size={16} /> Nova Assinatura
@@ -84,10 +84,10 @@ export function AssinaturaCliente() {
         {[
           { label: 'Total de Assinaturas', valor: total.toString(), cor: 'text-blue-400' },
           { label: 'MRR Total', valor: `R$ ${mrr.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, cor: 'text-emerald-400' },
-          { label: 'Ticket Médio', valor: `R$ ${ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, cor: 'text-slate-300' },
+          { label: 'Ticket Médio', valor: `R$ ${ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, cor: 'text-slate-700 dark:text-slate-300' },
         ].map(k => (
           <div key={k.label} className="card">
-            <p className="text-slate-400 text-xs mb-1">{k.label}</p>
+            <p className="text-slate-600 dark:text-slate-400 text-xs mb-1">{k.label}</p>
             <p className={`text-2xl font-bold ${k.cor}`}>{k.valor}</p>
           </div>
         ))}
@@ -96,7 +96,7 @@ export function AssinaturaCliente() {
       {/* Busca */}
       <div className="flex gap-3">
         <div className="relative flex-1 max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-400" />
           <input
             className="input-field pl-9"
             placeholder="Buscar cliente..."
@@ -113,7 +113,7 @@ export function AssinaturaCliente() {
       <div className="card p-0 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-700">
+            <tr className="border-b border-slate-200 dark:border-slate-700">
               {['Cliente', 'Forma Pgto', 'Valor', 'Vencimento', 'Periodicidade', 'Ações'].map(h => (
                 <th key={h} className="table-header text-left">{h}</th>
               ))}
@@ -134,19 +134,19 @@ export function AssinaturaCliente() {
 
                 return (
                   <tr key={a.id} className="table-row">
-                    <td className="table-cell font-medium text-slate-100">{nomeCliente(a)}</td>
+                    <td className="table-cell font-medium text-slate-900 dark:text-slate-100">{nomeCliente(a)}</td>
                     <td className="table-cell">
                       <span className={`badge gap-1 ${forma.cor}`}>
                         <forma.Icon size={12} /> {forma.label}
                       </span>
                     </td>
-                    <td className="table-cell font-semibold text-slate-100">
+                    <td className="table-cell font-semibold text-slate-900 dark:text-slate-100">
                       R$ {valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
-                    <td className="table-cell text-slate-400">
+                    <td className="table-cell text-slate-600 dark:text-slate-400">
                       {a.vencimento != null ? `Dia ${a.vencimento}` : '—'}
                     </td>
-                    <td className="table-cell text-slate-400">{periLabel}</td>
+                    <td className="table-cell text-slate-600 dark:text-slate-400">{periLabel}</td>
                     <td className="table-cell">
                       <button
                         className="text-blue-400 hover:text-blue-300 text-xs"

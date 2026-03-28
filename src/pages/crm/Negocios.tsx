@@ -68,7 +68,7 @@ export function Negocios() {
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-slate-400">Carregando...</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">Carregando...</p>
       </div>
     </div>
   )
@@ -94,8 +94,8 @@ export function Negocios() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Negócios / CRM</h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Negócios / CRM</h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
             Pipeline de vendas · {negocios.length} negócios cadastrados
           </p>
         </div>
@@ -113,7 +113,7 @@ export function Negocios() {
           { label: 'Total',      val: negocios.length,   cor: 'text-amber-400' },
         ].map(k => (
           <div key={k.label} className="card">
-            <p className="text-slate-400 text-xs">{k.label}</p>
+            <p className="text-slate-600 dark:text-slate-400 text-xs">{k.label}</p>
             <p className={`text-xl font-bold mt-1 ${k.cor}`}>{k.val}</p>
           </div>
         ))}
@@ -126,24 +126,24 @@ export function Negocios() {
             const lista = porEtapa(etapaLabel)
             const cor = STATUS_COR[etapaLabel] ?? 'border-slate-400'
             return (
-              <div key={etapaLabel} className={`flex-shrink-0 w-60 rounded-xl border-t-4 bg-slate-800 border-slate-700 ${cor}`}>
-                <div className="p-3 border-b border-slate-700">
-                  <p className="text-sm font-semibold text-slate-200">{etapaLabel}</p>
+              <div key={etapaLabel} className={`flex-shrink-0 w-60 rounded-xl border-t-4 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 ${cor}`}>
+                <div className="p-3 border-b border-slate-200 dark:border-slate-700">
+                  <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">{etapaLabel}</p>
                   <span className="text-xs text-slate-500">{lista.length} negócios</span>
                 </div>
                 <div className="p-2 space-y-2 min-h-[120px]">
                   {lista.map(n => (
                     <div
                       key={n.id}
-                      className="bg-slate-900 rounded-lg p-3 border border-slate-700 cursor-pointer hover:border-slate-500 transition-colors"
+                      className="bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-slate-500 transition-colors"
                     >
-                      <p className="text-xs font-semibold text-slate-200 mb-2 leading-tight">
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 mb-2 leading-tight">
                         {n.nome ?? `Negócio #${n.id}`}
                       </p>
                       {n.empresa && (
                         <div className="flex items-center gap-1 mb-1">
                           <User size={10} className="text-slate-500" />
-                          <span className="text-xs text-slate-400">{n.empresa}</span>
+                          <span className="text-xs text-slate-600 dark:text-slate-400">{n.empresa}</span>
                         </div>
                       )}
                       <div className="flex items-center justify-between">

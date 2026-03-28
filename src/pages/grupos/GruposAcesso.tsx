@@ -189,7 +189,7 @@ export function GruposAcesso() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm text-slate-400">Defina grupos com permissões de acesso e vincule usuários</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400">Defina grupos com permissões de acesso e vincule usuários</p>
         </div>
         <Button icon={<Plus className="w-4 h-4" />} onClick={() => setShowNewModal(true)}>
           Novo Grupo
@@ -199,7 +199,7 @@ export function GruposAcesso() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* ── Lista de grupos ── */}
         <div className="space-y-3">
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Grupos ({grupos.length})</h3>
+          <h3 className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Grupos ({grupos.length})</h3>
 
           {loading && <p className="text-sm text-slate-500">Carregando...</p>}
 
@@ -218,7 +218,7 @@ export function GruposAcesso() {
                 'p-4 rounded-xl border cursor-pointer transition-all',
                 selectedGrupo?.id === g.id
                   ? 'border-blue-500 bg-blue-500/10'
-                  : 'border-slate-700 bg-slate-800/50 hover:border-slate-600 hover:bg-slate-800'
+                  : 'border-slate-200 dark:border-slate-700 bg-slate-800/50 hover:border-slate-600 hover:bg-white dark:bg-slate-800'
               )}
             >
               <div className="flex items-start justify-between gap-2">
@@ -228,7 +228,7 @@ export function GruposAcesso() {
                   ) : (
                     <ShieldCheck className="w-4 h-4 text-blue-400 flex-shrink-0" />
                   )}
-                  <p className="text-sm font-semibold text-slate-100 truncate">{g.nome}</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{g.nome}</p>
                 </div>
                 <div className="flex gap-1 flex-shrink-0">
                   <button
@@ -290,7 +290,7 @@ export function GruposAcesso() {
                       : <ShieldCheck className="w-5 h-5 text-blue-400" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-base font-semibold text-slate-100">{selectedGrupo.nome}</p>
+                    <p className="text-base font-semibold text-slate-900 dark:text-slate-100">{selectedGrupo.nome}</p>
                     {selectedGrupo.descricao && <p className="text-xs text-slate-500 mt-0.5">{selectedGrupo.descricao}</p>}
                   </div>
                   {isSuperGrupo && (
@@ -304,8 +304,8 @@ export function GruposAcesso() {
               {/* Usuários do grupo */}
               <Card>
                 <div className="flex items-center justify-between mb-3">
-                  <h4 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                    <Users className="w-4 h-4 text-slate-400" />
+                  <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                    <Users className="w-4 h-4 text-slate-600 dark:text-slate-400" />
                     Usuários ({selectedGrupo.usuarios.length})
                   </h4>
                 </div>
@@ -313,7 +313,7 @@ export function GruposAcesso() {
                 {selectedGrupo.usuarios.length > 0 && (
                   <div className="flex flex-wrap gap-2 mb-3">
                     {selectedGrupo.usuarios.map(u => (
-                      <div key={u.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-sm text-slate-200">
+                      <div key={u.id} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm text-slate-800 dark:text-slate-200">
                         <span>{u.nome}</span>
                         <button
                           onClick={() => removeUser(u.id)}
@@ -346,7 +346,7 @@ export function GruposAcesso() {
               {/* Permissões */}
               <Card>
                 <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-sm font-semibold text-slate-200">
+                  <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                     Permissões de Acesso
                     {isSuperGrupo && (
                       <span className="ml-2 text-xs text-amber-400 font-normal">Super grupo tem acesso a tudo automaticamente</span>
@@ -370,14 +370,14 @@ export function GruposAcesso() {
                       const someSel = catRecursos.some(r => selectedPerms.has(r.id))
                       const isOpen = expandedCats.has(cat)
                       return (
-                        <div key={cat} className="border border-slate-700 rounded-lg overflow-hidden">
+                        <div key={cat} className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden">
                           <button
                             onClick={() => setExpandedCats(prev => {
                               const n = new Set(prev)
                               isOpen ? n.delete(cat) : n.add(cat)
                               return n
                             })}
-                            className="w-full flex items-center gap-3 px-4 py-2.5 bg-slate-800 hover:bg-slate-700/60 transition-colors"
+                            className="w-full flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-slate-800 hover:bg-slate-700/60 transition-colors"
                           >
                             <button
                               onClick={e => { e.stopPropagation(); toggleCategory(cat, catRecursos) }}
@@ -388,7 +388,7 @@ export function GruposAcesso() {
                             >
                               {(allSel || someSel) && <Check className="w-2.5 h-2.5 text-white" />}
                             </button>
-                            <span className="flex-1 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">{cat}</span>
+                            <span className="flex-1 text-left text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">{cat}</span>
                             <span className="text-xs text-slate-500">{catRecursos.filter(r => selectedPerms.has(r.id)).length}/{catRecursos.length}</span>
                             {isOpen ? <ChevronDown className="w-3.5 h-3.5 text-slate-500" /> : <ChevronRight className="w-3.5 h-3.5 text-slate-500" />}
                           </button>
@@ -396,7 +396,7 @@ export function GruposAcesso() {
                           {isOpen && (
                             <div className="divide-y divide-slate-700/50">
                               {catRecursos.map(r => (
-                                <label key={r.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-800/50 cursor-pointer">
+                                <label key={r.id} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:bg-slate-800/50 cursor-pointer">
                                   <div
                                     onClick={() => togglePerm(r.id)}
                                     className={clsx(
@@ -406,7 +406,7 @@ export function GruposAcesso() {
                                   >
                                     {selectedPerms.has(r.id) && <Check className="w-2.5 h-2.5 text-white" />}
                                   </div>
-                                  <span className="text-sm text-slate-300">{r.label}</span>
+                                  <span className="text-sm text-slate-700 dark:text-slate-300">{r.label}</span>
                                   <span className="ml-auto text-xs text-slate-600 font-mono">{r.id}</span>
                                 </label>
                               ))}
@@ -449,7 +449,7 @@ export function GruposAcesso() {
               <p className="text-sm font-medium text-amber-300 flex items-center gap-1.5">
                 <Crown className="w-3.5 h-3.5" /> Super Grupo
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">Usuários deste grupo terão acesso total ao sistema</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Usuários deste grupo terão acesso total ao sistema</p>
             </div>
           </label>
           <div className="flex justify-end gap-3 pt-1">
@@ -485,7 +485,7 @@ export function GruposAcesso() {
               <p className="text-sm font-medium text-amber-300 flex items-center gap-1.5">
                 <Crown className="w-3.5 h-3.5" /> Super Grupo
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">Acesso total ao sistema</p>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Acesso total ao sistema</p>
             </div>
           </label>
           <div className="flex justify-end gap-3 pt-1">

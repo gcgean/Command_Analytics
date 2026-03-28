@@ -39,7 +39,7 @@ export function AnaliseFinanceira() {
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-slate-400">Carregando...</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Carregando...</p>
       </div>
     </div>
   )
@@ -59,8 +59,8 @@ export function AnaliseFinanceira() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-100">Análise Financeira</h1>
-        <p className="text-slate-400 text-sm mt-1">Rentabilidade e margem por cliente</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Análise Financeira</h1>
+        <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Rentabilidade e margem por cliente</p>
       </div>
 
       {/* KPIs */}
@@ -74,7 +74,7 @@ export function AnaliseFinanceira() {
           <div key={k.label} className="card flex items-center gap-4">
             <div className={`p-3 rounded-xl ${k.cor}`}><k.icon size={22} /></div>
             <div>
-              <p className="text-xs text-slate-400">{k.label}</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{k.label}</p>
               <p className={`text-xl font-bold ${k.cor.split(' ')[0]}`}>{k.val}</p>
             </div>
           </div>
@@ -83,7 +83,7 @@ export function AnaliseFinanceira() {
 
       {/* Gráfico */}
       <div className="card">
-        <h3 className="text-sm font-semibold text-slate-200 mb-4">Receita × Custo por Cliente</h3>
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-4">Receita × Custo por Cliente</h3>
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -100,7 +100,7 @@ export function AnaliseFinanceira() {
       <div className="card p-0 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
-            <tr className="border-b border-slate-700">
+            <tr className="border-b border-slate-200 dark:border-slate-700">
               {['Cliente', 'Mensalidade', 'Custo Suporte', 'Custo Dev', 'Custo Fixo', 'Margem (R$)', 'Margem (%)'].map(h => (
                 <th key={h} className="table-header text-left">{h}</th>
               ))}
@@ -109,11 +109,11 @@ export function AnaliseFinanceira() {
           <tbody>
             {dados.map((d) => (
               <tr key={d.clienteId} className="table-row">
-                <td className="table-cell font-medium text-slate-100">{d.clienteNome}</td>
+                <td className="table-cell font-medium text-slate-900 dark:text-slate-100">{d.clienteNome}</td>
                 <td className="table-cell text-emerald-400">R$ {d.mensalidade.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                <td className="table-cell text-slate-300">R$ {d.custoSuporte.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                <td className="table-cell text-slate-300">R$ {d.custoDev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                <td className="table-cell text-slate-300">R$ {d.custoFixo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td className="table-cell text-slate-700 dark:text-slate-300">R$ {d.custoSuporte.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td className="table-cell text-slate-700 dark:text-slate-300">R$ {d.custoDev.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                <td className="table-cell text-slate-700 dark:text-slate-300">R$ {d.custoFixo.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                 <td className={`table-cell font-semibold ${d.margemValor >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                   R$ {d.margemValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </td>

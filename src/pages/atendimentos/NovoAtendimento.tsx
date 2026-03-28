@@ -97,7 +97,7 @@ export function NovoAtendimento() {
         <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/atendimentos')}>
           Voltar
         </Button>
-        <h2 className="text-lg font-semibold text-slate-100">Novo Atendimento</h2>
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Novo Atendimento</h2>
       </div>
 
       {saved && (
@@ -107,7 +107,7 @@ export function NovoAtendimento() {
       )}
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-700">
+      <div className="flex border-b border-slate-200 dark:border-slate-700">
         {tabs.map((tab, i) => (
           <button
             key={tab}
@@ -116,7 +116,7 @@ export function NovoAtendimento() {
               'px-6 py-3 text-sm font-medium transition-colors border-b-2 -mb-px',
               i === activeTab
                 ? 'text-blue-400 border-blue-500'
-                : 'text-slate-400 border-transparent hover:text-slate-200'
+                : 'text-slate-400 border-transparent hover:text-slate-800 dark:text-slate-200'
             )}
           >
             {tab}
@@ -195,28 +195,28 @@ export function NovoAtendimento() {
               />
             </div>
             <div className="space-y-3">
-              <p className="text-sm font-medium text-slate-300">Características</p>
-              <label className="flex items-center gap-3 p-4 bg-slate-900 rounded-lg border border-slate-700 cursor-pointer hover:border-slate-600 transition-colors">
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Características</p>
+              <label className="flex items-center gap-3 p-4 bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-slate-600 transition-colors">
                 <input
                   type="checkbox"
                   checked={form.bugSistema}
                   onChange={e => handleChange('bugSistema', e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+                  className="w-4 h-4 rounded border-slate-600 bg-white dark:bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
                 />
                 <div>
-                  <p className="text-sm font-medium text-slate-200">Bug de Sistema</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Bug de Sistema</p>
                   <p className="text-xs text-slate-500">Marque se o problema é um bug no software</p>
                 </div>
               </label>
-              <label className="flex items-center gap-3 p-4 bg-slate-900 rounded-lg border border-slate-700 cursor-pointer hover:border-slate-600 transition-colors">
+              <label className="flex items-center gap-3 p-4 bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-slate-600 transition-colors">
                 <input
                   type="checkbox"
                   checked={form.foraHorario}
                   onChange={e => handleChange('foraHorario', e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
+                  className="w-4 h-4 rounded border-slate-600 bg-white dark:bg-slate-800 text-blue-600 focus:ring-blue-500 focus:ring-offset-slate-900"
                 />
                 <div>
-                  <p className="text-sm font-medium text-slate-200">Fora do Horário Comercial</p>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Fora do Horário Comercial</p>
                   <p className="text-xs text-slate-500">Atendimento realizado fora do horário padrão</p>
                 </div>
               </label>
@@ -230,7 +230,7 @@ export function NovoAtendimento() {
         <Card>
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-300">Agendamentos do Cliente</p>
+              <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Agendamentos do Cliente</p>
               <Button size="sm" variant="secondary" icon={<Calendar className="w-3.5 h-3.5" />}>
                 Novo Agendamento
               </Button>
@@ -248,10 +248,10 @@ export function NovoAtendimento() {
             ) : (
               <div className="space-y-2">
                 {agendaList.map(a => (
-                  <div key={a.id} className="flex items-center gap-4 p-3 bg-slate-900 rounded-lg border border-slate-700">
+                  <div key={a.id} className="flex items-center gap-4 p-3 bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
                     <Calendar className="w-4 h-4 text-blue-400 flex-shrink-0" />
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-slate-200">{a.tipo}</p>
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{a.tipo}</p>
                       <p className="text-xs text-slate-500">{new Date(a.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} às {a.horario} · {a.tecnicoNome}</p>
                     </div>
                     <span className={clsx(

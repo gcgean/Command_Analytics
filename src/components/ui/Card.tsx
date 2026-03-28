@@ -11,7 +11,7 @@ export function Card({ children, className, padding = 'md', hover = false }: Car
   return (
     <div
       className={clsx(
-        'bg-slate-800 rounded-xl border border-slate-700',
+        'bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700',
         {
           'p-0': padding === 'none',
           'p-4': padding === 'sm',

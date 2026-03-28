@@ -26,9 +26,9 @@ export function Button({
         'inline-flex items-center justify-center gap-2 font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed',
         {
           'bg-blue-600 hover:bg-blue-700 text-white': variant === 'primary',
-          'bg-slate-700 hover:bg-slate-600 text-slate-200': variant === 'secondary',
+          'bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200': variant === 'secondary',
           'bg-red-600 hover:bg-red-700 text-white': variant === 'danger',
-          'text-slate-400 hover:text-slate-100 hover:bg-slate-800': variant === 'ghost',
+          'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800': variant === 'ghost',
           'px-3 py-1.5 text-xs': size === 'sm',
           'px-4 py-2 text-sm': size === 'md',
           'px-6 py-3 text-base': size === 'lg',

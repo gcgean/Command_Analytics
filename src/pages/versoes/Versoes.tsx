@@ -46,7 +46,7 @@ export function Versoes() {
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-slate-400">Carregando...</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">Carregando...</p>
       </div>
     </div>
   )
@@ -64,8 +64,8 @@ export function Versoes() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Versões e Licenças</h1>
-          <p className="text-slate-400 text-sm mt-1">Controle de versões dos sistemas</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Versões e Licenças</h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Controle de versões dos sistemas</p>
         </div>
         <button className="btn-primary" onClick={handleLancar}><Plus size={16} /> Lançar Versão</button>
       </div>
@@ -79,7 +79,7 @@ export function Versoes() {
             className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
               sistemaFiltro === s
                 ? 'bg-blue-600 text-white'
-                : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'
+                : 'bg-white dark:bg-slate-800 text-slate-400 hover:text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700'
             }`}
           >
             {s}
@@ -93,15 +93,15 @@ export function Versoes() {
           <div className="card text-center text-slate-500 py-12">Nenhuma versão encontrada.</div>
         ) : (
           filtradas.map(v => (
-            <div key={v.id} className="card border border-slate-700">
+            <div key={v.id} className="card border border-slate-200 dark:border-slate-700">
               <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-2 bg-slate-700 rounded-lg">
+                  <div className="p-2 bg-slate-100 dark:bg-slate-700 rounded-lg">
                     <Tag size={16} className="text-blue-400" />
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-base font-bold text-slate-100">{v.versao}</p>
+                      <p className="text-base font-bold text-slate-900 dark:text-slate-100">{v.versao}</p>
                       {v.obrigatoria === 'S' && (
                         <span className="badge bg-red-500/20 text-red-400 border border-red-500/30 text-xs flex items-center gap-1">
                           <AlertCircle size={10} /> Obrigatória
@@ -122,7 +122,7 @@ export function Versoes() {
               {v.notas && v.notas.length > 0 ? (
                 <div className="space-y-1 mt-2">
                   {v.notas.map(n => (
-                    <div key={n.id} className="flex items-start gap-2 text-sm text-slate-400">
+                    <div key={n.id} className="flex items-start gap-2 text-sm text-slate-600 dark:text-slate-400">
                       <CheckCircle size={14} className="text-emerald-400 flex-shrink-0 mt-0.5" />
                       <span>{n.descricao}</span>
                     </div>

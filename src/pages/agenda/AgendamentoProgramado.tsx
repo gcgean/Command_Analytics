@@ -497,7 +497,7 @@ export function AgendamentoProgramado() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <p className="text-sm text-slate-400">Gerencie disponibilidades e agende horários com os técnicos</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">Gerencie disponibilidades e agende horários com os técnicos</p>
         <div className="flex gap-2">
           <Button variant="secondary" icon={<Ban className="w-4 h-4" />} onClick={() => setShowBloqueioModal(true)}>
             Bloqueios
@@ -509,14 +509,14 @@ export function AgendamentoProgramado() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-slate-800">
+      <div className="flex gap-1 border-b border-slate-200 dark:border-slate-800">
         {(['slots', 'lista'] as const).map(tab => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={clsx(
               'px-4 py-2 text-sm font-medium border-b-2 transition-colors',
-              activeTab === tab ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200'
+              activeTab === tab ? 'border-blue-500 text-blue-600 dark:text-blue-400' : 'border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
             )}
           >
             {tab === 'slots' ? 'Horários Disponíveis' : 'Lista de Agendamentos'}
@@ -573,7 +573,7 @@ export function AgendamentoProgramado() {
                         <span key={h} className="px-2 py-0.5 rounded-lg bg-blue-600 text-white text-xs font-medium">{h}</span>
                       ))}
                     </div>
-                    <span className="text-sm text-slate-300">
+                    <span className="text-sm text-slate-700 dark:text-slate-300">
                       {selectedSlots.length} horário{selectedSlots.length > 1 ? 's' : ''} selecionado{selectedSlots.length > 1 ? 's' : ''} — {bookTecnico.tecnicoNome}
                     </span>
                   </div>
@@ -590,7 +590,7 @@ export function AgendamentoProgramado() {
                   return acc
                 }, {})).sort(([a], [b]) => a.localeCompare(b)).map(([date, results]) => (
                   <div key={date} className="space-y-4">
-                    <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider flex items-center gap-2">
                       <Calendar className="w-4 h-4" />
                       {fmtDate(date)}
                     </h3>
@@ -604,7 +604,7 @@ export function AgendamentoProgramado() {
                                 <User className="w-4 h-4 text-white" />
                               </div>
                               <div>
-                                <p className="text-sm font-semibold text-slate-100">{tech.tecnicoNome}</p>
+                                <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tech.tecnicoNome}</p>
                                 <p className="text-xs text-slate-500">{fmtDate(tech.data)}</p>
                               </div>
                               {isActiveTecnico && selectedSlots.length > 0 && (
@@ -631,7 +631,7 @@ export function AgendamentoProgramado() {
                                     className={clsx(
                                       'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
                                       isSelected
-                                        ? 'bg-blue-500 text-white ring-2 ring-blue-400 ring-offset-1 ring-offset-slate-900'
+                                        ? 'bg-blue-500 text-white ring-2 ring-blue-400 ring-offset-1 ring-offset-white dark:ring-offset-slate-900'
                                         : 'bg-blue-600 hover:bg-blue-500 text-white'
                                     )}
                                   >
@@ -640,7 +640,7 @@ export function AgendamentoProgramado() {
                                 )
                               })}
                               {tech.slotsOcupados.map(hora => (
-                                <span key={hora} className="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-500 text-sm font-medium cursor-not-allowed line-through" title="Horário ocupado">
+                                <span key={hora} className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-sm font-medium cursor-not-allowed line-through" title="Horário ocupado">
                                   {hora}
                                 </span>
                               ))}
@@ -716,21 +716,21 @@ export function AgendamentoProgramado() {
                     <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3">
                       <div>
                         <p className="text-xs text-slate-500">Técnico</p>
-                        <p className="text-sm font-medium text-slate-200">{ag.tecnicoNome}</p>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{ag.tecnicoNome}</p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500">Cliente</p>
-                        <p className="text-sm font-medium text-slate-200">{ag.clienteNome || '—'}</p>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{ag.clienteNome || '—'}</p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500">Data / Hora</p>
-                        <p className="text-sm font-medium text-slate-200">
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
                           {String(ag.data).startsWith('1970') ? '—' : fmtDate(ag.data)} · {formatTime(ag.horaInicio)} – {addMinutes(formatTime(ag.horaInicio), ag.duracao)}
                         </p>
                       </div>
                       <div>
                         <p className="text-xs text-slate-500">Duração</p>
-                        <p className="text-sm font-medium text-slate-200">{ag.duracao} min</p>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{ag.duracao} min</p>
                       </div>
                     </div>
 
@@ -779,18 +779,18 @@ export function AgendamentoProgramado() {
       {/* ── Modal: Bloqueios ── */}
       <Modal isOpen={showBloqueioModal} onClose={() => setShowBloqueioModal(false)} title="Bloqueios de Agendamento" size="lg">
         <div className="space-y-6">
-          <p className="text-xs text-slate-400">Bloqueios impedem novos agendamentos programados nos horários definidos. Não afetam agendamentos já existentes.</p>
+          <p className="text-xs text-slate-600 dark:text-slate-400">Bloqueios impedem novos agendamentos programados nos horários definidos. Não afetam agendamentos já existentes.</p>
 
           {bloqueios.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Bloqueios Ativos</p>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3">Bloqueios Ativos</p>
               <div className="space-y-2">
                 {bloqueios.map(b => (
                   <div key={b.id} className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/20">
                     <div>
-                      <p className="text-sm font-medium text-slate-200">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
                         {b.tecnicoNome ?? 'Todos os técnicos'}
-                        <span className="ml-2 text-xs text-slate-400">
+                        <span className="ml-2 text-xs text-slate-600 dark:text-slate-400">
                           {fmtDate(b.dataIni)} {b.horaIni} → {fmtDate(b.dataFim)} {b.horaFim}
                         </span>
                       </p>
@@ -806,7 +806,7 @@ export function AgendamentoProgramado() {
           )}
 
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Novo Bloqueio</p>
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3">Novo Bloqueio</p>
             <div className="space-y-4">
               <Select
                 label="Técnico (em branco = bloqueia todos)"
@@ -847,12 +847,12 @@ export function AgendamentoProgramado() {
         <div className="space-y-6">
           {disponibilidades.length > 0 && (
             <div>
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Técnicos Configurados</p>
+              <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3">Técnicos Configurados</p>
               <div className="space-y-2">
                 {disponibilidades.map(d => (
-                  <div key={d.tecnicoId} className="flex items-center justify-between p-3 rounded-lg bg-slate-800 border border-slate-700">
+                  <div key={d.tecnicoId} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                     <div>
-                      <p className="text-sm font-medium text-slate-200">{d.tecnicoNome}</p>
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{d.tecnicoNome}</p>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {d.diasSemana.split(',').map(n => DIAS_SEMANA.find(x => x.val === Number(n))?.label).join(', ')}
                         {' · '}{d.horaInicio} – {d.horaFim}{' · '}a cada {d.intervaloMin} min
@@ -865,10 +865,10 @@ export function AgendamentoProgramado() {
                       )}
                     </div>
                     <div className="flex gap-1">
-                      <button onClick={() => openEditConfig(d)} className="p-1.5 rounded-lg text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors text-xs">
+                      <button onClick={() => openEditConfig(d)} className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 transition-colors text-xs">
                         Editar
                       </button>
-                      <button onClick={() => deleteConfig(d.tecnicoId)} className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                      <button onClick={() => deleteConfig(d.tecnicoId)} className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -879,7 +879,7 @@ export function AgendamentoProgramado() {
           )}
 
           <div>
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
+            <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3">
               {editingTecnico ? 'Editar Disponibilidade' : 'Adicionar Técnico'}
             </p>
             <div className="space-y-4">
@@ -896,7 +896,7 @@ export function AgendamentoProgramado() {
               />
 
               <div>
-                <p className="text-sm font-medium text-slate-300 mb-2">Dias da semana</p>
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Dias da semana</p>
                 <div className="flex gap-2 flex-wrap">
                   {DIAS_SEMANA.map(dia => (
                     <button
@@ -906,7 +906,7 @@ export function AgendamentoProgramado() {
                         'w-10 h-10 rounded-lg text-xs font-semibold transition-colors border',
                         configForm.diasSemana.includes(dia.val)
                           ? 'bg-blue-600 text-white border-blue-500'
-                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500'
                       )}
                     >
                       {dia.label}
@@ -932,7 +932,7 @@ export function AgendamentoProgramado() {
               </div>
 
               <div>
-                <p className="text-sm font-medium text-slate-300 mb-2">
+                <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">
                   Período de validade <span className="text-slate-500 text-xs font-normal">(opcional — deixe em branco para sempre)</span>
                 </p>
                 <div className="grid grid-cols-2 gap-4">
@@ -949,7 +949,7 @@ export function AgendamentoProgramado() {
                     onChange={e => setConfigForm(f => ({ ...f, usarIntervalo: e.target.checked }))}
                     className="w-4 h-4 rounded accent-blue-600"
                   />
-                  <span className="text-sm font-medium text-slate-300">Bloquear intervalo de almoço</span>
+                  <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Bloquear intervalo de almoço</span>
                 </label>
                 {configForm.usarIntervalo && (
                   <div className="grid grid-cols-2 gap-4 mt-2">
@@ -981,7 +981,7 @@ export function AgendamentoProgramado() {
           <div className="flex items-start gap-3 p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
             <Clock className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-slate-200">{bookTecnico?.tecnicoNome} · {fmtDate(selectedDate)}</p>
+              <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{bookTecnico?.tecnicoNome} · {fmtDate(selectedDate)}</p>
               <div className="flex gap-1 flex-wrap mt-1.5">
                 {selectedSlots.map(h => (
                   <span key={h} className="px-2 py-0.5 rounded-lg bg-blue-600 text-white text-xs font-medium">{h}</span>
@@ -1084,7 +1084,7 @@ export function AgendamentoProgramado() {
       <Modal isOpen={!!statusItem} onClose={() => setStatusItem(null)} title="Alterar Status" size="sm">
         <div className="space-y-4">
           {statusItem && (
-            <p className="text-sm text-slate-400">
+            <p className="text-sm text-slate-600 dark:text-slate-400">
               {statusItem.clienteNome || statusItem.tecnicoNome} · {statusItem.horaInicio} em {fmtDate(statusItem.data)}
             </p>
           )}
@@ -1096,8 +1096,8 @@ export function AgendamentoProgramado() {
                 className={clsx(
                   'px-3 py-2.5 rounded-lg text-sm font-medium border transition-all',
                   newStatus === opt.value
-                    ? opt.color + ' ring-2 ring-offset-2 ring-offset-slate-900 ring-current'
-                    : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-slate-500'
+                    ? opt.color + ' ring-2 ring-offset-2 ring-offset-white dark:ring-offset-slate-900 ring-current'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-500'
                 )}
               >
                 {opt.label}

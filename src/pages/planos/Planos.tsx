@@ -39,7 +39,7 @@ export function Planos() {
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-slate-400">Carregando...</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">Carregando...</p>
       </div>
     </div>
   )
@@ -54,8 +54,8 @@ export function Planos() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Planos e Módulos</h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Planos e Módulos</h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
             {planos.length} planos cadastrados · {planos.filter(p => p.ativo).length} ativos
           </p>
         </div>
@@ -94,7 +94,7 @@ export function Planos() {
                 key={p.id}
                 onClick={() => setSelecionado(selecionado === p.id ? null : p.id)}
                 className={`card cursor-pointer transition-all border-2 ${
-                  selecionado === p.id ? 'border-blue-500' : 'border-slate-700'
+                  selecionado === p.id ? 'border-blue-500' : 'border-slate-200 dark:border-slate-700'
                 } ${!p.ativo ? 'opacity-50' : ''}`}
               >
                 <div className="flex items-start justify-between mb-3">
@@ -104,10 +104,10 @@ export function Planos() {
                         <Tag size={10} className="inline mr-1" />{tipoLabel}
                       </span>
                       {!p.ativo && (
-                        <span className="badge bg-slate-700 text-slate-500 text-xs">Inativo</span>
+                        <span className="badge bg-slate-100 dark:bg-slate-700 text-slate-500 text-xs">Inativo</span>
                       )}
                     </div>
-                    <h3 className="font-semibold text-slate-100 text-base">{p.descricao}</h3>
+                    <h3 className="font-semibold text-slate-900 dark:text-slate-100 text-base">{p.descricao}</h3>
                     {p.sistemaId && (
                       <p className="text-xs text-slate-500 mt-0.5">Sistema ID: {p.sistemaId}</p>
                     )}
@@ -119,7 +119,7 @@ export function Planos() {
                 <div className="mb-4">
                   <div className="text-3xl font-bold text-blue-400">
                     R$ {valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    <span className="text-slate-400 text-sm font-normal">/mês</span>
+                    <span className="text-slate-600 dark:text-slate-400 text-sm font-normal">/mês</span>
                   </div>
                   {valorAntigo != null && valorAntigo > 0 && valorAntigo !== valor && (
                     <p className="text-xs text-slate-600 line-through mt-0.5">
@@ -137,7 +137,7 @@ export function Planos() {
                 {detalhesLinhas.length > 0 && (
                   <ul className="space-y-1.5">
                     {detalhesLinhas.slice(0, 5).map((linha, i) => (
-                      <li key={i} className="flex items-center gap-2 text-sm text-slate-300">
+                      <li key={i} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
                         <Check size={14} className="text-emerald-400 flex-shrink-0" />
                         {linha}
                       </li>
@@ -148,7 +148,7 @@ export function Planos() {
                   </ul>
                 )}
 
-                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-700">
+                <div className="flex gap-2 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
                   <button
                     className="btn-secondary flex-1 justify-center text-xs py-1.5"
                     onClick={e => { e.stopPropagation(); toast.info('Edição de plano em desenvolvimento.') }}

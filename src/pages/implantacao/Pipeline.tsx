@@ -38,7 +38,7 @@ export function Pipeline() {
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-slate-400">Carregando...</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">Carregando...</p>
       </div>
     </div>
   )
@@ -50,8 +50,8 @@ export function Pipeline() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Pipeline de Implantação</h1>
-          <p className="text-slate-400 text-sm mt-1">{pipeline.length} clientes em processo · 16 etapas</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Pipeline de Implantação</h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">{pipeline.length} clientes em processo · 16 etapas</p>
         </div>
         <div className="flex gap-2">
           {etapaFiltro && (
@@ -69,7 +69,7 @@ export function Pipeline() {
           { label: 'Em Instalação', val: pipeline.filter(c => c.etapa === 2).length, cor: 'text-amber-400' },
         ].map(s => (
           <div key={s.label} className="card py-3">
-            <p className="text-slate-400 text-xs">{s.label}</p>
+            <p className="text-slate-600 dark:text-slate-400 text-xs">{s.label}</p>
             <p className={`text-2xl font-bold ${s.cor}`}>{s.val}</p>
           </div>
         ))}
@@ -81,9 +81,9 @@ export function Pipeline() {
           {etapas.map(etapa => {
             const lista = clientesPorEtapa(etapa.id)
             return (
-              <div key={etapa.id} className={`flex-shrink-0 w-52 rounded-xl border-t-4 bg-slate-800 border-slate-700 ${etapa.cor}`}>
-                <div className="p-3 border-b border-slate-700">
-                  <p className="text-xs font-semibold text-slate-300 leading-tight">{etapa.id}. {etapa.label}</p>
+              <div key={etapa.id} className={`flex-shrink-0 w-52 rounded-xl border-t-4 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 ${etapa.cor}`}>
+                <div className="p-3 border-b border-slate-200 dark:border-slate-700">
+                  <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 leading-tight">{etapa.id}. {etapa.label}</p>
                   <div className="flex items-center gap-1 mt-1">
                     <Users size={11} className="text-slate-500" />
                     <span className="text-xs text-slate-500">{lista.length}</span>
@@ -91,8 +91,8 @@ export function Pipeline() {
                 </div>
                 <div className="p-2 space-y-2 min-h-[80px]">
                   {lista.map((c: any) => (
-                    <div key={c.id} className="bg-slate-900 rounded-lg p-2.5 border border-slate-700 cursor-pointer hover:border-slate-500 transition-colors">
-                      <p className="text-xs font-medium text-slate-200 leading-tight mb-1">{c.clienteNome || `#${c.clienteId}`}</p>
+                    <div key={c.id} className="bg-slate-900 rounded-lg p-2.5 border border-slate-200 dark:border-slate-700 cursor-pointer hover:border-slate-500 transition-colors">
+                      <p className="text-xs font-medium text-slate-800 dark:text-slate-200 leading-tight mb-1">{c.clienteNome || `#${c.clienteId}`}</p>
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-slate-500">{c.etapaDescricao ?? `Etapa ${c.etapa}`}</span>
                         <span className="flex items-center gap-0.5 text-xs text-slate-500">
@@ -113,11 +113,11 @@ export function Pipeline() {
 
       {/* Legenda de fluxo */}
       <div className="card">
-        <h3 className="text-sm font-semibold text-slate-300 mb-3">Fluxo de Progressão</h3>
-        <div className="flex flex-wrap items-center gap-1 text-xs text-slate-400">
+        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">Fluxo de Progressão</h3>
+        <div className="flex flex-wrap items-center gap-1 text-xs text-slate-600 dark:text-slate-400">
           {etapas.slice(0, 9).map((e, i) => (
             <span key={e.id} className="flex items-center gap-1">
-              <span className="text-slate-200">{e.id}. {e.label}</span>
+              <span className="text-slate-800 dark:text-slate-200">{e.id}. {e.label}</span>
               {i < 8 && <ChevronRight size={12} className="text-slate-600" />}
             </span>
           ))}

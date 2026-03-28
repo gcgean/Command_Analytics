@@ -207,15 +207,15 @@ export function Atendimentos() {
 
       {/* Contagem */}
       <div className="flex items-center gap-2">
-        <span className="text-xs text-slate-400">
+        <span className="text-xs text-slate-500 dark:text-slate-400">
           {loading ? 'Carregando...' : `${total.toLocaleString('pt-BR')} atendimento(s) no total`}
         </span>
       </div>
 
       {/* Tabela */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center h-40 text-slate-400">
+          <div className="flex items-center justify-center h-40 text-slate-500 dark:text-slate-400">
             <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-3" />
             Carregando...
           </div>
@@ -254,7 +254,7 @@ export function Atendimentos() {
                         <td className="table-cell font-mono text-blue-400 font-semibold">#{a.id}</td>
                         <td className="table-cell">
                           <div>
-                            <p className="font-medium text-slate-200 truncate max-w-[180px]">{a.clienteNome || '—'}</p>
+                            <p className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[180px]">{a.clienteNome || '—'}</p>
                             {a.bugSistema === 'S' && (
                               <span className="flex items-center gap-1 text-xs text-red-400">
                                 <Bug className="w-3 h-3" /> Bug
@@ -262,7 +262,7 @@ export function Atendimentos() {
                             )}
                           </div>
                         </td>
-                        <td className="table-cell text-slate-300 truncate max-w-[120px]">{a.tecnicoNome || '—'}</td>
+                        <td className="table-cell text-slate-700 dark:text-slate-300 truncate max-w-[120px]">{a.tecnicoNome || '—'}</td>
                         <td className="table-cell">
                           <span className={clsx('text-xs font-medium px-2 py-0.5 rounded-full', deptColor)}>
                             {deptLabel}
@@ -272,7 +272,7 @@ export function Atendimentos() {
                           {tipoIcon ? (
                             <div className="flex items-center gap-1.5" title={tipoLabel}>
                               {tipoIcon}
-                              <span className="text-xs text-slate-400 hidden xl:inline">{tipoLabel}</span>
+                              <span className="text-xs text-slate-500 dark:text-slate-400 hidden xl:inline">{tipoLabel}</span>
                             </div>
                           ) : (
                             <span className="text-xs text-slate-500">{tipoLabel || '—'}</span>
@@ -284,10 +284,10 @@ export function Atendimentos() {
                         <td className="table-cell">
                           <StatusBadge status={(a.status ?? 1) as StatusAtendimento} />
                         </td>
-                        <td className="table-cell text-slate-400 text-xs">
+                        <td className="table-cell text-slate-500 dark:text-slate-400 text-xs">
                           {a.dataAbertura ? new Date(a.dataAbertura).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                         </td>
-                        <td className="table-cell text-slate-400 text-xs">
+                        <td className="table-cell text-slate-500 dark:text-slate-400 text-xs">
                           {a.tempoAtendimento ? `${a.tempoAtendimento}min` : '—'}
                         </td>
                       </tr>
@@ -303,7 +303,7 @@ export function Atendimentos() {
       {/* Paginação servidor */}
       {pages > 1 && (
         <div className="flex items-center justify-between">
-          <p className="text-xs text-slate-400">
+          <p className="text-xs text-slate-500 dark:text-slate-400">
             Página {page} de {pages} — {total.toLocaleString('pt-BR')} registros
           </p>
           <div className="flex gap-1 items-center">

@@ -85,25 +85,25 @@ export function Header({ onToggleSidebar }: HeaderProps) {
           </button>
 
           {showNotifications && (
-            <div className="absolute right-0 top-full mt-2 w-80 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50">
-              <div className="p-4 border-b border-slate-700">
-                <h3 className="text-sm font-semibold text-slate-100">Notificações</h3>
+            <div className="absolute right-0 top-full mt-2 w-80 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Notificações</h3>
               </div>
-              <div className="divide-y divide-slate-700">
+              <div className="divide-y divide-slate-200 dark:divide-slate-700">
                 {notifications.map((n) => (
-                  <div key={n.id} className="p-4 hover:bg-slate-700/50 cursor-pointer">
+                  <div key={n.id} className="p-4 hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer">
                     <div className="flex items-start gap-3">
                       <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${n.urgent ? 'bg-red-400' : 'bg-blue-400'}`} />
                       <div>
-                        <p className="text-xs text-slate-300">{n.text}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300">{n.text}</p>
                         <p className="text-xs text-slate-500 mt-1">{n.time} atrás</p>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
-              <div className="p-3 border-t border-slate-700">
-                <button className="w-full text-xs text-blue-400 hover:text-blue-300 text-center">
+              <div className="p-3 border-t border-slate-200 dark:border-slate-700">
+                <button className="w-full text-xs text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 text-center">
                   Ver todas as notificações
                 </button>
               </div>

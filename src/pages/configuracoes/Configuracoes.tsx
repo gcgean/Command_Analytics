@@ -165,15 +165,15 @@ export function Configuracoes() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-100">Configurações do Sistema</h1>
-        <p className="text-slate-400 text-sm mt-1">Parâmetros e integrações da plataforma</p>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Configurações do Sistema</h1>
+        <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Parâmetros e integrações da plataforma</p>
       </div>
 
       {/* Abas */}
-      <div className="flex gap-2 border-b border-slate-700">
+      <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700">
         {abas.map(a => (
           <button key={a.key} onClick={() => setAba(a.key)}
-            className={clsx('px-4 py-2 text-sm font-medium border-b-2 transition-colors', aba === a.key ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-200')}>
+            className={clsx('px-4 py-2 text-sm font-medium border-b-2 transition-colors', aba === a.key ? 'border-blue-500 text-blue-400' : 'border-transparent text-slate-400 hover:text-slate-800 dark:text-slate-200')}>
             {a.label}
           </button>
         ))}
@@ -182,7 +182,7 @@ export function Configuracoes() {
       {/* Aba Geral */}
       {aba === 'geral' && (
         <div className="card max-w-2xl space-y-5">
-          <h3 className="text-sm font-semibold text-slate-200">Custos e Parâmetros Gerais</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Custos e Parâmetros Gerais</h3>
           <div className="grid grid-cols-2 gap-4">
             {[
               { label: 'Custo/hora Suporte (R$)', key: 'custoHoraSuporte' },
@@ -193,7 +193,7 @@ export function Configuracoes() {
               { label: 'Margem Hora Suporte (%)', key: 'margemHoraSuporte' },
             ].map(f => (
               <div key={f.key}>
-                <label className="text-xs text-slate-400 block mb-1">{f.label}</label>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">{f.label}</label>
                 <input type="number" className="input-field" value={(geral as Record<string, string>)[f.key]}
                   onChange={e => setGeral(p => ({ ...p, [f.key]: e.target.value }))} />
               </div>
@@ -209,13 +209,13 @@ export function Configuracoes() {
       {aba === 'whatsapp' && (
         <div className="space-y-5 max-w-2xl">
           <div className="card space-y-4">
-            <h3 className="text-sm font-semibold text-slate-200">Tokens de API</h3>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Tokens de API</h3>
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Token API WhatsApp</label>
+              <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Token API WhatsApp</label>
               <input className="input-field font-mono text-xs" value={tokenApi} onChange={e => setTokenApi(e.target.value)} />
             </div>
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Token de Notificações</label>
+              <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Token de Notificações</label>
               <input className="input-field font-mono text-xs" value={tokenNotif} onChange={e => setTokenNotif(e.target.value)} />
             </div>
             <button onClick={handleSalvar} disabled={loading} className="btn-primary disabled:opacity-60">
@@ -225,20 +225,20 @@ export function Configuracoes() {
 
           <div className="card">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-semibold text-slate-200">Tokens Cadastrados</h3>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Tokens Cadastrados</h3>
               <button className="btn-secondary text-xs py-1">
                 <Plus size={13} /> Novo Token
               </button>
             </div>
             <div className="space-y-2">
               {tokens.map(t => (
-                <div key={t.id} className="flex items-center justify-between p-3 bg-slate-900 rounded-lg border border-slate-700">
+                <div key={t.id} className="flex items-center justify-between p-3 bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700">
                   <div>
-                    <p className="text-sm text-slate-200 font-medium">{t.descricao}</p>
+                    <p className="text-sm text-slate-800 dark:text-slate-200 font-medium">{t.descricao}</p>
                     <p className="text-xs text-slate-500 font-mono mt-0.5">{t.token}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className={`badge text-xs ${t.ativo ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-500'}`}>
+                    <span className={`badge text-xs ${t.ativo ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-100 dark:bg-slate-700 text-slate-500'}`}>
                       {t.ativo ? 'Ativo' : 'Inativo'}
                     </span>
                     <button onClick={() => removerToken(t.id)} className="text-slate-500 hover:text-red-400 transition-colors">
@@ -257,27 +257,27 @@ export function Configuracoes() {
         <div className="space-y-4 max-w-2xl">
           {contas.map(c => (
             <div key={c.id} className="card space-y-4">
-              <h3 className="text-sm font-semibold text-slate-200">Conta SMTP — {c.email}</h3>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Conta SMTP — {c.email}</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs text-slate-400 block mb-1">Host SMTP</label>
+                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Host SMTP</label>
                   <input className="input-field" defaultValue={c.host} />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400 block mb-1">Porta</label>
+                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Porta</label>
                   <input className="input-field" defaultValue={c.porta} />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400 block mb-1">E-mail</label>
+                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">E-mail</label>
                   <input type="email" className="input-field" defaultValue={c.email} />
                 </div>
                 <div>
-                  <label className="text-xs text-slate-400 block mb-1">Nome Remetente</label>
+                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Nome Remetente</label>
                   <input className="input-field" defaultValue={c.nomeRemetente} />
                 </div>
                 <div className="flex items-center gap-2">
-                  <input type="checkbox" id={`tls-${c.id}`} defaultChecked={c.tls} className="rounded border-slate-700 bg-slate-800 text-blue-600" />
-                  <label htmlFor={`tls-${c.id}`} className="text-sm text-slate-300 cursor-pointer">Usar TLS/SSL</label>
+                  <input type="checkbox" id={`tls-${c.id}`} defaultChecked={c.tls} className="rounded border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600" />
+                  <label htmlFor={`tls-${c.id}`} className="text-sm text-slate-700 dark:text-slate-300 cursor-pointer">Usar TLS/SSL</label>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -303,22 +303,22 @@ export function Configuracoes() {
         <div className="space-y-5 max-w-2xl">
           <div className="card space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-sm font-semibold text-slate-200">Configuração do Bot</h3>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Configuração do Bot</h3>
               <div className="flex items-center gap-2">
                 <input 
                   type="checkbox" 
                   id="telegram-ativo" 
                   checked={telegram.ativo} 
                   onChange={e => setTelegram(p => ({ ...p, ativo: e.target.checked }))}
-                  className="rounded border-slate-700 bg-slate-800 text-blue-600" 
+                  className="rounded border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600" 
                 />
-                <label htmlFor="telegram-ativo" className="text-xs text-slate-400">Ativar Integração</label>
+                <label htmlFor="telegram-ativo" className="text-xs text-slate-600 dark:text-slate-400">Ativar Integração</label>
               </div>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-xs text-slate-400 block mb-1">Nome do Bot</label>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Nome do Bot</label>
                 <input 
                   className="input-field" 
                   value={telegram.nomeBot} 
@@ -327,7 +327,7 @@ export function Configuracoes() {
                 />
               </div>
               <div>
-                <label className="text-xs text-slate-400 block mb-1">User ID Padrão (Destino)</label>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">User ID Padrão (Destino)</label>
                 <input 
                   className="input-field font-mono text-xs" 
                   value={telegram.userIdPadrao} 
@@ -336,7 +336,7 @@ export function Configuracoes() {
                 />
               </div>
               <div className="col-span-2">
-                <label className="text-xs text-slate-400 block mb-1">Token API (Relay)</label>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Token API (Relay)</label>
                 <input 
                   type="password"
                   className="input-field font-mono text-xs" 
@@ -354,10 +354,10 @@ export function Configuracoes() {
           </div>
 
           <div className="card space-y-4">
-            <h3 className="text-sm font-semibold text-slate-200">Teste de Envio</h3>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Teste de Envio</h3>
             <div className="space-y-3">
               <div>
-                <label className="text-xs text-slate-400 block mb-1">Mensagem de Teste</label>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Mensagem de Teste</label>
                 <textarea 
                   className="input-field min-h-[80px] resize-none" 
                   value={msgTeste} 
@@ -380,22 +380,22 @@ export function Configuracoes() {
       {/* Aba Parâmetros */}
       {aba === 'parametros' && (
         <div className="card max-w-2xl space-y-5">
-          <h3 className="text-sm font-semibold text-slate-200">Parâmetros Comerciais</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Parâmetros Comerciais</h3>
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className="text-xs text-slate-400 block mb-1">Chave PIX</label>
+              <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Chave PIX</label>
               <input className="input-field" value={params.chavePix} onChange={e => setParams(p => ({ ...p, chavePix: e.target.value }))} />
             </div>
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Percentual de Reajuste Anual (%)</label>
+              <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Percentual de Reajuste Anual (%)</label>
               <input type="number" className="input-field" value={params.percReajuste} onChange={e => setParams(p => ({ ...p, percReajuste: e.target.value }))} />
             </div>
             <div>
-              <label className="text-xs text-slate-400 block mb-1">% Máx. Desconto Implantação</label>
+              <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">% Máx. Desconto Implantação</label>
               <input type="number" className="input-field" value={params.percMaxDesconto} onChange={e => setParams(p => ({ ...p, percMaxDesconto: e.target.value }))} />
             </div>
             <div>
-              <label className="text-xs text-slate-400 block mb-1">Dias de Carência para Bloqueio</label>
+              <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Dias de Carência para Bloqueio</label>
               <input type="number" className="input-field" value={params.diasCarencia} onChange={e => setParams(p => ({ ...p, diasCarencia: e.target.value }))} />
             </div>
           </div>

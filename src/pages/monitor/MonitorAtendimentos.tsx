@@ -34,7 +34,7 @@ export function MonitorAtendimentos() {
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-slate-400">Carregando...</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Carregando...</p>
       </div>
     </div>
   )
@@ -46,8 +46,8 @@ export function MonitorAtendimentos() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Monitor de Atendimentos</h1>
-          <p className="text-slate-400 text-sm mt-1">WhatsApp / CRM em tempo real</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Monitor de Atendimentos</h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">WhatsApp / CRM em tempo real</p>
         </div>
         <button className="btn-secondary" onClick={carregar}><RefreshCw size={16} /> Atualizar</button>
       </div>
@@ -72,7 +72,7 @@ export function MonitorAtendimentos() {
           { label: 'Urgentes (+30min)', val: urgentes.length, cor: 'text-red-400' },
         ].map(k => (
           <div key={k.label} className="card">
-            <p className="text-xs text-slate-400">{k.label}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{k.label}</p>
             <p className={`text-2xl font-bold ${k.cor}`}>{k.val}</p>
           </div>
         ))}
@@ -82,7 +82,7 @@ export function MonitorAtendimentos() {
       <div className="flex gap-2 flex-wrap">
         {departamentos.map(d => (
           <button key={d} onClick={() => setDepto(d)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${depto === d ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-700'}`}>
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${depto === d ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 border border-slate-300 dark:border-slate-700'}`}>
             {d}
           </button>
         ))}
@@ -91,27 +91,27 @@ export function MonitorAtendimentos() {
       {/* Cards de atendimentos */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filtrados.map(a => (
-          <div key={a.id} className={`card border ${a.tempoEspera > 30 && a.status !== 'Resolvido' ? 'border-red-500/40' : 'border-slate-700'} transition-colors`}>
+          <div key={a.id} className={`card border ${a.tempoEspera > 30 && a.status !== 'Resolvido' ? 'border-red-500/40' : 'border-slate-200 dark:border-slate-700'} transition-colors`}>
             <div className="flex items-start justify-between mb-3">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 bg-slate-700 rounded-lg">
+                <div className="p-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg">
                   <MessageCircle size={16} className="text-blue-400" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-slate-100">{a.clienteNome}</p>
+                  <p className="text-sm font-semibold text-slate-900 dark:text-slate-100">{a.clienteNome}</p>
                   <p className="text-xs text-slate-500 flex items-center gap-1"><Phone size={10} />{a.numero}</p>
                 </div>
               </div>
-              <span className={`badge text-xs ${statusCor[a.status] || 'bg-slate-700 text-slate-400'}`}>{a.status}</span>
+              <span className={`badge text-xs ${statusCor[a.status] || 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400'}`}>{a.status}</span>
             </div>
 
-            <div className="space-y-1.5 text-xs text-slate-400">
+            <div className="space-y-1.5 text-xs text-slate-600 dark:text-slate-400">
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1">
                   <User size={11} />
                   {a.atendente || <em className="text-slate-600">Sem atendente</em>}
                 </span>
-                <span className="badge bg-slate-700 text-slate-400 text-xs">{a.departamento}</span>
+                <span className="badge bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 text-xs">{a.departamento}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Clock size={11} className={a.tempoEspera > 30 ? 'text-red-400' : 'text-slate-500'} />

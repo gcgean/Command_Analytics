@@ -57,7 +57,7 @@ export function HistoricoAtendimentos() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
-          { label: 'Total no período', value: filtered.length, color: 'text-slate-100' },
+          { label: 'Total no período', value: filtered.length, color: 'text-slate-900 dark:text-slate-100' },
           { label: 'Concluídos', value: concluidos, color: 'text-emerald-400' },
           { label: 'Cancelados', value: cancelados, color: 'text-red-400' },
           { label: 'Tempo médio', value: `${Math.round(avgTempo)}min`, color: 'text-amber-400' },
@@ -104,9 +104,9 @@ export function HistoricoAtendimentos() {
       </Card>
 
       {/* Table */}
-      <div className="bg-slate-800 rounded-xl border border-slate-700 overflow-hidden">
+      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
         {loading ? (
-          <div className="flex items-center justify-center h-40 text-slate-400">
+          <div className="flex items-center justify-center h-40 text-slate-600 dark:text-slate-400">
             <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-3" />
             Carregando histórico...
           </div>
@@ -128,20 +128,20 @@ export function HistoricoAtendimentos() {
                     <tr key={a.id} className="table-row">
                       <td className="table-cell font-mono text-blue-400 font-semibold">#{a.id}</td>
                       <td className="table-cell">
-                        <p className="font-medium text-slate-200 truncate max-w-[160px]">{a.clienteNome}</p>
+                        <p className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[160px]">{a.clienteNome}</p>
                       </td>
-                      <td className="table-cell text-slate-300">{a.tecnicoNome}</td>
+                      <td className="table-cell text-slate-700 dark:text-slate-300">{a.tecnicoNome}</td>
                       <td className="table-cell">
-                        <span className={clsx('text-xs font-medium px-2 py-0.5 rounded-full', departamentoColors[DEPT_LABEL[a.departamento]] ?? 'bg-slate-700 text-slate-400')}>
+                        <span className={clsx('text-xs font-medium px-2 py-0.5 rounded-full', departamentoColors[DEPT_LABEL[a.departamento]] ?? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400')}>
                           {DEPT_LABEL[a.departamento] ?? `Depto ${a.departamento}`}
                         </span>
                       </td>
                       <td className="table-cell"><StatusBadge status={a.status as StatusAtendimento} /></td>
-                      <td className="table-cell text-xs text-slate-400">{new Date(a.dataAbertura).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
-                      <td className="table-cell text-xs text-slate-400">
+                      <td className="table-cell text-xs text-slate-600 dark:text-slate-400">{new Date(a.dataAbertura).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
+                      <td className="table-cell text-xs text-slate-600 dark:text-slate-400">
                         {a.dataFechamento ? new Date(a.dataFechamento).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                       </td>
-                      <td className="table-cell text-xs text-slate-400">
+                      <td className="table-cell text-xs text-slate-600 dark:text-slate-400">
                         {a.tempoAtendimento ? `${a.tempoAtendimento}min` : '—'}
                       </td>
                       <td className="table-cell">

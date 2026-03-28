@@ -25,7 +25,7 @@ export function DataTable<T extends Record<string, unknown>>({
 }: DataTableProps<T>) {
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-40 text-slate-400">
+      <div className="flex items-center justify-center h-40 text-slate-500 dark:text-slate-400">
         <div className="flex items-center gap-3">
           <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
           <span className="text-sm">Carregando...</span>
@@ -43,7 +43,7 @@ export function DataTable<T extends Record<string, unknown>>({
               <th
                 key={col.key}
                 className={clsx(
-                  'bg-slate-900 text-slate-400 text-xs font-medium uppercase tracking-wider px-4 py-3 first:rounded-tl-lg last:rounded-tr-lg',
+                  'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 text-xs font-medium uppercase tracking-wider px-4 py-3 first:rounded-tl-lg last:rounded-tr-lg',
                   col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left',
                   col.width
                 )}
@@ -69,15 +69,15 @@ export function DataTable<T extends Record<string, unknown>>({
                 key={idx}
                 onClick={() => onRowClick?.(row)}
                 className={clsx(
-                  'border-b border-slate-700 transition-colors duration-150',
-                  onRowClick ? 'cursor-pointer hover:bg-slate-700/50' : 'hover:bg-slate-700/20'
+                  'border-b border-slate-200 dark:border-slate-700 transition-colors duration-150',
+                  onRowClick ? 'cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700/50' : 'hover:bg-slate-50 dark:hover:bg-slate-700/20'
                 )}
               >
                 {columns.map((col) => (
                   <td
                     key={col.key}
                     className={clsx(
-                      'px-4 py-3 text-sm text-slate-300',
+                      'px-4 py-3 text-sm text-slate-700 dark:text-slate-300',
                       col.align === 'center' ? 'text-center' : col.align === 'right' ? 'text-right' : 'text-left'
                     )}
                   >

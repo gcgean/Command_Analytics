@@ -13,11 +13,11 @@ const prioridadeCor: Record<string, string> = {
   A: 'bg-red-500/20 text-red-400 border border-red-500/30',
   B: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
   C: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
-  D: 'bg-slate-500/20 text-slate-400',
+  D: 'bg-slate-500/20 text-slate-600 dark:text-slate-400',
 }
 
 const statusCor: Record<string, string> = {
-  'Pendente': 'bg-slate-700 text-slate-400',
+  'Pendente': 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400',
   'Em Desenvolvimento': 'bg-blue-500/20 text-blue-400',
   'Em Teste': 'bg-amber-500/20 text-amber-400',
   'Concluída': 'bg-emerald-500/20 text-emerald-400',
@@ -47,7 +47,7 @@ export function Tarefas() {
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-slate-400">Carregando...</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Carregando...</p>
       </div>
     </div>
   )
@@ -73,8 +73,8 @@ export function Tarefas() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Desenvolvimento de Software</h1>
-          <p className="text-slate-400 text-sm mt-1">Gestão de tarefas e bugs</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Desenvolvimento de Software</h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Gestão de tarefas e bugs</p>
         </div>
         <button className="btn-primary" onClick={handleNova}><Plus size={16} /> Nova Tarefa</button>
       </div>
@@ -82,13 +82,13 @@ export function Tarefas() {
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: 'Pendentes', val: tarefas.filter(t => (t.status ?? 0) === 0).length, cor: 'text-slate-400' },
+          { label: 'Pendentes', val: tarefas.filter(t => (t.status ?? 0) === 0).length, cor: 'text-slate-600 dark:text-slate-400' },
           { label: 'Em Desenvolvimento', val: tarefas.filter(t => t.status === 1).length, cor: 'text-blue-400' },
           { label: 'Em Teste', val: tarefas.filter(t => t.status === 2).length, cor: 'text-amber-400' },
           { label: 'Prioridade Alta (A)', val: tarefas.filter(t => t.prioridade === 'A').length, cor: 'text-red-400' },
         ].map(k => (
           <div key={k.label} className="card">
-            <p className="text-xs text-slate-400">{k.label}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{k.label}</p>
             <p className={`text-2xl font-bold ${k.cor}`}>{k.val}</p>
           </div>
         ))}

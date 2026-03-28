@@ -37,19 +37,19 @@ const ToastContext = createContext<ToastContextValue | null>(null)
 const toastConfig: Record<ToastType, { icon: React.ReactNode; classes: string }> = {
   success: {
     icon: <CheckCircle className="w-5 h-5 text-emerald-400 flex-shrink-0" />,
-    classes: 'border-emerald-500/30 bg-slate-800',
+    classes: 'border-emerald-500/30 bg-white dark:bg-slate-800',
   },
   error: {
     icon: <XCircle className="w-5 h-5 text-red-400 flex-shrink-0" />,
-    classes: 'border-red-500/30 bg-slate-800',
+    classes: 'border-red-500/30 bg-white dark:bg-slate-800',
   },
   warning: {
     icon: <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />,
-    classes: 'border-amber-500/30 bg-slate-800',
+    classes: 'border-amber-500/30 bg-white dark:bg-slate-800',
   },
   info: {
     icon: <Info className="w-5 h-5 text-blue-400 flex-shrink-0" />,
-    classes: 'border-blue-500/30 bg-slate-800',
+    classes: 'border-blue-500/30 bg-white dark:bg-slate-800',
   },
 }
 
@@ -59,7 +59,7 @@ function ToastItemComponent({ toast, onDismiss }: { toast: ToastItem; onDismiss:
   return (
     <div
       className={clsx(
-        'flex items-center gap-3 px-4 py-3 rounded-xl border shadow-2xl text-sm text-slate-100 min-w-[280px] max-w-[400px] transition-all duration-300',
+        'flex items-center gap-3 px-4 py-3 rounded-xl border shadow-2xl text-sm text-slate-900 dark:text-slate-100 min-w-[280px] max-w-[400px] transition-all duration-300',
         config.classes,
         toast.visible
           ? 'translate-y-0 opacity-100'
@@ -70,7 +70,7 @@ function ToastItemComponent({ toast, onDismiss }: { toast: ToastItem; onDismiss:
       <span className="flex-1">{toast.message}</span>
       <button
         onClick={() => onDismiss(toast.id)}
-        className="text-slate-500 hover:text-slate-300 transition-colors flex-shrink-0"
+        className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors flex-shrink-0"
       >
         <X className="w-4 h-4" />
       </button>

@@ -129,8 +129,8 @@ export function Usuarios() {
             <User className="w-6 h-6 text-indigo-400" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-100">Usuários</h1>
-            <p className="text-sm text-slate-400">Gestão de acessos e perfis</p>
+            <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Usuários</h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400">Gestão de acessos e perfis</p>
           </div>
         </div>
         <Button onClick={openNew} icon={<Plus className="w-4 h-4" />}>
@@ -166,7 +166,7 @@ export function Usuarios() {
 
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left">
-            <thead className="text-xs text-slate-400 uppercase bg-slate-800/50">
+            <thead className="text-xs text-slate-600 dark:text-slate-400 uppercase bg-slate-50 dark:bg-slate-800/50">
               <tr>
                 <th className="px-4 py-3 font-medium rounded-tl-lg">Usuário</th>
                 <th className="px-4 py-3 font-medium">Nome Completo</th>
@@ -185,26 +185,26 @@ export function Usuarios() {
                 </tr>
               ) : (
                 filtered.map(u => (
-                  <tr key={u.id} className="hover:bg-slate-800/30 transition-colors">
-                    <td className="px-4 py-3 font-medium text-slate-200">
+                  <tr key={u.id} className="hover:bg-slate-50 dark:bg-slate-800/30 transition-colors">
+                    <td className="px-4 py-3 font-medium text-slate-800 dark:text-slate-200">
                       {u.nomeUsu || '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-300">
+                    <td className="px-4 py-3 text-slate-700 dark:text-slate-300">
                       {u.nome || '—'}
                     </td>
-                    <td className="px-4 py-3 text-slate-400">
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                       {u.email || '—'}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-slate-300">{u.cargo || '—'}</span>
+                        <span className="text-slate-700 dark:text-slate-300">{u.cargo || '—'}</span>
                         <span className="text-xs text-slate-500">{u.departamento || '—'}</span>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={clsx(
                         'px-2 py-1 text-xs font-medium rounded-full',
-                        u.ativo ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-500/10 text-slate-400'
+                        u.ativo ? 'bg-emerald-500/10 text-emerald-400' : 'bg-slate-500/10 text-slate-600 dark:text-slate-400'
                       )}>
                         {u.ativo ? 'Ativo' : 'Inativo'}
                       </span>
@@ -213,7 +213,7 @@ export function Usuarios() {
                       <div className="flex items-center justify-end gap-2">
                         <button
                           onClick={() => openEdit(u)}
-                          className="p-1.5 text-slate-400 hover:text-blue-400 transition-colors rounded"
+                          className="p-1.5 text-slate-600 dark:text-slate-400 hover:text-blue-400 transition-colors rounded"
                           title="Editar"
                         >
                           <Edit2 className="w-4 h-4" />
@@ -240,12 +240,12 @@ export function Usuarios() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-slate-900 rounded-xl shadow-xl w-full max-w-lg border border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
-            <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-100">
+          <div className="bg-slate-900 rounded-xl shadow-xl w-full max-w-lg border border-slate-100 dark:border-slate-800 overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
                 {editId ? 'Editar Usuário' : 'Novo Usuário'}
               </h3>
-              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-300">
+              <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-slate-700 dark:text-slate-300">
                 &times;
               </button>
             </div>
@@ -305,7 +305,7 @@ export function Usuarios() {
                 />
               </div>
 
-              <div className="pt-4 flex justify-end gap-3 border-t border-slate-800 mt-6">
+              <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800 mt-6">
                 <Button variant="secondary" onClick={() => setShowModal(false)} type="button">
                   Cancelar
                 </Button>

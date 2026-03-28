@@ -47,7 +47,7 @@ export function DetalheCliente() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-40 text-slate-400">
+      <div className="flex items-center justify-center h-40 text-slate-600 dark:text-slate-400">
         <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-3" />
         Carregando cliente...
       </div>
@@ -78,7 +78,7 @@ export function DetalheCliente() {
         </Button>
         <div className="flex-1">
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-slate-100">{cliente.nome ?? '—'}</h2>
+            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{cliente.nome ?? '—'}</h2>
             {curvaKey && (
               <span className={clsx('text-xs px-2 py-0.5 rounded-full font-medium', curvaColors[curvaKey] ?? '')}>
                 Curva {curvaKey}
@@ -91,13 +91,13 @@ export function DetalheCliente() {
               {statusLabel}
             </span>
           </div>
-          <p className="text-sm text-slate-400 mt-1">#{cliente.id} · {cliente.cnpj ?? '—'}</p>
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">#{cliente.id} · {cliente.cnpj ?? '—'}</p>
         </div>
         <Button variant="secondary">Editar Cliente</Button>
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-slate-700 overflow-x-auto">
+      <div className="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
         {tabs.map((tab, i) => (
           <button
             key={tab.label}
@@ -106,7 +106,7 @@ export function DetalheCliente() {
               'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap',
               i === activeTab
                 ? 'text-blue-400 border-blue-500'
-                : 'text-slate-400 border-transparent hover:text-slate-200'
+                : 'text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-slate-200'
             )}
           >
             {tab.icon}
@@ -133,7 +133,7 @@ export function DetalheCliente() {
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between gap-4">
                   <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="text-xs font-medium text-slate-300 text-right">{value}</dd>
+                  <dd className="text-xs font-medium text-slate-700 dark:text-slate-300 text-right">{value}</dd>
                 </div>
               ))}
             </dl>
@@ -150,7 +150,7 @@ export function DetalheCliente() {
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between gap-4">
                   <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="text-xs font-medium text-slate-300 text-right">{value}</dd>
+                  <dd className="text-xs font-medium text-slate-700 dark:text-slate-300 text-right">{value}</dd>
                 </div>
               ))}
             </dl>
@@ -249,7 +249,7 @@ export function DetalheCliente() {
               ].map(({ label, value }) => (
                 <div key={label} className="flex justify-between gap-4">
                   <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="text-xs font-medium text-slate-300 text-right">{value}</dd>
+                  <dd className="text-xs font-medium text-slate-700 dark:text-slate-300 text-right">{value}</dd>
                 </div>
               ))}
             </dl>

@@ -100,8 +100,8 @@ export function AcompImplantacao() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Acompanhamento de Implantação</h1>
-          <p className="text-slate-400 text-sm mt-1">
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Acompanhamento de Implantação</h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
             {cliente.nome} · Responsável: {cliente.responsavel}
           </p>
         </div>
@@ -122,7 +122,7 @@ export function AcompImplantacao() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Timeline */}
         <div className="lg:col-span-2 card">
-          <h3 className="text-sm font-semibold text-slate-200 mb-5">Timeline das Etapas</h3>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-5">Timeline das Etapas</h3>
           <div className="space-y-1">
             {etapas.map((etapa, i) => {
               const concluida = i < indexAtual
@@ -136,7 +136,7 @@ export function AcompImplantacao() {
                       'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 transition-all',
                       concluida && 'bg-emerald-500/20',
                       atual && 'bg-blue-600 ring-4 ring-blue-500/30',
-                      futura && 'bg-slate-800 border border-slate-700'
+                      futura && 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700'
                     )}>
                       {concluida
                         ? <CheckCircle className="w-4 h-4 text-emerald-400" />
@@ -145,7 +145,7 @@ export function AcompImplantacao() {
                           : <Circle className="w-4 h-4 text-slate-600" />}
                     </div>
                     {i < etapas.length - 1 && (
-                      <div className={clsx('w-0.5 h-6 mt-1', concluida ? 'bg-emerald-500/30' : 'bg-slate-700')} />
+                      <div className={clsx('w-0.5 h-6 mt-1', concluida ? 'bg-emerald-500/30' : 'bg-slate-100 dark:bg-slate-700')} />
                     )}
                   </div>
                   {/* Label */}
@@ -169,13 +169,13 @@ export function AcompImplantacao() {
         {/* Observações */}
         <div className="space-y-4">
           <div className="card flex-1">
-            <h3 className="text-sm font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-blue-400" />
               Observações
             </h3>
             <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
               {cliente.observacoes.map((obs, i) => (
-                <div key={i} className="text-xs text-slate-400 bg-slate-900 rounded-lg p-3 border border-slate-700">
+                <div key={i} className="text-xs text-slate-600 dark:text-slate-400 bg-slate-900 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
                   {obs}
                 </div>
               ))}
@@ -183,7 +183,7 @@ export function AcompImplantacao() {
           </div>
 
           <div className="card">
-            <h3 className="text-sm font-semibold text-slate-200 mb-3">Nova Observação</h3>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3">Nova Observação</h3>
             <textarea
               className="input-field resize-none h-24 text-sm"
               placeholder="Digite uma observação..."

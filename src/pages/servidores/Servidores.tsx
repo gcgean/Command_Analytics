@@ -33,10 +33,10 @@ function MetricBar({ val, cor }: { val: number; cor: string }) {
   const color = v > 80 ? 'bg-red-500' : v > 60 ? 'bg-amber-500' : cor
   return (
     <div className="flex items-center gap-2">
-      <div className="flex-1 bg-slate-700 rounded-full h-1.5">
+      <div className="flex-1 bg-slate-100 dark:bg-slate-700 rounded-full h-1.5">
         <div className={`h-1.5 rounded-full transition-all ${color}`} style={{ width: `${v}%` }} />
       </div>
-      <span className={`text-xs font-medium w-8 text-right ${v > 80 ? 'text-red-400' : v > 60 ? 'text-amber-400' : 'text-slate-300'}`}>{v}%</span>
+      <span className={`text-xs font-medium w-8 text-right ${v > 80 ? 'text-red-400' : v > 60 ? 'text-amber-400' : 'text-slate-700 dark:text-slate-300'}`}>{v}%</span>
     </div>
   )
 }
@@ -59,7 +59,7 @@ export function Servidores() {
     <div className="flex items-center justify-center h-64">
       <div className="flex flex-col items-center gap-3">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-sm text-slate-400">Carregando...</p>
+        <p className="text-sm text-slate-600 dark:text-slate-400">Carregando...</p>
       </div>
     </div>
   )
@@ -70,8 +70,8 @@ export function Servidores() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Servidores em Nuvem</h1>
-          <p className="text-slate-400 text-sm mt-1">{onlines}/{servidores.length} servidores online</p>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Servidores em Nuvem</h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">{onlines}/{servidores.length} servidores online</p>
         </div>
         <button className="btn-secondary flex items-center gap-2" onClick={carregar}>
           <RefreshCw size={16} /> Verificar
@@ -95,7 +95,7 @@ export function Servidores() {
           },
         ].map(k => (
           <div key={k.label} className="card">
-            <p className="text-xs text-slate-400">{k.label}</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400">{k.label}</p>
             <p className={`text-2xl font-bold ${k.cor}`}>{k.val}</p>
           </div>
         ))}
@@ -113,7 +113,7 @@ export function Servidores() {
           const ultimaVerif = hist.length > 0 ? hist[hist.length - 1]?.dataConsulta : null
 
           return (
-            <div key={s.id} className={`card border-2 ${s.online && !s.desativado ? 'border-slate-700' : 'border-red-500/30'}`}>
+            <div key={s.id} className={`card border-2 ${s.online && !s.desativado ? 'border-slate-200 dark:border-slate-700' : 'border-red-500/30'}`}>
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-lg ${s.online ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
@@ -121,7 +121,7 @@ export function Servidores() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-slate-100">{s.nome ?? 'Servidor'}</p>
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{s.nome ?? 'Servidor'}</p>
                       {s.online && !s.desativado
                         ? <span className="flex items-center gap-1 badge bg-emerald-500/20 text-emerald-400 text-xs"><Wifi size={10} /> Online</span>
                         : <span className="flex items-center gap-1 badge bg-red-500/20 text-red-400 text-xs"><WifiOff size={10} /> Offline</span>}
@@ -141,15 +141,15 @@ export function Servidores() {
                 <>
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     <div>
-                      <div className="flex items-center gap-1 text-xs text-slate-400 mb-1"><Cpu size={11} /> CPU</div>
+                      <div className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400 mb-1"><Cpu size={11} /> CPU</div>
                       <MetricBar val={Number(s.cpuPercent ?? 0)} cor="bg-blue-500" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-1 text-xs text-slate-400 mb-1"><MemoryStick size={11} /> RAM</div>
+                      <div className="flex items-center gap-1 text-xs text-slate-600 dark:text-slate-400 mb-1"><MemoryStick size={11} /> RAM</div>
                       <MetricBar val={Number(s.ramPercent ?? 0)} cor="bg-purple-500" />
                     </div>
                     <div className="col-span-2">
-                      <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                      <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-400 mb-1">
                         <span className="flex items-center gap-1"><HardDrive size={11} /> Disco {s.driveDisco ?? ''}</span>
                         <span>{discoUsado.toFixed(1)}GB / {discoTotal.toFixed(1)}GB livres</span>
                       </div>

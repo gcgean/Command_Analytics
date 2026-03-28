@@ -181,7 +181,7 @@ function NavItemComponent({
         onClick={onNavigate}
         className={({ isActive }) =>
           clsx(
-            'flex items-center justify-center p-2.5 rounded-lg text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-all duration-200',
+            'flex items-center justify-center p-2.5 rounded-lg text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 hover:bg-slate-800 transition-all duration-200',
             isActive && 'text-white bg-blue-600 hover:bg-blue-600'
           )
         }

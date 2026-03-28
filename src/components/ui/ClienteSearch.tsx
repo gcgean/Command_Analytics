@@ -100,7 +100,7 @@ export function ClienteSearch({ label, value, onChange, placeholder = 'Digite pa
   return (
     <div ref={ref} className="relative">
       {label && (
-        <label className="block text-sm font-medium text-slate-300 mb-1.5">
+        <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5">
           {label}{required && <span className="text-red-400 ml-1">*</span>}
         </label>
       )}
@@ -108,19 +108,19 @@ export function ClienteSearch({ label, value, onChange, placeholder = 'Digite pa
       {/* Input area */}
       <div
         className={clsx(
-          'flex items-center gap-2 px-3 py-2 rounded-lg border bg-slate-900 transition-colors cursor-text',
-          open ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-slate-700 hover:border-slate-600'
+          'flex items-center gap-2 px-3 py-2 rounded-lg border bg-white dark:bg-slate-900 transition-colors cursor-text',
+          open ? 'border-blue-500 ring-1 ring-blue-500/30' : 'border-slate-300 dark:border-slate-700 hover:border-slate-400 dark:hover:border-slate-600'
         )}
         onClick={() => { setOpen(true) }}
       >
         <Search className="w-4 h-4 text-slate-500 flex-shrink-0" />
 
         {selected && !open ? (
-          <span className="flex-1 text-sm text-slate-200 truncate">{displayName}</span>
+          <span className="flex-1 text-sm text-slate-800 dark:text-slate-200 truncate">{displayName}</span>
         ) : (
           <input
             autoFocus={open}
-            className="flex-1 bg-transparent text-sm text-slate-200 outline-none placeholder-slate-500 min-w-0"
+            className="flex-1 bg-transparent text-sm text-slate-800 dark:text-slate-200 outline-none placeholder-slate-400 dark:placeholder-slate-500 min-w-0"
             placeholder={selected ? (displayName ?? placeholder) : placeholder}
             value={query}
             onChange={e => { setQuery(e.target.value); setOpen(true) }}
@@ -137,7 +137,7 @@ export function ClienteSearch({ label, value, onChange, placeholder = 'Digite pa
 
       {/* Dropdown */}
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-xl max-h-72 overflow-y-auto">
+        <div className="absolute z-50 mt-1 w-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-xl max-h-72 overflow-y-auto">
           {query.trim().length < 1 ? (
             <p className="px-4 py-3 text-xs text-slate-500">Digite o nome, razão social, CNPJ ou cidade...</p>
           ) : filtered.length === 0 ? (
@@ -147,9 +147,9 @@ export function ClienteSearch({ label, value, onChange, placeholder = 'Digite pa
               <button
                 key={c.id}
                 onClick={() => select(c)}
-                className="w-full text-left px-4 py-2.5 hover:bg-slate-700 transition-colors border-b border-slate-700/50 last:border-0"
+                className="w-full text-left px-4 py-2.5 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors border-b border-slate-200 dark:border-slate-700/50 last:border-0"
               >
-                <p className="text-sm font-medium text-slate-200 truncate">
+                <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">
                   {c.nome || c.nomeRazao || `#${c.id}`}
                 </p>
                 <p className="text-xs text-slate-500 truncate mt-0.5">
