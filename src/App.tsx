@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { useAuthStore } from './store/authStore'
 import { useThemeStore } from './store/themeStore'
 import { MainLayout } from './components/layout/MainLayout'
+import type { Usuario } from './types'
 
 // Auth
 import { Login } from './pages/auth/Login'
@@ -94,6 +95,29 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function userCan(user: Usuario | null, recurso: string | string[]) {
+  const permissoes: string[] = (user as any)?.permissoes ?? []
+  if (permissoes.includes('*')) return true
+  const recursos = Array.isArray(recurso) ? recurso : [recurso]
+  return recursos.some((r) => {
+    if (r === 'boletim-comercial') return permissoes.includes('boletim-comercial') || permissoes.includes('metas')
+    if (r === 'metas') return permissoes.includes('metas') || permissoes.includes('boletim-comercial')
+    return permissoes.includes(r)
+  })
+}
+
+function PermissionRoute({
+  children,
+  recurso,
+}: {
+  children: React.ReactNode
+  recurso: string | string[]
+}) {
+  const user = useAuthStore(s => s.user)
+  if (!userCan(user, recurso)) return <Navigate to="/dashboard" replace />
+  return <>{children}</>
+}
+
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
   if (isAuthenticated) return <Navigate to="/dashboard" replace />
@@ -166,41 +190,41 @@ export default function App() {
         <Route path="atendimentos/historico" element={<HistoricoAtendimentos />} />
         <Route path="atendimentos/mapa" element={<MapaAtendimentos />} />
 
-        <Route path="agenda" element={<Agenda />} />
-        <Route path="agenda/agendamentos" element={<AgendamentoProgramado />} />
+        <Route path="agenda" element={<PermissionRoute recurso="agenda"><Agenda /></PermissionRoute>} />
+        <Route path="agenda/agendamentos" element={<PermissionRoute recurso="agenda-agendamentos"><AgendamentoProgramado /></PermissionRoute>} />
 
-        <Route path="clientes" element={<Clientes />} />
+        <Route path="clientes" element={<PermissionRoute recurso="clientes"><Clientes /></PermissionRoute>} />
         <Route path="clientes/:id" element={<DetalheCliente />} />
-        <Route path="clientes/monitor" element={<MonitorClientes />} />
+        <Route path="clientes/monitor" element={<PermissionRoute recurso="monitor-clientes"><MonitorClientes /></PermissionRoute>} />
 
-        <Route path="planos" element={<Planos />} />
-        <Route path="planos/assinaturas" element={<AssinaturaCliente />} />
+        <Route path="planos" element={<PermissionRoute recurso="planos"><Planos /></PermissionRoute>} />
+        <Route path="planos/assinaturas" element={<PermissionRoute recurso="planos"><AssinaturaCliente /></PermissionRoute>} />
 
-        <Route path="implantacao" element={<Pipeline />} />
-        <Route path="implantacao/dashboard" element={<DashboardImplantacao />} />
-        <Route path="implantacao/orcamento" element={<Orcamento />} />
-        <Route path="implantacao/acompanhamento" element={<AcompImplantacao />} />
+        <Route path="implantacao" element={<PermissionRoute recurso="implantacao"><Pipeline /></PermissionRoute>} />
+        <Route path="implantacao/dashboard" element={<PermissionRoute recurso="implantacao"><DashboardImplantacao /></PermissionRoute>} />
+        <Route path="implantacao/orcamento" element={<PermissionRoute recurso="implantacao-orcamento"><Orcamento /></PermissionRoute>} />
+        <Route path="implantacao/acompanhamento" element={<PermissionRoute recurso="implantacao-acompanhamento"><AcompImplantacao /></PermissionRoute>} />
 
-        <Route path="crm" element={<Negocios />} />
-        <Route path="crm/leads" element={<PesquisaLeads />} />
+        <Route path="crm" element={<PermissionRoute recurso="crm"><Negocios /></PermissionRoute>} />
+        <Route path="crm/leads" element={<PermissionRoute recurso="crm-leads"><PesquisaLeads /></PermissionRoute>} />
 
-        <Route path="financeiro" element={<AnaliseFinanceira />} />
-        <Route path="comissoes" element={<Comissoes />} />
-        <Route path="desenvolvimento" element={<Tarefas />} />
-        <Route path="videos" element={<Videos />} />
-        <Route path="metas" element={<Metas />} />
-        <Route path="monitor" element={<MonitorAtendimentos />} />
-        <Route path="campanhas" element={<Campanhas />} />
-        <Route path="contadores" element={<Contadores />} />
-        <Route path="versoes" element={<Versoes />} />
-        <Route path="servidores" element={<Servidores />} />
+        <Route path="financeiro" element={<PermissionRoute recurso="financeiro"><AnaliseFinanceira /></PermissionRoute>} />
+        <Route path="comissoes" element={<PermissionRoute recurso="comissoes"><Comissoes /></PermissionRoute>} />
+        <Route path="desenvolvimento" element={<PermissionRoute recurso="desenvolvimento"><Tarefas /></PermissionRoute>} />
+        <Route path="videos" element={<PermissionRoute recurso="videos"><Videos /></PermissionRoute>} />
+        <Route path="metas" element={<PermissionRoute recurso={['boletim-comercial', 'metas']}><Metas /></PermissionRoute>} />
+        <Route path="monitor" element={<PermissionRoute recurso="monitor"><MonitorAtendimentos /></PermissionRoute>} />
+        <Route path="campanhas" element={<PermissionRoute recurso="campanhas"><Campanhas /></PermissionRoute>} />
+        <Route path="contadores" element={<PermissionRoute recurso="contadores"><Contadores /></PermissionRoute>} />
+        <Route path="versoes" element={<PermissionRoute recurso="versoes"><Versoes /></PermissionRoute>} />
+        <Route path="servidores" element={<PermissionRoute recurso="servidores"><Servidores /></PermissionRoute>} />
 
-        <Route path="banco-horas" element={<BancoHoras />} />
-        <Route path="configuracoes" element={<Configuracoes />} />
-        <Route path="cadastro-etapas" element={<CadastroEtapas />} />
-        <Route path="cadastro-checklists" element={<CadastroChecklists />} />
-        <Route path="usuarios" element={<Usuarios />} />
-        <Route path="grupos-acesso" element={<GruposAcesso />} />
+        <Route path="banco-horas" element={<PermissionRoute recurso="banco-horas"><BancoHoras /></PermissionRoute>} />
+        <Route path="configuracoes" element={<PermissionRoute recurso="configuracoes"><Configuracoes /></PermissionRoute>} />
+        <Route path="cadastro-etapas" element={<PermissionRoute recurso="cadastro-etapas"><CadastroEtapas /></PermissionRoute>} />
+        <Route path="cadastro-checklists" element={<PermissionRoute recurso={['cadastro-checklists', 'cadastro-checklists-editar']}><CadastroChecklists /></PermissionRoute>} />
+        <Route path="usuarios" element={<PermissionRoute recurso="usuarios"><Usuarios /></PermissionRoute>} />
+        <Route path="grupos-acesso" element={<PermissionRoute recurso="grupos-acesso"><GruposAcesso /></PermissionRoute>} />
         <Route path="perfil" element={<Perfil />} />
       </Route>
 
