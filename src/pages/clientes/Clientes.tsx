@@ -33,7 +33,7 @@ export function Clientes() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
+  const [filterStatus, setFilterStatus] = useState('Ativo')
   const [filterSegmento, setFilterSegmento] = useState('')
   const [filterCurva, setFilterCurva] = useState('')
   const LIMIT = 50
@@ -42,8 +42,22 @@ export function Clientes() {
   useEffect(() => {
     const qs = new URLSearchParams(location.search)
     const contadorId = qs.get('contadorId') || ''
-    api.getClientes(contadorId ? { contadorId } : undefined).then(d => { setClientes(d); setLoading(false) })
-  }, [location.search])
+    const statusParams =
+      filterStatus === 'Ativo'
+        ? { ativo: 'S', bloqueado: 'N' }
+        : filterStatus === 'Bloqueado'
+          ? { bloqueado: 'S' }
+          : (filterStatus === 'Inativo' || filterStatus === 'Cancelado')
+            ? { ativo: 'N' }
+            : {}
+
+    setLoading(true)
+    api
+      .getClientes({ ...(contadorId ? { contadorId } : {}), ...statusParams })
+      .then((d) => setClientes(d))
+      .catch(() => setClientes([]))
+      .finally(() => setLoading(false))
+  }, [location.search, filterStatus])
 
   const filtered = clientes.filter(c => {
     const matchSearch = !search ||
@@ -59,6 +73,8 @@ export function Clientes() {
   useEffect(() => {
     setPage(1)
   }, [search, filterStatus, filterSegmento, filterCurva])
+
+  const hasCustomFilters = Boolean(search || filterSegmento || filterCurva || filterStatus !== 'Ativo')
 
   const pages = Math.max(Math.ceil(filtered.length / LIMIT), 1)
   const start = (page - 1) * LIMIT
@@ -101,9 +117,9 @@ export function Clientes() {
             onChange={e => setFilterCurva(e.target.value)}
           />
         </div>
-        {(search || filterStatus || filterSegmento || filterCurva) && (
+        {hasCustomFilters && (
           <Button variant="ghost" size="sm" icon={<RefreshCw className="w-3.5 h-3.5" />}
-            onClick={() => { setSearch(''); setFilterStatus(''); setFilterSegmento(''); setFilterCurva('') }}>
+            onClick={() => { setSearch(''); setFilterStatus('Ativo'); setFilterSegmento(''); setFilterCurva('') }}>
             Limpar
           </Button>
         )}
@@ -141,8 +157,10 @@ export function Clientes() {
                       <td className="table-cell font-mono text-slate-500 dark:text-slate-400 text-xs">{c.id}</td>
                       <td className="table-cell">
                         <div>
-                          <p className="font-medium text-slate-800 dark:text-slate-200 truncate max-w-[200px]">{c.nome ?? '—'}</p>
-                          <p className="text-xs text-slate-500 truncate">{c.responsavel ?? ''}</p>
+                          <p className="font-medium text-slate-800 dark:text-slate-200 whitespace-normal break-words">{c.nome ?? '—'}</p>
+                          <p className="text-xs text-slate-500 truncate">
+                            {c.nomeRazao && c.nomeRazao !== c.nome ? c.nomeRazao : ''}
+                          </p>
                         </div>
                       </td>
                       <td className="table-cell font-mono text-xs text-slate-500 dark:text-slate-400">{c.cnpj ?? '—'}</td>

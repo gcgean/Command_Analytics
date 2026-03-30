@@ -1,30 +1,45 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, Comissao, Tarefa, Video, Meta,
-  AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor,
-  StatusAtendimento
+  AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, EtapaCadastro,
+  ChecklistCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, Usuario, StatusAtendimento
 } from '../types'
 
 // ============================================================
 // CONFIGURAÇÃO BASE
 // ============================================================
+function normalizeApiBaseUrl(raw: string): string {
+  try {
+    const parsed = new URL(raw)
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '')
+    if (normalizedPath === '' || normalizedPath === '/') {
+      parsed.pathname = '/api'
+    } else if (normalizedPath === '/api') {
+      parsed.pathname = '/api'
+    }
+    return parsed.toString().replace(/\/+$/, '')
+  } catch {
+    return raw.replace(/\/+$/, '')
+  }
+}
+
 const BASE_URL = (() => {
   // 1) Query-string override: ?api=https://example.com/api
   if (typeof window !== 'undefined') {
     const qsApi = new URLSearchParams(window.location.search).get('api')
-    if (qsApi) return qsApi
+    if (qsApi) return normalizeApiBaseUrl(qsApi)
   }
   // 2) LocalStorage override (útil para testes): api_base_override
   const lsOverride = typeof window !== 'undefined' ? localStorage.getItem('api_base_override') : null
-  if (lsOverride) return lsOverride
+  if (lsOverride) return normalizeApiBaseUrl(lsOverride)
   // 3) VITE_API_URL (se definido)
   const envUrl = import.meta.env.VITE_API_URL as string | undefined
   if (envUrl) {
     if (typeof window !== 'undefined' && window.location?.protocol === 'https:' && envUrl.startsWith('http://')) {
       // Em páginas HTTPS, evitar conteúdo misto
-      return envUrl.replace('http://', 'https://')
+      return normalizeApiBaseUrl(envUrl.replace('http://', 'https://'))
     }
-    return envUrl
+    return normalizeApiBaseUrl(envUrl)
   }
   // 4) Autodetecção por domínio
   if (typeof window !== 'undefined') {
@@ -98,6 +113,13 @@ export const api = {
     const data = await fetchApi<{ token: string; user: Record<string, unknown> }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ usuario, senha }),
+    })
+    localStorage.setItem('auth_token', data.token)
+    return { user: data.user, token: data.token }
+  },
+  refreshToken: async () => {
+    const data = await fetchApi<{ token: string; user: Record<string, unknown> }>('/auth/refresh', {
+      method: 'POST',
     })
     localStorage.setItem('auth_token', data.token)
     return { user: data.user, token: data.token }
@@ -196,6 +218,34 @@ export const api = {
   getPipeline: () => fetchApi<PipelineItem[]>('/pipeline'),
   updatePipelineEtapa: (id: number, etapa: number, observacoes?: string) =>
     fetchApi<PipelineItem>(`/pipeline/${id}/etapa`, { method: 'PATCH', body: JSON.stringify({ etapa, observacoes }) }),
+  getImplantacaoPainel: (params?: { search?: string; status?: string }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.search) searchParams.set('search', params.search)
+    if (params?.status) searchParams.set('status', params.status)
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : ''
+    return fetchApi<ImplantacaoPainel>(`/pipeline/implantacao/painel${qs}`)
+  },
+  getImplantacaoChecklist: (clienteId: number, status?: number) =>
+    fetchApi<ImplantacaoChecklistDetalhe>(`/pipeline/implantacao/${clienteId}/checklist${status ? `?status=${status}` : ''}`),
+  getImplantacaoConfiguracao: (clienteId: number) =>
+    fetchApi<ImplantacaoConfiguracaoCliente>(`/pipeline/implantacao/${clienteId}/configuracao`),
+  updateImplantacaoConfiguracao: (
+    clienteId: number,
+    data: { statusInstal?: number; responsavelId?: number | null; checklistIds?: number[]; observacao?: string }
+  ) => fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/configuracao`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateImplantacaoStatus: (clienteId: number, status: number, observacao?: string) =>
+    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/status`, { method: 'PATCH', body: JSON.stringify({ status, observacao }) }),
+  updateImplantacaoResponsavel: (clienteId: number, responsavelId: number | null, observacao?: string) =>
+    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/responsavel`, { method: 'PATCH', body: JSON.stringify({ responsavelId, observacao }) }),
+  marcarItemChecklistImplantacao: (clienteId: number, data: { checklistId: number; itemIndex: number; marcado: boolean; observacao?: string }) =>
+    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/checklist`, { method: 'PATCH', body: JSON.stringify(data) }),
+  transicaoImplantacao: (clienteId: number, data: {
+    statusDestino: number
+    observacao?: string
+    checklist?: Array<{ checklistId: number; itemIndex: number; marcado: boolean; observacao?: string }>
+  }) => fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/transicao`, { method: 'PATCH', body: JSON.stringify(data) }),
+  addImplantacaoObservacao: (clienteId: number, observacao: string) =>
+    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/observacao`, { method: 'POST', body: JSON.stringify({ observacao }) }),
 
   // ─── CRM ───────────────────────────────────────────────────
   getNegocios: () => fetchApi<Negocio[]>('/crm/negocios'),
@@ -300,6 +350,32 @@ export const api = {
     fetchApi('/telegram/config', { method: 'PUT', body: JSON.stringify(data) }),
   sendTelegramMessage: (data: { userId: string; mensagem: string }) =>
     fetchApi('/telegram/enviar', { method: 'POST', body: JSON.stringify(data) }),
+
+  // ─── Cadastro de Etapas ───────────────────────────────────
+  getEtapas: (params?: { tela?: string; ativo?: '0' | '1' }) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi<EtapaCadastro[]>(`/etapas${qs}`)
+  },
+  getEtapasTelas: () => fetchApi<Array<{ id: string; label: string }>>('/etapas/telas'),
+  createEtapa: (data: { nome: string; cor: string; telas: string[]; ordem?: number; ativo?: boolean }) =>
+    fetchApi<{ id: number }>('/etapas', { method: 'POST', body: JSON.stringify(data) }),
+  updateEtapa: (id: number, data: { nome: string; cor: string; telas: string[]; ordem?: number; ativo?: boolean }) =>
+    fetchApi(`/etapas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleEtapa: (id: number) => fetchApi<{ ok: boolean; ativo: boolean }>(`/etapas/${id}/toggle`, { method: 'PATCH' }),
+  deleteEtapa: (id: number) => fetchApi(`/etapas/${id}`, { method: 'DELETE' }),
+
+  // ─── Cadastro de Checklists ───────────────────────────────
+  getChecklists: (params?: { tela?: string; ativo?: '0' | '1' }) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi<ChecklistCadastro[]>(`/checklists${qs}`)
+  },
+  getChecklistsTelas: () => fetchApi<Array<{ id: string; label: string }>>('/checklists/telas'),
+  createChecklist: (data: { nome: string; descricao?: string; itens: string[]; etapas?: string[]; telas: string[]; ordem?: number; ativo?: boolean }) =>
+    fetchApi<{ id: number }>('/checklists', { method: 'POST', body: JSON.stringify(data) }),
+  updateChecklist: (id: number, data: { nome: string; descricao?: string; itens: string[]; etapas?: string[]; telas: string[]; ordem?: number; ativo?: boolean }) =>
+    fetchApi(`/checklists/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleChecklist: (id: number) => fetchApi<{ ok: boolean; ativo: boolean }>(`/checklists/${id}/toggle`, { method: 'PATCH' }),
+  deleteChecklist: (id: number) => fetchApi(`/checklists/${id}`, { method: 'DELETE' }),
 }
 
 // ============================================================

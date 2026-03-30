@@ -30,12 +30,15 @@ export const SYSTEM_RESOURCES = [
   { id: 'campanhas',                label: 'Campanhas',                       grupo: 'MARKETING' },
   { id: 'videos',                   label: 'Vídeos',                          grupo: 'MARKETING' },
   // METAS
-  { id: 'metas',                    label: 'Metas e NPS',                     grupo: 'METAS' },
+  { id: 'boletim-comercial',        label: 'Boletim Comercial',               grupo: 'METAS' },
   // RH
   { id: 'banco-horas',              label: 'Banco de Horas',                  grupo: 'RH' },
   // SISTEMA
   { id: 'servidores',               label: 'Servidores em Nuvem',             grupo: 'INFRAESTRUTURA' },
   { id: 'configuracoes',            label: 'Configurações',                   grupo: 'INFRAESTRUTURA' },
+  { id: 'cadastro-etapas',          label: 'Cadastro de Etapas',              grupo: 'INFRAESTRUTURA' },
+  { id: 'cadastro-checklists',      label: 'Cadastro de Checklist',           grupo: 'INFRAESTRUTURA' },
+  { id: 'cadastro-checklists-editar', label: 'Cadastro de Checklist — Criar/Editar', grupo: 'INFRAESTRUTURA' },
   { id: 'usuarios',                 label: 'Usuários',                        grupo: 'INFRAESTRUTURA' },
   { id: 'grupos-acesso',            label: 'Grupos de Acesso',                grupo: 'INFRAESTRUTURA' },
 ]

@@ -75,6 +75,24 @@ export async function authRoutes(app: FastifyInstance) {
     }
   )
 
+  app.post(
+    '/refresh',
+    { preHandler: authMiddleware, schema: { tags: ['Auth'], summary: 'Renovar token da sessão autenticada' } },
+    async (request, reply) => {
+      const payload = request.user as { id: number }
+      const usuario = await prisma.usuario.findUnique({ where: { id: payload.id } })
+      if (!usuario || usuario.ativo !== 'S') {
+        return reply.status(401).send({ error: 'Usuário inválido para renovação de sessão.' })
+      }
+
+      const permissoes = await getUserPermissions(payload.id)
+      const user = formatUser(usuario, permissoes)
+      const token = app.jwt.sign({ id: usuario.id, email: usuario.email, nome: user.nome })
+
+      return { token, user }
+    }
+  )
+
   app.put(
     '/senha',
     { preHandler: authMiddleware, schema: { tags: ['Auth'], summary: 'Alterar senha' } },

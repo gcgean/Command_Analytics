@@ -93,7 +93,10 @@ export function GruposAcesso() {
     const detail: any = await api.getGrupoById(id).catch(() => null)
     if (detail) {
       setSelectedGrupo(detail)
-      setSelectedPerms(new Set(detail.permissoes))
+      const normalizedPerms = new Set<string>(
+        (detail.permissoes as string[]).map(p => (p === 'metas' ? 'boletim-comercial' : p))
+      )
+      setSelectedPerms(normalizedPerms)
       // expand all categories by default
       const cats = new Set(recursos.map(r => r.grupo))
       setExpandedCats(cats)

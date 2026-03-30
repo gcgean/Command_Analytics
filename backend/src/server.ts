@@ -26,9 +26,14 @@ import { usuariosRoutes } from './routes/usuarios'
 import { gruposRoutes } from './routes/grupos'
 import { auditoriaRoutes } from './routes/auditoria'
 import { telegramRoutes } from './routes/telegram'
+import { etapasRoutes } from './routes/etapas'
+import { checklistsRoutes } from './routes/checklists'
 import { initAuditoria } from './utils/auditoria'
+import { initEtapas } from './utils/etapas'
+import { initChecklists } from './utils/checklists'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
+const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
 
 // ─── Plugins ──────────────────────────────────────────────────
 app.register(cors, {
@@ -38,7 +43,7 @@ app.register(cors, {
 
 app.register(jwt, {
   secret: process.env.JWT_SECRET || 'command-analytics-secret',
-  sign: { expiresIn: '8h' },
+  sign: { expiresIn: JWT_EXPIRES_IN },
 })
 
 app.register(swagger, {
@@ -63,6 +68,8 @@ app.register(swagger, {
       { name: 'Servidores', description: 'Infraestrutura em nuvem' },
       { name: 'Dashboard', description: 'KPIs do dashboard' },
       { name: 'Usuários', description: 'Gestão de usuários' },
+      { name: 'Etapas', description: 'Cadastro de etapas customizadas' },
+      { name: 'Checklists', description: 'Cadastro de checklists customizados' },
       { name: 'Auditoria', description: 'Histórico de alterações' },
     ],
   },
@@ -100,6 +107,8 @@ app.register(async (api) => {
   api.register(gruposRoutes,       { prefix: '/grupos' })
   api.register(auditoriaRoutes,    { prefix: '/auditoria' })
   api.register(telegramRoutes,     { prefix: '/telegram' })
+  api.register(etapasRoutes,       { prefix: '/etapas' })
+  api.register(checklistsRoutes,   { prefix: '/checklists' })
 }, { prefix: '/api' })
 
 // ─── Start ─────────────────────────────────────────────────────
@@ -110,8 +119,15 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   console.log(`\n🚀 Command Analytics API rodando em http://localhost:${PORT}`)
   console.log(`📖 Documentação Swagger: http://localhost:${PORT}/docs`)
   console.log(`💾 Banco de dados: SQLite (${process.env.DATABASE_URL})`)
+  console.log(`🔐 Expiração do token JWT: ${JWT_EXPIRES_IN}`)
   // Garante que a tabela de auditoria existe
   initAuditoria()
     .then(() => console.log('✓ Tabela de auditoria verificada'))
     .catch(e => console.warn('⚠ Auditoria init:', e.message))
+  initEtapas()
+    .then(() => console.log('✓ Tabela de cadastro de etapas verificada'))
+    .catch(e => console.warn('⚠ Etapas init:', e.message))
+  initChecklists()
+    .then(() => console.log('✓ Tabela de cadastro de checklists verificada'))
+    .catch(e => console.warn('⚠ Checklists init:', e.message))
 })

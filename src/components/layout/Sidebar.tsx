@@ -7,7 +7,7 @@ import {
   Code2, Tag, Video, Target, Server,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
-  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck
+  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '../../store/authStore'
@@ -50,6 +50,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
       { label: 'Monitor Clientes', icon: <BarChart3 className="w-4 h-4" />,to: '/clientes/monitor', recurso: 'monitor-clientes' },
       {
         label: 'Implantação', icon: <GitBranch className="w-4 h-4" />, recurso: 'implantacao', children: [
+          { label: 'Dashboard',      icon: <Activity className="w-4 h-4" />,     to: '/implantacao/dashboard',        recurso: 'implantacao' },
           { label: 'Pipeline',       icon: <GitBranch className="w-4 h-4" />,    to: '/implantacao',                  recurso: 'implantacao' },
           { label: 'Acompanhamento', icon: <ClipboardList className="w-4 h-4" />,to: '/implantacao/acompanhamento',   recurso: 'implantacao-acompanhamento' },
           { label: 'Orçamento',      icon: <Receipt className="w-4 h-4" />,      to: '/implantacao/orcamento',        recurso: 'implantacao-orcamento' },
@@ -94,7 +95,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
   {
     group: 'METAS',
     items: [
-      { label: 'Boletim Comercial', icon: <Target className="w-4 h-4" />, to: '/metas', recurso: 'metas' },
+      { label: 'Boletim Comercial', icon: <Target className="w-4 h-4" />, to: '/metas', recurso: 'boletim-comercial' },
     ]
   },
   {
@@ -109,6 +110,8 @@ const navGroups: { group: string; items: NavItem[] }[] = [
       { label: 'Servidores em Nuvem', icon: <Server className="w-4 h-4" />,      to: '/servidores',    recurso: 'servidores' },
       { label: 'Usuários',            icon: <Users className="w-4 h-4" />,       to: '/usuarios',      recurso: 'usuarios' },
       { label: 'Grupos de Acesso',    icon: <ShieldCheck className="w-4 h-4" />, to: '/grupos-acesso', recurso: 'grupos-acesso' },
+      { label: 'Cadastro de Etapas',  icon: <Palette className="w-4 h-4" />,     to: '/cadastro-etapas', recurso: 'cadastro-etapas' },
+      { label: 'Cadastro de Checklist',  icon: <ListChecks className="w-4 h-4" />,     to: '/cadastro-checklists', recurso: 'cadastro-checklists' },
       { label: 'Configurações',       icon: <Settings className="w-4 h-4" />,    to: '/configuracoes', recurso: 'configuracoes' },
     ]
   },

@@ -8,6 +8,7 @@ interface AuthState {
   token: string | null
   isAuthenticated: boolean
   login: (usuario: string, password: string) => Promise<boolean>
+  refreshSession: () => Promise<boolean>
   logout: () => void
   setUser: (user: Usuario) => void
 }
@@ -21,6 +22,12 @@ export const useAuthStore = create<AuthState>()(
 
       login: async (usuario: string, password: string) => {
         const { user, token } = await api.login(usuario, password) as { user: Usuario; token: string }
+        set({ user, token, isAuthenticated: true })
+        return true
+      },
+
+      refreshSession: async () => {
+        const { user, token } = await api.refreshToken() as { user: Usuario; token: string }
         set({ user, token, isAuthenticated: true })
         return true
       },

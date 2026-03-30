@@ -32,6 +32,8 @@ const routeTitles: Record<string, string> = {
   '/implantacao/acompanhamento': 'Acompanhamento de Implantação',
   '/banco-horas': 'Banco de Horas',
   '/configuracoes': 'Configurações do Sistema',
+  '/cadastro-etapas': 'Cadastro de Etapas',
+  '/cadastro-checklists': 'Cadastro de Checklist',
   '/usuarios': 'Usuários',
   '/perfil': 'Meu Perfil',
 }

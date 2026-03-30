@@ -7,6 +7,77 @@ import { TelegramService } from '../services/telegram'
 
 const nomeTecnico = (u: any) => u?.nomeCompleto || u?.nomeUsu || 'Usuário'
 
+async function sincronizarResponsavelImplantacao(args: {
+  clienteId?: number | null
+  tecnicoId?: number | null
+  usuarioId?: number | null
+  origem: string
+}) {
+  const clienteId = Number(args.clienteId ?? 0)
+  const tecnicoId = Number(args.tecnicoId ?? 0)
+  const usuarioId = Number(args.usuarioId ?? 0) || null
+
+  if (!Number.isFinite(clienteId) || clienteId <= 0) return
+  if (!Number.isFinite(tecnicoId) || tecnicoId <= 0) return
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS implantacao_responsavel (
+      cliente_id     INT PRIMARY KEY,
+      responsavel_id INT NULL,
+      atualizado_em  DATETIME NOT NULL DEFAULT NOW(),
+      atualizado_por INT NULL,
+      observacao     VARCHAR(500) NULL,
+      INDEX idx_implantacao_responsavel (responsavel_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS implantacao_movimentacoes (
+      id            INT AUTO_INCREMENT PRIMARY KEY,
+      cliente_id    INT NOT NULL,
+      tipo          VARCHAR(30) NOT NULL,
+      status_origem INT NULL,
+      status_destino INT NULL,
+      checklist_id  INT NULL,
+      item_indice   INT NULL,
+      marcado       TINYINT(1) NULL,
+      responsavel_id INT NULL,
+      observacao    VARCHAR(500) NULL,
+      usuario_id    INT NULL,
+      data_hora     DATETIME NOT NULL DEFAULT NOW(),
+      INDEX idx_implantacao_mov_cliente_data (cliente_id, data_hora),
+      INDEX idx_implantacao_mov_tipo (tipo)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  const atualRows = await prisma.$queryRaw<{ responsavel_id: number | null }[]>`
+    SELECT responsavel_id
+    FROM implantacao_responsavel
+    WHERE cliente_id = ${clienteId}
+    LIMIT 1
+  `
+  const responsavelAtual = atualRows[0]?.responsavel_id ? Number(atualRows[0].responsavel_id) : null
+
+  await prisma.$executeRaw`
+    INSERT INTO implantacao_responsavel (cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
+    VALUES (${clienteId}, ${tecnicoId}, NOW(), ${usuarioId}, ${`Sincronizado automaticamente via ${args.origem}`})
+    ON DUPLICATE KEY UPDATE
+      responsavel_id = VALUES(responsavel_id),
+      atualizado_em = NOW(),
+      atualizado_por = VALUES(atualizado_por),
+      observacao = VALUES(observacao)
+  `
+
+  if (responsavelAtual !== tecnicoId) {
+    await prisma.$executeRaw`
+      INSERT INTO implantacao_movimentacoes
+        (cliente_id, tipo, responsavel_id, observacao, usuario_id, data_hora)
+      VALUES
+        (${clienteId}, 'responsavel', ${tecnicoId}, ${`Responsável da implantação sincronizado via ${args.origem}`}, ${usuarioId}, NOW())
+    `
+  }
+}
+
 /**
  * Envia notificação de agendamento via Telegram para o técnico
  */
@@ -450,11 +521,18 @@ export async function agendaRoutes(app: FastifyInstance) {
     const [inserted]: any[] = await prisma.$queryRaw`SELECT LAST_INSERT_ID() AS id`
     const newId = Number(inserted?.id ?? 0)
     if (newId > 0) {
-      registrarAuditoria({
-        tabela: 'agendamento_programado', registroId: newId, acao: 'CRIACAO', usuarioId: payload.id,
-        dadosAntes: null,
-        dadosDepois: { tecnicoId, clienteId: clienteId ?? null, data, horaInicio, duracao: duracao ?? 60, descricao: descricao ?? null },
-      })
+    registrarAuditoria({
+      tabela: 'agendamento_programado', registroId: newId, acao: 'CRIACAO', usuarioId: payload.id,
+      dadosAntes: null,
+      dadosDepois: { tecnicoId, clienteId: clienteId ?? null, data, horaInicio, duracao: duracao ?? 60, descricao: descricao ?? null },
+    })
+
+    await sincronizarResponsavelImplantacao({
+      clienteId: clienteId ?? null,
+      tecnicoId,
+      usuarioId: payload.id,
+      origem: 'Agenda Programada (criação)',
+    })
     }
 
     return reply.status(201).send({ ok: true })
@@ -522,6 +600,15 @@ export async function agendaRoutes(app: FastifyInstance) {
         duracao: duracao !== undefined ? duracao : dadosAntes?.duracao,
         descricao: descricao !== undefined ? descricao : dadosAntes?.descricao,
       },
+    })
+
+    const clienteFinal = clienteId !== undefined ? (clienteId ?? null) : (dadosAntes?.clienteId ?? null)
+    const tecnicoFinal = tecnicoId !== undefined ? tecnicoId : (dadosAntes?.tecnicoId ?? null)
+    await sincronizarResponsavelImplantacao({
+      clienteId: clienteFinal,
+      tecnicoId: tecnicoFinal,
+      usuarioId: payload.id,
+      origem: 'Agenda Programada (edição)',
     })
 
     return { ok: true }
@@ -653,6 +740,13 @@ export async function agendaRoutes(app: FastifyInstance) {
         observacoes: observacoes || null,
       },
     })
+
+    await sincronizarResponsavelImplantacao({
+      clienteId: clienteId ? Number(clienteId) : null,
+      tecnicoId: tecnicoId ? Number(tecnicoId) : null,
+      usuarioId: payload.id,
+      origem: 'Agenda (criação)',
+    })
     return reply.status(201).send({ ...item, id: Number(item.id) })
   })
 
@@ -711,6 +805,15 @@ export async function agendaRoutes(app: FastifyInstance) {
         horarioFim: horarioFim !== undefined ? (horarioFim || null) : dadosAntes?.horarioFim,
         observacoes: observacoes !== undefined ? (observacoes || null) : dadosAntes?.observacoes,
       },
+    })
+
+    const clienteFinal = clienteId !== undefined ? (clienteId ? Number(clienteId) : null) : (dadosAntes?.clienteId ?? null)
+    const tecnicoFinal = tecnicoId !== undefined ? (tecnicoId ? Number(tecnicoId) : null) : (dadosAntes?.tecnicoId ?? null)
+    await sincronizarResponsavelImplantacao({
+      clienteId: clienteFinal,
+      tecnicoId: tecnicoFinal,
+      usuarioId: payload.id,
+      origem: 'Agenda (edição)',
     })
 
     return { ok: true }

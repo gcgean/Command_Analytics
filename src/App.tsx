@@ -34,6 +34,7 @@ import { AssinaturaCliente } from './pages/planos/AssinaturaCliente'
 import { Pipeline } from './pages/implantacao/Pipeline'
 import { Orcamento } from './pages/implantacao/Orcamento'
 import { AcompImplantacao } from './pages/implantacao/AcompImplantacao'
+import { DashboardImplantacao } from './pages/implantacao/DashboardImplantacao'
 
 // CRM
 import { Negocios } from './pages/crm/Negocios'
@@ -75,6 +76,8 @@ import { BancoHoras } from './pages/rh/BancoHoras'
 // Configurações
 import { Configuracoes } from './pages/configuracoes/Configuracoes'
 import { Usuarios } from './pages/configuracoes/Usuarios'
+import { CadastroEtapas } from './pages/configuracoes/CadastroEtapas'
+import { CadastroChecklists } from './pages/configuracoes/CadastroChecklists'
 
 // Perfil
 import { Perfil } from './pages/perfil/Perfil'
@@ -99,12 +102,48 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const theme = useThemeStore(s => s.theme)
+  const isAuthenticated = useAuthStore(s => s.isAuthenticated)
+  const refreshSession = useAuthStore(s => s.refreshSession)
+  const logout = useAuthStore(s => s.logout)
 
   useEffect(() => {
     const root = window.document.documentElement
     root.classList.remove('light', 'dark')
     root.classList.add(theme)
   }, [theme])
+
+  useEffect(() => {
+    if (!isAuthenticated) return
+
+    const runRefresh = async () => {
+      try {
+        await refreshSession()
+      } catch (err: any) {
+        const message = String(err?.message ?? '')
+        if (message.includes('401') || message.toLowerCase().includes('token')) {
+          logout()
+        }
+      }
+    }
+
+    const onFocus = () => { void runRefresh() }
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void runRefresh()
+      }
+    }
+
+    void runRefresh()
+    const intervalId = window.setInterval(() => { void runRefresh() }, 30 * 60 * 1000)
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+
+    return () => {
+      window.clearInterval(intervalId)
+      window.removeEventListener('focus', onFocus)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [isAuthenticated, refreshSession, logout])
 
   return (
     <Routes>
@@ -138,6 +177,7 @@ export default function App() {
         <Route path="planos/assinaturas" element={<AssinaturaCliente />} />
 
         <Route path="implantacao" element={<Pipeline />} />
+        <Route path="implantacao/dashboard" element={<DashboardImplantacao />} />
         <Route path="implantacao/orcamento" element={<Orcamento />} />
         <Route path="implantacao/acompanhamento" element={<AcompImplantacao />} />
 
@@ -157,6 +197,8 @@ export default function App() {
 
         <Route path="banco-horas" element={<BancoHoras />} />
         <Route path="configuracoes" element={<Configuracoes />} />
+        <Route path="cadastro-etapas" element={<CadastroEtapas />} />
+        <Route path="cadastro-checklists" element={<CadastroChecklists />} />
         <Route path="usuarios" element={<Usuarios />} />
         <Route path="grupos-acesso" element={<GruposAcesso />} />
         <Route path="perfil" element={<Perfil />} />

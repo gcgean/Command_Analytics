@@ -536,7 +536,7 @@ export function Agenda() {
                   <div className="col-span-1 text-xs text-slate-600 dark:text-slate-400">{dateStr}</div>
                   <div className="col-span-2 min-w-0">
                     <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{item.clienteNome || '—'}</p>
-                    {descricao && <p className="text-xs text-slate-500 truncate mt-0.5">{descricao}</p>}
+                    {descricao && <p className="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap break-words">{descricao}</p>}
                     {(item as any).criadoPorNome && (
                       <p className="text-xs text-slate-600 mt-0.5 truncate">
                         por {(item as any).criadoPorNome}

@@ -23,6 +23,13 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
   function can(recurso: string): boolean {
     if (isSuperUser) return true
+    // Compatibilidade entre chave antiga e nova do módulo Boletim Comercial.
+    if (recurso === 'boletim-comercial') {
+      return permissoes.includes('boletim-comercial') || permissoes.includes('metas')
+    }
+    if (recurso === 'metas') {
+      return permissoes.includes('metas') || permissoes.includes('boletim-comercial')
+    }
     return permissoes.includes(recurso)
   }
 

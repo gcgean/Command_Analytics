@@ -191,6 +191,110 @@ export interface PipelineItem {
   observacoes?: string
 }
 
+export interface ImplantacaoEtapa {
+  status: number
+  nome: string
+  descricao: string
+  cor: string
+  slaDias?: number
+  quantidade?: number
+}
+
+export interface ImplantacaoCliente {
+  clienteId: number
+  clienteNome: string
+  nomeFantasia?: string | null
+  cnpj?: string | null
+  cidade?: string | null
+  uf?: string | null
+  celular?: string | null
+  telefone?: string | null
+  email?: string | null
+  statusInstal: number
+  statusPrimeiroPgto?: string | null
+  dataPrimeiroPgto?: string | null
+  dataUltimaVenda?: string | null
+  dataCadastro?: string | null
+  dataInicioStatusAtual?: string | null
+  observacoes?: string | null
+  responsavelId?: number | null
+  responsavelNome?: string | null
+  responsavelAtualizadoEm?: string | null
+  totalItensChecklist: number
+  itensChecklistMarcados: number
+  progressoChecklist: number
+  slaDiasEtapa?: number
+  diasNaEtapa?: number
+  emAtraso?: boolean
+}
+
+export interface ImplantacaoPainel {
+  etapas: ImplantacaoEtapa[]
+  kpis: {
+    totalClientes: number
+    emProcesso: number
+    concluidos: number
+    desistencias: number
+    aguardandoInicio: number
+    atrasados?: number
+  }
+  clientes: ImplantacaoCliente[]
+}
+
+export interface ImplantacaoChecklistDetalhe {
+  cliente: ImplantacaoCliente
+  etapaAtual: ImplantacaoEtapa
+  etapas: ImplantacaoEtapa[]
+  resumo: {
+    totalItens: number
+    itensMarcados: number
+    progresso: number
+  }
+  checklists: Array<{
+    id: number
+    nome: string
+    descricao?: string
+    itens: Array<{
+      index: number
+      texto: string
+      marcado: boolean
+    }>
+  }>
+  responsaveis?: Array<{ id: number; nome: string }>
+  timeline?: Array<{
+    id: number
+    tipo: string
+    statusOrigem?: number | null
+    statusDestino?: number | null
+    checklistId?: number | null
+    itemIndice?: number | null
+    marcado?: boolean | null
+    responsavelId?: number | null
+    responsavelNome?: string | null
+    observacao?: string | null
+    usuarioId?: number | null
+    usuarioNome?: string | null
+    dataHora: string
+  }>
+}
+
+export interface ImplantacaoChecklistOpcao {
+  id: number
+  nome: string
+  descricao?: string
+  ordem: number
+  etapas: string[]
+  itensQuantidade: number
+}
+
+export interface ImplantacaoConfiguracaoCliente {
+  cliente: ImplantacaoCliente
+  etapas: ImplantacaoEtapa[]
+  responsaveis: Array<{ id: number; nome: string }>
+  checklists: ImplantacaoChecklistOpcao[]
+  checklistIdsSelecionados: number[]
+}
+
 // ============================================================
 // CRM / NEGÓCIOS
 // ============================================================
@@ -410,4 +514,34 @@ export interface PaginationMeta {
 export interface ApiResponse<T> {
   data: T
   meta?: PaginationMeta
+}
+
+// ============================================================
+// CADASTRO DE ETAPAS
+// ============================================================
+export interface EtapaCadastro {
+  id: number
+  nome: string
+  cor: string
+  telas: string[]
+  ativo: boolean
+  ordem: number
+  criadoEm?: string | null
+  atualizadoEm?: string | null
+}
+
+// ============================================================
+// CADASTRO DE CHECKLISTS
+// ============================================================
+export interface ChecklistCadastro {
+  id: number
+  nome: string
+  descricao: string
+  itens: string[]
+  etapas?: string[]
+  telas: string[]
+  ativo: boolean
+  ordem: number
+  criadoEm?: string | null
+  atualizadoEm?: string | null
 }
