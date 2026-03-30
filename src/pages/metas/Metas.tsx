@@ -24,7 +24,6 @@ interface Filial {
   valor: number; meta: number; perc: number
 }
 interface EvoMes { mes: string; receitaNova: number; clientesNovos: number; anoAnterior: number; meta: number }
-interface EvoMesComMedia extends EvoMes { mediaMovel3m: number | null }
 interface ClienteNovo { codigo: number; nome: string; valor: number; cidade: string; data_cadastro: string; tipo?: string }
 interface ClientePerdido { codigo: number; nome: string; valor: number; cidade: string; data_desativacao: string }
 interface Upgrade { vendedor: string; cliente: string; descricao: string; valor: number; data_venda: string }
@@ -148,16 +147,7 @@ export function Metas() {
   const perc = resumo.percMeta
   const faltaMeta = Math.max(0, meta.geral - resumo.receitaNova)
   const isMesAtual = ano === now.getFullYear() && mes === now.getMonth() + 1
-  const evolucao12MesesBase = evolucao.slice(-12)
-  const evolucao12Meses: EvoMesComMedia[] = evolucao12MesesBase.map((item, index, arr) => {
-    const start = Math.max(0, index - 2)
-    const janela = arr.slice(start, index + 1)
-    const media = janela.reduce((acc, cur) => acc + Number(cur.receitaNova || 0), 0) / Math.max(1, janela.length)
-    return {
-      ...item,
-      mediaMovel3m: index >= 2 ? media : null,
-    }
-  })
+  const evolucao12Meses = evolucao.slice(-12)
   const receitaInicio12m = evolucao12Meses[0]?.receitaNova ?? 0
   const receitaFim12m = evolucao12Meses[evolucao12Meses.length - 1]?.receitaNova ?? 0
   const delta12m = receitaFim12m - receitaInicio12m
@@ -372,15 +362,6 @@ export function Metas() {
               strokeWidth={3}
               dot={{ r: 2 }}
               activeDot={{ r: 4 }}
-            />
-            <Line
-              type="monotone"
-              dataKey="mediaMovel3m"
-              name="Média móvel 3m"
-              stroke="#22c55e"
-              strokeWidth={2.5}
-              dot={false}
-              connectNulls
             />
           </LineChart>
         </ResponsiveContainer>
