@@ -54,7 +54,12 @@ export function AcompImplantacao() {
   const clientesFiltrados = useMemo(() => {
     const term = filtroCliente.trim().toLowerCase()
     const base = painel?.clientes || []
-    if (!term) return base
+    if (!term) {
+      if (clienteIdSelecionado) {
+        return base.filter((cliente) => cliente.clienteId === clienteIdSelecionado)
+      }
+      return []
+    }
     return base.filter((cliente) => {
       const fields = [
         cliente.clienteNome,
@@ -97,14 +102,6 @@ export function AcompImplantacao() {
     try {
       const data = await api.getImplantacaoPainel()
       setPainel(data)
-      const clienteQuery = Number(searchParams.get('cliente') || 0)
-      if (!clienteQuery && data.clientes.length > 0) {
-        setSearchParams((prev) => {
-          const next = new URLSearchParams(prev)
-          next.set('cliente', String(data.clientes[0].clienteId))
-          return next
-        }, { replace: true })
-      }
     } catch (err: any) {
       toast.error(err?.message || 'Falha ao carregar painel de implantação.')
     } finally {
@@ -135,14 +132,14 @@ export function AcompImplantacao() {
   }, [])
 
   useEffect(() => {
-    if (!clienteIdSelecionado && painel?.clientes?.length) return
     void carregarDetalhe(clienteIdSelecionado)
-  }, [clienteIdSelecionado, painel?.clientes?.length])
+  }, [clienteIdSelecionado])
 
   function selecionarCliente(clienteId: number) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
-      next.set('cliente', String(clienteId))
+      if (clienteId > 0) next.set('cliente', String(clienteId))
+      else next.delete('cliente')
       return next
     })
   }
@@ -266,7 +263,11 @@ export function AcompImplantacao() {
               onChange={(e) => selecionarCliente(Number(e.target.value))}
               className="h-7 sm:h-8 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] sm:text-xs px-2.5"
             >
-              {!clientesFiltrados.length ? <option value="">Nenhum cliente disponível</option> : null}
+              <option value="">
+                {filtroCliente.trim()
+                  ? 'Selecione um cliente encontrado'
+                  : 'Digite para buscar e selecione um cliente'}
+              </option>
               {clientesFiltrados.map((cliente) => (
                 <option key={cliente.clienteId} value={String(cliente.clienteId)}>
                   {getNomeDestaque(cliente)}{getNomeSecundario(cliente) ? ` • ${getNomeSecundario(cliente)}` : ''} • {cliente.cnpj || 'Sem CNPJ'}
@@ -277,11 +278,19 @@ export function AcompImplantacao() {
         </div>
       </Card>
 
-      {!clienteAtual || loadingDetalhe ? (
+      {loadingDetalhe ? (
         <Card>
           <div className="py-10 flex items-center justify-center">
             <Loader2 className="w-5 h-5 animate-spin text-slate-500" />
           </div>
+        </Card>
+      ) : !clienteIdSelecionado ? (
+        <Card>
+          <p className="text-sm text-slate-500">Busque e selecione um cliente para abrir o acompanhamento.</p>
+        </Card>
+      ) : !clienteAtual ? (
+        <Card>
+          <p className="text-sm text-slate-500">Cliente selecionado não encontrado na consulta atual.</p>
         </Card>
       ) : !detalhe ? (
         <Card>
