@@ -3,6 +3,7 @@ import { useThemeStore } from '../../store/themeStore'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, Legend,
+  LineChart,
 } from 'recharts'
 import {
   TrendingUp, TrendingDown, Users, Target, ChevronLeft,
@@ -23,6 +24,7 @@ interface Filial {
   valor: number; meta: number; perc: number
 }
 interface EvoMes { mes: string; receitaNova: number; clientesNovos: number; anoAnterior: number; meta: number }
+interface EvoMesComMedia extends EvoMes { mediaMovel3m: number | null }
 interface ClienteNovo { codigo: number; nome: string; valor: number; cidade: string; data_cadastro: string; tipo?: string }
 interface ClientePerdido { codigo: number; nome: string; valor: number; cidade: string; data_desativacao: string }
 interface Upgrade { vendedor: string; cliente: string; descricao: string; valor: number; data_venda: string }
@@ -146,6 +148,21 @@ export function Metas() {
   const perc = resumo.percMeta
   const faltaMeta = Math.max(0, meta.geral - resumo.receitaNova)
   const isMesAtual = ano === now.getFullYear() && mes === now.getMonth() + 1
+  const evolucao12MesesBase = evolucao.slice(-12)
+  const evolucao12Meses: EvoMesComMedia[] = evolucao12MesesBase.map((item, index, arr) => {
+    const start = Math.max(0, index - 2)
+    const janela = arr.slice(start, index + 1)
+    const media = janela.reduce((acc, cur) => acc + Number(cur.receitaNova || 0), 0) / Math.max(1, janela.length)
+    return {
+      ...item,
+      mediaMovel3m: index >= 2 ? media : null,
+    }
+  })
+  const receitaInicio12m = evolucao12Meses[0]?.receitaNova ?? 0
+  const receitaFim12m = evolucao12Meses[evolucao12Meses.length - 1]?.receitaNova ?? 0
+  const delta12m = receitaFim12m - receitaInicio12m
+  const delta12mPerc = receitaInicio12m > 0 ? (delta12m / receitaInicio12m) * 100 : null
+  const tendenciaSubindo = delta12m >= 0
 
   return (
     <div className="space-y-5 pb-6">
@@ -293,6 +310,80 @@ export function Metas() {
           </p>
           <p className="text-xs text-slate-500 mt-0.5">nova − perdida</p>
         </div>
+      </div>
+
+      {/* ── Tendência em Linha (12 meses) ────────────────────────── */}
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+              <Award className="w-4 h-4 text-blue-400" /> Tendência dos Últimos 12 Meses (Linha)
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {tendenciaSubindo ? 'Tendência de alta' : 'Tendência de queda'}:
+              {' '}
+              <span className={tendenciaSubindo ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>
+                {delta12mPerc === null
+                  ? `${brl(delta12m)} em relação ao início`
+                  : `${Math.abs(delta12mPerc).toFixed(1)}% ${tendenciaSubindo ? 'acima' : 'abaixo'} do início`}
+              </span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            {tendenciaSubindo ? (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/15 text-emerald-400">
+                <TrendingUp className="w-3.5 h-3.5" /> Subindo
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-red-500/15 text-red-400">
+                <TrendingDown className="w-3.5 h-3.5" /> Descendo
+              </span>
+            )}
+          </div>
+        </div>
+
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={evolucao12Meses} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+            <XAxis dataKey="mes" tick={{ fill: tickColor, fontSize: 10 }} axisLine={false} tickLine={false} />
+            <YAxis
+              tick={{ fill: tickColor, fontSize: 10 }}
+              axisLine={false}
+              tickLine={false}
+              tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`}
+              width={48}
+            />
+            <Tooltip content={<ChartTooltip />} />
+            <Legend />
+            <Line
+              type="monotone"
+              dataKey="anoAnterior"
+              name="Ano Anterior"
+              stroke="#64748b"
+              strokeWidth={2}
+              strokeDasharray="5 4"
+              dot={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="receitaNova"
+              name="Ano Atual"
+              stroke="#3b82f6"
+              strokeWidth={3}
+              dot={{ r: 2 }}
+              activeDot={{ r: 4 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="mediaMovel3m"
+              name="Média móvel 3m"
+              stroke="#22c55e"
+              strokeWidth={2.5}
+              dot={false}
+              connectNulls
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
       {/* ── Filiais ───────────────────────────────────────────────── */}
