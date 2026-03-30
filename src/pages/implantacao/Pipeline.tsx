@@ -80,6 +80,27 @@ function StageBadge({ etapa }: { etapa: ImplantacaoEtapa | undefined }) {
   )
 }
 
+function colorWithAlpha(color: string, alpha: number) {
+  const safeAlpha = Math.max(0, Math.min(1, alpha))
+  if (!color) return `rgba(59, 130, 246, ${safeAlpha})`
+  if (color.startsWith('#')) {
+    const hex = color.replace('#', '').trim()
+    if (hex.length === 3) {
+      const r = parseInt(hex[0] + hex[0], 16)
+      const g = parseInt(hex[1] + hex[1], 16)
+      const b = parseInt(hex[2] + hex[2], 16)
+      return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`
+    }
+    if (hex.length === 6) {
+      const r = parseInt(hex.slice(0, 2), 16)
+      const g = parseInt(hex.slice(2, 4), 16)
+      const b = parseInt(hex.slice(4, 6), 16)
+      return `rgba(${r}, ${g}, ${b}, ${safeAlpha})`
+    }
+  }
+  return color
+}
+
 export function Pipeline() {
   const navigate = useNavigate()
   const [search, setSearch] = useState('')
@@ -275,6 +296,7 @@ export function Pipeline() {
 
   const clientes = painel?.clientes || []
   const etapas = painel?.etapas || []
+  const etapasKanban = useMemo(() => etapas.filter((etapa) => etapa.status !== 7), [etapas])
   const timelineOrdenada = useMemo(() => {
     if (!historyData?.timeline) return []
     return [...historyData.timeline].sort((a: any, b: any) => {
@@ -464,8 +486,14 @@ export function Pipeline() {
           </div>
           <div className="overflow-x-auto p-2 sm:p-4">
             <div className="flex gap-2 min-w-max">
-              {etapas.map((etapa) => (
-                <div key={etapa.status} className="w-48 sm:w-56 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/50" onDragOver={(e) => e.preventDefault()} onDrop={() => void onDropToStage(etapa.status)}>
+              {etapasKanban.map((etapa) => (
+                <div
+                  key={etapa.status}
+                  className="w-48 sm:w-56 rounded-lg border border-slate-200 dark:border-slate-700"
+                  style={{ backgroundColor: colorWithAlpha(etapa.cor, 0.1) }}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => void onDropToStage(etapa.status)}
+                >
                   <div className="p-2 sm:p-2.5 border-b border-slate-200 dark:border-slate-700">
                     <div className="flex items-center justify-between gap-2">
                       <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 leading-tight whitespace-normal break-words">
