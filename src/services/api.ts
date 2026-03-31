@@ -60,7 +60,25 @@ const BASE_URL = (() => {
 export const API_BASE_URL = BASE_URL
 
 function getToken(): string | null {
-  return localStorage.getItem('auth_token')
+  const directToken = localStorage.getItem('auth_token')
+  if (directToken) return directToken
+
+  // Fallback: token persistido no Zustand (evita chamadas sem token em sessões restauradas).
+  const persistedAuth = localStorage.getItem('command-analytics-auth')
+  if (!persistedAuth) return null
+
+  try {
+    const parsed = JSON.parse(persistedAuth) as { state?: { token?: string | null } }
+    const restoredToken = parsed?.state?.token ?? null
+    if (restoredToken) {
+      localStorage.setItem('auth_token', restoredToken)
+      return restoredToken
+    }
+  } catch {
+    // ignore parse failure and proceed without token
+  }
+
+  return null
 }
 
 async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> {
