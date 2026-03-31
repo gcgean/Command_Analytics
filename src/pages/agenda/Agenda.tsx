@@ -531,7 +531,10 @@ export function Agenda() {
                 >
                   <div className="col-span-2 flex items-center gap-1.5">
                     <Clock className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                    <span className="text-sm font-mono text-slate-700 dark:text-slate-300 text-xs">{timeStr}</span>
+                    <div className="min-w-0">
+                      <span className="text-sm font-mono text-slate-700 dark:text-slate-300 text-xs">{timeStr}</span>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-none mt-0.5">#{item.id}</p>
+                    </div>
                   </div>
                   <div className="col-span-1 text-xs text-slate-600 dark:text-slate-400">{dateStr}</div>
                   <div className="col-span-2 min-w-0">
