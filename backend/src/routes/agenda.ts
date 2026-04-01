@@ -138,14 +138,106 @@ async function enviarNotificacaoAgendamento(data: {
 }
 
 export async function agendaRoutes(app: FastifyInstance) {
+  // POST /agenda/correcao-status-efetuado
+  // Corrige em lote agendamentos com status "Efetuado" (2) sem evidência de mudança de status para 2 na auditoria.
+  // Modo seguro: por padrão só retorna prévia; para aplicar, envie { executar: true }.
+  app.post('/correcao-status-efetuado', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request) => {
+    const payload = request.user as { id: number }
+    const { executar, dataInicio, dataFim } = (request.body as {
+      executar?: boolean
+      dataInicio?: string
+      dataFim?: string
+    } | undefined) ?? {}
+
+    const filtros: Prisma.Sql[] = [Prisma.sql`COALESCE(a.Status_agendamento, 0) = 2`]
+    if (dataInicio) filtros.push(Prisma.sql`a.data_agendamento >= ${new Date(`${dataInicio}T00:00:00Z`)}`)
+    if (dataFim) filtros.push(Prisma.sql`a.data_agendamento <= ${new Date(`${dataFim}T23:59:59Z`)}`)
+
+    const where = Prisma.sql`WHERE ${Prisma.join(filtros, ' AND ')}`
+
+    const candidatos: Array<{ id: number }> = await prisma.$queryRaw`
+      SELECT a.cod_agenda AS id
+      FROM agenda a
+      LEFT JOIN (
+        SELECT DISTINCT au.registro_id
+        FROM auditoria au
+        WHERE au.tabela = 'agenda'
+          AND au.acao = 'STATUS'
+          AND au.dados_depois LIKE '%"status":2%'
+      ) hist ON hist.registro_id = a.cod_agenda
+      ${where}
+        AND hist.registro_id IS NULL
+      ORDER BY a.cod_agenda
+    `
+
+    const ids = candidatos.map((r) => Number(r.id)).filter((n) => Number.isFinite(n) && n > 0)
+
+    if (!executar) {
+      return {
+        ok: true,
+        modo: 'preview',
+        totalCandidatos: ids.length,
+        ids: ids.slice(0, 200),
+        observacao: 'Envie executar=true para aplicar a correção (status 2 -> 1) nos IDs candidatos.',
+      }
+    }
+
+    if (!ids.length) {
+      return { ok: true, modo: 'executado', totalCorrigidos: 0, ids: [] }
+    }
+
+    await prisma.$executeRaw`
+      UPDATE agenda
+      SET Status_agendamento = 1
+      WHERE cod_agenda IN (${Prisma.join(ids)})
+    `
+
+    const usuarioRows: any[] = await prisma.$queryRaw`
+      SELECT COALESCE(NOME_USUARIO_COMPLETO, NOME_USU) AS nome
+      FROM usuario
+      WHERE COD_USU = ${payload.id}
+      LIMIT 1
+    `
+    const usuarioNome = usuarioRows[0]?.nome ?? null
+
+    await prisma.$executeRaw`
+      INSERT INTO auditoria (tabela, registro_id, acao, usuario_id, usuario_nome, dados_antes, dados_depois, campos_alterados, criado_em)
+      SELECT
+        'agenda' AS tabela,
+        a.cod_agenda AS registro_id,
+        'STATUS' AS acao,
+        ${payload.id} AS usuario_id,
+        ${usuarioNome} AS usuario_nome,
+        JSON_OBJECT('status', 2) AS dados_antes,
+        JSON_OBJECT('status', 1) AS dados_depois,
+        JSON_ARRAY('status') AS campos_alterados,
+        NOW() AS criado_em
+      FROM agenda a
+      WHERE a.cod_agenda IN (${Prisma.join(ids)})
+    `
+
+    return {
+      ok: true,
+      modo: 'executado',
+      totalCorrigidos: ids.length,
+      ids: ids.slice(0, 200),
+    }
+  })
+
   // GET /agenda
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request) => {
     const { data, dataInicio, dataFim, tecnicoId, status, clienteId, tipo } = request.query as Record<string, string>
+    const statusNorm = String(status ?? '').trim().toLowerCase()
+    const statusIsAguardando = statusNorm === 'aguardando'
+    const statusNum =
+      statusNorm !== '' && !statusIsAguardando && Number.isFinite(Number(statusNorm))
+        ? Number(statusNorm)
+        : null
 
     const where: Record<string, any> = {}
     if (tecnicoId) where.tecnicoId = Number(tecnicoId)
     if (clienteId) where.clienteId = Number(clienteId)
-    if (status !== undefined) where.status = Number(status)
+    if (statusNorm !== '') where.status = statusIsAguardando ? { in: [0, 1] } : statusNum
     if (tipo) where.tipo = tipo
 
     // Filtro por data exata (dia)
@@ -169,7 +261,8 @@ export async function agendaRoutes(app: FastifyInstance) {
     const condA: Prisma.Sql[] = []
     if (tecnicoId) condA.push(Prisma.sql`a.cod_colaborador = ${Number(tecnicoId)}`)
     if (clienteId) condA.push(Prisma.sql`a.cod_cli = ${Number(clienteId)}`)
-    if (status !== undefined) condA.push(Prisma.sql`a.Status_agendamento = ${Number(status)}`)
+    if (statusIsAguardando) condA.push(Prisma.sql`COALESCE(a.Status_agendamento, 0) IN (0, 1)`)
+    else if (statusNum !== null) condA.push(Prisma.sql`a.Status_agendamento = ${statusNum}`)
     if (tipo) condA.push(Prisma.sql`a.Tipo = ${tipo}`)
     if (data) {
       condA.push(Prisma.sql`a.data_agendamento = ${new Date(data + 'T12:00:00Z')}`)
@@ -183,6 +276,12 @@ export async function agendaRoutes(app: FastifyInstance) {
     const condP: Prisma.Sql[] = [Prisma.sql`p.status <> 3`]  // exclude cancelled
     if (tecnicoId) condP.push(Prisma.sql`p.cod_tecnico = ${Number(tecnicoId)}`)
     if (clienteId) condP.push(Prisma.sql`p.cod_cli = ${Number(clienteId)}`)
+    if (statusIsAguardando) condP.push(Prisma.sql`p.status = 1`)
+    else if (statusNum !== null) condP.push(Prisma.sql`p.status = ${statusNum}`)
+    // agendamento_programado não possui coluna de tipo equivalente à agenda.
+    // Quando o usuário filtra por tipo (ex.: Treinamento), evitamos misturar
+    // itens programados que poderiam aparecer como "Instalação" no formulário.
+    if (tipo && tipo !== 'Agendamento') condP.push(Prisma.sql`1 = 0`)
     if (data) {
       condP.push(Prisma.sql`p.data_agendamento = ${new Date(data + 'T12:00:00Z')}`)
     } else {
@@ -705,6 +804,7 @@ export async function agendaRoutes(app: FastifyInstance) {
         clienteId: clienteId ? Number(clienteId) : null,
         tecnicoId: tecnicoId ? Number(tecnicoId) : null,
         tipo: tipo || null,
+        status: 1,
         data: data ? new Date(data + 'T12:00:00Z') : null,
         horarioIni: horario ? new Date(`1970-01-01T${horario}:00Z`) : null,
         dataFim: dataFim ? new Date(dataFim + 'T12:00:00Z') : null,
@@ -733,6 +833,7 @@ export async function agendaRoutes(app: FastifyInstance) {
         clienteId: clienteId ? Number(clienteId) : null,
         tecnicoId: tecnicoId ? Number(tecnicoId) : null,
         tipo: tipo || null,
+        status: 1,
         data: data || null,
         horarioIni: horario || null,
         dataFim: dataFim || null,

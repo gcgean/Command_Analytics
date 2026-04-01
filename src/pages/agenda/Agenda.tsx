@@ -116,8 +116,10 @@ export function Agenda() {
   const [filters, setFilters] = useState({
     dataInicio: toBRDate(todayStr()),
     dataFim: toBRDate(todayStr()),
+    clienteId: '',
     tecnicoId: '',
     tipo: '',
+    status: '',
   })
 
   // Supporting data
@@ -200,8 +202,10 @@ export function Agenda() {
     const params: Record<string, string> = {}
     if (dIni) params.dataInicio = dIni
     if (dFim) params.dataFim = dFim
+    if (f.clienteId) params.clienteId = f.clienteId
     if (f.tecnicoId) params.tecnicoId = f.tecnicoId
     if (f.tipo) params.tipo = f.tipo
+    if (f.status) params.status = f.status
     api.getAgenda(params)
       .then(d => setResults(d as AgendaItem[]))
       .catch(() => setResults([]))
@@ -421,7 +425,10 @@ export function Agenda() {
               label="Data início"
               placeholder="dd/mm/aaaa"
               value={filters.dataInicio}
-              onChange={e => setFilters(f => ({ ...f, dataInicio: maskDate(e.target.value) }))}
+              inputMode="numeric"
+              maxLength={10}
+              onChange={e => setFilters(f => ({ ...f, dataInicio: e.target.value }))}
+              onBlur={e => setFilters(f => ({ ...f, dataInicio: maskDate(e.target.value) }))}
             />
           </div>
           <div className="flex-1 min-w-[130px]">
@@ -429,7 +436,18 @@ export function Agenda() {
               label="Data fim"
               placeholder="dd/mm/aaaa"
               value={filters.dataFim}
-              onChange={e => setFilters(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
+              inputMode="numeric"
+              maxLength={10}
+              onChange={e => setFilters(f => ({ ...f, dataFim: e.target.value }))}
+              onBlur={e => setFilters(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
+            />
+          </div>
+          <div className="flex-1 min-w-[220px]">
+            <ClienteSearch
+              label="Cliente"
+              value={filters.clienteId}
+              onChange={(id) => setFilters(f => ({ ...f, clienteId: id }))}
+              placeholder="Buscar cliente..."
             />
           </div>
           <div className="flex-1 min-w-[150px]">
@@ -446,6 +464,20 @@ export function Agenda() {
               options={[{ value: '', label: 'Todos' }, ...TIPOS.map(t => ({ value: t, label: t }))]}
               value={filters.tipo}
               onChange={e => setFilters(f => ({ ...f, tipo: e.target.value }))}
+            />
+          </div>
+          <div className="flex-1 min-w-[140px]">
+            <Select
+              label="Status"
+              options={[
+                { value: '', label: 'Todos' },
+                { value: 'aguardando', label: 'Aguardando' },
+                { value: '2', label: 'Efetuado' },
+                { value: '3', label: 'Não efetuado' },
+                { value: '4', label: 'Reagendado' },
+              ]}
+              value={filters.status}
+              onChange={e => setFilters(f => ({ ...f, status: e.target.value }))}
             />
           </div>
           <Button icon={<Search className="w-4 h-4" />} onClick={() => buscar()}>
@@ -653,7 +685,10 @@ export function Agenda() {
               label="Data Inicial"
               placeholder="dd/mm/aaaa"
               value={form.data}
-              onChange={e => setForm(f => ({ ...f, data: maskDate(e.target.value) }))}
+              inputMode="numeric"
+              maxLength={10}
+              onChange={e => setForm(f => ({ ...f, data: e.target.value }))}
+              onBlur={e => setForm(f => ({ ...f, data: maskDate(e.target.value) }))}
             />
             <Input
               label="Horário Inicial"
@@ -667,7 +702,10 @@ export function Agenda() {
               label="Data Final"
               placeholder="dd/mm/aaaa"
               value={form.dataFim}
-              onChange={e => setForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
+              inputMode="numeric"
+              maxLength={10}
+              onChange={e => setForm(f => ({ ...f, dataFim: e.target.value }))}
+              onBlur={e => setForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
             />
             <Input
               label="Horário Final"
@@ -721,7 +759,10 @@ export function Agenda() {
               label="Data Inicial"
               placeholder="dd/mm/aaaa"
               value={editForm.data}
-              onChange={e => setEditForm(f => ({ ...f, data: maskDate(e.target.value) }))}
+              inputMode="numeric"
+              maxLength={10}
+              onChange={e => setEditForm(f => ({ ...f, data: e.target.value }))}
+              onBlur={e => setEditForm(f => ({ ...f, data: maskDate(e.target.value) }))}
             />
             <Input
               label="Horário Inicial"
@@ -735,7 +776,10 @@ export function Agenda() {
               label="Data Final"
               placeholder="dd/mm/aaaa"
               value={editForm.dataFim}
-              onChange={e => setEditForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
+              inputMode="numeric"
+              maxLength={10}
+              onChange={e => setEditForm(f => ({ ...f, dataFim: e.target.value }))}
+              onBlur={e => setEditForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
             />
             <Input
               label="Horário Final"

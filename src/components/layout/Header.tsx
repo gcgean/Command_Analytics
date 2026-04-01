@@ -64,7 +64,7 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   ]
 
   return (
-    <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-6 flex-shrink-0 transition-colors duration-300">
+    <header className="h-20 pt-3 sm:h-16 sm:pt-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 sm:px-6 flex-shrink-0 transition-colors duration-300">
       <div className="flex items-center gap-4">
         <button
           onClick={onToggleSidebar}
