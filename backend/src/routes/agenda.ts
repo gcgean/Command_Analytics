@@ -20,61 +20,36 @@ async function sincronizarResponsavelImplantacao(args: {
   if (!Number.isFinite(clienteId) || clienteId <= 0) return
   if (!Number.isFinite(tecnicoId) || tecnicoId <= 0) return
 
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS implantacao_responsavel (
-      cliente_id     INT PRIMARY KEY,
-      responsavel_id INT NULL,
-      atualizado_em  DATETIME NOT NULL DEFAULT NOW(),
-      atualizado_por INT NULL,
-      observacao     VARCHAR(500) NULL,
-      INDEX idx_implantacao_responsavel (responsavel_id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `)
-
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS implantacao_movimentacoes (
-      id            INT AUTO_INCREMENT PRIMARY KEY,
-      cliente_id    INT NOT NULL,
-      tipo          VARCHAR(30) NOT NULL,
-      status_origem INT NULL,
-      status_destino INT NULL,
-      checklist_id  INT NULL,
-      item_indice   INT NULL,
-      marcado       TINYINT(1) NULL,
-      responsavel_id INT NULL,
-      observacao    VARCHAR(500) NULL,
-      usuario_id    INT NULL,
-      data_hora     DATETIME NOT NULL DEFAULT NOW(),
-      INDEX idx_implantacao_mov_cliente_data (cliente_id, data_hora),
-      INDEX idx_implantacao_mov_tipo (tipo)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-  `)
-
-  const atualRows = await prisma.$queryRaw<{ responsavel_id: number | null }[]>`
-    SELECT responsavel_id
-    FROM implantacao_responsavel
-    WHERE cliente_id = ${clienteId}
-    LIMIT 1
-  `
-  const responsavelAtual = atualRows[0]?.responsavel_id ? Number(atualRows[0].responsavel_id) : null
-
-  await prisma.$executeRaw`
-    INSERT INTO implantacao_responsavel (cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
-    VALUES (${clienteId}, ${tecnicoId}, NOW(), ${usuarioId}, ${`Sincronizado automaticamente via ${args.origem}`})
-    ON DUPLICATE KEY UPDATE
-      responsavel_id = VALUES(responsavel_id),
-      atualizado_em = NOW(),
-      atualizado_por = VALUES(atualizado_por),
-      observacao = VALUES(observacao)
-  `
-
-  if (responsavelAtual !== tecnicoId) {
-    await prisma.$executeRaw`
-      INSERT INTO implantacao_movimentacoes
-        (cliente_id, tipo, responsavel_id, observacao, usuario_id, data_hora)
-      VALUES
-        (${clienteId}, 'responsavel', ${tecnicoId}, ${`Responsável da implantação sincronizado via ${args.origem}`}, ${usuarioId}, NOW())
+  try {
+    const atualRows = await prisma.$queryRaw<{ responsavel_id: number | null }[]>`
+      SELECT responsavel_id
+      FROM implantacao_responsavel
+      WHERE cliente_id = ${clienteId}
+      LIMIT 1
     `
+    const responsavelAtual = atualRows[0]?.responsavel_id ? Number(atualRows[0].responsavel_id) : null
+
+    await prisma.$executeRaw`
+      INSERT INTO implantacao_responsavel (cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
+      VALUES (${clienteId}, ${tecnicoId}, NOW(), ${usuarioId}, ${`Sincronizado automaticamente via ${args.origem}`})
+      ON DUPLICATE KEY UPDATE
+        responsavel_id = VALUES(responsavel_id),
+        atualizado_em = NOW(),
+        atualizado_por = VALUES(atualizado_por),
+        observacao = VALUES(observacao)
+    `
+
+    if (responsavelAtual !== tecnicoId) {
+      await prisma.$executeRaw`
+        INSERT INTO implantacao_movimentacoes
+          (cliente_id, tipo, responsavel_id, observacao, usuario_id, data_hora)
+        VALUES
+          (${clienteId}, 'responsavel', ${tecnicoId}, ${`Responsável da implantação sincronizado via ${args.origem}`}, ${usuarioId}, NOW())
+      `
+    }
+  } catch (error) {
+    // Não impede o agendamento principal caso a infraestrutura de implantação esteja indisponível/permissões restritas.
+    console.warn('[agenda] Falha ao sincronizar responsável da implantação:', (error as any)?.message ?? error)
   }
 }
 
