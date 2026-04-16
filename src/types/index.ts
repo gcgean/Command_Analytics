@@ -545,3 +545,17 @@ export interface ChecklistCadastro {
   criadoEm?: string | null
   atualizadoEm?: string | null
 }
+
+// ============================================================
+// CADASTRO DE PROCEDIMENTOS
+// ============================================================
+export interface ProcedimentoCadastro {
+  id: number
+  nome: string
+  descricao: string
+  duracaoMin: number
+  ativo: boolean
+  ordem: number
+  criadoEm?: string | null
+  atualizadoEm?: string | null
+}

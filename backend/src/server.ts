@@ -28,9 +28,11 @@ import { auditoriaRoutes } from './routes/auditoria'
 import { telegramRoutes } from './routes/telegram'
 import { etapasRoutes } from './routes/etapas'
 import { checklistsRoutes } from './routes/checklists'
+import { procedimentosRoutes } from './routes/procedimentos'
 import { initAuditoria } from './utils/auditoria'
 import { initEtapas } from './utils/etapas'
 import { initChecklists } from './utils/checklists'
+import { initProcedimentos } from './utils/procedimentos'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
@@ -70,6 +72,7 @@ app.register(swagger, {
       { name: 'Usuários', description: 'Gestão de usuários' },
       { name: 'Etapas', description: 'Cadastro de etapas customizadas' },
       { name: 'Checklists', description: 'Cadastro de checklists customizados' },
+      { name: 'Procedimentos', description: 'Cadastro de procedimentos com duração' },
       { name: 'Auditoria', description: 'Histórico de alterações' },
     ],
   },
@@ -109,6 +112,7 @@ app.register(async (api) => {
   api.register(telegramRoutes,     { prefix: '/telegram' })
   api.register(etapasRoutes,       { prefix: '/etapas' })
   api.register(checklistsRoutes,   { prefix: '/checklists' })
+  api.register(procedimentosRoutes,{ prefix: '/procedimentos' })
 }, { prefix: '/api' })
 
 // ─── Start ─────────────────────────────────────────────────────
@@ -130,4 +134,7 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initChecklists()
     .then(() => console.log('✓ Tabela de cadastro de checklists verificada'))
     .catch(e => console.warn('⚠ Checklists init:', e.message))
+  initProcedimentos()
+    .then(() => console.log('✓ Tabela de cadastro de procedimentos verificada'))
+    .catch(e => console.warn('⚠ Procedimentos init:', e.message))
 })

@@ -2,7 +2,8 @@ import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, Comissao, Tarefa, Video, Meta,
   AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, EtapaCadastro,
-  ChecklistCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, Usuario, StatusAtendimento
+  ChecklistCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, Usuario,
+  StatusAtendimento, ProcedimentoCadastro
 } from '../types'
 
 // ============================================================
@@ -206,10 +207,12 @@ export const api = {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return fetchApi<any[]>(`/agenda/agendamentos-prog${qs}`)
   },
-  createAgendamentoProg: (data: { tecnicoId: number; clienteId?: number; data: string; horaInicio: string; duracao?: number; descricao?: string }) =>
+  validarDuracaoAgendamentoProg: (data: { tecnicoId: number; data: string; horaInicio: string; duracao: number; agendamentoIdIgnorar?: number | null }) =>
+    fetchApi<{ ok: boolean }>('/agenda/agendamentos-prog/validar-duracao', { method: 'POST', body: JSON.stringify(data) }),
+  createAgendamentoProg: (data: { tecnicoId: number; clienteId?: number; procedimentoId: number; data: string; horaInicio: string; duracao?: number; descricao?: string }) =>
     fetchApi('/agenda/agendamentos-prog', { method: 'POST', body: JSON.stringify(data) }),
   cancelAgendamentoProg: (id: number) => fetchApi(`/agenda/agendamentos-prog/${id}`, { method: 'DELETE' }),
-  updateAgendamentoProg: (id: number, data: { tecnicoId?: number; clienteId?: number | null; data?: string; horaInicio?: string; duracao?: number; descricao?: string | null }) =>
+  updateAgendamentoProg: (id: number, data: { tecnicoId?: number; clienteId?: number | null; procedimentoId?: number | null; data?: string; horaInicio?: string; duracao?: number; descricao?: string | null }) =>
     fetchApi(`/agenda/agendamentos-prog/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   updateAgendamentoProgStatus: (id: number, status: number) =>
     fetchApi(`/agenda/agendamentos-prog/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
@@ -394,6 +397,18 @@ export const api = {
     fetchApi(`/checklists/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleChecklist: (id: number) => fetchApi<{ ok: boolean; ativo: boolean }>(`/checklists/${id}/toggle`, { method: 'PATCH' }),
   deleteChecklist: (id: number) => fetchApi(`/checklists/${id}`, { method: 'DELETE' }),
+
+  // ─── Cadastro de Procedimentos ───────────────────────────
+  getProcedimentos: (params?: { ativo?: '0' | '1' }) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi<ProcedimentoCadastro[]>(`/procedimentos${qs}`)
+  },
+  createProcedimento: (data: { nome: string; descricao?: string; duracaoMin?: number; ordem?: number; ativo?: boolean }) =>
+    fetchApi<{ id: number }>('/procedimentos', { method: 'POST', body: JSON.stringify(data) }),
+  updateProcedimento: (id: number, data: { nome: string; descricao?: string; duracaoMin?: number; ordem?: number; ativo?: boolean }) =>
+    fetchApi(`/procedimentos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleProcedimento: (id: number) => fetchApi<{ ok: boolean; ativo: boolean }>(`/procedimentos/${id}/toggle`, { method: 'PATCH' }),
+  deleteProcedimento: (id: number) => fetchApi(`/procedimentos/${id}`, { method: 'DELETE' }),
 }
 
 // ============================================================

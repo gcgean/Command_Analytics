@@ -37,6 +37,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'servidores',               label: 'Servidores em Nuvem',             grupo: 'INFRAESTRUTURA' },
   { id: 'configuracoes',            label: 'Configurações',                   grupo: 'INFRAESTRUTURA' },
   { id: 'cadastro-etapas',          label: 'Cadastro de Etapas',              grupo: 'INFRAESTRUTURA' },
+  { id: 'cadastro-procedimentos',   label: 'Cadastro de Procedimentos',        grupo: 'INFRAESTRUTURA' },
   { id: 'cadastro-checklists',      label: 'Cadastro de Checklist',           grupo: 'INFRAESTRUTURA' },
   { id: 'cadastro-checklists-editar', label: 'Cadastro de Checklist — Criar/Editar', grupo: 'INFRAESTRUTURA' },
   { id: 'usuarios',                 label: 'Usuários',                        grupo: 'INFRAESTRUTURA' },

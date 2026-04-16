@@ -93,6 +93,15 @@ function addMinutes(hhmm: string, mins: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`
 }
 
+function formatDurationLabel(duracaoMin: number): string {
+  if (!Number.isFinite(duracaoMin) || duracaoMin <= 0) return '-'
+  if (duracaoMin < 60) return `${duracaoMin} min`
+  const horas = Math.floor(duracaoMin / 60)
+  const resto = duracaoMin % 60
+  if (!resto) return `${horas}h`
+  return `${horas}h ${resto}min`
+}
+
 interface DispItem {
   id: number
   tecnicoId: number
@@ -122,6 +131,8 @@ interface AgProg {
   tecnicoNome: string
   clienteId: number | null
   clienteNome: string | null
+  procedimentoId?: number | null
+  procedimentoNome?: string | null
   data: any
   horaInicio: string
   duracao: number
@@ -130,6 +141,7 @@ interface AgProg {
 }
 
 interface Tecnico { id: number; nome: string }
+interface ProcedimentoOption { id: number; nome: string; duracaoMin: number; ativo: boolean }
 
 interface Bloqueio {
   id: number
@@ -166,6 +178,7 @@ export function AgendamentoProgramado() {
 
   const [disponibilidades, setDisponibilidades] = useState<DispItem[]>([])
   const [allTecnicos, setAllTecnicos] = useState<Tecnico[]>([])
+  const [procedimentos, setProcedimentos] = useState<ProcedimentoOption[]>([])
   const [agendamentos, setAgendamentos] = useState<AgProg[]>([])
   const [slotResults, setSlotResults] = useState<SlotResult[]>([])
 
@@ -213,7 +226,7 @@ export function AgendamentoProgramado() {
   const [showBookModal, setShowBookModal] = useState(false)
   const [bookTecnico, setBookTecnico] = useState<{ tecnicoId: number; tecnicoNome: string; data: string } | null>(null)
   const [selectedSlots, setSelectedSlots] = useState<string[]>([])
-  const [bookForm, setBookForm] = useState({ clienteId: '', descricao: '', duracao: '60' })
+  const [bookForm, setBookForm] = useState({ clienteId: '', procedimentoId: '', descricao: '', duracao: '60' })
   const [submitting, setSubmitting] = useState(false)
   const [bookError, setBookError] = useState('')
 
@@ -224,6 +237,7 @@ export function AgendamentoProgramado() {
   const [editForm, setEditForm] = useState({
     tecnicoId: '',
     clienteId: '',
+    procedimentoId: '',
     data: '',
     horaInicio: '',
     duracao: '60',
@@ -240,6 +254,7 @@ export function AgendamentoProgramado() {
   useEffect(() => {
     api.getDisponibilidades().then((d: any) => setDisponibilidades(d)).catch(() => {})
     api.getBloqueios().then((b: any) => setBloqueios(b)).catch(() => {})
+    api.getProcedimentos({ ativo: '1' }).then((p: any) => setProcedimentos(Array.isArray(p) ? p : [])).catch(() => {})
     api.getUsuarios().then((u: any) => {
       setAllTecnicos(u.map((x: any) => ({ id: x.id, nome: x.nome || x.nomeUsu || `#${x.id}` })))
     }).catch(() => {})
@@ -248,6 +263,24 @@ export function AgendamentoProgramado() {
   useEffect(() => {
     if (activeTab === 'lista') fetchAgendamentos()
   }, [activeTab, listaStatus, listaDataInicio, listaDataFim, selectedTecnico])
+
+  useEffect(() => {
+    if (bookForm.procedimentoId) {
+      const p = findProcedimentoById(bookForm.procedimentoId)
+      if (p) {
+        setBookForm((prev) => ({ ...prev, duracao: String(p.duracaoMin) }))
+      }
+    }
+  }, [procedimentos]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (editForm.procedimentoId) {
+      const p = findProcedimentoById(editForm.procedimentoId)
+      if (p) {
+        setEditForm((prev) => ({ ...prev, duracao: String(p.duracaoMin) }))
+      }
+    }
+  }, [procedimentos]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Fetch slots ────────────────────────────────────────────────
   function fetchSlots() {
@@ -285,6 +318,30 @@ export function AgendamentoProgramado() {
       .then((r: any) => setAgendamentos(r))
       .catch(() => {})
       .finally(() => setLoadingLista(false))
+  }
+
+  function findProcedimentoById(idRaw: string | number | null | undefined) {
+    const id = Number(idRaw ?? 0)
+    if (!Number.isFinite(id) || id <= 0) return null
+    return procedimentos.find((p) => p.id === id) ?? null
+  }
+
+  function onChangeProcedimentoBook(procedimentoId: string) {
+    const procedimento = findProcedimentoById(procedimentoId)
+    setBookForm((prev) => ({
+      ...prev,
+      procedimentoId,
+      duracao: String(procedimento?.duracaoMin ?? (prev.duracao || '60')),
+    }))
+  }
+
+  function onChangeProcedimentoEdit(procedimentoId: string) {
+    const procedimento = findProcedimentoById(procedimentoId)
+    setEditForm((prev) => ({
+      ...prev,
+      procedimentoId,
+      duracao: String(procedimento?.duracaoMin ?? (prev.duracao || '60')),
+    }))
   }
 
   // ── Config modal ───────────────────────────────────────────────
@@ -347,7 +404,7 @@ export function AgendamentoProgramado() {
   function openBook(tecnicoId: number, tecnicoNome: string, data: string, hora: string) {
     setBookTecnico({ tecnicoId, tecnicoNome, data })
     setSelectedSlots([hora])
-    setBookForm({ clienteId: '', descricao: '', duracao: '60' })
+    setBookForm({ clienteId: '', procedimentoId: '', descricao: '', duracao: '60' })
     setBookError('')
     setShowBookModal(true)
   }
@@ -357,7 +414,7 @@ export function AgendamentoProgramado() {
     if (!bookTecnico || bookTecnico.tecnicoId !== tech.tecnicoId || bookTecnico.data !== tech.data) {
       setBookTecnico({ tecnicoId: tech.tecnicoId, tecnicoNome: tech.tecnicoNome, data: tech.data })
       setSelectedSlots([hora])
-      setBookForm({ clienteId: '', descricao: '', duracao: '60' })
+      setBookForm({ clienteId: '', procedimentoId: '', descricao: '', duracao: '60' })
       setBookError('')
       return
     }
@@ -374,16 +431,28 @@ export function AgendamentoProgramado() {
 
   async function saveBook() {
     if (!bookTecnico || selectedSlots.length === 0 || !bookForm.clienteId) { setBookError('Selecione um cliente.'); return }
+    if (!bookForm.procedimentoId) { setBookError('Selecione o procedimento.'); return }
+    const procedimento = findProcedimentoById(bookForm.procedimentoId)
+    if (!procedimento) { setBookError('Procedimento inválido.'); return }
     setSubmitting(true)
     setBookError('')
     try {
       for (const hora of selectedSlots) {
+        await api.validarDuracaoAgendamentoProg({
+          tecnicoId: bookTecnico.tecnicoId,
+          data: bookTecnico.data,
+          horaInicio: hora,
+          duracao: Number(procedimento.duracaoMin),
+        })
+      }
+      for (const hora of selectedSlots) {
         await api.createAgendamentoProg({
           tecnicoId: bookTecnico.tecnicoId,
           clienteId: Number(bookForm.clienteId),
+          procedimentoId: Number(bookForm.procedimentoId),
           data: bookTecnico.data,
           horaInicio: hora,
-          duracao: Number(bookForm.duracao),
+          duracao: Number(procedimento.duracaoMin),
           descricao: bookForm.descricao || undefined,
         })
       }
@@ -409,6 +478,7 @@ export function AgendamentoProgramado() {
     setEditForm({
       tecnicoId: String(ag.tecnicoId),
       clienteId: ag.clienteId ? String(ag.clienteId) : '',
+      procedimentoId: ag.procedimentoId ? String(ag.procedimentoId) : '',
       data: toBRDate(rawData),
       horaInicio: formatTime(ag.horaInicio),
       duracao: String(ag.duracao),
@@ -420,12 +490,17 @@ export function AgendamentoProgramado() {
     if (!editItem) return
     const dVal = fromBRDate(editForm.data)
     if (!dVal) return
+    if (!editForm.procedimentoId) {
+      alert('Selecione o procedimento.')
+      return
+    }
 
     setSavingEdit(true)
     try {
       await api.updateAgendamentoProg(editItem.id, {
         tecnicoId: Number(editForm.tecnicoId),
         clienteId: editForm.clienteId ? Number(editForm.clienteId) : null,
+        procedimentoId: editForm.procedimentoId ? Number(editForm.procedimentoId) : null,
         data: dVal,
         horaInicio: editForm.horaInicio,
         duracao: Number(editForm.duracao),
@@ -761,8 +836,9 @@ export function AgendamentoProgramado() {
                         </p>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500">Duração</p>
-                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{ag.duracao} min</p>
+                        <p className="text-xs text-slate-500">Procedimento</p>
+                        <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{ag.procedimentoNome || 'Não definido'}</p>
+                        <p className="text-xs text-slate-500">{formatDurationLabel(ag.duracao)}</p>
                       </div>
                     </div>
 
@@ -1062,16 +1138,13 @@ export function AgendamentoProgramado() {
           />
 
           <Select
-            label="Duração"
-            options={[
-              { value: '30', label: '30 minutos' },
-              { value: '60', label: '1 hora' },
-              { value: '90', label: '1h 30min' },
-              { value: '120', label: '2 horas' },
-            ]}
-            value={bookForm.duracao}
-            onChange={e => setBookForm(f => ({ ...f, duracao: e.target.value }))}
+            label="Procedimento *"
+            options={procedimentos.map((p) => ({ value: String(p.id), label: `${p.nome} · ${formatDurationLabel(p.duracaoMin)}` }))}
+            placeholder={procedimentos.length ? 'Selecione o procedimento' : 'Nenhum procedimento ativo'}
+            value={bookForm.procedimentoId}
+            onChange={e => onChangeProcedimentoBook(e.target.value)}
           />
+          <Input label="Duração calculada" value={formatDurationLabel(Number(bookForm.duracao || 0))} readOnly />
 
           <Textarea
             label="Descrição (opcional)"
@@ -1090,7 +1163,7 @@ export function AgendamentoProgramado() {
 
           <div className="flex justify-end gap-3 pt-1">
             <Button variant="secondary" onClick={() => setShowBookModal(false)}>Cancelar</Button>
-            <Button onClick={saveBook} disabled={submitting || !bookForm.clienteId}>
+            <Button onClick={saveBook} disabled={submitting || !bookForm.clienteId || !bookForm.procedimentoId}>
               {submitting ? 'Salvando...' : 'Confirmar Agendamento'}
             </Button>
           </div>
@@ -1112,6 +1185,13 @@ export function AgendamentoProgramado() {
             value={editForm.clienteId}
             onChange={id => setEditForm(f => ({ ...f, clienteId: id }))}
           />
+          <Select
+            label="Procedimento *"
+            options={procedimentos.map((p) => ({ value: String(p.id), label: `${p.nome} · ${formatDurationLabel(p.duracaoMin)}` }))}
+            placeholder={procedimentos.length ? 'Selecione o procedimento' : 'Nenhum procedimento ativo'}
+            value={editForm.procedimentoId}
+            onChange={e => onChangeProcedimentoEdit(e.target.value)}
+          />
           <div className="grid grid-cols-2 gap-4">
             <Input
               label="Data"
@@ -1124,17 +1204,7 @@ export function AgendamentoProgramado() {
             />
             <Input label="Hora início" type="time" value={editForm.horaInicio} onChange={e => setEditForm(f => ({ ...f, horaInicio: e.target.value }))} />
           </div>
-          <Select
-            label="Duração"
-            options={[
-              { value: '30', label: '30 minutos' },
-              { value: '60', label: '1 hora' },
-              { value: '90', label: '1h 30min' },
-              { value: '120', label: '2 horas' },
-            ]}
-            value={editForm.duracao}
-            onChange={e => setEditForm(f => ({ ...f, duracao: e.target.value }))}
-          />
+          <Input label="Duração calculada" value={formatDurationLabel(Number(editForm.duracao || 0))} readOnly />
           <Textarea
             label="Descrição"
             placeholder="Descrição..."
@@ -1145,7 +1215,7 @@ export function AgendamentoProgramado() {
           />
           <div className="flex justify-end gap-3 pt-1">
             <Button variant="secondary" onClick={() => setEditItem(null)}>Cancelar</Button>
-            <Button onClick={saveEdit} disabled={savingEdit}>
+            <Button onClick={saveEdit} disabled={savingEdit || !editForm.procedimentoId}>
               {savingEdit ? 'Salvando...' : 'Salvar Alterações'}
             </Button>
           </div>

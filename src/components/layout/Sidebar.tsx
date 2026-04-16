@@ -111,6 +111,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
       { label: 'Usuários',            icon: <Users className="w-4 h-4" />,       to: '/usuarios',      recurso: 'usuarios' },
       { label: 'Grupos de Acesso',    icon: <ShieldCheck className="w-4 h-4" />, to: '/grupos-acesso', recurso: 'grupos-acesso' },
       { label: 'Cadastro de Etapas',  icon: <Palette className="w-4 h-4" />,     to: '/cadastro-etapas', recurso: 'cadastro-etapas' },
+      { label: 'Cadastro de Procedimentos',  icon: <ClipboardList className="w-4 h-4" />,     to: '/cadastro-procedimentos', recurso: 'cadastro-procedimentos' },
       { label: 'Cadastro de Checklist',  icon: <ListChecks className="w-4 h-4" />,     to: '/cadastro-checklists', recurso: 'cadastro-checklists' },
       { label: 'Configurações',       icon: <Settings className="w-4 h-4" />,    to: '/configuracoes', recurso: 'configuracoes' },
     ]
