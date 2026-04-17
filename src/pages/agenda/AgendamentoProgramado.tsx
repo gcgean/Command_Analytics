@@ -183,6 +183,7 @@ export function AgendamentoProgramado() {
   const [slotResults, setSlotResults] = useState<SlotResult[]>([])
 
   const [selectedTecnico, setSelectedTecnico] = useState('')
+  const [selectedProcedimento, setSelectedProcedimento] = useState('')
   const [selectedDate, setSelectedDate] = useState(toBRDate(today()))
   const [selectedDateEnd, setSelectedDateEnd] = useState(toBRDate(today()))
   const [listaStatus, setListaStatus] = useState('1')
@@ -265,6 +266,15 @@ export function AgendamentoProgramado() {
   }, [activeTab, listaStatus, listaDataInicio, listaDataFim, selectedTecnico])
 
   useEffect(() => {
+    if (activeTab !== 'slots') return
+    if (!selectedProcedimento) return
+    const dIni = fromBRDate(selectedDate)
+    const dFim = fromBRDate(selectedDateEnd)
+    if (!dIni || !dFim) return
+    fetchSlots()
+  }, [selectedProcedimento]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
     if (bookForm.procedimentoId) {
       const p = findProcedimentoById(bookForm.procedimentoId)
       if (p) {
@@ -287,12 +297,14 @@ export function AgendamentoProgramado() {
     const dIni = fromBRDate(selectedDate)
     const dFim = fromBRDate(selectedDateEnd)
     if (!dIni || !dFim) return
+    if (!selectedProcedimento) return
 
     setLoadingSlots(true)
     setSlotResults([])
     const params: Record<string, string> = { 
       dataInicio: dIni,
-      dataFim: dFim 
+      dataFim: dFim,
+      procedimentoId: selectedProcedimento,
     }
     if (selectedTecnico) params.tecnicoId = selectedTecnico
     api.getSlots(params)
@@ -604,6 +616,22 @@ export function AgendamentoProgramado() {
         <div className="space-y-4">
           <Card>
             <div className="flex flex-wrap gap-4 items-end">
+              <div className="flex-1 min-w-[220px]">
+                <Select
+                  label="Procedimento *"
+                  options={[
+                    { value: '', label: 'Selecione o procedimento' },
+                    ...procedimentos.map((p) => ({ value: String(p.id), label: `${p.nome} · ${formatDurationLabel(p.duracaoMin)}` })),
+                  ]}
+                  value={selectedProcedimento}
+                  onChange={e => {
+                    setSelectedProcedimento(e.target.value)
+                    setSelectedSlots([])
+                    setBookTecnico(null)
+                    setSlotResults([])
+                  }}
+                />
+              </div>
               <div className="flex-1 min-w-[180px]">
                 <Select
                   label="Técnico"
@@ -637,7 +665,14 @@ export function AgendamentoProgramado() {
                   onBlur={e => setSelectedDateEnd(maskDate(e.target.value))}
                 />
               </div>
-              <Button onClick={fetchSlots} icon={<Calendar className="w-4 h-4" />}>Buscar Horários</Button>
+              <Button
+                onClick={fetchSlots}
+                icon={<Calendar className="w-4 h-4" />}
+                disabled={!selectedProcedimento}
+                title={!selectedProcedimento ? 'Selecione o procedimento para buscar horários.' : undefined}
+              >
+                Buscar Horários
+              </Button>
             </div>
           </Card>
 
@@ -646,7 +681,11 @@ export function AgendamentoProgramado() {
           {!loadingSlots && slotResults.length === 0 && (
             <div className="text-center py-12 text-slate-500">
               <Clock className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">Selecione um técnico e data e clique em Buscar Horários.</p>
+              <p className="text-sm">
+                {selectedProcedimento
+                  ? 'Selecione técnico/data e clique em Buscar Horários.'
+                  : 'Selecione primeiro o procedimento para calcular horários disponíveis.'}
+              </p>
               {disponibilidades.length === 0 && (
                 <p className="text-xs mt-2 text-amber-400">Nenhuma disponibilidade configurada ainda.</p>
               )}

@@ -497,14 +497,32 @@ export async function agendaRoutes(app: FastifyInstance) {
 
   // ─── SLOTS DISPONÍVEIS ────────────────────────────────────────
 
-  // GET /agenda/slots?tecnicoId=1&dataInicio=2026-03-20&dataFim=2026-03-22
+  // GET /agenda/slots?tecnicoId=1&procedimentoId=2&dataInicio=2026-03-20&dataFim=2026-03-22
   app.get('/slots', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
-    const { tecnicoId, data, dataInicio, dataFim } = request.query as { tecnicoId?: string; data?: string; dataInicio?: string; dataFim?: string }
+    const { tecnicoId, procedimentoId, data, dataInicio, dataFim } = request.query as {
+      tecnicoId?: string
+      procedimentoId?: string
+      data?: string
+      dataInicio?: string
+      dataFim?: string
+    }
     
     const startStr = dataInicio || data
     const endStr = dataFim || startStr
     
     if (!startStr) return reply.status(400).send({ error: 'Data é obrigatória' })
+    if (!procedimentoId) return reply.status(400).send({ error: 'Procedimento é obrigatório para calcular os horários disponíveis.' })
+
+    const procedimentoRows: any[] = await prisma.$queryRaw`
+      SELECT id, nome, duracao_min, ativo
+      FROM cadastro_procedimentos
+      WHERE id = ${Number(procedimentoId)}
+      LIMIT 1
+    `
+    if (!procedimentoRows.length || Number(procedimentoRows[0].ativo) !== 1) {
+      return reply.status(400).send({ error: 'Procedimento inválido ou inativo.' })
+    }
+    const duracaoProcedimento = Math.max(MIN_DURACAO_PROCEDIMENTO, Number(procedimentoRows[0].duracao_min ?? 0))
 
     const dates: string[] = []
     const dStart = new Date(startStr + 'T12:00:00')
@@ -618,18 +636,22 @@ export async function agendaRoutes(app: FastifyInstance) {
           ranges.push({ iniMin, finMin })
         }
 
-        const isOccupied = (slot: string) => {
+        const isSlotDisponivel = (slot: string) => {
           const [h, m] = slot.split(':').map(Number)
-          const slotMin = h * 60 + m
-          return ranges.some(r => slotMin >= r.iniMin && slotMin < r.finMin)
+          const slotIni = h * 60 + m
+          const slotFim = slotIni + duracaoProcedimento
+
+          if (slotFim > endMin) return false
+          if (lunchIni !== null && lunchFim !== null && overlapsRange(slotIni, slotFim, lunchIni, lunchFim)) return false
+          return !ranges.some(r => overlapsRange(slotIni, slotFim, r.iniMin, r.finMin))
         }
 
         dayResult.push({
           tecnicoId: tId,
           tecnicoNome: disp.tecnicoNome,
           data: dataStr,
-          slotsDisponiveis: allSlots.filter(s => !isOccupied(s)),
-          slotsOcupados: allSlots.filter(s => isOccupied(s)),
+          slotsDisponiveis: allSlots.filter(s => isSlotDisponivel(s)),
+          slotsOcupados: allSlots.filter(s => !isSlotDisponivel(s)),
         })
       }
       if (dayResult.length > 0) {
