@@ -274,9 +274,44 @@ export function AgendamentoProgramado() {
     api.getDisponibilidades().then((d: any) => setDisponibilidades(d)).catch(() => {})
     api.getBloqueios().then((b: any) => setBloqueios(b)).catch(() => {})
     api.getProcedimentos({ ativo: '1' }).then((p: any) => setProcedimentos(Array.isArray(p) ? p : [])).catch(() => {})
-    api.getUsuarios().then((u: any) => {
-      setAllTecnicos(u.map((x: any) => ({ id: x.id, nome: x.nome || x.nomeUsu || `#${x.id}` })))
-    }).catch(() => {})
+    const mapTecnicos = (input: any): Tecnico[] => {
+      const list = Array.isArray(input)
+        ? input
+        : Array.isArray(input?.usuarios)
+          ? input.usuarios
+          : Array.isArray(input?.data)
+            ? input.data
+            : []
+
+      return list
+        .map((x: any) => ({ id: Number(x?.id), nome: x?.nome || x?.nomeUsu || `#${x?.id}` }))
+        .filter((x: Tecnico) => Number.isFinite(x.id) && x.id > 0)
+    }
+
+    api.getUsuarios()
+      .then(async (u: any) => {
+        const mapped = mapTecnicos(u)
+        if (mapped.length > 0) {
+          setAllTecnicos(mapped)
+          return
+        }
+        try {
+          const all = await api.getUsuariosTodos()
+          const mappedAll = mapTecnicos(all)
+          setAllTecnicos(mappedAll)
+        } catch {
+          setAllTecnicos([])
+        }
+      })
+      .catch(async () => {
+        try {
+          const all = await api.getUsuariosTodos()
+          const mappedAll = mapTecnicos(all)
+          setAllTecnicos(mappedAll)
+        } catch {
+          setAllTecnicos([])
+        }
+      })
   }, [])
 
   useEffect(() => {
@@ -595,8 +630,18 @@ export function AgendamentoProgramado() {
     if (slotResults.length > 0) fetchSlots()
   }
 
+  const tecnicosFromDisponibilidades = Array.from(
+    disponibilidades.reduce((acc, item) => {
+      if (!acc.has(item.tecnicoId)) {
+        acc.set(item.tecnicoId, { id: item.tecnicoId, nome: item.tecnicoNome || `#${item.tecnicoId}` })
+      }
+      return acc
+    }, new Map<number, Tecnico>()).values()
+  )
+  const tecnicosBase = allTecnicos.length > 0 ? allTecnicos : tecnicosFromDisponibilidades
   const configuredTecnicoIds = new Set(disponibilidades.map(d => d.tecnicoId))
-  const availableTecnicos = allTecnicos.filter(t => !configuredTecnicoIds.has(t.id))
+  const availableTecnicos = tecnicosBase.filter(t => !configuredTecnicoIds.has(t.id))
+  const createModeTecnicos = availableTecnicos.length > 0 ? availableTecnicos : tecnicosBase
 
   return (
     <div className="space-y-6">
@@ -1074,12 +1119,17 @@ export function AgendamentoProgramado() {
                 options={
                   editingTecnico
                     ? disponibilidades.filter(d => d.tecnicoId === editingTecnico).map(d => ({ value: String(d.tecnicoId), label: d.tecnicoNome }))
-                    : availableTecnicos.map(t => ({ value: String(t.id), label: t.nome }))
+                    : createModeTecnicos.map(t => ({ value: String(t.id), label: t.nome }))
                 }
                 placeholder="Selecione o técnico"
                 value={configForm.tecnicoId}
                 onChange={e => setConfigForm(f => ({ ...f, tecnicoId: e.target.value }))}
               />
+              {!editingTecnico && createModeTecnicos.length === 0 && (
+                <p className="text-xs text-amber-500/80">
+                  Nenhum técnico ativo disponível para configuração.
+                </p>
+              )}
 
               <div>
                 <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Dias da semana</p>
