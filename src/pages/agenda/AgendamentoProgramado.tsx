@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
 import { Input, Textarea } from '../../components/ui/Input'
+import { DateInput } from '../../components/ui/DateInput'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
 import { api } from '../../services/api'
 import clsx from 'clsx'
@@ -194,13 +195,6 @@ function fromBRDate(br: string) {
   if (!d || !m || !y) return ''
   return `${y}-${m}-${d}`
 }
-function maskDate(val: string) {
-  const v = val.replace(/\D/g, '').slice(0, 8)
-  if (v.length <= 2) return v
-  if (v.length <= 4) return `${v.slice(0, 2)}/${v.slice(2)}`
-  return `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`
-}
-
 function defaultDiaConfig() {
   return { horaInicio: '08:00', horaFim: '18:00', intervaloMin: '60', usarIntervalo: false, intervaloIni: '12:00', intervaloFim: '13:00' }
 }
@@ -817,25 +811,19 @@ export function AgendamentoProgramado() {
                 />
               </div>
               <div className="flex-1 min-w-[160px]">
-                <Input
+                <DateInput
                   label="Data Início"
-                  placeholder="dd/mm/aaaa"
+                  mode="br"
                   value={selectedDate}
-                  inputMode="numeric"
-                  maxLength={10}
-                  onChange={e => setSelectedDate(e.target.value)}
-                  onBlur={e => setSelectedDate(maskDate(e.target.value))}
+                  onChange={setSelectedDate}
                 />
               </div>
               <div className="flex-1 min-w-[160px]">
-                <Input
+                <DateInput
                   label="Data Fim"
-                  placeholder="dd/mm/aaaa"
+                  mode="br"
                   value={selectedDateEnd}
-                  inputMode="numeric"
-                  maxLength={10}
-                  onChange={e => setSelectedDateEnd(e.target.value)}
-                  onBlur={e => setSelectedDateEnd(maskDate(e.target.value))}
+                  onChange={setSelectedDateEnd}
                 />
               </div>
               <Button
@@ -976,25 +964,19 @@ export function AgendamentoProgramado() {
         <div className="space-y-4">
           <div className="flex flex-wrap gap-4 items-end">
             <div className="w-48">
-              <Input
+              <DateInput
                 label="Data Início"
-                placeholder="dd/mm/aaaa"
+                mode="br"
                 value={listaDataInicio}
-                inputMode="numeric"
-                maxLength={10}
-                onChange={e => setListaDataInicio(e.target.value)}
-                onBlur={e => setListaDataInicio(maskDate(e.target.value))}
+                onChange={setListaDataInicio}
               />
             </div>
             <div className="w-48">
-              <Input
+              <DateInput
                 label="Data Fim"
-                placeholder="dd/mm/aaaa"
+                mode="br"
                 value={listaDataFim}
-                inputMode="numeric"
-                maxLength={10}
-                onChange={e => setListaDataFim(e.target.value)}
-                onBlur={e => setListaDataFim(maskDate(e.target.value))}
+                onChange={setListaDataFim}
               />
             </div>
             <div className="w-48">
@@ -1143,26 +1125,20 @@ export function AgendamentoProgramado() {
                 onChange={e => setBloqueioForm(f => ({ ...f, tecnicoId: e.target.value }))}
               />
               <div className="grid grid-cols-2 gap-4">
-                <Input
+                <DateInput
                   label="Data início"
-                  placeholder="dd/mm/aaaa"
+                  mode="br"
                   value={bloqueioForm.dataIni}
-                  inputMode="numeric"
-                  maxLength={10}
-                  onChange={e => setBloqueioForm(f => ({ ...f, dataIni: e.target.value }))}
-                  onBlur={e => setBloqueioForm(f => ({ ...f, dataIni: maskDate(e.target.value) }))}
+                  onChange={(value) => setBloqueioForm(f => ({ ...f, dataIni: value }))}
                 />
                 <Input label="Hora início" type="time" value={bloqueioForm.horaIni} onChange={e => setBloqueioForm(f => ({ ...f, horaIni: e.target.value }))} />
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <Input
+                <DateInput
                   label="Data fim"
-                  placeholder="dd/mm/aaaa"
+                  mode="br"
                   value={bloqueioForm.dataFim}
-                  inputMode="numeric"
-                  maxLength={10}
-                  onChange={e => setBloqueioForm(f => ({ ...f, dataFim: e.target.value }))}
-                  onBlur={e => setBloqueioForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
+                  onChange={(value) => setBloqueioForm(f => ({ ...f, dataFim: value }))}
                 />
                 <Input label="Hora fim" type="time" value={bloqueioForm.horaFim} onChange={e => setBloqueioForm(f => ({ ...f, horaFim: e.target.value }))} />
               </div>
@@ -1332,23 +1308,17 @@ export function AgendamentoProgramado() {
                   Período de validade <span className="text-slate-500 text-xs font-normal">(opcional — deixe em branco para sempre)</span>
                 </p>
                 <div className="grid grid-cols-2 gap-4">
-                  <Input
+                  <DateInput
                     label="Data início"
-                    placeholder="dd/mm/aaaa"
+                    mode="br"
                     value={configForm.dataInicio}
-                    inputMode="numeric"
-                    maxLength={10}
-                    onChange={e => setConfigForm(f => ({ ...f, dataInicio: e.target.value }))}
-                    onBlur={e => setConfigForm(f => ({ ...f, dataInicio: maskDate(e.target.value) }))}
+                    onChange={(value) => setConfigForm(f => ({ ...f, dataInicio: value }))}
                   />
-                  <Input
+                  <DateInput
                     label="Data fim"
-                    placeholder="dd/mm/aaaa"
+                    mode="br"
                     value={configForm.dataFim}
-                    inputMode="numeric"
-                    maxLength={10}
-                    onChange={e => setConfigForm(f => ({ ...f, dataFim: e.target.value }))}
-                    onBlur={e => setConfigForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
+                    onChange={(value) => setConfigForm(f => ({ ...f, dataFim: value }))}
                   />
                 </div>
               </div>
@@ -1447,14 +1417,11 @@ export function AgendamentoProgramado() {
             onChange={e => onChangeProcedimentoEdit(e.target.value)}
           />
           <div className="grid grid-cols-2 gap-4">
-            <Input
+            <DateInput
               label="Data"
-              placeholder="dd/mm/aaaa"
+              mode="br"
               value={editForm.data}
-              inputMode="numeric"
-              maxLength={10}
-              onChange={e => setEditForm(f => ({ ...f, data: e.target.value }))}
-              onBlur={e => setEditForm(f => ({ ...f, data: maskDate(e.target.value) }))}
+              onChange={(value) => setEditForm(f => ({ ...f, data: value }))}
             />
             <Input label="Hora início" type="time" value={editForm.horaInicio} onChange={e => setEditForm(f => ({ ...f, horaInicio: e.target.value }))} />
           </div>

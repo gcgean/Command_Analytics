@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Clock, Plus, X, Loader2, TrendingUp, Calendar, AlertCircle } from 'lucide-react'
 import { useToast } from '../../components/ui/Toast'
+import { DateInput } from '../../components/ui/DateInput'
 import clsx from 'clsx'
 
 type TipoMovimento = 'Hora Extra' | 'Falta c/ Atestado' | 'Falta s/ Atestado' | 'Home Office'
@@ -214,11 +215,11 @@ export function BancoHoras() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Data Início *</label>
-                  <input type="date" className="input-field" value={form.dataInicio} onChange={e => setForm(p => ({ ...p, dataInicio: e.target.value }))} />
+                  <DateInput mode="iso" value={form.dataInicio} onChange={(value) => setForm(p => ({ ...p, dataInicio: value }))} />
                 </div>
                 <div>
                   <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Data Fim *</label>
-                  <input type="date" className="input-field" value={form.dataFim} onChange={e => setForm(p => ({ ...p, dataFim: e.target.value }))} />
+                  <DateInput mode="iso" value={form.dataFim} onChange={(value) => setForm(p => ({ ...p, dataFim: value }))} />
                 </div>
               </div>
               <div>

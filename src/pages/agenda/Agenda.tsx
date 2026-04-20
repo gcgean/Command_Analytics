@@ -7,6 +7,7 @@ import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
 import { Input, Textarea } from '../../components/ui/Input'
+import { DateInput } from '../../components/ui/DateInput'
 import { api } from '../../services/api'
 import type { AgendaItem } from '../../types'
 import clsx from 'clsx'
@@ -91,13 +92,6 @@ function fromBRDate(br: string) {
   if (!d || !m || !y) return ''
   return `${y}-${m}-${d}`
 }
-function maskDate(val: string) {
-  const v = val.replace(/\D/g, '').slice(0, 8)
-  if (v.length <= 2) return v
-  if (v.length <= 4) return `${v.slice(0, 2)}/${v.slice(2)}`
-  return `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`
-}
-
 export function Agenda() {
   const [currentMonth, setCurrentMonth] = useState(() => {
     const t = new Date()
@@ -421,25 +415,19 @@ export function Agenda() {
         {/* Filter bar */}
         <div className="flex flex-wrap gap-3 items-end mb-4">
           <div className="flex-1 min-w-[130px]">
-            <Input
+            <DateInput
               label="Data início"
-              placeholder="dd/mm/aaaa"
+              mode="br"
               value={filters.dataInicio}
-              inputMode="numeric"
-              maxLength={10}
-              onChange={e => setFilters(f => ({ ...f, dataInicio: e.target.value }))}
-              onBlur={e => setFilters(f => ({ ...f, dataInicio: maskDate(e.target.value) }))}
+              onChange={(value) => setFilters(f => ({ ...f, dataInicio: value }))}
             />
           </div>
           <div className="flex-1 min-w-[130px]">
-            <Input
+            <DateInput
               label="Data fim"
-              placeholder="dd/mm/aaaa"
+              mode="br"
               value={filters.dataFim}
-              inputMode="numeric"
-              maxLength={10}
-              onChange={e => setFilters(f => ({ ...f, dataFim: e.target.value }))}
-              onBlur={e => setFilters(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
+              onChange={(value) => setFilters(f => ({ ...f, dataFim: value }))}
             />
           </div>
           <div className="flex-1 min-w-[220px]">
@@ -681,14 +669,11 @@ export function Agenda() {
             <div className="hidden"></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input
+            <DateInput
               label="Data Inicial"
-              placeholder="dd/mm/aaaa"
+              mode="br"
               value={form.data}
-              inputMode="numeric"
-              maxLength={10}
-              onChange={e => setForm(f => ({ ...f, data: e.target.value }))}
-              onBlur={e => setForm(f => ({ ...f, data: maskDate(e.target.value) }))}
+              onChange={(value) => setForm(f => ({ ...f, data: value }))}
             />
             <Input
               label="Horário Inicial"
@@ -698,14 +683,11 @@ export function Agenda() {
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input
+            <DateInput
               label="Data Final"
-              placeholder="dd/mm/aaaa"
+              mode="br"
               value={form.dataFim}
-              inputMode="numeric"
-              maxLength={10}
-              onChange={e => setForm(f => ({ ...f, dataFim: e.target.value }))}
-              onBlur={e => setForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
+              onChange={(value) => setForm(f => ({ ...f, dataFim: value }))}
             />
             <Input
               label="Horário Final"
@@ -755,14 +737,11 @@ export function Agenda() {
             <div className="hidden"></div>
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input
+            <DateInput
               label="Data Inicial"
-              placeholder="dd/mm/aaaa"
+              mode="br"
               value={editForm.data}
-              inputMode="numeric"
-              maxLength={10}
-              onChange={e => setEditForm(f => ({ ...f, data: e.target.value }))}
-              onBlur={e => setEditForm(f => ({ ...f, data: maskDate(e.target.value) }))}
+              onChange={(value) => setEditForm(f => ({ ...f, data: value }))}
             />
             <Input
               label="Horário Inicial"
@@ -772,14 +751,11 @@ export function Agenda() {
             />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <Input
+            <DateInput
               label="Data Final"
-              placeholder="dd/mm/aaaa"
+              mode="br"
               value={editForm.dataFim}
-              inputMode="numeric"
-              maxLength={10}
-              onChange={e => setEditForm(f => ({ ...f, dataFim: e.target.value }))}
-              onBlur={e => setEditForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
+              onChange={(value) => setEditForm(f => ({ ...f, dataFim: value }))}
             />
             <Input
               label="Horário Final"

@@ -7,6 +7,7 @@ const DEPT_LABEL: Record<number, string> = {
 }
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
+import { DateInput } from '../../components/ui/DateInput'
 import { Select } from '../../components/ui/Select'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { Card } from '../../components/ui/Card'
@@ -88,10 +89,10 @@ export function HistoricoAtendimentos() {
             <Select label="Departamento" options={deptOptions} placeholder="Todos" value={filterDept} onChange={e => setFilterDept(e.target.value)} />
           </div>
           <div className="w-36">
-            <Input label="Data início" type="date" value={dataInicio} onChange={e => setDataInicio(e.target.value)} />
+            <DateInput label="Data início" mode="iso" value={dataInicio} onChange={setDataInicio} />
           </div>
           <div className="w-36">
-            <Input label="Data fim" type="date" value={dataFim} onChange={e => setDataFim(e.target.value)} />
+            <DateInput label="Data fim" mode="iso" value={dataFim} onChange={setDataFim} />
           </div>
           <Button variant="ghost" size="sm" icon={<RefreshCw className="w-4 h-4" />}
             onClick={() => { setSearch(''); setFilterStatus(''); setFilterDept('') }}>

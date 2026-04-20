@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Eye, Megaphone, ToggleLeft, ToggleRight, Loader2 } from 'lucide-react'
 import { api } from '../../services/api'
 import { useToast } from '../../components/ui/Toast'
+import { DateInput } from '../../components/ui/DateInput'
 import type { Campanha } from '../../types'
 
 export function Campanhas() {
@@ -93,11 +94,11 @@ export function Campanhas() {
             </div>
             <div>
               <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Data Início *</label>
-              <input type="date" className="input-field" value={form.dataInicio} onChange={e => setForm(p => ({ ...p, dataInicio: e.target.value }))} />
+              <DateInput mode="iso" value={form.dataInicio} onChange={(value) => setForm(p => ({ ...p, dataInicio: value }))} />
             </div>
             <div>
               <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Data Fim *</label>
-              <input type="date" className="input-field" value={form.dataFim} onChange={e => setForm(p => ({ ...p, dataFim: e.target.value }))} />
+              <DateInput mode="iso" value={form.dataFim} onChange={(value) => setForm(p => ({ ...p, dataFim: value }))} />
             </div>
             <div>
               <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Tipo</label>
