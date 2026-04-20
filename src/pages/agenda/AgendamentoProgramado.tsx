@@ -289,28 +289,12 @@ export function AgendamentoProgramado() {
     }
 
     api.getUsuarios()
-      .then(async (u: any) => {
+      .then((u: any) => {
         const mapped = mapTecnicos(u)
-        if (mapped.length > 0) {
-          setAllTecnicos(mapped)
-          return
-        }
-        try {
-          const all = await api.getUsuariosTodos()
-          const mappedAll = mapTecnicos(all)
-          setAllTecnicos(mappedAll)
-        } catch {
-          setAllTecnicos([])
-        }
+        setAllTecnicos(mapped)
       })
-      .catch(async () => {
-        try {
-          const all = await api.getUsuariosTodos()
-          const mappedAll = mapTecnicos(all)
-          setAllTecnicos(mappedAll)
-        } catch {
-          setAllTecnicos([])
-        }
+      .catch(() => {
+        setAllTecnicos([])
       })
   }, [])
 
@@ -467,9 +451,15 @@ export function AgendamentoProgramado() {
 
   // ── Booking ────────────────────────────────────────────────────
   function openBook(tecnicoId: number, tecnicoNome: string, data: string, hora: string) {
+    const procedimentoSelecionado = findProcedimentoById(selectedProcedimento)
     setBookTecnico({ tecnicoId, tecnicoNome, data })
     setSelectedSlots([hora])
-    setBookForm({ clienteId: '', procedimentoId: '', descricao: '', duracao: '60' })
+    setBookForm({
+      clienteId: '',
+      procedimentoId: selectedProcedimento || '',
+      descricao: '',
+      duracao: String(procedimentoSelecionado?.duracaoMin ?? 60),
+    })
     setBookError('')
     setShowBookModal(true)
   }
@@ -477,9 +467,15 @@ export function AgendamentoProgramado() {
   function toggleSlotSelection(tech: SlotResult, hora: string) {
     // If no tecnico or different date selected yet, start fresh
     if (!bookTecnico || bookTecnico.tecnicoId !== tech.tecnicoId || bookTecnico.data !== tech.data) {
+      const procedimentoSelecionado = findProcedimentoById(selectedProcedimento)
       setBookTecnico({ tecnicoId: tech.tecnicoId, tecnicoNome: tech.tecnicoNome, data: tech.data })
       setSelectedSlots([hora])
-      setBookForm({ clienteId: '', procedimentoId: '', descricao: '', duracao: '60' })
+      setBookForm({
+        clienteId: '',
+        procedimentoId: selectedProcedimento || '',
+        descricao: '',
+        duracao: String(procedimentoSelecionado?.duracaoMin ?? 60),
+      })
       setBookError('')
       return
     }
@@ -490,6 +486,14 @@ export function AgendamentoProgramado() {
 
   function openBookModal() {
     if (!bookTecnico || selectedSlots.length === 0) return
+    const procedimentoSelecionado = findProcedimentoById(selectedProcedimento)
+    if (selectedProcedimento) {
+      setBookForm((prev) => ({
+        ...prev,
+        procedimentoId: selectedProcedimento,
+        duracao: String(procedimentoSelecionado?.duracaoMin ?? prev.duracao || 60),
+      }))
+    }
     setBookError('')
     setShowBookModal(true)
   }
