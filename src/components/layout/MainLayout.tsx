@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { PermissionsProvider } from '../../contexts/PermissionsContext'
+import { PwaUpdateBanner } from '../ui/PwaUpdateBanner'
 import clsx from 'clsx'
 
 export function MainLayout() {
@@ -37,6 +38,7 @@ export function MainLayout() {
             <Outlet />
           </main>
         </div>
+        <PwaUpdateBanner />
       </div>
     </PermissionsProvider>
   )

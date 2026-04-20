@@ -102,6 +102,23 @@ function formatDurationLabel(duracaoMin: number): string {
   return `${horas}h ${resto}min`
 }
 
+function slotMotivoLabel(motivo?: string | null): string {
+  switch (motivo) {
+    case 'agenda':
+      return 'Horário ocupado por agendamento da agenda.'
+    case 'programado':
+      return 'Horário ocupado por agendamento programado.'
+    case 'bloqueio':
+      return 'Horário bloqueado para este técnico.'
+    case 'intervalo':
+      return 'Horário indisponível por intervalo configurado.'
+    case 'fora_janela_duracao':
+      return 'Sem tempo suficiente para concluir este procedimento.'
+    default:
+      return 'Horário ocupado.'
+  }
+}
+
 interface DispItem {
   id: number
   tecnicoId: number
@@ -123,6 +140,7 @@ interface SlotResult {
   data: string
   slotsDisponiveis: string[]
   slotsOcupados: string[]
+  slotMotivos?: Record<string, string>
 }
 
 interface AgProg {
@@ -770,7 +788,12 @@ export function AgendamentoProgramado() {
                                 )
                               })}
                               {tech.slotsOcupados.map(hora => (
-                                <span key={hora} className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-sm font-medium cursor-not-allowed line-through" title="Horário ocupado">
+                                <span
+                                  key={hora}
+                                  className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-sm font-medium cursor-not-allowed line-through"
+                                  title={slotMotivoLabel(tech.slotMotivos?.[hora])}
+                                  aria-label={slotMotivoLabel(tech.slotMotivos?.[hora])}
+                                >
                                   {hora}
                                 </span>
                               ))}

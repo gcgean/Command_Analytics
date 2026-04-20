@@ -95,6 +95,7 @@ async function validarJanelaAgendamentoProgramado(args: {
     WHERE cod_colaborador = ${tecnicoId}
       AND DATE(data_agendamento) = ${dataStr}
       AND hora_ini IS NOT NULL
+      AND COALESCE(Status_agendamento, 0) IN (0, 1)
   `
 
   const programados: any[] = await prisma.$queryRaw`
@@ -602,6 +603,7 @@ export async function agendaRoutes(app: FastifyInstance) {
         const agendaItems: any[] = await prisma.$queryRaw`
           SELECT hora_ini, hora_fin FROM agenda
           WHERE cod_colaborador = ${tId} AND DATE(data_agendamento) = ${dataStr} AND hora_ini IS NOT NULL
+            AND COALESCE(Status_agendamento, 0) IN (0, 1)
         `
 
         const programados: any[] = await prisma.$queryRaw`
@@ -616,42 +618,58 @@ export async function agendaRoutes(app: FastifyInstance) {
             AND data_ini <= ${dataStr} AND data_fim >= ${dataStr}
         `
 
-        const ranges: Array<{ iniMin: number; finMin: number }> = []
+        const ranges: Array<{ iniMin: number; finMin: number; motivo: 'agenda' | 'programado' | 'bloqueio' }> = []
         for (const item of agendaItems) {
           const iniMin = parseTimeToMinutes(item.hora_ini)
           if (iniMin === null) continue
           const finMin = parseTimeToMinutes(item.hora_fin) ?? (iniMin + intervalo)
-          ranges.push({ iniMin, finMin: finMin > iniMin ? finMin : iniMin + intervalo })
+          ranges.push({ iniMin, finMin: finMin > iniMin ? finMin : iniMin + intervalo, motivo: 'agenda' })
         }
         for (const ap of programados) {
           const iniMin = parseTimeToMinutes(ap.hora_inicio)
           if (iniMin === null) continue
           const finMin = iniMin + (Number(ap.duracao_min) || 60)
-          ranges.push({ iniMin, finMin })
+          ranges.push({ iniMin, finMin, motivo: 'programado' })
         }
         for (const bl of bloqueios) {
           const iniMin = parseTimeToMinutes(bl.hora_ini)
           const finMin = parseTimeToMinutes(bl.hora_fim)
           if (iniMin === null || finMin === null) continue
-          ranges.push({ iniMin, finMin })
+          ranges.push({ iniMin, finMin, motivo: 'bloqueio' })
         }
 
-        const isSlotDisponivel = (slot: string) => {
+        const getSlotMotivo = (slot: string): string | null => {
           const [h, m] = slot.split(':').map(Number)
           const slotIni = h * 60 + m
           const slotFim = slotIni + duracaoProcedimento
 
-          if (slotFim > endMin) return false
-          if (lunchIni !== null && lunchFim !== null && overlapsRange(slotIni, slotFim, lunchIni, lunchFim)) return false
-          return !ranges.some(r => overlapsRange(slotIni, slotFim, r.iniMin, r.finMin))
+          if (slotFim > endMin) return 'fora_janela_duracao'
+          if (lunchIni !== null && lunchFim !== null && overlapsRange(slotIni, slotFim, lunchIni, lunchFim)) return 'intervalo'
+
+          const conflito = ranges.find(r => overlapsRange(slotIni, slotFim, r.iniMin, r.finMin))
+          return conflito?.motivo ?? null
+        }
+
+        const slotMotivos: Record<string, string> = {}
+        const slotsDisponiveis: string[] = []
+        const slotsOcupados: string[] = []
+        for (const slot of allSlots) {
+          const motivo = getSlotMotivo(slot)
+          if (!motivo) {
+            slotsDisponiveis.push(slot)
+            continue
+          }
+          slotsOcupados.push(slot)
+          slotMotivos[slot] = motivo
         }
 
         dayResult.push({
           tecnicoId: tId,
           tecnicoNome: disp.tecnicoNome,
           data: dataStr,
-          slotsDisponiveis: allSlots.filter(s => isSlotDisponivel(s)),
-          slotsOcupados: allSlots.filter(s => !isSlotDisponivel(s)),
+          slotsDisponiveis,
+          slotsOcupados,
+          slotMotivos,
         })
       }
       if (dayResult.length > 0) {
@@ -778,6 +796,7 @@ export async function agendaRoutes(app: FastifyInstance) {
       SELECT cod_agenda FROM agenda
       WHERE cod_colaborador = ${tecnicoId} AND DATE(data_agendamento) = ${data}
         AND TIME_FORMAT(hora_ini, '%H:%i') = ${horaInicio}
+        AND COALESCE(Status_agendamento, 0) IN (0, 1)
     `
     if (conflitoAgenda.length > 0) {
       return reply.status(409).send({ error: 'Horário ocupado na agenda principal do técnico.' })
