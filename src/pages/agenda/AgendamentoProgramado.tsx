@@ -132,6 +132,16 @@ interface DispItem {
   dataFim?: string | null
   intervaloIni?: string | null
   intervaloFim?: string | null
+  diasConfiguracao?: DiaConfiguracao[]
+}
+
+interface DiaConfiguracao {
+  diaSemana: number
+  horaInicio: string
+  horaFim: string
+  intervaloMin: number
+  intervaloIni?: string | null
+  intervaloFim?: string | null
 }
 
 interface SlotResult {
@@ -191,6 +201,10 @@ function maskDate(val: string) {
   return `${v.slice(0, 2)}/${v.slice(2, 4)}/${v.slice(4)}`
 }
 
+function defaultDiaConfig() {
+  return { horaInicio: '08:00', horaFim: '18:00', intervaloMin: '60', usarIntervalo: false, intervaloIni: '12:00', intervaloFim: '13:00' }
+}
+
 export function AgendamentoProgramado() {
   const [activeTab, setActiveTab] = useState<'slots' | 'lista'>('slots')
 
@@ -217,14 +231,16 @@ export function AgendamentoProgramado() {
   const [configForm, setConfigForm] = useState({
     tecnicoId: '',
     diasSemana: [1, 2, 3, 4, 5] as number[],
-    horaInicio: '08:00',
-    horaFim: '18:00',
-    intervaloMin: '60',
+    diaSelecionado: 1,
+    diasConfiguracao: {
+      1: { horaInicio: '08:00', horaFim: '18:00', intervaloMin: '60', usarIntervalo: false, intervaloIni: '12:00', intervaloFim: '13:00' },
+      2: { horaInicio: '08:00', horaFim: '18:00', intervaloMin: '60', usarIntervalo: false, intervaloIni: '12:00', intervaloFim: '13:00' },
+      3: { horaInicio: '08:00', horaFim: '18:00', intervaloMin: '60', usarIntervalo: false, intervaloIni: '12:00', intervaloFim: '13:00' },
+      4: { horaInicio: '08:00', horaFim: '18:00', intervaloMin: '60', usarIntervalo: false, intervaloIni: '12:00', intervaloFim: '13:00' },
+      5: { horaInicio: '08:00', horaFim: '18:00', intervaloMin: '60', usarIntervalo: false, intervaloIni: '12:00', intervaloFim: '13:00' },
+    } as Record<number, { horaInicio: string; horaFim: string; intervaloMin: string; usarIntervalo: boolean; intervaloIni: string; intervaloFim: string }>,
     dataInicio: '',
     dataFim: '',
-    usarIntervalo: false,
-    intervaloIni: '12:00',
-    intervaloFim: '13:00',
   })
   const [savingConfig, setSavingConfig] = useState(false)
 
@@ -284,8 +300,17 @@ export function AgendamentoProgramado() {
             : []
 
       return list
-        .map((x: any) => ({ id: Number(x?.id), nome: x?.nome || x?.nomeUsu || `#${x?.id}` }))
-        .filter((x: Tecnico) => Number.isFinite(x.id) && x.id > 0)
+        .map((x: any) => ({
+          id: Number(x?.id ?? x?.COD_USU ?? x?.codUsu),
+          nome: x?.nome || x?.nomeCompleto || x?.nomeUsu || `#${x?.id ?? x?.COD_USU ?? x?.codUsu}`,
+          ativo: x?.ativo,
+        }))
+        .filter((x: any) => Number.isFinite(x.id) && x.id > 0)
+        .filter((x: any) => {
+          if (x.ativo === undefined || x.ativo === null) return true
+          return x.ativo === true || x.ativo === 1 || x.ativo === '1' || x.ativo === 'S' || x.ativo === 's'
+        })
+        .map((x: any) => ({ id: x.id, nome: x.nome }))
     }
 
     api.getUsuarios()
@@ -395,45 +420,105 @@ export function AgendamentoProgramado() {
 
   // ── Config modal ───────────────────────────────────────────────
   function openEditConfig(d: DispItem) {
+    const diasCfg = (d.diasConfiguracao && d.diasConfiguracao.length > 0)
+      ? d.diasConfiguracao
+      : d.diasSemana.split(',').map((diaSemana) => ({
+        diaSemana: Number(diaSemana),
+        horaInicio: d.horaInicio,
+        horaFim: d.horaFim,
+        intervaloMin: d.intervaloMin,
+        intervaloIni: d.intervaloIni ?? null,
+        intervaloFim: d.intervaloFim ?? null,
+      }))
+    const diasSelecionados = diasCfg.map((x) => Number(x.diaSemana)).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6)
+    const diasConfiguracao: Record<number, { horaInicio: string; horaFim: string; intervaloMin: string; usarIntervalo: boolean; intervaloIni: string; intervaloFim: string }> = {}
+    for (const item of diasCfg) {
+      const dia = Number(item.diaSemana)
+      if (!Number.isInteger(dia) || dia < 0 || dia > 6) continue
+      diasConfiguracao[dia] = {
+        horaInicio: String(item.horaInicio || d.horaInicio).substring(0, 5),
+        horaFim: String(item.horaFim || d.horaFim).substring(0, 5),
+        intervaloMin: String(item.intervaloMin || d.intervaloMin || 60),
+        usarIntervalo: !!(item.intervaloIni && item.intervaloFim),
+        intervaloIni: item.intervaloIni ? String(item.intervaloIni).substring(0, 5) : '12:00',
+        intervaloFim: item.intervaloFim ? String(item.intervaloFim).substring(0, 5) : '13:00',
+      }
+    }
     setEditingTecnico(d.tecnicoId)
     setConfigForm({
       tecnicoId: String(d.tecnicoId),
-      diasSemana: d.diasSemana.split(',').map(Number),
-      horaInicio: d.horaInicio,
-      horaFim: d.horaFim,
-      intervaloMin: String(d.intervaloMin),
+      diasSemana: diasSelecionados,
+      diaSelecionado: diasSelecionados[0] ?? 1,
+      diasConfiguracao,
       dataInicio: d.dataInicio ? toBRDate(String(d.dataInicio).substring(0, 10)) : '',
       dataFim: d.dataFim ? toBRDate(String(d.dataFim).substring(0, 10)) : '',
-      usarIntervalo: !!(d.intervaloIni && d.intervaloFim),
-      intervaloIni: d.intervaloIni ? String(d.intervaloIni).substring(0, 5) : '12:00',
-      intervaloFim: d.intervaloFim ? String(d.intervaloFim).substring(0, 5) : '13:00',
     })
     setShowConfigModal(true)
   }
 
   function toggleDia(val: number) {
-    setConfigForm(f => ({
-      ...f,
-      diasSemana: f.diasSemana.includes(val)
-        ? f.diasSemana.filter(d => d !== val)
-        : [...f.diasSemana, val].sort(),
-    }))
+    setConfigForm((f) => {
+      const already = f.diasSemana.includes(val)
+      const diasSemana = already
+        ? f.diasSemana.filter((d) => d !== val)
+        : [...f.diasSemana, val].sort((a, b) => a - b)
+      const diasConfiguracao = { ...f.diasConfiguracao }
+      if (!already && !diasConfiguracao[val]) diasConfiguracao[val] = defaultDiaConfig()
+      if (already) delete diasConfiguracao[val]
+      const diaSelecionado = diasSemana.includes(f.diaSelecionado) ? f.diaSelecionado : (diasSemana[0] ?? 1)
+      return { ...f, diasSemana, diasConfiguracao, diaSelecionado }
+    })
+  }
+
+  function updateDiaConfiguracao(field: 'horaInicio' | 'horaFim' | 'intervaloMin' | 'usarIntervalo' | 'intervaloIni' | 'intervaloFim', value: string | boolean) {
+    setConfigForm((f) => {
+      const dia = f.diaSelecionado
+      const atual = f.diasConfiguracao[dia] ?? defaultDiaConfig()
+      return {
+        ...f,
+        diasConfiguracao: {
+          ...f.diasConfiguracao,
+          [dia]: {
+            ...atual,
+            [field]: value,
+          },
+        },
+      }
+    })
   }
 
   async function saveConfig() {
     if (!configForm.tecnicoId || !configForm.diasSemana.length) return
+    const diasConfiguracao = configForm.diasSemana
+      .sort((a, b) => a - b)
+      .map((diaSemana) => {
+        const conf = configForm.diasConfiguracao[diaSemana] ?? defaultDiaConfig()
+        return {
+          diaSemana,
+          horaInicio: conf.horaInicio,
+          horaFim: conf.horaFim,
+          intervaloMin: Number(conf.intervaloMin || 60),
+          intervaloIni: conf.usarIntervalo ? conf.intervaloIni : null,
+          intervaloFim: conf.usarIntervalo ? conf.intervaloFim : null,
+        }
+      })
+      .filter((x) => x.horaInicio && x.horaFim)
+    if (!diasConfiguracao.length) return
+
+    const baseDia = diasConfiguracao[0]
     setSavingConfig(true)
     try {
       await api.saveDisponibilidade({
         tecnicoId: Number(configForm.tecnicoId),
-        diasSemana: configForm.diasSemana.join(','),
-        horaInicio: configForm.horaInicio,
-        horaFim: configForm.horaFim,
-        intervaloMin: Number(configForm.intervaloMin),
+        diasSemana: diasConfiguracao.map((x) => x.diaSemana).join(','),
+        horaInicio: baseDia.horaInicio,
+        horaFim: baseDia.horaFim,
+        intervaloMin: Number(baseDia.intervaloMin),
         dataInicio: fromBRDate(configForm.dataInicio) || null,
         dataFim: fromBRDate(configForm.dataFim) || null,
-        intervaloIni: configForm.usarIntervalo ? configForm.intervaloIni : null,
-        intervaloFim: configForm.usarIntervalo ? configForm.intervaloFim : null,
+        intervaloIni: baseDia.intervaloIni,
+        intervaloFim: baseDia.intervaloFim,
+        diasConfiguracao,
       })
       const updated: any = await api.getDisponibilidades()
       setDisponibilidades(updated)
@@ -500,8 +585,9 @@ export function AgendamentoProgramado() {
 
   async function saveBook() {
     if (!bookTecnico || selectedSlots.length === 0 || !bookForm.clienteId) { setBookError('Selecione um cliente.'); return }
-    if (!bookForm.procedimentoId) { setBookError('Selecione o procedimento.'); return }
-    const procedimento = findProcedimentoById(bookForm.procedimentoId)
+    const procedimentoIdEfetivo = bookForm.procedimentoId || selectedProcedimento
+    if (!procedimentoIdEfetivo) { setBookError('Selecione o procedimento.'); return }
+    const procedimento = findProcedimentoById(procedimentoIdEfetivo)
     if (!procedimento) { setBookError('Procedimento inválido.'); return }
     setSubmitting(true)
     setBookError('')
@@ -518,7 +604,7 @@ export function AgendamentoProgramado() {
         await api.createAgendamentoProg({
           tecnicoId: bookTecnico.tecnicoId,
           clienteId: Number(bookForm.clienteId),
-          procedimentoId: Number(bookForm.procedimentoId),
+          procedimentoId: Number(procedimentoIdEfetivo),
           data: bookTecnico.data,
           horaInicio: hora,
           duracao: Number(procedimento.duracaoMin),
@@ -634,6 +720,25 @@ export function AgendamentoProgramado() {
     if (slotResults.length > 0) fetchSlots()
   }
 
+  function openConfigCreate() {
+    setEditingTecnico(null)
+    setConfigForm({
+      tecnicoId: '',
+      diasSemana: [1, 2, 3, 4, 5],
+      diaSelecionado: 1,
+      diasConfiguracao: {
+        1: defaultDiaConfig(),
+        2: defaultDiaConfig(),
+        3: defaultDiaConfig(),
+        4: defaultDiaConfig(),
+        5: defaultDiaConfig(),
+      },
+      dataInicio: '',
+      dataFim: '',
+    })
+    setShowConfigModal(true)
+  }
+
   const tecnicosFromDisponibilidades = Array.from(
     disponibilidades.reduce((acc, item) => {
       if (!acc.has(item.tecnicoId)) {
@@ -646,6 +751,7 @@ export function AgendamentoProgramado() {
   const configuredTecnicoIds = new Set(disponibilidades.map(d => d.tecnicoId))
   const availableTecnicos = tecnicosBase.filter(t => !configuredTecnicoIds.has(t.id))
   const createModeTecnicos = availableTecnicos.length > 0 ? availableTecnicos : tecnicosBase
+  const diaConfigAtual = configForm.diasConfiguracao[configForm.diaSelecionado] ?? defaultDiaConfig()
 
   return (
     <div className="space-y-6">
@@ -656,7 +762,7 @@ export function AgendamentoProgramado() {
           <Button variant="secondary" icon={<Ban className="w-4 h-4" />} onClick={() => setShowBloqueioModal(true)}>
             Bloqueios
           </Button>
-          <Button variant="secondary" icon={<Settings className="w-4 h-4" />} onClick={() => setShowConfigModal(true)}>
+          <Button variant="secondary" icon={<Settings className="w-4 h-4" />} onClick={openConfigCreate}>
             Disponibilidades
           </Button>
         </div>
@@ -1087,12 +1193,30 @@ export function AgendamentoProgramado() {
                 {disponibilidades.map(d => (
                   <div key={d.tecnicoId} className="flex items-center justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
                     <div>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{d.tecnicoNome}</p>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {d.diasSemana.split(',').map(n => DIAS_SEMANA.find(x => x.val === Number(n))?.label).join(', ')}
-                        {' · '}{d.horaInicio} – {d.horaFim}{' · '}a cada {d.intervaloMin} min
-                        {d.intervaloIni && d.intervaloFim && ` · almoço ${d.intervaloIni}–${d.intervaloFim}`}
-                      </p>
+                      {(() => {
+                        const diasCfg = (d.diasConfiguracao && d.diasConfiguracao.length > 0)
+                          ? [...d.diasConfiguracao].sort((a, b) => a.diaSemana - b.diaSemana)
+                          : d.diasSemana.split(',').map((diaSemana) => ({
+                            diaSemana: Number(diaSemana),
+                            horaInicio: d.horaInicio,
+                            horaFim: d.horaFim,
+                            intervaloMin: d.intervaloMin,
+                            intervaloIni: d.intervaloIni ?? null,
+                            intervaloFim: d.intervaloFim ?? null,
+                          }))
+                        const resumo = diasCfg.map((cfg) => {
+                          const diaLabel = DIAS_SEMANA.find((x) => x.val === Number(cfg.diaSemana))?.label ?? String(cfg.diaSemana)
+                          const base = `${diaLabel} ${cfg.horaInicio}–${cfg.horaFim} · ${cfg.intervaloMin} min`
+                          if (cfg.intervaloIni && cfg.intervaloFim) return `${base} · almoço ${cfg.intervaloIni}–${cfg.intervaloFim}`
+                          return base
+                        }).join(' | ')
+                        return (
+                          <>
+                            <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{d.tecnicoNome}</p>
+                            <p className="text-xs text-slate-500 mt-0.5">{resumo}</p>
+                          </>
+                        )
+                      })()}
                       {(d.dataInicio || d.dataFim) && (
                         <p className="text-xs text-amber-500/80 mt-0.5">
                           Válido: {d.dataInicio ? String(d.dataInicio).substring(0, 10) : '...'} → {d.dataFim ? String(d.dataFim).substring(0, 10) : 'sem limite'}
@@ -1155,20 +1279,52 @@ export function AgendamentoProgramado() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
-                <Input label="Hora início" type="time" value={configForm.horaInicio} onChange={e => setConfigForm(f => ({ ...f, horaInicio: e.target.value }))} />
-                <Input label="Hora fim" type="time" value={configForm.horaFim} onChange={e => setConfigForm(f => ({ ...f, horaFim: e.target.value }))} />
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-3">
                 <Select
-                  label="Intervalo de slot"
-                  options={[
-                    { value: '30', label: '30 min' },
-                    { value: '60', label: '60 min' },
-                    { value: '90', label: '90 min' },
-                    { value: '120', label: '2 horas' },
-                  ]}
-                  value={configForm.intervaloMin}
-                  onChange={e => setConfigForm(f => ({ ...f, intervaloMin: e.target.value }))}
+                  label="Editar dia"
+                  options={configForm.diasSemana.length
+                    ? configForm.diasSemana.map((dia) => ({
+                      value: String(dia),
+                      label: DIAS_SEMANA.find((x) => x.val === dia)?.label || String(dia),
+                    }))
+                    : [{ value: '', label: 'Selecione ao menos um dia' }]}
+                  value={configForm.diasSemana.length ? String(configForm.diaSelecionado) : ''}
+                  onChange={(e) => setConfigForm((f) => ({ ...f, diaSelecionado: Number(e.target.value || 0) }))}
                 />
+
+                <div className="grid grid-cols-3 gap-4">
+                  <Input label="Hora início" type="time" value={diaConfigAtual.horaInicio} onChange={e => updateDiaConfiguracao('horaInicio', e.target.value)} />
+                  <Input label="Hora fim" type="time" value={diaConfigAtual.horaFim} onChange={e => updateDiaConfiguracao('horaFim', e.target.value)} />
+                  <Select
+                    label="Intervalo de slot"
+                    options={[
+                      { value: '30', label: '30 min' },
+                      { value: '60', label: '60 min' },
+                      { value: '90', label: '90 min' },
+                      { value: '120', label: '2 horas' },
+                    ]}
+                    value={diaConfigAtual.intervaloMin}
+                    onChange={e => updateDiaConfiguracao('intervaloMin', e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="flex items-center gap-2 cursor-pointer mb-2">
+                    <input
+                      type="checkbox"
+                      checked={diaConfigAtual.usarIntervalo}
+                      onChange={e => updateDiaConfiguracao('usarIntervalo', e.target.checked)}
+                      className="w-4 h-4 rounded accent-blue-600"
+                    />
+                    <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Bloquear intervalo de almoço neste dia</span>
+                  </label>
+                  {diaConfigAtual.usarIntervalo && (
+                    <div className="grid grid-cols-2 gap-4 mt-2">
+                      <Input label="Início do almoço" type="time" value={diaConfigAtual.intervaloIni} onChange={e => updateDiaConfiguracao('intervaloIni', e.target.value)} />
+                      <Input label="Fim do almoço" type="time" value={diaConfigAtual.intervaloFim} onChange={e => updateDiaConfiguracao('intervaloFim', e.target.value)} />
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div>
@@ -1195,24 +1351,6 @@ export function AgendamentoProgramado() {
                     onBlur={e => setConfigForm(f => ({ ...f, dataFim: maskDate(e.target.value) }))}
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer mb-2">
-                  <input
-                    type="checkbox"
-                    checked={configForm.usarIntervalo}
-                    onChange={e => setConfigForm(f => ({ ...f, usarIntervalo: e.target.checked }))}
-                    className="w-4 h-4 rounded accent-blue-600"
-                  />
-                  <span className="text-sm font-medium text-slate-600 dark:text-slate-300">Bloquear intervalo de almoço</span>
-                </label>
-                {configForm.usarIntervalo && (
-                  <div className="grid grid-cols-2 gap-4 mt-2">
-                    <Input label="Início do almoço" type="time" value={configForm.intervaloIni} onChange={e => setConfigForm(f => ({ ...f, intervaloIni: e.target.value }))} />
-                    <Input label="Fim do almoço" type="time" value={configForm.intervaloFim} onChange={e => setConfigForm(f => ({ ...f, intervaloFim: e.target.value }))} />
-                  </div>
-                )}
               </div>
 
               <div className="flex justify-end gap-3">
@@ -1257,7 +1395,7 @@ export function AgendamentoProgramado() {
             label="Procedimento *"
             options={procedimentos.map((p) => ({ value: String(p.id), label: `${p.nome} · ${formatDurationLabel(p.duracaoMin)}` }))}
             placeholder={procedimentos.length ? 'Selecione o procedimento' : 'Nenhum procedimento ativo'}
-            value={bookForm.procedimentoId}
+            value={bookForm.procedimentoId || selectedProcedimento}
             onChange={e => onChangeProcedimentoBook(e.target.value)}
           />
           <Input label="Duração calculada" value={formatDurationLabel(Number(bookForm.duracao || 0))} readOnly />
@@ -1279,7 +1417,7 @@ export function AgendamentoProgramado() {
 
           <div className="flex justify-end gap-3 pt-1">
             <Button variant="secondary" onClick={() => setShowBookModal(false)}>Cancelar</Button>
-            <Button onClick={saveBook} disabled={submitting || !bookForm.clienteId || !bookForm.procedimentoId}>
+            <Button onClick={saveBook} disabled={submitting || !bookForm.clienteId || !(bookForm.procedimentoId || selectedProcedimento)}>
               {submitting ? 'Salvando...' : 'Confirmar Agendamento'}
             </Button>
           </div>

@@ -198,7 +198,25 @@ export const api = {
 
   // ─── Disponibilidade de Técnicos ───────────────────────────────
   getDisponibilidades: () => fetchApi<any[]>('/agenda/disponibilidade'),
-  saveDisponibilidade: (data: { tecnicoId: number; diasSemana: string; horaInicio: string; horaFim: string; intervaloMin: number; dataInicio?: string | null; dataFim?: string | null; intervaloIni?: string | null; intervaloFim?: string | null }) =>
+  saveDisponibilidade: (data: {
+    tecnicoId: number
+    diasSemana: string
+    horaInicio: string
+    horaFim: string
+    intervaloMin: number
+    dataInicio?: string | null
+    dataFim?: string | null
+    intervaloIni?: string | null
+    intervaloFim?: string | null
+    diasConfiguracao?: Array<{
+      diaSemana: number
+      horaInicio: string
+      horaFim: string
+      intervaloMin: number
+      intervaloIni?: string | null
+      intervaloFim?: string | null
+    }>
+  }) =>
     fetchApi('/agenda/disponibilidade', { method: 'POST', body: JSON.stringify(data) }),
   deleteDisponibilidade: (tecnicoId: number) => fetchApi(`/agenda/disponibilidade/${tecnicoId}`, { method: 'DELETE' }),
   getSlots: (params: Record<string, string>) =>

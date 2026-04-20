@@ -10,6 +10,87 @@ const nomeTecnico = (u: any) => u?.nomeCompleto || u?.nomeUsu || 'Usuário'
 
 const MIN_DURACAO_PROCEDIMENTO = 15
 
+interface DisponibilidadeDiaPayload {
+  diaSemana: number
+  horaInicio: string
+  horaFim: string
+  intervaloMin: number
+  intervaloIni?: string | null
+  intervaloFim?: string | null
+}
+
+async function initDisponibilidadePorDia(): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS tecnico_disponibilidade_dia (
+      id            INT AUTO_INCREMENT PRIMARY KEY,
+      cod_tecnico   INT NOT NULL,
+      dia_semana    TINYINT NOT NULL,
+      hora_inicio   TIME NOT NULL,
+      hora_fim      TIME NOT NULL,
+      intervalo_min INT NOT NULL DEFAULT 60,
+      intervalo_ini TIME NULL,
+      intervalo_fim TIME NULL,
+      ativo         TINYINT(1) NOT NULL DEFAULT 1,
+      criado_em     DATETIME NOT NULL DEFAULT NOW(),
+      atualizado_em DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+      UNIQUE KEY uk_disponibilidade_dia (cod_tecnico, dia_semana),
+      INDEX idx_disponibilidade_dia_ativo (ativo),
+      INDEX idx_disponibilidade_dia_tecnico (cod_tecnico)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+}
+
+function parseDiasSemanaCsv(raw: any): number[] {
+  return String(raw ?? '')
+    .split(',')
+    .map((n) => Number(String(n).trim()))
+    .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6)
+}
+
+function normalizarDiasConfiguracao(
+  diasSemanaRaw: string | undefined,
+  horaInicio: string,
+  horaFim: string,
+  intervaloMin: number,
+  intervaloIni: string | null,
+  intervaloFim: string | null,
+  diasConfiguracaoRaw?: DisponibilidadeDiaPayload[]
+): DisponibilidadeDiaPayload[] {
+  const fromPayload = Array.isArray(diasConfiguracaoRaw) ? diasConfiguracaoRaw : []
+  const baseIntervalo = Number(intervaloMin) > 0 ? Number(intervaloMin) : 60
+  const source = fromPayload.length > 0
+    ? fromPayload
+    : parseDiasSemanaCsv(diasSemanaRaw).map((diaSemana) => ({
+      diaSemana,
+      horaInicio,
+      horaFim,
+      intervaloMin: baseIntervalo,
+      intervaloIni,
+      intervaloFim,
+    }))
+
+  const map = new Map<number, DisponibilidadeDiaPayload>()
+  for (const item of source) {
+    const diaSemana = Number(item?.diaSemana)
+    if (!Number.isInteger(diaSemana) || diaSemana < 0 || diaSemana > 6) continue
+    const hi = String(item?.horaInicio || horaInicio || '').substring(0, 5)
+    const hf = String(item?.horaFim || horaFim || '').substring(0, 5)
+    if (!hi || !hf) continue
+
+    const intervaloItem = Number(item?.intervaloMin)
+    map.set(diaSemana, {
+      diaSemana,
+      horaInicio: hi,
+      horaFim: hf,
+      intervaloMin: intervaloItem > 0 ? intervaloItem : baseIntervalo,
+      intervaloIni: item?.intervaloIni ? String(item.intervaloIni).substring(0, 5) : null,
+      intervaloFim: item?.intervaloFim ? String(item.intervaloFim).substring(0, 5) : null,
+    })
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.diaSemana - b.diaSemana)
+}
+
 function parseTimeToMinutes(value: any): number | null {
   if (!value) return null
   const asStr = value instanceof Date
@@ -46,7 +127,7 @@ async function validarJanelaAgendamentoProgramado(args: {
   const fimMin = inicioMin + duracao
 
   const dispRows: any[] = await prisma.$queryRaw`
-    SELECT d.cod_tecnico, d.dias_semana, d.hora_inicio, d.hora_fim, d.intervalo_ini, d.intervalo_fim, d.data_inicio, d.data_fim
+    SELECT d.cod_tecnico, d.dias_semana, d.hora_inicio, d.hora_fim, d.intervalo_min, d.intervalo_ini, d.intervalo_fim, d.data_inicio, d.data_fim
     FROM tecnico_disponibilidade d
     WHERE d.cod_tecnico = ${tecnicoId} AND d.ativo = 1
     LIMIT 1
@@ -59,10 +140,6 @@ async function validarJanelaAgendamentoProgramado(args: {
   const [y, m, d] = dataStr.split('-').map(Number)
   const dataObj = new Date(y, m - 1, d)
   const diaSemana = dataObj.getDay()
-  const dias = String(disp.dias_semana ?? '').split(',').map((n: string) => Number(n))
-  if (!dias.includes(diaSemana)) {
-    return { ok: false as const, motivo: 'A data escolhida não está nos dias ativos da disponibilidade do técnico.' }
-  }
 
   if (disp.data_inicio) {
     const ini = new Date(disp.data_inicio)
@@ -75,8 +152,24 @@ async function validarJanelaAgendamentoProgramado(args: {
     if (dataObj > fim) return { ok: false as const, motivo: 'Data fora do período de validade da disponibilidade.' }
   }
 
-  const disponibilidadeIni = parseTimeToMinutes(disp.hora_inicio)
-  const disponibilidadeFim = parseTimeToMinutes(disp.hora_fim)
+  const detalheRows: any[] = await prisma.$queryRaw`
+    SELECT dia_semana AS diaSemana, hora_inicio AS horaInicio, hora_fim AS horaFim,
+           intervalo_min AS intervaloMin, intervalo_ini AS intervaloIni, intervalo_fim AS intervaloFim
+    FROM tecnico_disponibilidade_dia
+    WHERE cod_tecnico = ${tecnicoId} AND ativo = 1 AND dia_semana = ${diaSemana}
+    LIMIT 1
+  `
+
+  const detalhe = detalheRows[0]
+  const dias = parseDiasSemanaCsv(disp.dias_semana)
+  const usaFallbackBase = !detalhe
+
+  if (usaFallbackBase && !dias.includes(diaSemana)) {
+    return { ok: false as const, motivo: 'A data escolhida não está nos dias ativos da disponibilidade do técnico.' }
+  }
+
+  const disponibilidadeIni = parseTimeToMinutes(usaFallbackBase ? disp.hora_inicio : detalhe.horaInicio)
+  const disponibilidadeFim = parseTimeToMinutes(usaFallbackBase ? disp.hora_fim : detalhe.horaFim)
   if (disponibilidadeIni === null || disponibilidadeFim === null || disponibilidadeFim <= disponibilidadeIni) {
     return { ok: false as const, motivo: 'Disponibilidade do técnico inválida.' }
   }
@@ -84,8 +177,8 @@ async function validarJanelaAgendamentoProgramado(args: {
     return { ok: false as const, motivo: 'Duração do procedimento ultrapassa a janela de trabalho disponível.' }
   }
 
-  const almocoIni = parseTimeToMinutes(disp.intervalo_ini)
-  const almocoFim = parseTimeToMinutes(disp.intervalo_fim)
+  const almocoIni = parseTimeToMinutes(usaFallbackBase ? disp.intervalo_ini : detalhe.intervaloIni)
+  const almocoFim = parseTimeToMinutes(usaFallbackBase ? disp.intervalo_fim : detalhe.intervaloFim)
   if (almocoIni !== null && almocoFim !== null && overlapsRange(inicioMin, fimMin, almocoIni, almocoFim)) {
     return { ok: false as const, motivo: 'Duração do procedimento conflita com o intervalo bloqueado do técnico.' }
   }
@@ -253,6 +346,7 @@ async function enviarNotificacaoAgendamento(data: {
 
 export async function agendaRoutes(app: FastifyInstance) {
   await initProcedimentos()
+  await initDisponibilidadePorDia()
 
   // POST /agenda/correcao-status-efetuado
   // Corrige em lote agendamentos com status "Efetuado" (2) sem evidência de mudança de status para 2 na auditoria.
@@ -455,7 +549,7 @@ export async function agendaRoutes(app: FastifyInstance) {
 
   // GET /agenda/disponibilidade
   app.get('/disponibilidade', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async () => {
-    return prisma.$queryRaw<any[]>`
+    const rows = await prisma.$queryRaw<any[]>`
       SELECT d.id, d.cod_tecnico AS tecnicoId, d.dias_semana AS diasSemana,
              d.hora_inicio AS horaInicio, d.hora_fim AS horaFim,
              d.intervalo_min AS intervaloMin, d.ativo,
@@ -466,32 +560,113 @@ export async function agendaRoutes(app: FastifyInstance) {
       LEFT JOIN usuario u ON u.COD_USU = d.cod_tecnico
       ORDER BY tecnicoNome
     `
+
+    const tecnicoIds = rows.map((r) => Number(r.tecnicoId)).filter((id) => Number.isFinite(id) && id > 0)
+    const detalhes = tecnicoIds.length
+      ? await prisma.$queryRaw<any[]>(Prisma.sql`
+          SELECT cod_tecnico AS tecnicoId, dia_semana AS diaSemana, hora_inicio AS horaInicio, hora_fim AS horaFim,
+                 intervalo_min AS intervaloMin, intervalo_ini AS intervaloIni, intervalo_fim AS intervaloFim
+          FROM tecnico_disponibilidade_dia
+          WHERE ativo = 1 AND cod_tecnico IN (${Prisma.join(tecnicoIds)})
+          ORDER BY cod_tecnico, dia_semana
+        `)
+      : []
+
+    const detalhesMap = new Map<number, any[]>()
+    for (const det of detalhes) {
+      const tecnicoId = Number(det.tecnicoId)
+      if (!detalhesMap.has(tecnicoId)) detalhesMap.set(tecnicoId, [])
+      detalhesMap.get(tecnicoId)!.push({
+        diaSemana: Number(det.diaSemana),
+        horaInicio: String(det.horaInicio).substring(0, 5),
+        horaFim: String(det.horaFim).substring(0, 5),
+        intervaloMin: Number(det.intervaloMin ?? 60),
+        intervaloIni: det.intervaloIni ? String(det.intervaloIni).substring(0, 5) : null,
+        intervaloFim: det.intervaloFim ? String(det.intervaloFim).substring(0, 5) : null,
+      })
+    }
+
+    return rows.map((row) => {
+      const tecnicoId = Number(row.tecnicoId)
+      const detalhesRow = detalhesMap.get(tecnicoId) ?? []
+      const fallbackDias = parseDiasSemanaCsv(row.diasSemana).map((diaSemana) => ({
+        diaSemana,
+        horaInicio: String(row.horaInicio).substring(0, 5),
+        horaFim: String(row.horaFim).substring(0, 5),
+        intervaloMin: Number(row.intervaloMin ?? 60),
+        intervaloIni: row.intervaloIni ? String(row.intervaloIni).substring(0, 5) : null,
+        intervaloFim: row.intervaloFim ? String(row.intervaloFim).substring(0, 5) : null,
+      }))
+
+      return {
+        ...row,
+        diasConfiguracao: detalhesRow.length ? detalhesRow : fallbackDias,
+      }
+    })
   })
 
   // POST /agenda/disponibilidade
   app.post('/disponibilidade', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
-    const { tecnicoId, diasSemana, horaInicio, horaFim, intervaloMin, dataInicio, dataFim, intervaloIni, intervaloFim } = request.body as {
+    const { tecnicoId, diasSemana, horaInicio, horaFim, intervaloMin, dataInicio, dataFim, intervaloIni, intervaloFim, diasConfiguracao } = request.body as {
       tecnicoId: number; diasSemana: string; horaInicio: string; horaFim: string; intervaloMin: number
       dataInicio?: string | null; dataFim?: string | null; intervaloIni?: string | null; intervaloFim?: string | null
+      diasConfiguracao?: DisponibilidadeDiaPayload[]
     }
+    const diasCfg = normalizarDiasConfiguracao(
+      diasSemana,
+      horaInicio,
+      horaFim,
+      intervaloMin,
+      intervaloIni ?? null,
+      intervaloFim ?? null,
+      diasConfiguracao
+    )
+    if (!diasCfg.length) {
+      return reply.status(400).send({ error: 'Informe ao menos um dia da semana com horário válido.' })
+    }
+
+    const diasSemanaFinal = diasCfg.map((x) => x.diaSemana).join(',')
+    const baseCfg = diasCfg[0]
+
     await prisma.$executeRaw`
       INSERT INTO tecnico_disponibilidade
         (cod_tecnico, dias_semana, hora_inicio, hora_fim, intervalo_min, ativo, data_inicio, data_fim, intervalo_ini, intervalo_fim)
       VALUES
-        (${tecnicoId}, ${diasSemana}, ${horaInicio}, ${horaFim}, ${intervaloMin}, 1,
-         ${dataInicio ?? null}, ${dataFim ?? null}, ${intervaloIni ?? null}, ${intervaloFim ?? null})
+        (${tecnicoId}, ${diasSemanaFinal}, ${baseCfg.horaInicio}, ${baseCfg.horaFim}, ${baseCfg.intervaloMin}, 1,
+         ${dataInicio ?? null}, ${dataFim ?? null}, ${baseCfg.intervaloIni ?? null}, ${baseCfg.intervaloFim ?? null})
       ON DUPLICATE KEY UPDATE
-        dias_semana = ${diasSemana}, hora_inicio = ${horaInicio},
-        hora_fim = ${horaFim}, intervalo_min = ${intervaloMin}, ativo = 1,
+        dias_semana = ${diasSemanaFinal}, hora_inicio = ${baseCfg.horaInicio},
+        hora_fim = ${baseCfg.horaFim}, intervalo_min = ${baseCfg.intervaloMin}, ativo = 1,
         data_inicio = ${dataInicio ?? null}, data_fim = ${dataFim ?? null},
-        intervalo_ini = ${intervaloIni ?? null}, intervalo_fim = ${intervaloFim ?? null}
+        intervalo_ini = ${baseCfg.intervaloIni ?? null}, intervalo_fim = ${baseCfg.intervaloFim ?? null}
     `
+
+    await prisma.$executeRaw`DELETE FROM tecnico_disponibilidade_dia WHERE cod_tecnico = ${tecnicoId}`
+
+    for (const cfg of diasCfg) {
+      await prisma.$executeRaw`
+        INSERT INTO tecnico_disponibilidade_dia
+          (cod_tecnico, dia_semana, hora_inicio, hora_fim, intervalo_min, intervalo_ini, intervalo_fim, ativo)
+        VALUES
+          (${tecnicoId}, ${cfg.diaSemana}, ${cfg.horaInicio}, ${cfg.horaFim}, ${cfg.intervaloMin},
+           ${cfg.intervaloIni ?? null}, ${cfg.intervaloFim ?? null}, 1)
+        ON DUPLICATE KEY UPDATE
+          hora_inicio = ${cfg.horaInicio},
+          hora_fim = ${cfg.horaFim},
+          intervalo_min = ${cfg.intervaloMin},
+          intervalo_ini = ${cfg.intervaloIni ?? null},
+          intervalo_fim = ${cfg.intervaloFim ?? null},
+          ativo = 1
+      `
+    }
+
     return reply.status(201).send({ ok: true })
   })
 
   // DELETE /agenda/disponibilidade/:tecnicoId
   app.delete('/disponibilidade/:tecnicoId', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
     const { tecnicoId } = request.params as { tecnicoId: string }
+    await prisma.$executeRaw`DELETE FROM tecnico_disponibilidade_dia WHERE cod_tecnico = ${Number(tecnicoId)}`
     await prisma.$executeRaw`DELETE FROM tecnico_disponibilidade WHERE cod_tecnico = ${Number(tecnicoId)}`
     return reply.status(204).send()
   })
@@ -559,6 +734,21 @@ export async function agendaRoutes(app: FastifyInstance) {
 
     if (!dispRows.length) return []
 
+    const tecnicoIds = Array.from(new Set(dispRows.map((d: any) => Number(d.cod_tecnico)).filter((id: number) => Number.isFinite(id) && id > 0)))
+    const detalheRows = tecnicoIds.length
+      ? await prisma.$queryRaw<any[]>(Prisma.sql`
+          SELECT cod_tecnico AS tecnicoId, dia_semana AS diaSemana, hora_inicio AS horaInicio, hora_fim AS horaFim,
+                 intervalo_min AS intervaloMin, intervalo_ini AS intervaloIni, intervalo_fim AS intervaloFim
+          FROM tecnico_disponibilidade_dia
+          WHERE ativo = 1 AND cod_tecnico IN (${Prisma.join(tecnicoIds)})
+        `)
+      : []
+    const detalheMap = new Map<string, any>()
+    for (const det of detalheRows) {
+      const key = `${Number(det.tecnicoId)}-${Number(det.diaSemana)}`
+      detalheMap.set(key, det)
+    }
+
     const finalResult = []
 
     for (const dataStr of dates) {
@@ -579,26 +769,30 @@ export async function agendaRoutes(app: FastifyInstance) {
           if (dataObj > fim) continue
         }
 
-        const dias = String(disp.dias_semana).split(',').map(Number)
-        if (!dias.includes(diaSemana)) continue
+        const tId = Number(disp.cod_tecnico)
+        const detalheDia = detalheMap.get(`${tId}-${diaSemana}`)
+        const usaFallbackBase = !detalheDia
 
-        const [hIni, mIni] = String(disp.hora_inicio).split(':').map(Number)
-        const [hFim, mFim] = String(disp.hora_fim).split(':').map(Number)
+        const dias = parseDiasSemanaCsv(disp.dias_semana)
+        if (usaFallbackBase && !dias.includes(diaSemana)) continue
+
+        const horaInicioRef = usaFallbackBase ? disp.hora_inicio : detalheDia.horaInicio
+        const horaFimRef = usaFallbackBase ? disp.hora_fim : detalheDia.horaFim
+        const [hIni, mIni] = String(horaInicioRef).split(':').map(Number)
+        const [hFim, mFim] = String(horaFimRef).split(':').map(Number)
         const startMin = hIni * 60 + mIni
         const endMin = hFim * 60 + (mFim || 0)
-        const intervalo = Number(disp.intervalo_min) || 60
+        const intervalo = Number(usaFallbackBase ? disp.intervalo_min : detalheDia.intervaloMin) || 60
 
         // Lunch break range (if configured)
-        const lunchIni = parseTimeToMinutes(disp.intervalo_ini)
-        const lunchFim = parseTimeToMinutes(disp.intervalo_fim)
+        const lunchIni = parseTimeToMinutes(usaFallbackBase ? disp.intervalo_ini : detalheDia.intervaloIni)
+        const lunchFim = parseTimeToMinutes(usaFallbackBase ? disp.intervalo_fim : detalheDia.intervaloFim)
 
         const allSlots: string[] = []
         for (let min = startMin; min < endMin; min += intervalo) {
           if (lunchIni !== null && lunchFim !== null && min >= lunchIni && min < lunchFim) continue
           allSlots.push(`${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`)
         }
-
-        const tId = Number(disp.cod_tecnico)
 
         const agendaItems: any[] = await prisma.$queryRaw`
           SELECT hora_ini, hora_fin FROM agenda
