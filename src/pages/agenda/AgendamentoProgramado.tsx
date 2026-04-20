@@ -491,7 +491,7 @@ export function AgendamentoProgramado() {
       setBookForm((prev) => ({
         ...prev,
         procedimentoId: selectedProcedimento,
-        duracao: String(procedimentoSelecionado?.duracaoMin ?? prev.duracao || 60),
+        duracao: String(procedimentoSelecionado?.duracaoMin ?? (prev.duracao || 60)),
       }))
     }
     setBookError('')
