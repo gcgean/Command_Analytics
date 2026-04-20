@@ -110,6 +110,14 @@ function overlapsRange(targetIni: number, targetFim: number, otherIni: number, o
   return targetIni < otherFim && targetFim > otherIni
 }
 
+function minutesToHHmm(totalMinutes: number | null): string | null {
+  if (totalMinutes === null || !Number.isFinite(totalMinutes)) return null
+  const safe = Math.max(0, Math.min(23 * 60 + 59, Math.round(totalMinutes)))
+  const hh = String(Math.floor(safe / 60)).padStart(2, '0')
+  const mm = String(safe % 60).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
 async function validarJanelaAgendamentoProgramado(args: {
   tecnicoId: number
   data: string
@@ -576,13 +584,17 @@ export async function agendaRoutes(app: FastifyInstance) {
     for (const det of detalhes) {
       const tecnicoId = Number(det.tecnicoId)
       if (!detalhesMap.has(tecnicoId)) detalhesMap.set(tecnicoId, [])
+      const horaInicio = minutesToHHmm(parseTimeToMinutes(det.horaInicio)) ?? ''
+      const horaFim = minutesToHHmm(parseTimeToMinutes(det.horaFim)) ?? ''
+      const intervaloIni = minutesToHHmm(parseTimeToMinutes(det.intervaloIni))
+      const intervaloFim = minutesToHHmm(parseTimeToMinutes(det.intervaloFim))
       detalhesMap.get(tecnicoId)!.push({
         diaSemana: Number(det.diaSemana),
-        horaInicio: String(det.horaInicio).substring(0, 5),
-        horaFim: String(det.horaFim).substring(0, 5),
+        horaInicio,
+        horaFim,
         intervaloMin: Number(det.intervaloMin ?? 60),
-        intervaloIni: det.intervaloIni ? String(det.intervaloIni).substring(0, 5) : null,
-        intervaloFim: det.intervaloFim ? String(det.intervaloFim).substring(0, 5) : null,
+        intervaloIni,
+        intervaloFim,
       })
     }
 
