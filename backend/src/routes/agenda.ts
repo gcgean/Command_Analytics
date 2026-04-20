@@ -790,11 +790,28 @@ export async function agendaRoutes(app: FastifyInstance) {
 
         const horaInicioRef = usaFallbackBase ? disp.hora_inicio : detalheDia.horaInicio
         const horaFimRef = usaFallbackBase ? disp.hora_fim : detalheDia.horaFim
-        const [hIni, mIni] = String(horaInicioRef).split(':').map(Number)
-        const [hFim, mFim] = String(horaFimRef).split(':').map(Number)
-        const startMin = hIni * 60 + mIni
-        const endMin = hFim * 60 + (mFim || 0)
-        const intervalo = Number(usaFallbackBase ? disp.intervalo_min : detalheDia.intervaloMin) || 60
+        const fallbackStartMin = parseTimeToMinutes(disp.hora_inicio)
+        const fallbackEndMin = parseTimeToMinutes(disp.hora_fim)
+
+        let startMin = parseTimeToMinutes(horaInicioRef)
+        let endMin = parseTimeToMinutes(horaFimRef)
+
+        // Se o detalhe do dia vier em formato inesperado/inválido, volta para a base legada.
+        if ((!Number.isFinite(startMin as number) || !Number.isFinite(endMin as number) || (endMin as number) <= (startMin as number))
+          && !usaFallbackBase
+          && fallbackStartMin !== null
+          && fallbackEndMin !== null
+          && fallbackEndMin > fallbackStartMin) {
+          startMin = fallbackStartMin
+          endMin = fallbackEndMin
+        }
+
+        if (startMin === null || endMin === null || endMin <= startMin) {
+          continue
+        }
+
+        const intervaloRaw = Number(usaFallbackBase ? disp.intervalo_min : detalheDia.intervaloMin)
+        const intervalo = Number.isFinite(intervaloRaw) && intervaloRaw > 0 ? intervaloRaw : 60
 
         // Lunch break range (if configured)
         const lunchIni = parseTimeToMinutes(usaFallbackBase ? disp.intervalo_ini : detalheDia.intervaloIni)
