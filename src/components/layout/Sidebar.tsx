@@ -102,6 +102,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
     group: 'RH',
     items: [
       { label: 'Banco de Horas', icon: <Clock className="w-4 h-4" />, to: '/banco-horas', recurso: 'banco-horas' },
+      { label: 'Histórico de Treinamentos', icon: <FileText className="w-4 h-4" />, to: '/historico-treinamentos', recurso: 'historico-treinamentos' },
     ]
   },
   {

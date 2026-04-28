@@ -7,6 +7,12 @@
 - Após o resumo de impacto, **aguardar o aval** antes de alterar código, banco ou configuração.
 - Manter comunicação em **pt-BR**, prática e direta.
 
+## Operação local (dev)
+
+- Ao iniciar **backend** e **frontend**, verificar se a porta alvo já está ocupada.
+- Se estiver ocupada por outro processo, iniciar em outra porta disponível e informar as URLs ativas.
+- Portas padrão: backend `3333`, frontend `5173`.
+
 ## Segurança de arquivos
 
 - **Nunca alterar arquivo read-only.**

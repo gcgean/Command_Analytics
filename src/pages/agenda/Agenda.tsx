@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { ChevronLeft, ChevronRight, Plus, Clock, User, Search, Calendar, Pencil, CheckSquare, Trash2, History } from 'lucide-react'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import { Card } from '../../components/ui/Card'
@@ -11,6 +11,8 @@ import { DateInput } from '../../components/ui/DateInput'
 import { api } from '../../services/api'
 import type { AgendaItem } from '../../types'
 import clsx from 'clsx'
+import { Anexos } from '../../components/ui/Anexos'
+import { AnexosDraft } from '../../components/ui/AnexosDraft'
 
 const MONTH_NAMES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const WEEK_DAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -131,6 +133,7 @@ export function Agenda() {
     horarioFim: '10:00',
     observacoes: '',
   })
+  const [newFiles, setNewFiles] = useState<File[]>([])
 
   // Edit appointment modal
   const [editItem, setEditItem] = useState<AgendaItem | null>(null)
@@ -216,7 +219,7 @@ export function Agenda() {
   async function saveAgendamento() {
     setSaving(true)
     try {
-      await api.createAgendaItem({
+      const created: any = await api.createAgendaItem({
         clienteId: form.clienteId ? Number(form.clienteId) : undefined,
         tecnicoId: form.tecnicoId ? Number(form.tecnicoId) : undefined,
         tipo: form.tipo || undefined,
@@ -226,8 +229,15 @@ export function Agenda() {
         horarioFim: form.horarioFim || undefined,
         observacoes: form.observacoes || undefined,
       } as any)
+
+      const createdId = Number(created?.id ?? created?.cod_agenda ?? created?.codAgenda)
+      if (createdId && newFiles.length) {
+        await api.uploadAnexos({ tabela: 'agenda', registroId: createdId, files: newFiles })
+      }
+
       setShowModal(false)
       setForm({ clienteId: '', tecnicoId: '', tipo: 'Instalação', data: toBRDate(todayStr()), horario: '09:00', dataFim: toBRDate(todayStr()), horarioFim: '10:00', observacoes: '' })
+      setNewFiles([])
       buscar()
       loadMonthData()
     } catch (e: any) {
@@ -500,19 +510,19 @@ export function Agenda() {
         {/* Results list */}
         {!loading && results.length > 0 && (
           <div className="overflow-x-auto -mx-1">
-          <div className="min-w-[680px] space-y-1 px-1">
+            <div className="min-w-[680px] space-y-0 px-1">
             {/* Table header */}
             <div className="grid grid-cols-12 gap-2 px-3 py-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wider">
               <div className="col-span-2">Horário</div>
               <div className="col-span-1">Data</div>
-              <div className="col-span-2">Cliente / Descrição</div>
+              <div className="col-span-4">Cliente / Descrição</div>
               <div className="col-span-2">Técnico</div>
               <div className="col-span-1">Tipo</div>
-              <div className="col-span-2">Status</div>
-              <div className="col-span-2"></div>
+              <div className="col-span-1">Status</div>
+              <div className="col-span-1"></div>
             </div>
 
-            {results.map(item => {
+            {results.map((item, index) => {
               const statusLabel = getStatusLabel(item.status)
               const tipoKey = item.tipo ?? ''
               const tipoClass = tipoColors[tipoKey] ?? defaultTipoColor
@@ -545,92 +555,96 @@ export function Agenda() {
               const descricao = (item as any).observacoes as string | null | undefined
 
               return (
-                <div
-                  key={item.id}
-                  className="grid grid-cols-12 gap-2 px-3 py-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors items-center border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
-                >
-                  <div className="col-span-2 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <span className="text-sm font-mono text-slate-700 dark:text-slate-300 text-xs">{timeStr}</span>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-none mt-0.5">#{item.id}</p>
+                <Fragment key={item.id}>
+                  <div
+                    className="grid grid-cols-12 gap-2 px-3 py-2.5 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors items-center border border-transparent hover:border-slate-200 dark:hover:border-slate-700"
+                  >
+                    <div className="col-span-2 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <span className="text-sm font-mono text-slate-700 dark:text-slate-300 text-xs">{timeStr}</span>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 leading-none mt-0.5">#{item.id}</p>
+                      </div>
+                    </div>
+                    <div className="col-span-1 text-xs text-slate-600 dark:text-slate-400">{dateStr}</div>
+                    <div className="col-span-4 min-w-0">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{item.clienteNome || '—'}</p>
+                      {descricao && <p className="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap break-words">{descricao}</p>}
+                      {(item as any).criadoPorNome && (
+                        <p className="text-xs text-slate-600 mt-0.5 truncate">
+                          por {(item as any).criadoPorNome}
+                          {(item as any).dataCriacao ? ` · ${new Date((item as any).dataCriacao).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
+                        </p>
+                      )}
+                    </div>
+                    <div className="col-span-2 flex items-center gap-1">
+                      <User className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                      <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{item.tecnicoNome || '—'}</span>
+                    </div>
+                    <div className="col-span-1">
+                      {(item as any).origem === 'programado' ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full border bg-indigo-500/20 text-indigo-400 border-indigo-500/30">
+                          Programado
+                        </span>
+                      ) : (
+                        <span className={clsx('text-xs px-2 py-0.5 rounded-full border', tipoClass)}>
+                          {tipoKey || '—'}
+                        </span>
+                      )}
+                    </div>
+                    <div className="col-span-1">
+                      <span className={clsx('text-xs px-2 py-0.5 rounded-full', statusColors[statusLabel] ?? '')}>
+                        {statusLabel}
+                      </span>
+                    </div>
+                    <div className="col-span-1 flex gap-0.5 justify-end flex-nowrap">
+                      <button
+                        onClick={() => setAuditoriaItem({
+                          tabela: (item as any).origem === 'programado' ? 'agendamento_programado' : 'agenda',
+                          registroId: item.id,
+                          label: item.clienteNome || `#${item.id}`,
+                        })}
+                        title="Histórico de auditoria"
+                        className="p-1 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-violet-500/10 transition-colors"
+                      >
+                        <History className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => openStatusChange(item)}
+                        title="Alterar Status"
+                        className="p-1 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
+                      >
+                        <CheckSquare className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => openEdit(item)}
+                        title="Alterar Agendamento"
+                        className="p-1 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!confirm('Excluir este agendamento?')) return
+                          if ((item as any).origem === 'programado') {
+                            await api.cancelAgendamentoProg(item.id).catch(() => {})
+                          } else {
+                            await api.deleteAgendaItem(item.id).catch(() => {})
+                          }
+                          buscar()
+                          loadMonthData()
+                        }}
+                        title="Excluir"
+                        className="p-1 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
-                  <div className="col-span-1 text-xs text-slate-600 dark:text-slate-400">{dateStr}</div>
-                  <div className="col-span-2 min-w-0">
-                    <p className="text-sm font-medium text-slate-800 dark:text-slate-200 truncate">{item.clienteNome || '—'}</p>
-                    {descricao && <p className="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap break-words">{descricao}</p>}
-                    {(item as any).criadoPorNome && (
-                      <p className="text-xs text-slate-600 mt-0.5 truncate">
-                        por {(item as any).criadoPorNome}
-                        {(item as any).dataCriacao ? ` · ${new Date((item as any).dataCriacao).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}` : ''}
-                      </p>
-                    )}
-                  </div>
-                  <div className="col-span-2 flex items-center gap-1">
-                    <User className="w-3 h-3 text-slate-500 flex-shrink-0" />
-                    <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{item.tecnicoNome || '—'}</span>
-                  </div>
-                  <div className="col-span-1">
-                    {(item as any).origem === 'programado' ? (
-                      <span className="text-xs px-2 py-0.5 rounded-full border bg-indigo-500/20 text-indigo-400 border-indigo-500/30">
-                        Programado
-                      </span>
-                    ) : (
-                      <span className={clsx('text-xs px-2 py-0.5 rounded-full border', tipoClass)}>
-                        {tipoKey || '—'}
-                      </span>
-                    )}
-                  </div>
-                  <div className="col-span-2">
-                    <span className={clsx('text-xs px-2 py-0.5 rounded-full', statusColors[statusLabel] ?? '')}>
-                      {statusLabel}
-                    </span>
-                  </div>
-                  <div className="col-span-2 flex gap-1 justify-end">
-                    <button
-                      onClick={() => setAuditoriaItem({
-                        tabela: (item as any).origem === 'programado' ? 'agendamento_programado' : 'agenda',
-                        registroId: item.id,
-                        label: item.clienteNome || `#${item.id}`,
-                      })}
-                      title="Histórico de auditoria"
-                      className="p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-violet-500/10 transition-colors"
-                    >
-                      <History className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => openStatusChange(item)}
-                      title="Alterar Status"
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
-                    >
-                      <CheckSquare className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => openEdit(item)}
-                      title="Alterar Agendamento"
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!confirm('Excluir este agendamento?')) return
-                        if ((item as any).origem === 'programado') {
-                          await api.cancelAgendamentoProg(item.id).catch(() => {})
-                        } else {
-                          await api.deleteAgendaItem(item.id).catch(() => {})
-                        }
-                        buscar()
-                        loadMonthData()
-                      }}
-                      title="Excluir"
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
+                  {index < results.length - 1 && (
+                    <div className="mx-3 my-1 h-px bg-slate-200/70 dark:bg-slate-700/60" />
+                  )}
+                </Fragment>
               )
             })}
           </div>
@@ -701,9 +715,10 @@ export function Agenda() {
             placeholder="Observações do agendamento..."
             value={form.observacoes}
             onChange={e => setForm(f => ({ ...f, observacoes: e.target.value }))}
-            maxLength={2000}
+            maxLength={5000}
             rows={4}
           />
+          <AnexosDraft files={newFiles} onChange={setNewFiles} />
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Button>
             <Button onClick={saveAgendamento} disabled={saving}>
@@ -769,9 +784,15 @@ export function Agenda() {
             placeholder="Observações do agendamento..."
             value={editForm.observacoes}
             onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))}
-            maxLength={2000}
+            maxLength={5000}
             rows={4}
           />
+          {editItem && (
+            <Anexos
+              tabela={(editItem as any).origem === 'programado' ? 'agendamento_programado' : 'agenda'}
+              registroId={editItem.id}
+            />
+          )}
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setEditItem(null)}>Cancelar</Button>
             <Button onClick={saveEdit} disabled={savingEdit}>

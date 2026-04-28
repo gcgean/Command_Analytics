@@ -7,9 +7,46 @@ import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
 import { Input, Textarea } from '../../components/ui/Input'
 import { DateInput } from '../../components/ui/DateInput'
+import { Anexos } from '../../components/ui/Anexos'
+import { AnexosDraft } from '../../components/ui/AnexosDraft'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
 import { api } from '../../services/api'
 import clsx from 'clsx'
+
+function timeToMinutes(hhmm: string): number | null {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(hhmm)
+  if (!m) return null
+  return Number(m[1]) * 60 + Number(m[2])
+}
+
+function minutesToTime(minutes: number): string {
+  const m = ((minutes % (24 * 60)) + (24 * 60)) % (24 * 60)
+  const hh = String(Math.floor(m / 60)).padStart(2, '0')
+  const mm = String(m % 60).padStart(2, '0')
+  return `${hh}:${mm}`
+}
+
+function getContinuousBlock(slots: string[], stepMinutes: number) {
+  const mins = slots
+    .map(s => ({ s, m: timeToMinutes(s) }))
+    .filter((x): x is { s: string; m: number } => x.m !== null)
+    .sort((a, b) => a.m - b.m)
+
+  if (mins.length !== slots.length || mins.length === 0) {
+    return { ok: false as const, error: 'Horários inválidos.' }
+  }
+  if (stepMinutes <= 0) {
+    return { ok: false as const, error: 'Duração inválida.' }
+  }
+  for (let i = 1; i < mins.length; i++) {
+    if (mins[i].m - mins[i - 1].m !== stepMinutes) {
+      return { ok: false as const, error: 'Selecione horários contínuos (sem buracos).' }
+    }
+  }
+  const startMinutes = mins[0].m
+  const duration = mins.length * stepMinutes
+  return { ok: true as const, start: minutesToTime(startMinutes), duration }
+}
 
 const DIAS_SEMANA = [
   { val: 0, label: 'Dom' },
@@ -256,6 +293,7 @@ export function AgendamentoProgramado() {
   const [bookTecnico, setBookTecnico] = useState<{ tecnicoId: number; tecnicoNome: string; data: string } | null>(null)
   const [selectedSlots, setSelectedSlots] = useState<string[]>([])
   const [bookForm, setBookForm] = useState({ clienteId: '', procedimentoId: '', descricao: '', duracao: '60' })
+  const [bookFiles, setBookFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [bookError, setBookError] = useState('')
 
@@ -558,9 +596,16 @@ export function AgendamentoProgramado() {
       setBookError('')
       return
     }
-    setSelectedSlots(prev =>
-      prev.includes(hora) ? prev.filter(h => h !== hora) : [...prev, hora].sort()
-    )
+    setSelectedSlots(prev => {
+      const next = prev.includes(hora) ? prev.filter(h => h !== hora) : [...prev, hora]
+      next.sort()
+      const procedimentoIdEfetivo = selectedProcedimento || bookForm.procedimentoId
+      const procedimentoSelecionado = procedimentoIdEfetivo ? findProcedimentoById(procedimentoIdEfetivo) : null
+      const step = Number(procedimentoSelecionado?.duracaoMin ?? (Number(bookForm.duracao) || 60))
+      const block = getContinuousBlock(next, step)
+      setBookForm(f => ({ ...f, duracao: String(block.ok ? block.duration : (procedimentoSelecionado?.duracaoMin ?? (Number(f.duracao) || 60))) }))
+      return next
+    })
   }
 
   function openBookModal() {
@@ -573,6 +618,15 @@ export function AgendamentoProgramado() {
         duracao: String(procedimentoSelecionado?.duracaoMin ?? (prev.duracao || 60)),
       }))
     }
+    const procedimentoIdEfetivo = selectedProcedimento || bookForm.procedimentoId
+    const procedimento = procedimentoIdEfetivo ? findProcedimentoById(procedimentoIdEfetivo) : null
+    const step = Number(procedimento?.duracaoMin ?? (Number(bookForm.duracao) || 60))
+    const block = getContinuousBlock(selectedSlots, step)
+    if (!block.ok) {
+      setBookError(block.error)
+      return
+    }
+    setBookForm((prev) => ({ ...prev, duracao: String(block.duration) }))
     setBookError('')
     setShowBookModal(true)
   }
@@ -583,31 +637,37 @@ export function AgendamentoProgramado() {
     if (!procedimentoIdEfetivo) { setBookError('Selecione o procedimento.'); return }
     const procedimento = findProcedimentoById(procedimentoIdEfetivo)
     if (!procedimento) { setBookError('Procedimento inválido.'); return }
+    const step = Number(procedimento.duracaoMin)
+    const block = getContinuousBlock(selectedSlots, step)
+    if (!block.ok) { setBookError(block.error); return }
     setSubmitting(true)
     setBookError('')
     try {
-      for (const hora of selectedSlots) {
-        await api.validarDuracaoAgendamentoProg({
-          tecnicoId: bookTecnico.tecnicoId,
-          data: bookTecnico.data,
-          horaInicio: hora,
-          duracao: Number(procedimento.duracaoMin),
-        })
+      await api.validarDuracaoAgendamentoProg({
+        tecnicoId: bookTecnico.tecnicoId,
+        data: bookTecnico.data,
+        horaInicio: block.start,
+        duracao: block.duration,
+      })
+
+      const created: any = await api.createAgendamentoProg({
+        tecnicoId: bookTecnico.tecnicoId,
+        clienteId: Number(bookForm.clienteId),
+        procedimentoId: Number(procedimentoIdEfetivo),
+        data: bookTecnico.data,
+        horaInicio: block.start,
+        duracao: block.duration,
+        descricao: bookForm.descricao || undefined,
+      })
+      const createdId = Number(created?.id)
+      if (bookFiles.length && createdId) {
+        await api.uploadAnexos({ tabela: 'agendamento_programado', registroId: createdId, files: bookFiles })
       }
-      for (const hora of selectedSlots) {
-        await api.createAgendamentoProg({
-          tecnicoId: bookTecnico.tecnicoId,
-          clienteId: Number(bookForm.clienteId),
-          procedimentoId: Number(procedimentoIdEfetivo),
-          data: bookTecnico.data,
-          horaInicio: hora,
-          duracao: Number(procedimento.duracaoMin),
-          descricao: bookForm.descricao || undefined,
-        })
-      }
+
       setShowBookModal(false)
       setSelectedSlots([])
       setBookTecnico(null)
+      setBookFiles([])
       fetchSlots()
       fetchAgendamentos()
       setActiveTab('lista')
@@ -857,6 +917,13 @@ export function AgendamentoProgramado() {
             <>
               {/* Barra de seleção múltipla */}
               {bookTecnico && selectedSlots.length > 0 && (
+                (() => {
+                  const procedimentoIdEfetivo = selectedProcedimento || bookForm.procedimentoId
+                  const procedimento = procedimentoIdEfetivo ? findProcedimentoById(procedimentoIdEfetivo) : null
+                  const step = Number(procedimento?.duracaoMin ?? (Number(bookForm.duracao) || 60))
+                  const block = getContinuousBlock(selectedSlots, step)
+                  const canAgendar = block.ok
+                  return (
                 <div className="flex items-center justify-between p-3 rounded-xl bg-blue-600/10 border border-blue-500/30">
                   <div className="flex items-center gap-3">
                     <div className="flex gap-1 flex-wrap">
@@ -867,12 +934,17 @@ export function AgendamentoProgramado() {
                     <span className="text-sm text-slate-700 dark:text-slate-300">
                       {selectedSlots.length} horário{selectedSlots.length > 1 ? 's' : ''} selecionado{selectedSlots.length > 1 ? 's' : ''} — {bookTecnico.tecnicoNome}
                     </span>
+                    {!canAgendar && (
+                      <span className="text-xs text-red-400">Selecione horários contínuos (sem buracos)</span>
+                    )}
                   </div>
                   <div className="flex gap-2">
                     <Button variant="secondary" onClick={() => { setSelectedSlots([]); setBookTecnico(null) }}>Limpar</Button>
-                    <Button onClick={openBookModal} icon={<Plus className="w-4 h-4" />}>Agendar</Button>
+                    <Button onClick={openBookModal} disabled={!canAgendar} icon={<Plus className="w-4 h-4" />}>Agendar</Button>
                   </div>
                 </div>
+                  )
+                })()
               )}
 
               <div className="space-y-8">
@@ -1375,9 +1447,11 @@ export function AgendamentoProgramado() {
             placeholder="Descreva o objetivo do agendamento..."
             value={bookForm.descricao}
             onChange={e => setBookForm(f => ({ ...f, descricao: e.target.value }))}
-            maxLength={2000}
+            maxLength={5000}
             rows={4}
           />
+
+          <AnexosDraft files={bookFiles} onChange={setBookFiles} />
 
           {bookError && (
             <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
@@ -1431,9 +1505,12 @@ export function AgendamentoProgramado() {
             placeholder="Descrição..."
             value={editForm.descricao}
             onChange={e => setEditForm(f => ({ ...f, descricao: e.target.value }))}
-            maxLength={2000}
+            maxLength={5000}
             rows={4}
           />
+          {editItem && (
+            <Anexos tabela="agendamento_programado" registroId={editItem.id} />
+          )}
           <div className="flex justify-end gap-3 pt-1">
             <Button variant="secondary" onClick={() => setEditItem(null)}>Cancelar</Button>
             <Button onClick={saveEdit} disabled={savingEdit || !editForm.procedimentoId}>

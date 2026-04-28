@@ -5,10 +5,20 @@ import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
 import { Card } from '../../components/ui/Card'
 import { api } from '../../services/api'
-import type { Usuario } from '../../types'
+import type { Usuario, Departamento } from '../../types'
 import clsx from 'clsx'
 
 const DEPARTAMENTOS = ['Suporte', 'Fiscal', 'Financeiro', 'Comercial', 'Certificado', 'CS', 'Instalação', 'Treinamento', 'Técnico']
+
+type UsuarioForm = {
+  nome: string
+  nomeUsu: string
+  email: string
+  senha: string
+  cargo: string
+  departamento: Departamento
+  idTelegram: string
+}
 
 export function Usuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
@@ -21,7 +31,7 @@ export function Usuarios() {
   
   // Modal State
   const [editId, setEditId] = useState<number | null>(null)
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<UsuarioForm>({
     nome: '',
     nomeUsu: '',
     email: '',
@@ -291,7 +301,7 @@ export function Usuarios() {
                 <Select
                   label="Departamento"
                   value={form.departamento}
-                  onChange={e => setForm({ ...form, departamento: e.target.value })}
+                  onChange={e => setForm({ ...form, departamento: e.target.value as Departamento })}
                   options={DEPARTAMENTOS.map(d => ({ value: d, label: d }))}
                 />
               </div>

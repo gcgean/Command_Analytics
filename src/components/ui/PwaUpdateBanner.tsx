@@ -12,10 +12,10 @@ export function PwaUpdateBanner() {
     offlineReady: [offlineReady, setOfflineReady],
     updateServiceWorker,
   } = useRegisterSW({
-    onRegisteredSW(_swUrl, swRegistration) {
+    onRegisteredSW(_swUrl: string, swRegistration: ServiceWorkerRegistration | undefined) {
       setRegistration(swRegistration ?? null)
     },
-    onRegisterError(error) {
+    onRegisterError(error: unknown) {
       console.error('[PWA] Falha ao registrar Service Worker:', error)
     },
   })

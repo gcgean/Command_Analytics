@@ -87,7 +87,7 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
   const baseHeaders: Record<string, string> = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
   }
-  if (options.body !== undefined) {
+  if (options.body !== undefined && typeof options.body === 'string') {
     baseHeaders['Content-Type'] = 'application/json'
   }
   let res: Response
@@ -191,6 +191,62 @@ export const api = {
   updateAgendaItem: (id: number, data: Partial<AgendaItem>) =>
     fetchApi<AgendaItem>(`/agenda/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAgendaItem: (id: number) => fetchApi(`/agenda/${id}`, { method: 'DELETE' }),
+
+  // ─── Anexos (Agenda / Agendamentos Programados) ─────────────
+  listAnexos: (params: { tabela: 'agenda' | 'agendamento_programado'; registroId: number }) => {
+    const qs = '?' + new URLSearchParams({ tabela: params.tabela, registroId: String(params.registroId) }).toString()
+    return fetchApi<any[]>(`/anexos${qs}`)
+  },
+  uploadAnexos: async (params: { tabela: 'agenda' | 'agendamento_programado'; registroId: number; files: File[]; onProgress?: (percent: number) => void }) => {
+    const qs = '?' + new URLSearchParams({ tabela: params.tabela, registroId: String(params.registroId) }).toString()
+    const fd = new FormData()
+    for (const file of params.files) fd.append('files', file)
+
+    const token = getToken()
+
+    return await new Promise<any[]>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${BASE_URL}/anexos${qs}`)
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)
+
+      xhr.upload.onprogress = (evt) => {
+        if (!evt.lengthComputable) return
+        const percent = Math.max(0, Math.min(100, Math.round((evt.loaded / evt.total) * 100)))
+        params.onProgress?.(percent)
+      }
+
+      xhr.onload = () => {
+        try {
+          if (xhr.status < 200 || xhr.status >= 300) {
+            const parsed = JSON.parse(xhr.responseText || '{}')
+            reject(new Error(parsed?.error || `HTTP ${xhr.status}`))
+            return
+          }
+          const parsed = JSON.parse(xhr.responseText || '[]')
+          resolve(parsed)
+        } catch {
+          reject(new Error('Resposta inválida do servidor.'))
+        }
+      }
+
+      xhr.onerror = () => reject(new Error('Falha de rede ao enviar anexos.'))
+      xhr.send(fd)
+    })
+  },
+  deleteAnexo: (id: number) => fetchApi(`/anexos/${id}`, { method: 'DELETE' }),
+  getAnexoBlob: async (id: number, opts?: { download?: boolean }) => {
+    const token = getToken()
+    const headers: Record<string, string> = {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    }
+    const download = opts?.download !== false
+    const res = await fetch(`${BASE_URL}/anexos/${id}/download?download=${download ? '1' : '0'}`, { headers })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Erro desconhecido' }))
+      throw new Error(err.error || `HTTP ${res.status}`)
+    }
+    return res.blob()
+  },
 
   // ─── Auditoria ─────────────────────────────────────────────
   getAuditoria: (tabela: string, registroId: number) =>

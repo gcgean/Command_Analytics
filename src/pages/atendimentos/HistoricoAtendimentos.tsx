@@ -34,7 +34,8 @@ export function HistoricoAtendimentos() {
   }, [])
 
   const filtered = atendimentos.filter((a: any) => {
-    const deptLabel = DEPT_LABEL[a.departamento] ?? String(a.departamento ?? '')
+    const deptKey = a.departamento === null || a.departamento === undefined ? null : Number(a.departamento)
+    const deptLabel = (deptKey !== null && Number.isFinite(deptKey) ? DEPT_LABEL[deptKey] : undefined) ?? String(a.departamento ?? '')
     const matchSearch = !search ||
       (a.clienteNome ?? '').toLowerCase().includes(search.toLowerCase()) ||
       (a.tecnicoNome ?? '').toLowerCase().includes(search.toLowerCase())
@@ -133,12 +134,21 @@ export function HistoricoAtendimentos() {
                       </td>
                       <td className="table-cell text-slate-700 dark:text-slate-300">{a.tecnicoNome}</td>
                       <td className="table-cell">
-                        <span className={clsx('text-xs font-medium px-2 py-0.5 rounded-full', departamentoColors[DEPT_LABEL[a.departamento]] ?? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400')}>
-                          {DEPT_LABEL[a.departamento] ?? `Depto ${a.departamento}`}
-                        </span>
+                        {(() => {
+                          const key = a.departamento === null || a.departamento === undefined ? null : Number(a.departamento)
+                          const label = key !== null && Number.isFinite(key) ? DEPT_LABEL[key] : undefined
+                          const classes = label ? (departamentoColors[label] ?? 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400') : 'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400'
+                          return (
+                            <span className={clsx('text-xs font-medium px-2 py-0.5 rounded-full', classes)}>
+                              {label ?? `Depto ${a.departamento ?? '—'}`}
+                            </span>
+                          )
+                        })()}
                       </td>
                       <td className="table-cell"><StatusBadge status={a.status as StatusAtendimento} /></td>
-                      <td className="table-cell text-xs text-slate-600 dark:text-slate-400">{new Date(a.dataAbertura).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })}</td>
+                      <td className="table-cell text-xs text-slate-600 dark:text-slate-400">
+                        {a.dataAbertura ? new Date(a.dataAbertura).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                      </td>
                       <td className="table-cell text-xs text-slate-600 dark:text-slate-400">
                         {a.dataFechamento ? new Date(a.dataFechamento).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                       </td>

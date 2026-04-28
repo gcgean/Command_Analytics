@@ -107,7 +107,7 @@ export function Configuracoes() {
 
   const handleEnviarTesteTelegram = async () => {
     if (!telegram.userIdPadrao || !msgTeste) {
-      toast.warn('Informe o User ID e a mensagem de teste.')
+      toast.warning('Informe o User ID e a mensagem de teste.')
       return
     }
     setEnviandoTeste(true)

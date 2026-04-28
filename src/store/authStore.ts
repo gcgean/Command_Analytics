@@ -21,13 +21,13 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       login: async (usuario: string, password: string) => {
-        const { user, token } = await api.login(usuario, password) as { user: Usuario; token: string }
+        const { user, token } = await api.login(usuario, password) as unknown as { user: Usuario; token: string }
         set({ user, token, isAuthenticated: true })
         return true
       },
 
       refreshSession: async () => {
-        const { user, token } = await api.refreshToken() as { user: Usuario; token: string }
+        const { user, token } = await api.refreshToken() as unknown as { user: Usuario; token: string }
         set({ user, token, isAuthenticated: true })
         return true
       },

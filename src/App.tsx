@@ -73,6 +73,7 @@ import { Servidores } from './pages/servidores/Servidores'
 
 // RH
 import { BancoHoras } from './pages/rh/BancoHoras'
+import { HistoricoTreinamentos } from './pages/rh/HistoricoTreinamentos'
 
 // Configurações
 import { Configuracoes } from './pages/configuracoes/Configuracoes'
@@ -221,6 +222,7 @@ export default function App() {
         <Route path="servidores" element={<PermissionRoute recurso="servidores"><Servidores /></PermissionRoute>} />
 
         <Route path="banco-horas" element={<PermissionRoute recurso="banco-horas"><BancoHoras /></PermissionRoute>} />
+        <Route path="historico-treinamentos" element={<PermissionRoute recurso="historico-treinamentos"><HistoricoTreinamentos /></PermissionRoute>} />
         <Route path="configuracoes" element={<PermissionRoute recurso="configuracoes"><Configuracoes /></PermissionRoute>} />
         <Route path="cadastro-etapas" element={<PermissionRoute recurso="cadastro-etapas"><CadastroEtapas /></PermissionRoute>} />
         <Route path="cadastro-procedimentos" element={<PermissionRoute recurso="cadastro-procedimentos"><CadastroProcedimentos /></PermissionRoute>} />

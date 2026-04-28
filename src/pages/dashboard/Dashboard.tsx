@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom'
 import type { StatusAtendimento, Atendimento, AgendaItem, Cliente } from '../../types'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import clsx from 'clsx'
 
 interface KPIData {
   atendimentosHoje: number

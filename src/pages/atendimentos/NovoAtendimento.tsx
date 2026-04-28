@@ -7,7 +7,7 @@ import { Select } from '../../components/ui/Select'
 import { Card } from '../../components/ui/Card'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
 import { api } from '../../services/api'
-import type { AgendaItem } from '../../types'
+import type { AgendaItem, Atendimento } from '../../types'
 import clsx from 'clsx'
 
 const tabs = ['Dados', 'Tipo', 'Agendamentos']
@@ -71,23 +71,29 @@ export function NovoAtendimento() {
     if (!form.clienteId || !form.tecnicoId) return
     setSaving(true)
     try {
-      await api.createAtendimento({
+      const payload: Partial<Atendimento> = {
         clienteId: Number(form.clienteId),
         tecnicoId: Number(form.tecnicoId),
-        tipoContato: form.tipoContato as never,
-        departamento: form.departamento as never,
-        prioridade: form.prioridade as never,
         observacoes: form.observacoes,
         solucao: form.solucao || undefined,
-        bugSistema: form.bugSistema,
-        foraHorario: form.foraHorario,
+        bugSistema: form.bugSistema ? 'S' : '',
+        foraHorario: form.foraHorario ? 'S' : '',
         status: 1,
-      })
+        dataAbertura: form.data,
+      }
+
+      await api.createAtendimento(payload as unknown as Partial<Atendimento>)
       setSaved(true)
       setTimeout(() => navigate('/atendimentos'), 1200)
     } finally {
       setSaving(false)
     }
+  }
+
+  const getAgendaStatusLabel = (status: number | null) => {
+    if (status === 2) return 'Finalizado'
+    if (status === 1) return 'Aguardando'
+    return 'Não Finalizado'
   }
 
   return (
@@ -129,12 +135,12 @@ export function NovoAtendimento() {
         <Card>
           <div className="space-y-5">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Select
+              <ClienteSearch
                 label="Cliente"
-                options={clienteOptions}
-                placeholder="Selecione o cliente"
                 value={form.clienteId}
-                onChange={e => handleChange('clienteId', e.target.value)}
+                onChange={(id) => handleChange('clienteId', id)}
+                placeholder="Digite para buscar cliente..."
+                required
               />
               <Select
                 label="Técnico Responsável"
@@ -252,15 +258,18 @@ export function NovoAtendimento() {
                     <Calendar className="w-4 h-4 text-blue-400 flex-shrink-0" />
                     <div className="flex-1">
                       <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{a.tipo}</p>
-                      <p className="text-xs text-slate-500">{new Date(a.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })} às {a.horario} · {a.tecnicoNome}</p>
+                      <p className="text-xs text-slate-500">
+                        {a.data ? new Date(a.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
+                        {' '}às {a.horario ?? a.horarioIni ?? '—'} · {a.tecnicoNome}
+                      </p>
                     </div>
                     <span className={clsx(
                       'text-xs px-2 py-0.5 rounded-full',
-                      a.status === 'Aguardando' ? 'bg-amber-500/20 text-amber-400' :
-                      a.status === 'Finalizado' ? 'bg-emerald-500/20 text-emerald-400' :
+                      getAgendaStatusLabel(a.status ?? null) === 'Aguardando' ? 'bg-amber-500/20 text-amber-400' :
+                      getAgendaStatusLabel(a.status ?? null) === 'Finalizado' ? 'bg-emerald-500/20 text-emerald-400' :
                       'bg-red-500/20 text-red-400'
                     )}>
-                      {a.status}
+                      {getAgendaStatusLabel(a.status ?? null)}
                     </span>
                   </div>
                 ))}

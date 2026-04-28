@@ -33,6 +33,10 @@ interface Recurso {
   grupo: string
 }
 
+const EXTRA_RECURSOS: Recurso[] = [
+  { id: 'historico-treinamentos', label: 'Histórico de Treinamentos', grupo: 'RH' },
+]
+
 interface Tecnico { id: number; nome: string; nomeUsu?: string }
 
 // Group resources by category
@@ -76,7 +80,19 @@ export function GruposAcesso() {
 
   useEffect(() => {
     loadGrupos()
-    api.getGruposRecursos().then((r: any) => setRecursos(r)).catch(() => {})
+    api.getGruposRecursos().then((r: any) => {
+      const merged = new Map<string, Recurso>()
+      const list = Array.isArray(r) ? (r as Recurso[]) : []
+      for (const item of list) merged.set(item.id, item)
+      for (const item of EXTRA_RECURSOS) {
+        if (!merged.has(item.id)) merged.set(item.id, item)
+      }
+      setRecursos(Array.from(merged.values()))
+    }).catch(() => {
+      const merged = new Map<string, Recurso>()
+      for (const item of EXTRA_RECURSOS) merged.set(item.id, item)
+      setRecursos(Array.from(merged.values()))
+    })
     api.getUsuarios().then((u: any) =>
       setAllUsers(u.map((x: any) => ({ id: x.id, nome: x.nome || x.nomeUsu || `#${x.id}`, nomeUsu: x.nomeUsu })))
     ).catch(() => {})

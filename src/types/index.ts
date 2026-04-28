@@ -96,6 +96,12 @@ export interface Cliente {
   idPlano?: number | null
   contadorId?: number | null
   observacoes?: string | null
+  ultimoFTP?: string | null
+  ultimoBackup?: string | null
+  certificadoVencimento?: string | null
+  versaoSistema?: string | null
+  conexoes?: number | null
+  caixas?: number | null
   // Legacy optional fields for compatibility
   status?: string
   segmento?: string
@@ -328,6 +334,7 @@ export interface Lead {
   responsavelId: number
   responsavelNome: string
   dataCadastro: string
+  contador?: string | null
   observacoes?: string
 }
 
