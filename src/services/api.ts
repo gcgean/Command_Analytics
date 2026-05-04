@@ -60,6 +60,14 @@ const BASE_URL = (() => {
 
 export const API_BASE_URL = BASE_URL
 
+type PaginatedResponse<T> = {
+  total: number
+  page: number
+  limit: number
+  pages: number
+  data: T[]
+}
+
 function getToken(): string | null {
   const directToken = localStorage.getItem('auth_token')
   if (directToken) return directToken
@@ -161,6 +169,29 @@ export const api = {
     const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
     return fetchApi<Cliente[]>(`/clientes${qs}`)
   },
+  getClientesPaged: (params: {
+    page: number
+    limit: number
+    search?: string
+    ativo?: string
+    bloqueado?: string
+    curvaABC?: string
+    idSegmento?: string
+    contadorId?: string
+  }) => {
+    const qs = '?' + new URLSearchParams({
+      page: String(params.page),
+      limit: String(params.limit),
+      ...(params.search ? { search: params.search } : {}),
+      ...(params.ativo !== undefined ? { ativo: params.ativo } : {}),
+      ...(params.bloqueado !== undefined ? { bloqueado: params.bloqueado } : {}),
+      ...(params.curvaABC ? { curvaABC: params.curvaABC } : {}),
+      ...(params.idSegmento ? { idSegmento: params.idSegmento } : {}),
+      ...(params.contadorId ? { contadorId: params.contadorId } : {}),
+    }).toString()
+    return fetchApi<PaginatedResponse<Cliente>>(`/clientes${qs}`)
+  },
+  getSegmentos: () => fetchApi<Array<{ id: number; descricao: string }>>('/segmentos'),
   getClienteById: (id: number) => fetchApi<Cliente>(`/clientes/${id}`),
   createCliente: (data: Partial<Cliente>) => fetchApi<Cliente>('/clientes', { method: 'POST', body: JSON.stringify(data) }),
   updateCliente: (id: number, data: Partial<Cliente>) => fetchApi<Cliente>(`/clientes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

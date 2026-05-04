@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Search, Plus, RefreshCw } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
@@ -32,54 +32,121 @@ export function Clientes() {
   const location = useLocation()
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('Ativo')
+  const [segmentos, setSegmentos] = useState<Array<{ id: number; descricao: string }>>([])
   const [filterSegmento, setFilterSegmento] = useState('')
   const [filterCurva, setFilterCurva] = useState('')
   const LIMIT = 50
   const [page, setPage] = useState(1)
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const fetchingRef = useRef(false)
 
-  useEffect(() => {
+  const segmentoLabelById = useMemo(() => {
+    const map = new Map<number, string>()
+    for (const s of segmentos) map.set(s.id, s.descricao)
+    return map
+  }, [segmentos])
+
+  const statusParams = useMemo(() => {
+    return filterStatus === 'Ativo'
+      ? { ativo: 'S', bloqueado: 'N' }
+      : filterStatus === 'Bloqueado'
+        ? { bloqueado: 'S' }
+        : (filterStatus === 'Inativo' || filterStatus === 'Cancelado')
+          ? { ativo: 'N' }
+          : {}
+  }, [filterStatus])
+
+  const contadorId = useMemo(() => {
     const qs = new URLSearchParams(location.search)
-    const contadorId = qs.get('contadorId') || ''
-    const statusParams =
-      filterStatus === 'Ativo'
-        ? { ativo: 'S', bloqueado: 'N' }
-        : filterStatus === 'Bloqueado'
-          ? { bloqueado: 'S' }
-          : (filterStatus === 'Inativo' || filterStatus === 'Cancelado')
-            ? { ativo: 'N' }
-            : {}
+    return qs.get('contadorId') || ''
+  }, [location.search])
 
-    setLoading(true)
-    api
-      .getClientes({ ...(contadorId ? { contadorId } : {}), ...statusParams })
-      .then((d) => setClientes(d))
-      .catch(() => setClientes([]))
-      .finally(() => setLoading(false))
-  }, [location.search, filterStatus])
-
-  const filtered = clientes.filter(c => {
-    const matchSearch = !search ||
-      (c.nome ?? '').toLowerCase().includes(search.toLowerCase()) ||
-      (c.cnpj ?? '').includes(search) ||
-      (c.cidade ?? '').toLowerCase().includes(search.toLowerCase())
-    const matchStatus = !filterStatus || getClienteStatus(c) === filterStatus
-    const matchSeg = !filterSegmento || true // segmento field removed from API
-    const matchCurva = !filterCurva || (c.curvaABC ?? '') === filterCurva
-    return matchSearch && matchStatus && matchSeg && matchCurva
-  })
+  const queryKey = useMemo(() => {
+    return JSON.stringify({
+      search: search.trim(),
+      filterCurva,
+      filterSegmento,
+      contadorId,
+      statusParams,
+    })
+  }, [search, filterCurva, filterSegmento, contadorId, statusParams])
 
   useEffect(() => {
-    setPage(1)
-  }, [search, filterStatus, filterSegmento, filterCurva])
+    api.getSegmentos().then(setSegmentos).catch(() => setSegmentos([]))
+  }, [])
+
+  async function loadPage(targetPage: number, opts?: { reset?: boolean }) {
+    if (fetchingRef.current) return
+    fetchingRef.current = true
+    const reset = opts?.reset === true
+    if (reset) {
+      setLoading(true)
+      setClientes([])
+      setPage(1)
+      setHasMore(true)
+    } else {
+      setLoadingMore(true)
+    }
+    setError(null)
+
+    try {
+      const res = await api.getClientesPaged({
+        page: targetPage,
+        limit: LIMIT,
+        ...(search.trim() ? { search: search.trim() } : {}),
+        ...(filterCurva ? { curvaABC: filterCurva } : {}),
+        ...(filterSegmento ? { idSegmento: filterSegmento } : {}),
+        ...(contadorId ? { contadorId } : {}),
+        ...statusParams,
+      })
+
+      setClientes(prev => {
+        const next = reset ? res.data : [...prev, ...res.data]
+        const byId = new Map<number, Cliente>()
+        for (const c of next) byId.set(c.id, c)
+        return Array.from(byId.values())
+      })
+
+      setPage(res.page)
+      setHasMore(res.page < res.pages)
+    } catch (e: any) {
+      setError(e?.message || 'Falha ao carregar clientes')
+      if (reset) setClientes([])
+      setHasMore(false)
+    } finally {
+      setLoading(false)
+      setLoadingMore(false)
+      fetchingRef.current = false
+    }
+  }
+
+  useEffect(() => {
+    void loadPage(1, { reset: true })
+  }, [queryKey])
+
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el) return
+    if (loading || loadingMore || !hasMore) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0]
+        if (!entry?.isIntersecting) return
+        void loadPage(page + 1)
+      },
+      { root: null, rootMargin: '300px', threshold: 0 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [loading, loadingMore, hasMore, page, queryKey])
 
   const hasCustomFilters = Boolean(search || filterSegmento || filterCurva || filterStatus !== 'Ativo')
-
-  const pages = Math.max(Math.ceil(filtered.length / LIMIT), 1)
-  const start = (page - 1) * LIMIT
-  const end = start + LIMIT
-  const paginated = filtered.slice(start, end)
 
   return (
     <div className="space-y-6">
@@ -103,7 +170,7 @@ export function Clientes() {
         </div>
         <div className="w-40">
           <Select
-            options={['Varejo', 'Atacado', 'Serviços', 'Indústria', 'Farmácia', 'Posto'].map(s => ({ value: s, label: s }))}
+            options={segmentos.map(s => ({ value: String(s.id), label: s.descricao }))}
             placeholder="Segmento"
             value={filterSegmento}
             onChange={e => setFilterSegmento(e.target.value)}
@@ -145,10 +212,12 @@ export function Clientes() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 ? (
+                {error ? (
+                  <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-red-400">{error}</td></tr>
+                ) : clientes.length === 0 ? (
                   <tr><td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500">Nenhum cliente encontrado.</td></tr>
                 ) : (
-                  paginated.map(c => (
+                  clientes.map(c => (
                     <tr
                       key={c.id}
                       className="table-row cursor-pointer"
@@ -166,7 +235,9 @@ export function Clientes() {
                       <td className="table-cell font-mono text-xs text-slate-500 dark:text-slate-400">{c.cnpj ?? '—'}</td>
                       <td className="table-cell text-slate-700 dark:text-slate-300">{c.cidade ?? '—'}/{c.uf ?? '—'}</td>
                       <td className="table-cell">
-                        <span className="text-xs text-slate-400">—</span>
+                        <span className="text-xs text-slate-700 dark:text-slate-300">
+                          {c.idSegmento ? (segmentoLabelById.get(Number(c.idSegmento)) ?? '—') : '—'}
+                        </span>
                       </td>
                       <td className="table-cell">
                         <span className="text-xs font-medium text-blue-400">
@@ -195,31 +266,21 @@ export function Clientes() {
                 )}
               </tbody>
             </table>
-            {pages > 1 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t border-slate-200 dark:border-slate-700">
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Página {page} de {pages} — {filtered.length.toLocaleString('pt-BR')} registros
-                </p>
-                <div className="flex gap-1 items-center">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={page <= 1}
-                    onClick={() => setPage(p => Math.max(p - 1, 1))}
-                  >
-                    Anterior
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    disabled={page >= pages}
-                    onClick={() => setPage(p => Math.min(p + 1, pages))}
-                  >
-                    Próxima
-                  </Button>
-                </div>
+            <div className="border-t border-slate-200 dark:border-slate-700">
+              <div ref={sentinelRef} className="h-1" />
+              <div className="px-4 py-3">
+                {loadingMore ? (
+                  <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    Carregando mais...
+                  </div>
+                ) : hasMore ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Role para carregar mais…</p>
+                ) : (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">Fim da lista.</p>
+                )}
               </div>
-            )}
+            </div>
           </div>
         )}
       </div>

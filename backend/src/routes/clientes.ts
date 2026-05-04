@@ -45,7 +45,14 @@ export async function clientesRoutes(app: FastifyInstance) {
       ...(ativo !== undefined && { ativo }),
       ...(bloqueado !== undefined && { bloqueado }),
       ...(curvaABC && { curvaABC }),
-      ...(search && { nome: { contains: search } }),
+      ...(search && {
+        OR: [
+          { nome: { contains: search } },
+          { nomeRazao: { contains: search } },
+          { cnpj: { contains: search } },
+          { cidade: { contains: search } },
+        ],
+      }),
       ...(idSegmento && { idSegmento: Number(idSegmento) }),
       ...(idRegime && { idRegime: Number(idRegime) }),
       ...(idPlano && { idPlano: Number(idPlano) }),
