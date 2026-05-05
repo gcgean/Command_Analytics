@@ -14,6 +14,7 @@ export function CadastroProcedimentos() {
   const canAccess = can('cadastro-procedimentos')
 
   const [procedimentos, setProcedimentos] = useState<ProcedimentoCadastro[]>([])
+  const [tecnicos, setTecnicos] = useState<Array<{ id: number; nome: string }>>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -23,15 +24,33 @@ export function CadastroProcedimentos() {
     duracaoMin: '60',
     ordem: '0',
     ativo: true,
+    tecnicoIds: [] as number[],
   })
 
   async function loadData() {
     setLoading(true)
     try {
-      const data = await api.getProcedimentos()
+      const [data, usuarios] = await Promise.all([
+        api.getProcedimentos(),
+        api.getUsuarios(),
+      ])
+      const mappedTecnicos = (Array.isArray(usuarios) ? usuarios : [])
+        .map((usuario: any) => ({
+          id: Number(usuario?.id ?? usuario?.COD_USU ?? usuario?.codUsu),
+          nome: usuario?.nome || usuario?.nomeCompleto || usuario?.nomeUsu || `#${usuario?.id ?? usuario?.COD_USU ?? usuario?.codUsu}`,
+          ativo: usuario?.ativo,
+        }))
+        .filter((usuario: any) => Number.isFinite(usuario.id) && usuario.id > 0)
+        .filter((usuario: any) => {
+          if (usuario.ativo === undefined || usuario.ativo === null) return true
+          return usuario.ativo === true || usuario.ativo === 1 || usuario.ativo === '1' || usuario.ativo === 'S' || usuario.ativo === 's'
+        })
+        .map((usuario: any) => ({ id: usuario.id, nome: usuario.nome }))
       setProcedimentos(data)
+      setTecnicos(mappedTecnicos)
     } catch {
       setProcedimentos([])
+      setTecnicos([])
     } finally {
       setLoading(false)
     }
@@ -51,7 +70,17 @@ export function CadastroProcedimentos() {
       duracaoMin: '60',
       ordem: '0',
       ativo: true,
+      tecnicoIds: [],
     })
+  }
+
+  function toggleTecnico(tecnicoId: number) {
+    setForm((current) => ({
+      ...current,
+      tecnicoIds: current.tecnicoIds.includes(tecnicoId)
+        ? current.tecnicoIds.filter((id) => id !== tecnicoId)
+        : [...current.tecnicoIds, tecnicoId],
+    }))
   }
 
   async function saveProcedimento() {
@@ -74,6 +103,7 @@ export function CadastroProcedimentos() {
         duracaoMin,
         ordem: Number(form.ordem || 0),
         ativo: form.ativo,
+        tecnicoIds: form.tecnicoIds,
       }
       if (editId) {
         await api.updateProcedimento(editId, payload)
@@ -97,6 +127,7 @@ export function CadastroProcedimentos() {
       duracaoMin: String(p.duracaoMin ?? 60),
       ordem: String(p.ordem ?? 0),
       ativo: p.ativo,
+      tecnicoIds: Array.isArray(p.tecnicoIds) ? p.tecnicoIds : [],
     })
   }
 
@@ -174,6 +205,32 @@ export function CadastroProcedimentos() {
           />
         </div>
 
+        <div className="mt-4">
+          <div className="mb-2">
+            <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Técnicos vinculados (opcional)</p>
+            <p className="text-xs text-slate-500">Se nenhum técnico for marcado, o procedimento continuará disponível para todos.</p>
+          </div>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+            {tecnicos.length > 0 ? (
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                {tecnicos.map((tecnico) => (
+                  <label key={tecnico.id} className="flex items-center gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm text-slate-700 dark:text-slate-300">
+                    <input
+                      type="checkbox"
+                      checked={form.tecnicoIds.includes(tecnico.id)}
+                      onChange={() => toggleTecnico(tecnico.id)}
+                      className="accent-blue-600"
+                    />
+                    <span className="break-words">{tecnico.nome}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-500">Nenhum técnico disponível para vínculo.</p>
+            )}
+          </div>
+        </div>
+
         <div className="mt-4 flex items-center justify-between">
           <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
             <input
@@ -226,6 +283,13 @@ export function CadastroProcedimentos() {
                     {p.descricao ? (
                       <p className="text-xs text-slate-500 mt-1 whitespace-pre-wrap">{p.descricao}</p>
                     ) : null}
+                    {p.tecnicos && p.tecnicos.length > 0 ? (
+                      <p className="text-xs text-slate-500 mt-1 break-words">
+                        Técnicos vinculados: {p.tecnicos.map((tecnico) => tecnico.nome).join(', ')}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-slate-500 mt-1">Técnicos vinculados: todos os técnicos</p>
+                    )}
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
                     <button

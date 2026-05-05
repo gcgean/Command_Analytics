@@ -17,6 +17,19 @@ export async function initProcedimentos(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS cadastro_procedimentos_tecnicos (
+      id              INT AUTO_INCREMENT PRIMARY KEY,
+      procedimento_id INT NOT NULL,
+      cod_tecnico     INT NOT NULL,
+      criado_em       DATETIME NOT NULL DEFAULT NOW(),
+      atualizado_em   DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+      UNIQUE KEY uk_procedimento_tecnico (procedimento_id, cod_tecnico),
+      INDEX idx_proc_tecnico_proc (procedimento_id),
+      INDEX idx_proc_tecnico_usuario (cod_tecnico)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
   try {
     await prisma.$executeRawUnsafe(`
       ALTER TABLE agendamento_programado

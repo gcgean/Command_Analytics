@@ -712,6 +712,23 @@ export async function agendaRoutes(app: FastifyInstance) {
     }
     const duracaoProcedimento = Math.max(MIN_DURACAO_PROCEDIMENTO, Number(procedimentoRows[0].duracao_min ?? 0))
 
+    const procedimentoTecnicosRows: Array<{ tecnicoId: number }> = await prisma.$queryRaw`
+      SELECT cod_tecnico AS tecnicoId
+      FROM cadastro_procedimentos_tecnicos
+      WHERE procedimento_id = ${Number(procedimentoId)}
+    `
+    const procedimentoTecnicosIds = Array.from(
+      new Set(
+        procedimentoTecnicosRows
+          .map((row) => Number(row.tecnicoId))
+          .filter((id) => Number.isFinite(id) && id > 0),
+      ),
+    )
+
+    if (tecnicoId && procedimentoTecnicosIds.length > 0 && !procedimentoTecnicosIds.includes(Number(tecnicoId))) {
+      return []
+    }
+
     const dates: string[] = []
     const dStart = new Date(startStr + 'T12:00:00')
     const dEnd = new Date(endStr + 'T12:00:00')
@@ -725,24 +742,19 @@ export async function agendaRoutes(app: FastifyInstance) {
       limit++
     }
 
-    const dispRows: any[] = tecnicoId
-      ? await prisma.$queryRaw`
-          SELECT d.id, d.cod_tecnico, d.dias_semana, d.hora_inicio, d.hora_fim, d.intervalo_min,
-                 d.data_inicio, d.data_fim, d.intervalo_ini, d.intervalo_fim,
-                 COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS tecnicoNome
-          FROM tecnico_disponibilidade d
-          LEFT JOIN usuario u ON u.COD_USU = d.cod_tecnico
-          WHERE d.cod_tecnico = ${Number(tecnicoId)} AND d.ativo = 1
-        `
-      : await prisma.$queryRaw`
-          SELECT d.id, d.cod_tecnico, d.dias_semana, d.hora_inicio, d.hora_fim, d.intervalo_min,
-                 d.data_inicio, d.data_fim, d.intervalo_ini, d.intervalo_fim,
-                 COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS tecnicoNome
-          FROM tecnico_disponibilidade d
-          LEFT JOIN usuario u ON u.COD_USU = d.cod_tecnico
-          WHERE d.ativo = 1
-          ORDER BY tecnicoNome
-        `
+    const dispConds: Prisma.Sql[] = [Prisma.sql`d.ativo = 1`]
+    if (tecnicoId) dispConds.push(Prisma.sql`d.cod_tecnico = ${Number(tecnicoId)}`)
+    if (procedimentoTecnicosIds.length > 0) dispConds.push(Prisma.sql`d.cod_tecnico IN (${Prisma.join(procedimentoTecnicosIds)})`)
+
+    const dispRows: any[] = await prisma.$queryRaw(Prisma.sql`
+      SELECT d.id, d.cod_tecnico, d.dias_semana, d.hora_inicio, d.hora_fim, d.intervalo_min,
+             d.data_inicio, d.data_fim, d.intervalo_ini, d.intervalo_fim,
+             COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS tecnicoNome
+      FROM tecnico_disponibilidade d
+      LEFT JOIN usuario u ON u.COD_USU = d.cod_tecnico
+      WHERE ${Prisma.join(dispConds, ' AND ')}
+      ORDER BY tecnicoNome
+    `)
 
     if (!dispRows.length) return []
 

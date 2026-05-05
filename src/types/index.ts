@@ -630,6 +630,8 @@ export interface ProcedimentoCadastro {
   duracaoMin: number
   ativo: boolean
   ordem: number
+  tecnicoIds?: number[]
+  tecnicos?: Array<{ id: number; nome: string }>
   criadoEm?: string | null
   atualizadoEm?: string | null
 }

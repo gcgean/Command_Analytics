@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, Trash2, Ban, Pencil, CheckSquare } from 'lucide-react'
 
 import { Card } from '../../components/ui/Card'
@@ -207,7 +207,14 @@ interface AgProg {
 }
 
 interface Tecnico { id: number; nome: string }
-interface ProcedimentoOption { id: number; nome: string; duracaoMin: number; ativo: boolean }
+interface ProcedimentoOption {
+  id: number
+  nome: string
+  duracaoMin: number
+  ativo: boolean
+  tecnicoIds?: number[]
+  tecnicos?: Array<{ id: number; nome: string }>
+}
 
 interface Bloqueio {
   id: number
@@ -317,6 +324,23 @@ export function AgendamentoProgramado() {
   const [newStatus, setNewStatus] = useState(1)
   const [savingStatus, setSavingStatus] = useState(false)
 
+  const procedimentosMap = useMemo(
+    () => new Map(procedimentos.map((procedimento) => [procedimento.id, procedimento])),
+    [procedimentos],
+  )
+  const procedimentoSelecionado = useMemo(() => {
+    const id = Number(selectedProcedimento || 0)
+    return Number.isFinite(id) && id > 0 ? (procedimentosMap.get(id) ?? null) : null
+  }, [procedimentosMap, selectedProcedimento])
+  const tecnicoIdsProcedimento = useMemo(() => {
+    const ids = procedimentoSelecionado?.tecnicoIds ?? []
+    return Array.isArray(ids) ? ids.filter((id) => Number.isFinite(id) && id > 0) : []
+  }, [procedimentoSelecionado])
+  const disponibilidadesFiltradas = useMemo(() => {
+    if (!tecnicoIdsProcedimento.length) return disponibilidades
+    return disponibilidades.filter((disp) => tecnicoIdsProcedimento.includes(Number(disp.tecnicoId)))
+  }, [disponibilidades, tecnicoIdsProcedimento])
+
   // ── Load initial data ──────────────────────────────────────────
   useEffect(() => {
     api.getDisponibilidades().then((d: any) => setDisponibilidades(d)).catch(() => {})
@@ -367,6 +391,16 @@ export function AgendamentoProgramado() {
     if (!dIni || !dFim) return
     fetchSlots()
   }, [selectedProcedimento]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!selectedTecnico) return
+    if (!tecnicoIdsProcedimento.length) return
+    if (tecnicoIdsProcedimento.includes(Number(selectedTecnico))) return
+    setSelectedTecnico('')
+    setSelectedSlots([])
+    setBookTecnico(null)
+    setSlotResults([])
+  }, [selectedTecnico, tecnicoIdsProcedimento])
 
   useEffect(() => {
     if (bookForm.procedimentoId) {
@@ -429,7 +463,7 @@ export function AgendamentoProgramado() {
   function findProcedimentoById(idRaw: string | number | null | undefined) {
     const id = Number(idRaw ?? 0)
     if (!Number.isFinite(id) || id <= 0) return null
-    return procedimentos.find((p) => p.id === id) ?? null
+    return procedimentosMap.get(id) ?? null
   }
 
   function onChangeProcedimentoBook(procedimentoId: string) {
@@ -864,7 +898,7 @@ export function AgendamentoProgramado() {
                   label="Técnico"
                   options={[
                     { value: '', label: 'Todos os técnicos com agenda' },
-                    ...disponibilidades.map(d => ({ value: String(d.tecnicoId), label: d.tecnicoNome }))
+                    ...disponibilidadesFiltradas.map(d => ({ value: String(d.tecnicoId), label: d.tecnicoNome }))
                   ]}
                   value={selectedTecnico}
                   onChange={e => setSelectedTecnico(e.target.value)}

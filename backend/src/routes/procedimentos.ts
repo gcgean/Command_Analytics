@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { initProcedimentos } from '../utils/procedimentos'
@@ -12,6 +13,12 @@ type ProcedimentoRow = {
   ordem: number
   criado_em?: Date
   atualizado_em?: Date
+}
+
+type ProcedimentoTecnicoRow = {
+  procedimentoId: number
+  tecnicoId: number
+  tecnicoNome: string | null
 }
 
 let procedimentosInitPromise: Promise<void> | null = null
@@ -48,6 +55,54 @@ async function withProcedimentosTable<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+async function getTecnicosVinculadosMap(procedimentoIds: number[]) {
+  if (!procedimentoIds.length) return new Map<number, Array<{ id: number; nome: string }>>()
+
+  const rows = await withProcedimentosTable(async () => prisma.$queryRaw<ProcedimentoTecnicoRow[]>`
+    SELECT
+      pt.procedimento_id AS procedimentoId,
+      pt.cod_tecnico AS tecnicoId,
+      COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS tecnicoNome
+    FROM cadastro_procedimentos_tecnicos pt
+    LEFT JOIN usuario u ON u.COD_USU = pt.cod_tecnico
+    WHERE pt.procedimento_id IN (${Prisma.join(procedimentoIds)})
+    ORDER BY tecnicoNome ASC, pt.cod_tecnico ASC
+  `)
+
+  const map = new Map<number, Array<{ id: number; nome: string }>>()
+  for (const row of rows) {
+    const procedimentoId = Number(row.procedimentoId)
+    const tecnicoId = Number(row.tecnicoId)
+    if (!Number.isFinite(procedimentoId) || !Number.isFinite(tecnicoId) || tecnicoId <= 0) continue
+    if (!map.has(procedimentoId)) map.set(procedimentoId, [])
+    map.get(procedimentoId)!.push({
+      id: tecnicoId,
+      nome: row.tecnicoNome?.trim() || `#${tecnicoId}`,
+    })
+  }
+
+  return map
+}
+
+async function normalizeTecnicoIds(tecnicoIdsRaw: unknown) {
+  const ids = Array.isArray(tecnicoIdsRaw)
+    ? tecnicoIdsRaw.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value > 0)
+    : []
+
+  const uniqueIds = Array.from(new Set(ids))
+  if (!uniqueIds.length) return []
+
+  const rows = await prisma.$queryRaw<Array<{ id: number }>>(Prisma.sql`
+    SELECT COD_USU AS id
+    FROM usuario
+    WHERE COD_USU IN (${Prisma.join(uniqueIds)}) AND COALESCE(ATIVO, 'S') = 'S'
+  `)
+
+  return rows
+    .map((row) => Number(row.id))
+    .filter((id) => Number.isFinite(id) && id > 0)
+}
+
 export async function procedimentosRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Procedimentos'], summary: 'Listar procedimentos cadastrados' } }, async (request) => {
     const { ativo } = request.query as { ativo?: string }
@@ -58,8 +113,13 @@ export async function procedimentosRoutes(app: FastifyInstance) {
       ORDER BY ordem ASC, nome ASC
     `)
 
+    const procedimentoIds = rows.map((r) => Number(r.id)).filter((id) => Number.isFinite(id) && id > 0)
+    const tecnicosMap = await getTecnicosVinculadosMap(procedimentoIds)
+
     return rows
-      .map((r) => ({
+      .map((r) => {
+        const tecnicos = tecnicosMap.get(Number(r.id)) ?? []
+        return {
         id: Number(r.id),
         nome: r.nome,
         descricao: r.descricao ?? '',
@@ -68,17 +128,20 @@ export async function procedimentosRoutes(app: FastifyInstance) {
         ordem: Number(r.ordem ?? 0),
         criadoEm: r.criado_em ?? null,
         atualizadoEm: r.atualizado_em ?? null,
-      }))
+        tecnicoIds: tecnicos.map((tecnico) => tecnico.id),
+        tecnicos,
+      }})
       .filter((r) => (ativo ? String(r.ativo ? 1 : 0) === String(ativo) : true))
   })
 
   app.post('/', { preHandler: authMiddleware, schema: { tags: ['Procedimentos'], summary: 'Criar procedimento' } }, async (request, reply) => {
-    const { nome, descricao, duracaoMin, ordem, ativo } = request.body as {
+    const { nome, descricao, duracaoMin, ordem, ativo, tecnicoIds } = request.body as {
       nome: string
       descricao?: string
       duracaoMin?: number
       ordem?: number
       ativo?: boolean
+      tecnicoIds?: number[]
     }
 
     const nomeTrim = String(nome ?? '').trim()
@@ -88,6 +151,8 @@ export async function procedimentosRoutes(app: FastifyInstance) {
     if (!Number.isFinite(duracaoNum) || duracaoNum < 15) {
       return reply.status(400).send({ error: 'Duração mínima deve ser de 15 minutos.' })
     }
+
+    const normalizedTecnicoIds = await normalizeTecnicoIds(tecnicoIds)
 
     await withProcedimentosTable(async () => prisma.$executeRaw`
       INSERT INTO cadastro_procedimentos (nome, descricao, duracao_min, ordem, ativo, criado_em, atualizado_em)
@@ -103,7 +168,15 @@ export async function procedimentosRoutes(app: FastifyInstance) {
     `)
 
     const inserted = await withProcedimentosTable(async () => prisma.$queryRaw<{ id: number }[]>`SELECT id FROM cadastro_procedimentos ORDER BY id DESC LIMIT 1`)
-    return reply.status(201).send({ id: Number(inserted[0]?.id ?? 0) })
+    const insertedId = Number(inserted[0]?.id ?? 0)
+
+    if (insertedId > 0 && normalizedTecnicoIds.length) {
+      await withProcedimentosTable(async () => prisma.$executeRaw(Prisma.sql`
+        INSERT INTO cadastro_procedimentos_tecnicos (procedimento_id, cod_tecnico)
+        VALUES ${Prisma.join(normalizedTecnicoIds.map((tecnicoId) => Prisma.sql`(${insertedId}, ${tecnicoId})`), ', ')}
+      `))
+    }
+    return reply.status(201).send({ id: insertedId })
   })
 
   app.put('/:id', { preHandler: authMiddleware, schema: { tags: ['Procedimentos'], summary: 'Atualizar procedimento' } }, async (request, reply) => {
@@ -111,12 +184,13 @@ export async function procedimentosRoutes(app: FastifyInstance) {
     const procedimentoId = Number(id)
     if (!Number.isFinite(procedimentoId) || procedimentoId <= 0) return reply.status(400).send({ error: 'ID inválido.' })
 
-    const { nome, descricao, duracaoMin, ordem, ativo } = request.body as {
+    const { nome, descricao, duracaoMin, ordem, ativo, tecnicoIds } = request.body as {
       nome: string
       descricao?: string
       duracaoMin?: number
       ordem?: number
       ativo?: boolean
+      tecnicoIds?: number[]
     }
 
     const nomeTrim = String(nome ?? '').trim()
@@ -126,6 +200,8 @@ export async function procedimentosRoutes(app: FastifyInstance) {
     if (!Number.isFinite(duracaoNum) || duracaoNum < 15) {
       return reply.status(400).send({ error: 'Duração mínima deve ser de 15 minutos.' })
     }
+
+    const normalizedTecnicoIds = await normalizeTecnicoIds(tecnicoIds)
 
     await withProcedimentosTable(async () => prisma.$executeRaw`
       UPDATE cadastro_procedimentos
@@ -137,6 +213,14 @@ export async function procedimentosRoutes(app: FastifyInstance) {
           atualizado_em = NOW()
       WHERE id = ${procedimentoId}
     `)
+
+    await withProcedimentosTable(async () => prisma.$executeRaw`DELETE FROM cadastro_procedimentos_tecnicos WHERE procedimento_id = ${procedimentoId}`)
+    if (normalizedTecnicoIds.length) {
+      await withProcedimentosTable(async () => prisma.$executeRaw(Prisma.sql`
+        INSERT INTO cadastro_procedimentos_tecnicos (procedimento_id, cod_tecnico)
+        VALUES ${Prisma.join(normalizedTecnicoIds.map((tecnicoId) => Prisma.sql`(${procedimentoId}, ${tecnicoId})`), ', ')}
+      `))
+    }
 
     return { ok: true }
   })
@@ -160,6 +244,7 @@ export async function procedimentosRoutes(app: FastifyInstance) {
     const procedimentoId = Number(id)
     if (!Number.isFinite(procedimentoId) || procedimentoId <= 0) return reply.status(400).send({ error: 'ID inválido.' })
 
+    await withProcedimentosTable(async () => prisma.$executeRaw`DELETE FROM cadastro_procedimentos_tecnicos WHERE procedimento_id = ${procedimentoId}`)
     await withProcedimentosTable(async () => prisma.$executeRaw`DELETE FROM cadastro_procedimentos WHERE id = ${procedimentoId}`)
     return reply.status(204).send()
   })

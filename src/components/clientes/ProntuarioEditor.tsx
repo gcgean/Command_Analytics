@@ -138,23 +138,23 @@ export function ProntuarioEditor({
   }
 
   return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-6 items-start">
-        <Card className="overflow-hidden border-slate-200/90 dark:border-slate-700">
+    <div className="space-y-4 md:space-y-6">
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_320px] gap-4 md:gap-6 items-start">
+        <Card className="min-w-0 overflow-hidden border-slate-200/90 dark:border-slate-700">
           <div className="border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-slate-50 to-white dark:from-slate-900 dark:to-slate-800 px-5 py-4">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-              <div>
+              <div className="min-w-0">
                 <h3 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-500 dark:text-slate-400">Prontuário do cliente</h3>
                 <p className="mt-2 text-sm text-slate-700 dark:text-slate-300">
                   Registro central do cliente com anotações, contexto comercial e materiais de apoio.
                 </p>
               </div>
-              <div className="flex flex-wrap gap-2 sm:justify-end">
-                <Button size="sm" variant="secondary" icon={<History className="w-4 h-4" />} onClick={() => setShowHistory(true)}>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-end">
+                <Button className="w-full sm:w-auto" size="sm" variant="secondary" icon={<History className="w-4 h-4" />} onClick={() => setShowHistory(true)}>
                   Histórico
                 </Button>
                 {!editing && (
-                  <Button size="sm" variant="secondary" icon={<Pencil className="w-4 h-4" />} onClick={() => setEditing(true)}>
+                  <Button className="w-full sm:w-auto" size="sm" variant="secondary" icon={<Pencil className="w-4 h-4" />} onClick={() => setEditing(true)}>
                     Editar prontuário
                   </Button>
                 )}
@@ -162,7 +162,7 @@ export function ProntuarioEditor({
             </div>
           </div>
 
-          <div className="sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 bg-white/95 dark:bg-slate-800/95 backdrop-blur px-4 py-3">
+          <div className="sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 bg-white/95 px-4 py-3 backdrop-blur dark:bg-slate-800/95">
             <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
               <Button size="sm" variant="secondary" disabled={!editing} icon={<Bold className="w-4 h-4" />} onClick={() => exec('bold')}>
                 Negrito
@@ -186,7 +186,7 @@ export function ProntuarioEditor({
                 Título 2
               </Button>
 
-              <label className="flex shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+              <label className="flex min-w-max shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
                 <Type className="w-4 h-4" />
                 Fonte
                 <select
@@ -201,7 +201,7 @@ export function ProntuarioEditor({
                 </select>
               </label>
 
-              <label className="flex shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+              <label className="flex min-w-max shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
                 <Heading2 className="w-4 h-4" />
                 Tamanho
                 <select
@@ -216,7 +216,7 @@ export function ProntuarioEditor({
                 </select>
               </label>
 
-              <label className="flex shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+              <label className="flex min-w-max shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
                 <Palette className="w-4 h-4" />
                 Cor
                 <input
@@ -229,35 +229,37 @@ export function ProntuarioEditor({
             </div>
           </div>
 
-          <div className="bg-[linear-gradient(to_bottom,transparent_31px,#e5edf7_32px)] dark:bg-[linear-gradient(to_bottom,transparent_31px,#243041_32px)] bg-[length:100%_32px] px-5 py-5">
+          <div className="bg-[linear-gradient(to_bottom,transparent_31px,#e5edf7_32px)] bg-[length:100%_32px] px-3 py-3 dark:bg-[linear-gradient(to_bottom,transparent_31px,#243041_32px)] sm:px-5 sm:py-5">
             <div
               ref={editorRef}
               contentEditable={editing}
               suppressContentEditableWarning
               onInput={handleInput}
-              className="min-h-[420px] w-full rounded-2xl border border-slate-200/80 bg-white/90 px-6 py-5 text-sm leading-8 text-slate-800 shadow-[0_10px_30px_rgba(15,23,42,0.04)] focus:outline-none dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-200"
+              className="min-h-[320px] w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-4 text-sm leading-7 text-slate-800 shadow-[0_10px_30px_rgba(15,23,42,0.04)] break-words focus:outline-none dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-200 sm:min-h-[420px] sm:px-6 sm:py-5 sm:leading-8"
               dangerouslySetInnerHTML={{ __html: draft || '<p></p>' }}
             />
           </div>
 
           <div className="border-t border-slate-200 dark:border-slate-700 px-5 py-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex flex-col gap-3 sm:gap-4">
               <div className="min-w-0 text-xs text-slate-500">
                 {plainPreview ? `Resumo: ${plainPreview.slice(0, 240)}${plainPreview.length > 240 ? '...' : ''}` : 'Nenhum conteúdo cadastrado no prontuário.'}
               </div>
-              <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                {characterCount} caractere{characterCount === 1 ? '' : 's'}
-              </div>
-              {editing && (
-                <div className="flex w-full items-center gap-2 sm:w-auto sm:justify-end">
-                  <Button size="sm" variant="secondary" icon={<X className="w-4 h-4" />} onClick={handleCancel}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                  {characterCount} caractere{characterCount === 1 ? '' : 's'}
+                </div>
+                {editing && (
+                <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:justify-end">
+                  <Button className="w-full sm:w-auto" size="sm" variant="secondary" icon={<X className="w-4 h-4" />} onClick={handleCancel}>
                     Cancelar
                   </Button>
-                  <Button size="sm" icon={<Save className="w-4 h-4" />} loading={saving} onClick={() => void handleSave()}>
+                  <Button className="w-full sm:w-auto" size="sm" icon={<Save className="w-4 h-4" />} loading={saving} onClick={() => void handleSave()}>
                     Salvar
                   </Button>
                 </div>
-              )}
+                )}
+              </div>
             </div>
             {error && (
               <div className="mt-3 text-sm text-red-500">{error}</div>

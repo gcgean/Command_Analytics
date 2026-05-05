@@ -328,14 +328,14 @@ export function DetalheCliente() {
   ].filter(Boolean)
 
   return (
-    <div className="space-y-6 max-w-6xl">
-      <div className="flex items-start gap-4">
-        <Button variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/clientes')}>
+    <div className="space-y-4 md:space-y-6 max-w-full min-w-0">
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
+        <Button className="w-full justify-center md:w-auto md:justify-start" variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/clientes')}>
           Voltar
         </Button>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100">{cliente.nome ?? '—'}</h2>
+            <h2 className="min-w-0 break-words text-lg font-bold text-slate-900 dark:text-slate-100 sm:text-xl">{cliente.nome ?? '—'}</h2>
             {curvaKey && (
               <span className={clsx('text-xs px-2 py-0.5 rounded-full font-medium', curvaColors[curvaKey] ?? '')}>
                 Curva {curvaKey}
@@ -348,18 +348,19 @@ export function DetalheCliente() {
               {statusLabel}
             </span>
           </div>
-          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">#{cliente.id} · {cliente.cnpj ?? '—'}</p>
+          <p className="mt-1 break-words text-sm text-slate-600 dark:text-slate-400">#{cliente.id} · {cliente.cnpj ?? '—'}</p>
         </div>
-        <Button variant="secondary">Editar Cliente</Button>
+        <Button className="w-full md:w-auto" variant="secondary">Editar Cliente</Button>
       </div>
 
-      <div className="flex border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
+      <div className="-mx-4 overflow-x-auto border-b border-slate-200 px-4 dark:border-slate-700 sm:mx-0 sm:px-0">
+        <div className="flex min-w-max">
         {tabs.map((tab, i) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(i)}
             className={clsx(
-              'flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap',
+              'flex shrink-0 items-center gap-2 border-b-2 -mb-px px-3 py-3 text-xs font-medium whitespace-nowrap transition-colors sm:px-4 sm:text-sm',
               i === activeTab
                 ? 'text-blue-400 border-blue-500'
                 : 'text-slate-600 dark:text-slate-400 border-transparent hover:text-slate-900 dark:hover:text-slate-200',
@@ -369,11 +370,12 @@ export function DetalheCliente() {
             {tab.label}
           </button>
         ))}
+        </div>
       </div>
 
       {tabKey === 'dados' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
+          <Card className="min-w-0">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
               <Building2 className="w-4 h-4 text-blue-400" /> Dados cadastrais
             </h3>
@@ -387,15 +389,15 @@ export function DetalheCliente() {
                 { label: 'Data Contrato', value: formatSafeDate(cliente.dataContrato) },
                 { label: 'Responsável', value: cliente.responsavel ?? '—' },
               ].map(({ label, value }) => (
-                <div key={label} className="flex justify-between gap-4">
+                <div key={label} className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="text-xs font-medium text-slate-700 dark:text-slate-300 text-right">{value}</dd>
+                  <dd className="break-words text-left text-xs font-medium text-slate-700 dark:text-slate-300 sm:text-right">{value}</dd>
                 </div>
               ))}
             </dl>
           </Card>
 
-          <Card>
+          <Card className="min-w-0">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
               <MapPin className="w-4 h-4 text-blue-400" /> Contato
             </h3>
@@ -407,9 +409,9 @@ export function DetalheCliente() {
                 { label: 'E-mail', value: cliente.email ?? '—' },
                 { label: 'Contador', value: cliente.contador?.nomeComercial ?? cliente.contador?.nome ?? '—' },
               ].map(({ label, value }) => (
-                <div key={label} className="flex justify-between gap-4">
+                <div key={label} className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="text-xs font-medium text-slate-700 dark:text-slate-300 text-right">{value}</dd>
+                  <dd className="break-words text-left text-xs font-medium text-slate-700 dark:text-slate-300 sm:text-right">{value}</dd>
                 </div>
               ))}
             </dl>
@@ -430,11 +432,11 @@ export function DetalheCliente() {
 
       {tabKey === 'observacoes-gerais' && (
         <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6">
-          <Card>
+          <Card className="min-w-0">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Resumo do plano</h3>
             <div className="space-y-2">
               {legacyParsed.generalLines.length > 0 ? legacyParsed.generalLines.map((line, index) => (
-                <p key={`${line}-${index}`} className="text-sm text-slate-700 dark:text-slate-300">
+                <p key={`${line}-${index}`} className="break-words text-sm text-slate-700 dark:text-slate-300">
                   {line}
                 </p>
               )) : (
@@ -443,21 +445,21 @@ export function DetalheCliente() {
             </div>
           </Card>
 
-          <Card>
+          <Card className="min-w-0">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
               <Phone className="w-4 h-4 text-blue-400" /> Contatos do cliente
             </h3>
             <div className="space-y-3">
               {contatosLegado.length > 0 ? contatosLegado.map((contato, index) => (
-                <div key={`${contato.descricao}-${contato.numero}-${index}`} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{contato.descricao || 'Contato'}</p>
-                  <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{contato.numero || '—'}</p>
+                <div key={`${contato.descricao}-${contato.numero}-${index}`} className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 min-w-0">
+                  <p className="break-words text-sm font-medium text-slate-800 dark:text-slate-200">{contato.descricao || 'Contato'}</p>
+                  <p className="mt-1 break-words text-sm text-slate-600 dark:text-slate-400">{contato.numero || '—'}</p>
                   {contato.setor && <p className="text-xs text-slate-500 mt-1">{contato.setor}</p>}
                 </div>
               )) : legacyParsed.contactsFromText.length > 0 ? legacyParsed.contactsFromText.map((line, index) => (
-                <p key={`${line}-${index}`} className="text-sm text-slate-700 dark:text-slate-300">{line}</p>
+                <p key={`${line}-${index}`} className="break-words text-sm text-slate-700 dark:text-slate-300">{line}</p>
               )) : contatosFallback.map((line, index) => (
-                <p key={`${line}-${index}`} className="text-sm text-slate-700 dark:text-slate-300">{line}</p>
+                <p key={`${line}-${index}`} className="break-words text-sm text-slate-700 dark:text-slate-300">{line}</p>
               ))}
             </div>
           </Card>
@@ -465,13 +467,13 @@ export function DetalheCliente() {
       )}
 
       {tabKey === 'observacao-venda' && (
-        <Card>
+        <Card className="min-w-0">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Campos trazidos do legado de venda</h3>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-3">
             {vendaFields.map(({ label, value }) => (
-              <div key={label} className="flex items-start justify-between gap-4 border-b border-slate-100 dark:border-slate-800 py-2">
+              <div key={label} className="flex flex-col gap-1 border-b border-slate-100 py-2 dark:border-slate-800 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                 <span className="text-xs text-slate-500">{label}</span>
-                <span className="text-sm font-medium text-right text-slate-700 dark:text-slate-300">{value || '—'}</span>
+                <span className="break-words text-left text-sm font-medium text-slate-700 dark:text-slate-300 sm:text-right">{value || '—'}</span>
               </div>
             ))}
           </div>
@@ -488,22 +490,22 @@ export function DetalheCliente() {
           {agendaLegado.length > 0 ? (
             <div className="divide-y divide-slate-200 dark:divide-slate-700">
               {agendaLegado.map((item) => (
-                <div key={item.id} className="p-4 space-y-2">
-                  <div className="flex items-center justify-between gap-4 flex-wrap">
-                    <div>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
+                <div key={item.id} className="space-y-2 p-4">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                    <div className="min-w-0">
+                      <p className="break-words text-sm font-medium text-slate-800 dark:text-slate-200">
                         {item.tipo || 'Agendamento'} · #{item.id}
                       </p>
                       <p className="text-xs text-slate-500 mt-1">{formatAgendaWindow(item)}</p>
                     </div>
-                    <div className="text-right">
+                    <div className="text-left sm:text-right">
                       <span className="block text-xs text-slate-500">{item.tecnicoNome || 'Sem técnico informado'}</span>
                       <span className="mt-1 inline-flex rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                         {item.origem === 'agendamento_programado' ? 'Programado' : 'Agenda'}
                       </span>
                     </div>
                   </div>
-                  <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">
+                  <p className="break-words whitespace-pre-wrap text-sm text-slate-700 dark:text-slate-300">
                     {item.observacoes || 'Sem observações registradas para este agendamento.'}
                   </p>
                 </div>
@@ -516,23 +518,23 @@ export function DetalheCliente() {
       )}
 
       {tabKey === 'atendimentos' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
+        <div className="space-y-4 md:space-y-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <Card className="min-w-0">
               <p className="text-xs uppercase tracking-wide text-slate-500">Tempo médio</p>
               <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
                 {formatDurationMinutes(resumoAtendimentos?.tempoMedioMinutos)}
               </p>
               <p className="mt-1 text-xs text-slate-500">média de duração dos atendimentos desse cliente</p>
             </Card>
-            <Card>
+            <Card className="min-w-0">
               <p className="text-xs uppercase tracking-wide text-slate-500">Total de chamados</p>
               <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
                 {resumoAtendimentos?.totalChamados ?? clienteAtendimentos.length}
               </p>
               <p className="mt-1 text-xs text-slate-500">somente atendimentos normais concluídos</p>
             </Card>
-            <Card>
+            <Card className="min-w-0 sm:col-span-2 xl:col-span-1">
               <p className="text-xs uppercase tracking-wide text-slate-500">Média por dia</p>
               <p className="mt-2 text-2xl font-semibold text-slate-900 dark:text-slate-100">
                 {resumoAtendimentos?.mediaChamadosPorDia != null ? resumoAtendimentos.mediaChamadosPorDia.toFixed(2) : '—'}
@@ -548,11 +550,11 @@ export function DetalheCliente() {
             {clienteAtendimentos.length > 0 ? (
               <div className="divide-y divide-slate-200 dark:divide-slate-700">
                 {clienteAtendimentos.map((a) => (
-                  <div key={a.id} className="px-4 py-4 flex items-start gap-4">
-                    <span className="font-mono text-xs text-blue-400 mt-0.5">#{a.id}</span>
+                  <div key={a.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:gap-4">
+                    <span className="font-mono text-xs text-blue-400 sm:mt-0.5">#{a.id}</span>
                     <div className="flex-1 min-w-0 space-y-2">
-                      <div className="flex items-start justify-between gap-4 flex-wrap">
-                        <p className="text-xs text-slate-500">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                        <p className="break-words text-xs text-slate-500">
                           {formatSafeDate(a.dataFechamento ?? a.dataAbertura)} · {a.tecnicoNome || 'Sem técnico informado'}
                         </p>
                         <StatusBadge status={a.status as StatusAtendimento} />
@@ -573,9 +575,9 @@ export function DetalheCliente() {
                         </span>
                       </div>
 
-                      <div className="text-sm">
+                      <div className="min-w-0 text-sm">
                         <p className="text-[11px] uppercase tracking-wide text-slate-500">Procedimento efetuado</p>
-                        <p className="mt-1 text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{a.procedimentos || 'Não informado.'}</p>
+                        <p className="mt-1 break-words whitespace-pre-wrap text-slate-700 dark:text-slate-300">{a.procedimentos || 'Não informado.'}</p>
                       </div>
                     </div>
                   </div>
@@ -598,11 +600,11 @@ export function DetalheCliente() {
           {historicoDesenvolvimento.length > 0 ? (
             <div className="divide-y divide-slate-200 dark:divide-slate-700">
               {historicoDesenvolvimento.map((item) => (
-                <div key={item.id} className="px-4 py-4 flex items-start gap-4">
-                  <span className="font-mono text-xs text-blue-400 mt-0.5">#{item.id}</span>
+                <div key={item.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-start sm:gap-4">
+                  <span className="font-mono text-xs text-blue-400 sm:mt-0.5">#{item.id}</span>
                   <div className="flex-1 min-w-0 space-y-3">
                     <div>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
+                      <p className="break-words whitespace-pre-wrap text-sm font-medium text-slate-800 dark:text-slate-200">
                         {item.solicitacao}
                       </p>
                     </div>
@@ -631,17 +633,17 @@ export function DetalheCliente() {
       )}
 
       {tabKey === 'financeiro' && (
-        <Card>
+        <Card className="min-w-0">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Assinaturas</h3>
           <div className="space-y-4">
             {clienteAssinaturas.length > 0 ? clienteAssinaturas.map((a) => (
-              <div key={a.id} className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
-                <div className="flex justify-between items-start gap-4">
-                  <div>
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{a.planoNome}</p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{a.formaPagamento} · Vencimento dia {a.vencimento}</p>
+              <div key={a.id} className="rounded-xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-900 min-w-0">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                  <div className="min-w-0">
+                    <p className="break-words font-semibold text-slate-900 dark:text-slate-100">{a.planoNome}</p>
+                    <p className="mt-1 break-words text-sm text-slate-500 dark:text-slate-400">{a.formaPagamento} · Vencimento dia {a.vencimento}</p>
                   </div>
-                  <div className="text-right">
+                  <div className="text-left sm:text-right">
                     <p className="text-xl font-bold text-blue-400">R$ {a.valor.toLocaleString('pt-BR')}</p>
                     <span className={clsx(
                       'text-xs px-2 py-0.5 rounded-full',
@@ -663,7 +665,7 @@ export function DetalheCliente() {
 
       {tabKey === 'tecnico' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
+          <Card className="min-w-0">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Dados do sistema</h3>
             <dl className="space-y-3">
               {[
@@ -673,15 +675,15 @@ export function DetalheCliente() {
                 { label: 'Último backup', value: formatSafeDateTime(cliente.ultimoBackup) },
                 { label: 'Último FTP', value: formatSafeDateTime(cliente.ultimoFTP) },
               ].map(({ label, value }) => (
-                <div key={label} className="flex justify-between gap-4">
+                <div key={label} className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                   <dt className="text-xs text-slate-500">{label}</dt>
-                  <dd className="text-xs font-medium text-slate-700 dark:text-slate-300 text-right">{String(value)}</dd>
+                  <dd className="break-words text-left text-xs font-medium text-slate-700 dark:text-slate-300 sm:text-right">{String(value)}</dd>
                 </div>
               ))}
             </dl>
           </Card>
 
-          <Card>
+          <Card className="min-w-0">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
               <Shield className="w-4 h-4 text-amber-400" /> Certificado digital
             </h3>
@@ -693,10 +695,10 @@ export function DetalheCliente() {
       )}
 
       {tabKey === 'implantacao' && (
-        <Card>
+        <Card className="min-w-0">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Status da implantação</h3>
           <p className="text-sm text-slate-600 dark:text-slate-400">Acompanhe o status do processo de implantação completo na tela Pipeline de Implantação.</p>
-          <Button className="mt-4" variant="secondary" onClick={() => navigate('/implantacao')}>
+          <Button className="mt-4 w-full sm:w-auto" variant="secondary" onClick={() => navigate('/implantacao')}>
             Ver Pipeline
           </Button>
         </Card>

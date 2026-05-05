@@ -555,9 +555,9 @@ export const api = {
     const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
     return fetchApi<ProcedimentoCadastro[]>(`/procedimentos${qs}`)
   },
-  createProcedimento: (data: { nome: string; descricao?: string; duracaoMin?: number; ordem?: number; ativo?: boolean }) =>
+  createProcedimento: (data: { nome: string; descricao?: string; duracaoMin?: number; ordem?: number; ativo?: boolean; tecnicoIds?: number[] }) =>
     fetchApi<{ id: number }>('/procedimentos', { method: 'POST', body: JSON.stringify(data) }),
-  updateProcedimento: (id: number, data: { nome: string; descricao?: string; duracaoMin?: number; ordem?: number; ativo?: boolean }) =>
+  updateProcedimento: (id: number, data: { nome: string; descricao?: string; duracaoMin?: number; ordem?: number; ativo?: boolean; tecnicoIds?: number[] }) =>
     fetchApi(`/procedimentos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleProcedimento: (id: number) => fetchApi<{ ok: boolean; ativo: boolean }>(`/procedimentos/${id}/toggle`, { method: 'PATCH' }),
   deleteProcedimento: (id: number) => fetchApi(`/procedimentos/${id}`, { method: 'DELETE' }),
