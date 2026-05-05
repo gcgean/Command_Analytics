@@ -13,6 +13,7 @@ const FIELD_LABELS: Record<string, string> = {
   horarioIni:  'Horário inicial',
   horaInicio:  'Horário inicial',
   observacoes: 'Observações',
+  prontuario:  'Prontuário',
   descricao:   'Descrição',
   duracao:     'Duração (min)',
 }

@@ -83,6 +83,10 @@ export interface Cliente {
   cnpj?: string | null
   cidade?: string | null
   uf?: string | null
+  endereco?: string | null
+  telefoneResidencial?: string | null
+  cep?: string | null
+  classificacaoNome?: string | null
   telefone?: string | null
   email?: string | null
   ativo?: string | null          // 'S'/'N'
@@ -96,17 +100,71 @@ export interface Cliente {
   idPlano?: number | null
   contadorId?: number | null
   observacoes?: string | null
+  obsVenda?: string | null
   ultimoFTP?: string | null
   ultimoBackup?: string | null
   certificadoVencimento?: string | null
   versaoSistema?: string | null
   conexoes?: number | null
   caixas?: number | null
+  legado?: ClienteLegado | null
   // Legacy optional fields for compatibility
   status?: string
   segmento?: string
   planoNome?: string
   codigo?: string
+}
+
+export interface ClienteLegadoContato {
+  descricao: string
+  numero: string
+  setor?: string | null
+}
+
+export interface ClienteLegadoVendaCampo {
+  label: string
+  value: string
+}
+
+export interface ClienteLegadoAgenda {
+  id: number
+  origem?: 'agenda' | 'agendamento_programado'
+  tipo?: string | null
+  status?: number | null
+  data?: string | null
+  dataFim?: string | null
+  horarioIni?: string | null
+  horarioFim?: string | null
+  observacoes?: string | null
+  tecnicoNome?: string | null
+}
+
+export interface ClienteHistoricoDesenvolvimento {
+  id: number
+  clienteId?: number | null
+  clienteNome: string
+  solicitacao: string
+  dataSolicitacao?: string | null
+  dataReferencia?: string | null
+  tecnicoNome?: string | null
+  desenvolvedorNome?: string | null
+}
+
+export interface ClienteLegado {
+  observacaoPlataforma?: string | null
+  contatos?: ClienteLegadoContato[]
+  vendaCampos?: ClienteLegadoVendaCampo[]
+  agendaObservacoes?: ClienteLegadoAgenda[]
+}
+
+export interface ClienteAnexo {
+  id: number
+  tabela: 'agenda' | 'agendamento_programado' | 'cliente_prontuario'
+  registroId: number
+  originalName: string
+  mimeType: string
+  sizeBytes: number
+  createdAt: string
 }
 
 // ============================================================
@@ -128,8 +186,17 @@ export interface Atendimento {
   solucao?: string | null
   dataAbertura: string | null    // DateTime
   dataFechamento?: string | null
+  nota?: number | null
+  procedimentos?: string | null
+  departamentoLabel?: string | null
   tempoAtendimento?: number | null
   protocolo?: string | null
+}
+
+export interface ClienteResumoAtendimentos {
+  totalChamados: number
+  tempoMedioMinutos: number | null
+  mediaChamadosPorDia: number | null
 }
 
 // ============================================================

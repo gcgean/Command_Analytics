@@ -1,0 +1,281 @@
+{
+   "aboutDescription": {
+      "message": "Web PKI é um componente que suporta assinatura digital de documentos e operações com certificado digital via Web sem a necessidade de Java."
+   },
+   "aboutTitle": {
+      "message": "Sobre o Web PKI"
+   },
+   "add": {
+      "message": "Adicionar"
+   },
+   "advanced": {
+      "message": "Avançadas"
+   },
+   "advancedSettings": {
+      "message": "Configurações Avançadas"
+   },
+   "askLater": {
+      "message": "Perguntar depois"
+   },
+   "cancel": {
+      "message": "Cancelar"
+   },
+   "clickHere": {
+      "message": "clique aqui"
+   },
+   "close": {
+      "message": "Fechar"
+   },
+   "configurePkcs11": {
+      "message": "Cripto Dispositivos"
+   },
+   "confirmRemoveCertificateMessagePart1": {
+      "message": "Tem certeza de que deseja remover o certificado "
+   },
+   "confirmRemoveCertificateMessagePart2": {
+      "message": " ?"
+   },
+   "confirmRemoveCertificateTitle": {
+      "message": "Remover certificado?"
+   },
+   "confirmRemoveDeviceMessage": {
+      "message": "Tem certeza de que deseja remover o dispositivo "
+   },
+   "confirmRemoveDeviceTitle": {
+      "message": "Remover dispositivo?"
+   },
+   "details": {
+      "message": "Detalhes"
+   },
+   "device": {
+      "message": "Dispositivo"
+   },
+   "downloadedMessagePart1": {
+      "message": "Agora "
+   },
+   "downloadedMessagePart2": {
+      "message": "execute o arquivo baixado"
+   },
+   "downloadedMessagePart3": {
+      "message": " para atualizar o Web PKI em seu PC"
+   },
+   "downloadedTitle": {
+      "message": "Falta pouco"
+   },
+   "downloadingMessage": {
+      "message": "Baixando o instalador..."
+   },
+   "errorOccurred": {
+      "message": "Ocorreu um erro"
+   },
+   "experimentalAccess": {
+      "message": "Acesso experimental"
+   },
+   "experimentalAccessDetails": {
+      "message": "Acesse antecipadamente os recursos ainda em desenvolvimento."
+   },
+   "expiration": {
+      "message": "Validade"
+   },
+   "expiredCertificate": {
+      "message": "Certificado expirado"
+   },
+   "export": {
+      "message": "Exportar"
+   },
+   "hideAdvancedSettings": {
+      "message": "Ocultar configurações avançadas"
+   },
+   "importPkcs12": {
+      "message": "Importar PFX"
+   },
+   "install": {
+      "message": "Instalar"
+   },
+   "installDeb": {
+      "message": "Instalar .deb"
+   },
+   "installRpm": {
+      "message": "Instalar .rpm"
+   },
+   "issuedBy": {
+      "message": "emitido por"
+   },
+   "issuer": {
+      "message": "Emissor"
+   },
+   "loading": {
+      "message": "Carregando..."
+   },
+   "mobileConnectTimeout": {
+      "message": "Não foi possível conectar com o dipositivo {{deviceName}}. Por favor recarregue o pareamento na opção 'Celulares' do plugin do navegador."
+   },
+   "mobileNotAuthorized": {
+      "message": "Este computador não está autorizado a comunicar com o dispositivo {{deviceName}}. Por favor atualize ou remova o pareamento na opção 'Celulares' do plugin do navegador."
+   },
+   "mobileSendMessage": {
+      "message": "Não foi possível enviar o comando ao dispositivo {{deviceName}}. Por favor certifique-se de que este computador está autorizado na opção 'Computadores' no aplicativo Web PKI e recarregue o pareamento na opção 'Celulares' do plugin do navegador."
+   },
+   "mobileTimeout": {
+      "message": "O dispositivo {{deviceName}} não está respondendo. Por favor certifique-se de que o aplicativo Web PKI está aberto no seu dispositivo e recarregue o pareamento na opção 'Celulares' do plugin do navegador."
+   },
+   "myCertificates": {
+      "message": "Meus Certificados"
+   },
+   "noDevice": {
+      "message": "Nenhum dispositivo conectado. Clique no botão 'Adicionar' para adicionar um novo dispositivo"
+   },
+   "noTrustedSites": {
+      "message": "Aqui você poderá visualizar e alterar os sites que você autorizou a realizar assinaturas digitais (por enquanto não há nenhum)."
+   },
+   "notInstalledMessage": {
+      "message": "Para utilizar este componente, é necessário instalar o Web PKI no seu PC"
+   },
+   "notInstalledTitle": {
+      "message": "O Web PKI não está completamente instalado"
+   },
+   "ok": {
+      "message": "OK"
+   },
+   "outdatedMessage": {
+      "message": "Há uma atualização disponível para o componente nativo Web PKI no seu PC"
+   },
+   "outdatedTitle": {
+      "message": "O Web PKI está desatualizado"
+   },
+   "permissions": {
+      "message": "Permissões"
+   },
+   "personalCertificates": {
+      "message": "Certificados Pessoais"
+   },
+   "pkcs11CustomSubtitle": {
+      "message": "Se o seu dispositivo criptográfico não está listado acima, digite no campo abaixo o nome do arquivo {{lib-ext}} fornecido pelo fabricante."
+   },
+   "pkcs11CustomTitle": {
+      "message": "Opções personalizadas"
+   },
+   "pkcs11ModuleDescription_aetpkss1_dll": {
+      "message": "Dispositivos SafeSign AET"
+   },
+   "pkcs11ModuleDescription_asepkcs_dll": {
+      "message": "Smartcards Athena IDProtect"
+   },
+   "pkcs11ModuleDescription_eTPKCS11_dll": {
+      "message": "Tokens SafeNet"
+   },
+   "pkcs11ModuleDescription_libaetpkss_dylib": {
+      "message": "Dispositivos SafeSign AET"
+   },
+   "pkcs11ModuleDescription_libaetpkss_so_3": {
+      "message": "Dispositivos SafeSign AET"
+   },
+   "pkcs11ModuleDescription_libeToken_dylib": {
+      "message": "Tokens SafeNet"
+   },
+   "pkcs11ModuleDescription_libeToken_so": {
+      "message": "Tokens SafeNet"
+   },
+   "pkcs11ModuleNamePlaceholder": {
+      "message": "Nome do arquivo {{lib-ext}} (com extensão)"
+   },
+   "pkcs11Subtitle": {
+      "message": "Se você possui certificados armazenados em um dispositivo criptográfico e deseja utilizá-los via PKCS#11, marque uma das opções abaixo."
+   },
+   "pkcs11Title": {
+      "message": "Dispositivos criptográficos (PKCS #11)"
+   },
+   "pkcs11TypeModuleName": {
+      "message": "Por favor preencha o nome do arquivo."
+   },
+   "pleaseWait": {
+      "message": "Por favor aguarde..."
+   },
+   "productName": {
+      "message": "Web PKI"
+   },
+   "redownloadMessageLinux": {
+      "message": "Se ocorrer algum problema, selecione um pacote para baixar novamente:"
+   },
+   "redownloadMessageLinuxDeb": {
+      "message": "Pacote .deb para distribuições baseadas em Debian (ex: Ubuntu, Mint): "
+   },
+   "redownloadMessageLinuxRpm": {
+      "message": "Pacote .rpm para distribuições baseadas em RedHat e Slackware (ex: Fedora, openSUSE): "
+   },
+   "redownloadMessagePart1": {
+      "message": "Se ocorreu algum problema, "
+   },
+   "redownloadMessagePart2": {
+      "message": " para baixar o instalador novamente"
+   },
+   "refresh": {
+      "message": "Recarregar"
+   },
+   "remoteDevices": {
+      "message": "Celulares"
+   },
+   "remove": {
+      "message": "Remover"
+   },
+   "settings": {
+      "message": "Configurações"
+   },
+   "showAdvancedSettings": {
+      "message": "Exibir configurações avançadas..."
+   },
+   "showTrustedSites": {
+      "message": "Sites confiáveis..."
+   },
+   "signatureDemos": {
+      "message": "Demonstrações de assinatura"
+   },
+   "site": {
+      "message": "Site"
+   },
+   "subject": {
+      "message": "Titular"
+   },
+   "syncDevice1": {
+      "message": "Abra o \u003Ca href=\"https://get.webpkiplugin.com/Mobile?brand=\" target=\"_blank\">aplicativo Web PKI\u003C/a> no seu celular"
+   },
+   "syncDevice2": {
+      "message": "Toque no item 'Ler QR code'"
+   },
+   "syncDevice3": {
+      "message": "Aponte seu celular para o código abaixo"
+   },
+   "trustedSites": {
+      "message": "Sites"
+   },
+   "trustedSitesSubtitle": {
+      "message": "Os seguintes sites estão autorizados a realizar assinaturas digitais com os certificados abaixo"
+   },
+   "update": {
+      "message": "Atualizar"
+   },
+   "updateDeb": {
+      "message": "Atualizar .deb"
+   },
+   "updateRpm": {
+      "message": "Atualizar .rpm"
+   },
+   "userCancelled": {
+      "message": "Operacão cancelada pelo usuário"
+   },
+   "verboseLogging": {
+      "message": "Habilitar logs detalhados"
+   },
+   "versionLabel": {
+      "message": "Versão: "
+   },
+   "welcomeMessage": {
+      "message": "Para começar a usar o Web PKI, você precisa importar um certificado PKCS #12 (para certificados A1) ou habilitar o uso de um dispositivo criptográfico (para certificados A3)."
+   },
+   "welcomeTitle": {
+      "message": "Bem-vindo ao Web PKI"
+   },
+   "yesRemove": {
+      "message": "Sim, remover"
+   }
+}

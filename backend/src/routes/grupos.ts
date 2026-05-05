@@ -12,6 +12,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'monitor',                  label: 'Monitor de Atendimentos',         grupo: 'OPERACIONAL' },
   // CLIENTES
   { id: 'clientes',                 label: 'Clientes',                        grupo: 'CLIENTES' },
+  { id: 'clientes-valores',         label: 'Clientes — Plano/Mensalidade',     grupo: 'CLIENTES' },
   { id: 'monitor-clientes',         label: 'Monitor de Clientes',             grupo: 'CLIENTES' },
   { id: 'implantacao',              label: 'Pipeline de Implantação',         grupo: 'CLIENTES' },
   { id: 'implantacao-orcamento',    label: 'Orçamento',                       grupo: 'CLIENTES' },

@@ -1,0 +1,436 @@
+import { createHotContext as __vite__createHotContext } from "/@vite/client";import.meta.hot = __vite__createHotContext("/src/pages/implantacao/Orcamento.tsx");import __vite__cjsImport0_react_jsxDevRuntime from "/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=6b13ee83"; const jsxDEV = __vite__cjsImport0_react_jsxDevRuntime["jsxDEV"];
+import * as RefreshRuntime from "/@react-refresh";
+const inWebWorker = typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope;
+let prevRefreshReg;
+let prevRefreshSig;
+if (import.meta.hot && !inWebWorker) {
+  if (!window.$RefreshReg$) {
+    throw new Error(
+      "@vitejs/plugin-react can't detect preamble. Something is wrong."
+    );
+  }
+  prevRefreshReg = window.$RefreshReg$;
+  prevRefreshSig = window.$RefreshSig$;
+  window.$RefreshReg$ = RefreshRuntime.getRefreshReg("C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx");
+  window.$RefreshSig$ = RefreshRuntime.createSignatureFunctionForTransform;
+}
+var _s = $RefreshSig$();
+import __vite__cjsImport3_react from "/node_modules/.vite/deps/react.js?v=6b13ee83"; const useState = __vite__cjsImport3_react["useState"];
+import { Calculator, DollarSign } from "/node_modules/.vite/deps/lucide-react.js?v=f4d14ca8";
+export function Orcamento() {
+  _s();
+  const [form, setForm] = useState({
+    valorPlano: 499.9,
+    qtdCarros: 1,
+    distanciaKm: 0,
+    custoKm: 1.5,
+    qtdTecnicos: 1,
+    qtdHorasTreinamento: 8,
+    custoHoraTecnica: 80,
+    diasHospedagem: 0,
+    custoHospedagem: 150,
+    qtdAlimentacao: 0,
+    custoAlimentacao: 45,
+    valorMigracao: 0,
+    desconto: 0
+  });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const custoDeslocamento = form.qtdCarros * form.distanciaKm * 2 * form.custoKm;
+  const custoTreinamento = form.qtdTecnicos * form.qtdHorasTreinamento * form.custoHoraTecnica;
+  const custoHospedagem = form.diasHospedagem * form.custoHospedagem * form.qtdTecnicos;
+  const custoAlimentacao = form.qtdAlimentacao * form.custoAlimentacao;
+  const subtotal = custoDeslocamento + custoTreinamento + custoHospedagem + custoAlimentacao + form.valorMigracao;
+  const descontoValor = subtotal * (form.desconto / 100);
+  const total = subtotal - descontoValor;
+  const Field = ({ label, field, prefix = "", step = 1 }) => /* @__PURE__ */ jsxDEV("div", { children: [
+    /* @__PURE__ */ jsxDEV("label", { className: "text-xs text-slate-600 dark:text-slate-400 block mb-1", children: label }, void 0, false, {
+      fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+      lineNumber: 52,
+      columnNumber: 7
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "relative", children: [
+      prefix && /* @__PURE__ */ jsxDEV("span", { className: "absolute left-3 top-1/2 -translate-y-1/2 text-slate-600 dark:text-slate-400 text-sm", children: prefix }, void 0, false, {
+        fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+        lineNumber: 54,
+        columnNumber: 20
+      }, this),
+      /* @__PURE__ */ jsxDEV(
+        "input",
+        {
+          type: "number",
+          step,
+          min: 0,
+          className: `input-field ${prefix ? "pl-10" : ""}`,
+          value: form[field],
+          onChange: (e) => set(field, parseFloat(e.target.value) || 0)
+        },
+        void 0,
+        false,
+        {
+          fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+          lineNumber: 55,
+          columnNumber: 9
+        },
+        this
+      )
+    ] }, void 0, true, {
+      fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+      lineNumber: 53,
+      columnNumber: 7
+    }, this)
+  ] }, void 0, true, {
+    fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+    lineNumber: 51,
+    columnNumber: 3
+  }, this);
+  return /* @__PURE__ */ jsxDEV("div", { className: "space-y-6", children: [
+    /* @__PURE__ */ jsxDEV("div", { className: "flex items-center gap-3", children: [
+      /* @__PURE__ */ jsxDEV(Calculator, { className: "text-blue-400", size: 28 }, void 0, false, {
+        fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+        lineNumber: 68,
+        columnNumber: 9
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { children: [
+        /* @__PURE__ */ jsxDEV("h1", { className: "text-2xl font-bold text-slate-900 dark:text-slate-100", children: "Orçamento de Implantação" }, void 0, false, {
+          fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+          lineNumber: 70,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("p", { className: "text-slate-600 dark:text-slate-400 text-sm mt-0.5", children: "Calcule o custo total de implantação para um cliente" }, void 0, false, {
+          fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+          lineNumber: 71,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+        lineNumber: 69,
+        columnNumber: 9
+      }, this)
+    ] }, void 0, true, {
+      fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+      lineNumber: 67,
+      columnNumber: 7
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "grid grid-cols-1 lg:grid-cols-3 gap-6", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "lg:col-span-2 space-y-5", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: "card", children: [
+          /* @__PURE__ */ jsxDEV("h3", { className: "text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2", children: [
+            /* @__PURE__ */ jsxDEV(DollarSign, { size: 16, className: "text-blue-400" }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 79,
+              columnNumber: 115
+            }, this),
+            " Plano"
+          ] }, void 0, true, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 79,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV(Field, { label: "Valor do Plano (R$)", field: "valorPlano", prefix: "R$", step: 0.01 }, void 0, false, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 80,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+          lineNumber: 78,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "card", children: [
+          /* @__PURE__ */ jsxDEV("h3", { className: "text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4", children: "🚗 Deslocamento" }, void 0, false, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 84,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "grid grid-cols-3 gap-4", children: [
+            /* @__PURE__ */ jsxDEV(Field, { label: "Qtd. Carros", field: "qtdCarros" }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 86,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV(Field, { label: "Distância (km)", field: "distanciaKm" }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 87,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV(Field, { label: "Custo por km (R$)", field: "custoKm", prefix: "R$", step: 0.01 }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 88,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 85,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+          lineNumber: 83,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "card", children: [
+          /* @__PURE__ */ jsxDEV("h3", { className: "text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4", children: "🎓 Treinamento" }, void 0, false, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 93,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "grid grid-cols-3 gap-4", children: [
+            /* @__PURE__ */ jsxDEV(Field, { label: "Qtd. Técnicos", field: "qtdTecnicos" }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 95,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV(Field, { label: "Horas de Treinamento", field: "qtdHorasTreinamento" }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 96,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV(Field, { label: "Custo/hora técnica (R$)", field: "custoHoraTecnica", prefix: "R$", step: 0.01 }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 97,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 94,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+          lineNumber: 92,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "card", children: [
+          /* @__PURE__ */ jsxDEV("h3", { className: "text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4", children: "🏨 Hospedagem e Alimentação" }, void 0, false, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 102,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "grid grid-cols-2 gap-4", children: [
+            /* @__PURE__ */ jsxDEV(Field, { label: "Dias de Hospedagem", field: "diasHospedagem" }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 104,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV(Field, { label: "Custo/dia hospedagem (R$)", field: "custoHospedagem", prefix: "R$", step: 0.01 }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 105,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV(Field, { label: "Qtd. Refeições", field: "qtdAlimentacao" }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 106,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV(Field, { label: "Custo por refeição (R$)", field: "custoAlimentacao", prefix: "R$", step: 0.01 }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 107,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 103,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+          lineNumber: 101,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "card", children: [
+          /* @__PURE__ */ jsxDEV("h3", { className: "text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4", children: "💾 Migração e Desconto" }, void 0, false, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 112,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "grid grid-cols-2 gap-4", children: [
+            /* @__PURE__ */ jsxDEV(Field, { label: "Valor da Migração (R$)", field: "valorMigracao", prefix: "R$", step: 0.01 }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 114,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV(Field, { label: "Desconto (%)", field: "desconto", step: 0.5 }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 115,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 113,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+          lineNumber: 111,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+        lineNumber: 77,
+        columnNumber: 9
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "space-y-4", children: /* @__PURE__ */ jsxDEV("div", { className: "card sticky top-6", children: [
+        /* @__PURE__ */ jsxDEV("h3", { className: "text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4", children: "💰 Resumo do Orçamento" }, void 0, false, {
+          fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+          lineNumber: 123,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "space-y-3", children: [
+          [
+            { label: "Deslocamento", val: custoDeslocamento },
+            { label: "Treinamento", val: custoTreinamento },
+            { label: "Hospedagem", val: custoHospedagem },
+            { label: "Alimentação", val: custoAlimentacao },
+            { label: "Migração", val: form.valorMigracao }
+          ].map(
+            (item) => /* @__PURE__ */ jsxDEV("div", { className: "flex justify-between text-sm", children: [
+              /* @__PURE__ */ jsxDEV("span", { className: "text-slate-600 dark:text-slate-400", children: item.label }, void 0, false, {
+                fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+                lineNumber: 133,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("span", { className: "text-slate-800 dark:text-slate-200", children: [
+                "R$ ",
+                item.val.toFixed(2).replace(".", ",")
+              ] }, void 0, true, {
+                fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+                lineNumber: 134,
+                columnNumber: 19
+              }, this)
+            ] }, item.label, true, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 132,
+              columnNumber: 15
+            }, this)
+          ),
+          /* @__PURE__ */ jsxDEV("div", { className: "border-t border-slate-200 dark:border-slate-700 pt-3 flex justify-between text-sm", children: [
+            /* @__PURE__ */ jsxDEV("span", { className: "text-slate-600 dark:text-slate-400", children: "Subtotal" }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 138,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { className: "text-slate-800 dark:text-slate-200", children: [
+              "R$ ",
+              subtotal.toFixed(2).replace(".", ",")
+            ] }, void 0, true, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 139,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 137,
+            columnNumber: 15
+          }, this),
+          form.desconto > 0 && /* @__PURE__ */ jsxDEV("div", { className: "flex justify-between text-sm", children: [
+            /* @__PURE__ */ jsxDEV("span", { className: "text-red-400", children: [
+              "Desconto (",
+              form.desconto,
+              "%)"
+            ] }, void 0, true, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 143,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { className: "text-red-400", children: [
+              "- R$ ",
+              descontoValor.toFixed(2).replace(".", ",")
+            ] }, void 0, true, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 144,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 142,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "border-t border-blue-500 pt-3 flex justify-between", children: [
+            /* @__PURE__ */ jsxDEV("span", { className: "text-blue-300 font-semibold", children: "TOTAL IMPLANTAÇÃO" }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 148,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { className: "text-blue-400 font-bold text-lg", children: [
+              "R$ ",
+              total.toFixed(2).replace(".", ",")
+            ] }, void 0, true, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 149,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 147,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "border-t border-slate-200 dark:border-slate-700 pt-3 flex justify-between text-sm", children: [
+            /* @__PURE__ */ jsxDEV("span", { className: "text-slate-600 dark:text-slate-400", children: "Mensalidade do Plano" }, void 0, false, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 152,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { className: "text-emerald-400 font-semibold", children: [
+              "R$ ",
+              form.valorPlano.toFixed(2).replace(".", ","),
+              "/mês"
+            ] }, void 0, true, {
+              fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+              lineNumber: 153,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+            lineNumber: 151,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+          lineNumber: 124,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("button", { className: "btn-primary w-full mt-5 justify-center", children: "Gerar Proposta" }, void 0, false, {
+          fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+          lineNumber: 156,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+        lineNumber: 122,
+        columnNumber: 11
+      }, this) }, void 0, false, {
+        fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+        lineNumber: 121,
+        columnNumber: 9
+      }, this)
+    ] }, void 0, true, {
+      fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+      lineNumber: 75,
+      columnNumber: 7
+    }, this)
+  ] }, void 0, true, {
+    fileName: "C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx",
+    lineNumber: 66,
+    columnNumber: 5
+  }, this);
+}
+_s(Orcamento, "wzmJVyJrtapywN6wlt715z1huCI=");
+_c = Orcamento;
+var _c;
+$RefreshReg$(_c, "Orcamento");
+if (import.meta.hot && !inWebWorker) {
+  window.$RefreshReg$ = prevRefreshReg;
+  window.$RefreshSig$ = prevRefreshSig;
+}
+if (import.meta.hot && !inWebWorker) {
+  RefreshRuntime.__hmr_import(import.meta.url).then((currentExports) => {
+    RefreshRuntime.registerExportsForReactRefresh("C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx", currentExports);
+    import.meta.hot.accept((nextExports) => {
+      if (!nextExports) return;
+      const invalidateMessage = RefreshRuntime.validateRefreshBoundaryAndEnqueueUpdate("C:/Projetos/dev/Command_Analytics/src/pages/implantacao/Orcamento.tsx", currentExports, nextExports);
+      if (invalidateMessage) import.meta.hot.invalidate(invalidateMessage);
+    });
+  });
+}
+
+//# sourceMappingURL=data:application/json;base64,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R0E7QUFBQSxVQUNBLHVCQUFDLFNBQUksV0FBVSxxRkFDYjtBQUFBLG1DQUFDLFVBQUssV0FBVSxzQ0FBcUMsb0NBQXJEO0FBQUE7QUFBQTtBQUFBO0FBQUEsbUJBQXlFO0FBQUEsWUFDekUsdUJBQUMsVUFBSyxXQUFVLGtDQUFpQztBQUFBO0FBQUEsY0FBSXJDLEtBQUtFLFdBQVdrQyxRQUFRLENBQUMsRUFBRUMsUUFBUSxLQUFLLEdBQUc7QUFBQSxjQUFFO0FBQUEsaUJBQWxHO0FBQUE7QUFBQTtBQUFBO0FBQUEsbUJBQXNHO0FBQUEsZUFGeEc7QUFBQTtBQUFBO0FBQUE7QUFBQSxpQkFHQTtBQUFBLGFBOUJGO0FBQUE7QUFBQTtBQUFBO0FBQUEsZUErQkE7QUFBQSxRQUNBLHVCQUFDLFlBQU8sV0FBVSwwQ0FBeUMsOEJBQTNEO0FBQUE7QUFBQTtBQUFBO0FBQUEsZUFBeUU7QUFBQSxXQWxDM0U7QUFBQTtBQUFBO0FBQUE7QUFBQSxhQW1DQSxLQXBDRjtBQUFBO0FBQUE7QUFBQTtBQUFBLGFBcUNBO0FBQUEsU0FuRkY7QUFBQTtBQUFBO0FBQUE7QUFBQSxXQW9GQTtBQUFBLE9BN0ZGO0FBQUE7QUFBQTtBQUFBO0FBQUEsU0E4RkE7QUFFSjtBQUFDdEMsR0EzSWVELFdBQVM7QUFBQSxLQUFUQTtBQUFTLElBQUF3QztBQUFBLGFBQUFBLElBQUEiLCJuYW1lcyI6WyJ1c2VTdGF0ZSIsIkNhbGN1bGF0b3IiLCJEb2xsYXJTaWduIiwiT3JjYW1lbnRvIiwiX3MiLCJmb3JtIiwic2V0Rm9ybSIsInZhbG9yUGxhbm8iLCJxdGRDYXJyb3MiLCJkaXN0YW5jaWFLbSIsImN1c3RvS20iLCJxdGRUZWNuaWNvcyIsInF0ZEhvcmFzVHJlaW5hbWVudG8iLCJjdXN0b0hvcmFUZWNuaWNhIiwiZGlhc0hvc3BlZGFnZW0iLCJjdXN0b0hvc3BlZGFnZW0iLCJxdGRBbGltZW50YWNhbyIsImN1c3RvQWxpbWVudGFjYW8iLCJ2YWxvck1pZ3JhY2FvIiwiZGVzY29udG8iLCJzZXQiLCJrIiwidiIsImYiLCJjdXN0b0Rlc2xvY2FtZW50byIsImN1c3RvVHJlaW5hbWVudG8iLCJzdWJ0b3RhbCIsImRlc2NvbnRvVmFsb3IiLCJ0b3RhbCIsIkZpZWxkIiwibGFiZWwiLCJmaWVsZCIsInByZWZpeCIsInN0ZXAiLCJlIiwicGFyc2VGbG9hdCIsInRhcmdldCIsInZhbHVlIiwidmFsIiwibWFwIiwiaXRlbSIsInRvRml4ZWQiLCJyZXBsYWNlIiwiX2MiXSwiaWdub3JlTGlzdCI6W10sInNvdXJjZXMiOlsiT3JjYW1lbnRvLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgeyB1c2VTdGF0ZSB9IGZyb20gJ3JlYWN0J1xyXG5pbXBvcnQgeyBDYWxjdWxhdG9yLCBEb2xsYXJTaWduIH0gZnJvbSAnbHVjaWRlLXJlYWN0J1xyXG5cclxuZXhwb3J0IGZ1bmN0aW9uIE9yY2FtZW50bygpIHtcclxuICBjb25zdCBbZm9ybSwgc2V0Rm9ybV0gPSB1c2VTdGF0ZSh7XHJcbiAgICB2YWxvclBsYW5vOiA0OTkuOTAsXHJcbiAgICBxdGRDYXJyb3M6IDEsXHJcbiAgICBkaXN0YW5jaWFLbTogMCxcclxuICAgIGN1c3RvS206IDEuNSxcclxuICAgIHF0ZFRlY25pY29zOiAxLFxyXG4gICAgcXRkSG9yYXNUcmVpbmFtZW50bzogOCxcclxuICAgIGN1c3RvSG9yYVRlY25pY2E6IDgwLFxyXG4gICAgZGlhc0hvc3BlZGFnZW06IDAsXHJcbiAgICBjdXN0b0hvc3BlZGFnZW06IDE1MCxcclxuICAgIHF0ZEFsaW1lbnRhY2FvOiAwLFxyXG4gICAgY3VzdG9BbGltZW50YWNhbzogNDUsXHJcbiAgICB2YWxvck1pZ3JhY2FvOiAwLFxyXG4gICAgZGVzY29udG86IDAsXHJcbiAgfSlcclxuXHJcbiAgY29uc3Qgc2V0ID0gKGs6IHN0cmluZywgdjogbnVtYmVyKSA9PiBzZXRGb3JtKGYgPT4gKHsgLi4uZiwgW2tdOiB2IH0pKVxyXG5cclxuICBjb25zdCBjdXN0b0Rlc2xvY2FtZW50byA9IGZvcm0ucXRkQ2Fycm9zICogZm9ybS5kaXN0YW5jaWFLbSAqIDIgKiBmb3JtLmN1c3RvS21cclxuICBjb25zdCBjdXN0b1RyZWluYW1lbnRvID0gZm9ybS5xdGRUZWNuaWNvcyAqIGZvcm0ucXRkSG9yYXNUcmVpbmFtZW50byAqIGZvcm0uY3VzdG9Ib3JhVGVjbmljYVxyXG4gIGNvbnN0IGN1c3RvSG9zcGVkYWdlbSA9IGZvcm0uZGlhc0hvc3BlZGFnZW0gKiBmb3JtLmN1c3RvSG9zcGVkYWdlbSAqIGZvcm0ucXRkVGVjbmljb3NcclxuICBjb25zdCBjdXN0b0FsaW1lbnRhY2FvID0gZm9ybS5xdGRBbGltZW50YWNhbyAqIGZvcm0uY3VzdG9BbGltZW50YWNhb1xyXG4gIGNvbnN0IHN1YnRvdGFsID0gY3VzdG9EZXNsb2NhbWVudG8gKyBjdXN0b1RyZWluYW1lbnRvICsgY3VzdG9Ib3NwZWRhZ2VtICsgY3VzdG9BbGltZW50YWNhbyArIGZvcm0udmFsb3JNaWdyYWNhb1xyXG4gIGNvbnN0IGRlc2NvbnRvVmFsb3IgPSBzdWJ0b3RhbCAqIChmb3JtLmRlc2NvbnRvIC8gMTAwKVxyXG4gIGNvbnN0IHRvdGFsID0gc3VidG90YWwgLSBkZXNjb250b1ZhbG9yXHJcblxyXG4gIGNvbnN0IEZpZWxkID0gKHsgbGFiZWwsIGZpZWxkLCBwcmVmaXggPSAnJywgc3RlcCA9IDEgfTogeyBsYWJlbDogc3RyaW5nOyBmaWVsZDogc3RyaW5nOyBwcmVmaXg/OiBzdHJpbmc7IHN0ZXA/OiBudW1iZXIgfSkgPT4gKFxyXG4gICAgPGRpdj5cclxuICAgICAgPGxhYmVsIGNsYXNzTmFtZT1cInRleHQteHMgdGV4dC1zbGF0ZS02MDAgZGFyazp0ZXh0LXNsYXRlLTQwMCBibG9jayBtYi0xXCI+e2xhYmVsfTwvbGFiZWw+XHJcbiAgICAgIDxkaXYgY2xhc3NOYW1lPVwicmVsYXRpdmVcIj5cclxuICAgICAgICB7cHJlZml4ICYmIDxzcGFuIGNsYXNzTmFtZT1cImFic29sdXRlIGxlZnQtMyB0b3AtMS8yIC10cmFuc2xhdGUteS0xLzIgdGV4dC1zbGF0ZS02MDAgZGFyazp0ZXh0LXNsYXRlLTQwMCB0ZXh0LXNtXCI+e3ByZWZpeH08L3NwYW4+fVxyXG4gICAgICAgIDxpbnB1dFxyXG4gICAgICAgICAgdHlwZT1cIm51bWJlclwiIHN0ZXA9e3N0ZXB9IG1pbj17MH1cclxuICAgICAgICAgIGNsYXNzTmFtZT17YGlucHV0LWZpZWxkICR7cHJlZml4ID8gJ3BsLTEwJyA6ICcnfWB9XHJcbiAgICAgICAgICB2YWx1ZT17KGZvcm0gYXMgUmVjb3JkPHN0cmluZywgbnVtYmVyPilbZmllbGRdfVxyXG4gICAgICAgICAgb25DaGFuZ2U9e2UgPT4gc2V0KGZpZWxkLCBwYXJzZUZsb2F0KGUudGFyZ2V0LnZhbHVlKSB8fCAwKX1cclxuICAgICAgICAvPlxyXG4gICAgICA8L2Rpdj5cclxuICAgIDwvZGl2PlxyXG4gIClcclxuXHJcbiAgcmV0dXJuIChcclxuICAgIDxkaXYgY2xhc3NOYW1lPVwic3BhY2UteS02XCI+XHJcbiAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIgZ2FwLTNcIj5cclxuICAgICAgICA8Q2FsY3VsYXRvciBjbGFzc05hbWU9XCJ0ZXh0LWJsdWUtNDAwXCIgc2l6ZT17Mjh9IC8+XHJcbiAgICAgICAgPGRpdj5cclxuICAgICAgICAgIDxoMSBjbGFzc05hbWU9XCJ0ZXh0LTJ4bCBmb250LWJvbGQgdGV4dC1zbGF0ZS05MDAgZGFyazp0ZXh0LXNsYXRlLTEwMFwiPk9yw6dhbWVudG8gZGUgSW1wbGFudGHDp8OjbzwvaDE+XHJcbiAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LXNsYXRlLTYwMCBkYXJrOnRleHQtc2xhdGUtNDAwIHRleHQtc20gbXQtMC41XCI+Q2FsY3VsZSBvIGN1c3RvIHRvdGFsIGRlIGltcGxhbnRhw6fDo28gcGFyYSB1bSBjbGllbnRlPC9wPlxyXG4gICAgICAgIDwvZGl2PlxyXG4gICAgICA8L2Rpdj5cclxuXHJcbiAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZ3JpZCBncmlkLWNvbHMtMSBsZzpncmlkLWNvbHMtMyBnYXAtNlwiPlxyXG4gICAgICAgIHsvKiBGb3JtdWzDoXJpbyAqL31cclxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImxnOmNvbC1zcGFuLTIgc3BhY2UteS01XCI+XHJcbiAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImNhcmRcIj5cclxuICAgICAgICAgICAgPGgzIGNsYXNzTmFtZT1cInRleHQtc20gZm9udC1zZW1pYm9sZCB0ZXh0LXNsYXRlLTgwMCBkYXJrOnRleHQtc2xhdGUtMjAwIG1iLTQgZmxleCBpdGVtcy1jZW50ZXIgZ2FwLTJcIj48RG9sbGFyU2lnbiBzaXplPXsxNn0gY2xhc3NOYW1lPVwidGV4dC1ibHVlLTQwMFwiIC8+IFBsYW5vPC9oMz5cclxuICAgICAgICAgICAgPEZpZWxkIGxhYmVsPVwiVmFsb3IgZG8gUGxhbm8gKFIkKVwiIGZpZWxkPVwidmFsb3JQbGFub1wiIHByZWZpeD1cIlIkXCIgc3RlcD17MC4wMX0gLz5cclxuICAgICAgICAgIDwvZGl2PlxyXG5cclxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiY2FyZFwiPlxyXG4gICAgICAgICAgICA8aDMgY2xhc3NOYW1lPVwidGV4dC1zbSBmb250LXNlbWlib2xkIHRleHQtc2xhdGUtODAwIGRhcms6dGV4dC1zbGF0ZS0yMDAgbWItNFwiPvCfmpcgRGVzbG9jYW1lbnRvPC9oMz5cclxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJncmlkIGdyaWQtY29scy0zIGdhcC00XCI+XHJcbiAgICAgICAgICAgICAgPEZpZWxkIGxhYmVsPVwiUXRkLiBDYXJyb3NcIiBmaWVsZD1cInF0ZENhcnJvc1wiIC8+XHJcbiAgICAgICAgICAgICAgPEZpZWxkIGxhYmVsPVwiRGlzdMOibmNpYSAoa20pXCIgZmllbGQ9XCJkaXN0YW5jaWFLbVwiIC8+XHJcbiAgICAgICAgICAgICAgPEZpZWxkIGxhYmVsPVwiQ3VzdG8gcG9yIGttIChSJClcIiBmaWVsZD1cImN1c3RvS21cIiBwcmVmaXg9XCJSJFwiIHN0ZXA9ezAuMDF9IC8+XHJcbiAgICAgICAgICAgIDwvZGl2PlxyXG4gICAgICAgICAgPC9kaXY+XHJcblxyXG4gICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJjYXJkXCI+XHJcbiAgICAgICAgICAgIDxoMyBjbGFzc05hbWU9XCJ0ZXh0LXNtIGZvbnQtc2VtaWJvbGQgdGV4dC1zbGF0ZS04MDAgZGFyazp0ZXh0LXNsYXRlLTIwMCBtYi00XCI+8J+OkyBUcmVpbmFtZW50bzwvaDM+XHJcbiAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZ3JpZCBncmlkLWNvbHMtMyBnYXAtNFwiPlxyXG4gICAgICAgICAgICAgIDxGaWVsZCBsYWJlbD1cIlF0ZC4gVMOpY25pY29zXCIgZmllbGQ9XCJxdGRUZWNuaWNvc1wiIC8+XHJcbiAgICAgICAgICAgICAgPEZpZWxkIGxhYmVsPVwiSG9yYXMgZGUgVHJlaW5hbWVudG9cIiBmaWVsZD1cInF0ZEhvcmFzVHJlaW5hbWVudG9cIiAvPlxyXG4gICAgICAgICAgICAgIDxGaWVsZCBsYWJlbD1cIkN1c3RvL2hvcmEgdMOpY25pY2EgKFIkKVwiIGZpZWxkPVwiY3VzdG9Ib3JhVGVjbmljYVwiIHByZWZpeD1cIlIkXCIgc3RlcD17MC4wMX0gLz5cclxuICAgICAgICAgICAgPC9kaXY+XHJcbiAgICAgICAgICA8L2Rpdj5cclxuXHJcbiAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImNhcmRcIj5cclxuICAgICAgICAgICAgPGgzIGNsYXNzTmFtZT1cInRleHQtc20gZm9udC1zZW1pYm9sZCB0ZXh0LXNsYXRlLTgwMCBkYXJrOnRleHQtc2xhdGUtMjAwIG1iLTRcIj7wn4+oIEhvc3BlZGFnZW0gZSBBbGltZW50YcOnw6NvPC9oMz5cclxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJncmlkIGdyaWQtY29scy0yIGdhcC00XCI+XHJcbiAgICAgICAgICAgICAgPEZpZWxkIGxhYmVsPVwiRGlhcyBkZSBIb3NwZWRhZ2VtXCIgZmllbGQ9XCJkaWFzSG9zcGVkYWdlbVwiIC8+XHJcbiAgICAgICAgICAgICAgPEZpZWxkIGxhYmVsPVwiQ3VzdG8vZGlhIGhvc3BlZGFnZW0gKFIkKVwiIGZpZWxkPVwiY3VzdG9Ib3NwZWRhZ2VtXCIgcHJlZml4PVwiUiRcIiBzdGVwPXswLjAxfSAvPlxyXG4gICAgICAgICAgICAgIDxGaWVsZCBsYWJlbD1cIlF0ZC4gUmVmZWnDp8O1ZXNcIiBmaWVsZD1cInF0ZEFsaW1lbnRhY2FvXCIgLz5cclxuICAgICAgICAgICAgICA8RmllbGQgbGFiZWw9XCJDdXN0byBwb3IgcmVmZWnDp8OjbyAoUiQpXCIgZmllbGQ9XCJjdXN0b0FsaW1lbnRhY2FvXCIgcHJlZml4PVwiUiRcIiBzdGVwPXswLjAxfSAvPlxyXG4gICAgICAgICAgICA8L2Rpdj5cclxuICAgICAgICAgIDwvZGl2PlxyXG5cclxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiY2FyZFwiPlxyXG4gICAgICAgICAgICA8aDMgY2xhc3NOYW1lPVwidGV4dC1zbSBmb250LXNlbWlib2xkIHRleHQtc2xhdGUtODAwIGRhcms6dGV4dC1zbGF0ZS0yMDAgbWItNFwiPvCfkr4gTWlncmHDp8OjbyBlIERlc2NvbnRvPC9oMz5cclxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJncmlkIGdyaWQtY29scy0yIGdhcC00XCI+XHJcbiAgICAgICAgICAgICAgPEZpZWxkIGxhYmVsPVwiVmFsb3IgZGEgTWlncmHDp8OjbyAoUiQpXCIgZmllbGQ9XCJ2YWxvck1pZ3JhY2FvXCIgcHJlZml4PVwiUiRcIiBzdGVwPXswLjAxfSAvPlxyXG4gICAgICAgICAgICAgIDxGaWVsZCBsYWJlbD1cIkRlc2NvbnRvICglKVwiIGZpZWxkPVwiZGVzY29udG9cIiBzdGVwPXswLjV9IC8+XHJcbiAgICAgICAgICAgIDwvZGl2PlxyXG4gICAgICAgICAgPC9kaXY+XHJcbiAgICAgICAgPC9kaXY+XHJcblxyXG4gICAgICAgIHsvKiBSZXN1bHRhZG8gKi99XHJcbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJzcGFjZS15LTRcIj5cclxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiY2FyZCBzdGlja3kgdG9wLTZcIj5cclxuICAgICAgICAgICAgPGgzIGNsYXNzTmFtZT1cInRleHQtc20gZm9udC1zZW1pYm9sZCB0ZXh0LXNsYXRlLTgwMCBkYXJrOnRleHQtc2xhdGUtMjAwIG1iLTRcIj7wn5KwIFJlc3VtbyBkbyBPcsOnYW1lbnRvPC9oMz5cclxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJzcGFjZS15LTNcIj5cclxuICAgICAgICAgICAgICB7W1xyXG4gICAgICAgICAgICAgICAgeyBsYWJlbDogJ0Rlc2xvY2FtZW50bycsIHZhbDogY3VzdG9EZXNsb2NhbWVudG8gfSxcclxuICAgICAgICAgICAgICAgIHsgbGFiZWw6ICdUcmVpbmFtZW50bycsIHZhbDogY3VzdG9UcmVpbmFtZW50byB9LFxyXG4gICAgICAgICAgICAgICAgeyBsYWJlbDogJ0hvc3BlZGFnZW0nLCB2YWw6IGN1c3RvSG9zcGVkYWdlbSB9LFxyXG4gICAgICAgICAgICAgICAgeyBsYWJlbDogJ0FsaW1lbnRhw6fDo28nLCB2YWw6IGN1c3RvQWxpbWVudGFjYW8gfSxcclxuICAgICAgICAgICAgICAgIHsgbGFiZWw6ICdNaWdyYcOnw6NvJywgdmFsOiBmb3JtLnZhbG9yTWlncmFjYW8gfSxcclxuICAgICAgICAgICAgICBdLm1hcChpdGVtID0+IChcclxuICAgICAgICAgICAgICAgIDxkaXYga2V5PXtpdGVtLmxhYmVsfSBjbGFzc05hbWU9XCJmbGV4IGp1c3RpZnktYmV0d2VlbiB0ZXh0LXNtXCI+XHJcbiAgICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cInRleHQtc2xhdGUtNjAwIGRhcms6dGV4dC1zbGF0ZS00MDBcIj57aXRlbS5sYWJlbH08L3NwYW4+XHJcbiAgICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cInRleHQtc2xhdGUtODAwIGRhcms6dGV4dC1zbGF0ZS0yMDBcIj5SJCB7aXRlbS52YWwudG9GaXhlZCgyKS5yZXBsYWNlKCcuJywgJywnKX08L3NwYW4+XHJcbiAgICAgICAgICAgICAgICA8L2Rpdj5cclxuICAgICAgICAgICAgICApKX1cclxuICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImJvcmRlci10IGJvcmRlci1zbGF0ZS0yMDAgZGFyazpib3JkZXItc2xhdGUtNzAwIHB0LTMgZmxleCBqdXN0aWZ5LWJldHdlZW4gdGV4dC1zbVwiPlxyXG4gICAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwidGV4dC1zbGF0ZS02MDAgZGFyazp0ZXh0LXNsYXRlLTQwMFwiPlN1YnRvdGFsPC9zcGFuPlxyXG4gICAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwidGV4dC1zbGF0ZS04MDAgZGFyazp0ZXh0LXNsYXRlLTIwMFwiPlIkIHtzdWJ0b3RhbC50b0ZpeGVkKDIpLnJlcGxhY2UoJy4nLCAnLCcpfTwvc3Bhbj5cclxuICAgICAgICAgICAgICA8L2Rpdj5cclxuICAgICAgICAgICAgICB7Zm9ybS5kZXNjb250byA+IDAgJiYgKFxyXG4gICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGp1c3RpZnktYmV0d2VlbiB0ZXh0LXNtXCI+XHJcbiAgICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cInRleHQtcmVkLTQwMFwiPkRlc2NvbnRvICh7Zm9ybS5kZXNjb250b30lKTwvc3Bhbj5cclxuICAgICAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwidGV4dC1yZWQtNDAwXCI+LSBSJCB7ZGVzY29udG9WYWxvci50b0ZpeGVkKDIpLnJlcGxhY2UoJy4nLCAnLCcpfTwvc3Bhbj5cclxuICAgICAgICAgICAgICAgIDwvZGl2PlxyXG4gICAgICAgICAgICAgICl9XHJcbiAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJib3JkZXItdCBib3JkZXItYmx1ZS01MDAgcHQtMyBmbGV4IGp1c3RpZnktYmV0d2VlblwiPlxyXG4gICAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwidGV4dC1ibHVlLTMwMCBmb250LXNlbWlib2xkXCI+VE9UQUwgSU1QTEFOVEHDh8ODTzwvc3Bhbj5cclxuICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cInRleHQtYmx1ZS00MDAgZm9udC1ib2xkIHRleHQtbGdcIj5SJCB7dG90YWwudG9GaXhlZCgyKS5yZXBsYWNlKCcuJywgJywnKX08L3NwYW4+XHJcbiAgICAgICAgICAgICAgPC9kaXY+XHJcbiAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJib3JkZXItdCBib3JkZXItc2xhdGUtMjAwIGRhcms6Ym9yZGVyLXNsYXRlLTcwMCBwdC0zIGZsZXgganVzdGlmeS1iZXR3ZWVuIHRleHQtc21cIj5cclxuICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cInRleHQtc2xhdGUtNjAwIGRhcms6dGV4dC1zbGF0ZS00MDBcIj5NZW5zYWxpZGFkZSBkbyBQbGFubzwvc3Bhbj5cclxuICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cInRleHQtZW1lcmFsZC00MDAgZm9udC1zZW1pYm9sZFwiPlIkIHtmb3JtLnZhbG9yUGxhbm8udG9GaXhlZCgyKS5yZXBsYWNlKCcuJywgJywnKX0vbcOqczwvc3Bhbj5cclxuICAgICAgICAgICAgICA8L2Rpdj5cclxuICAgICAgICAgICAgPC9kaXY+XHJcbiAgICAgICAgICAgIDxidXR0b24gY2xhc3NOYW1lPVwiYnRuLXByaW1hcnkgdy1mdWxsIG10LTUganVzdGlmeS1jZW50ZXJcIj5HZXJhciBQcm9wb3N0YTwvYnV0dG9uPlxyXG4gICAgICAgICAgPC9kaXY+XHJcbiAgICAgICAgPC9kaXY+XHJcbiAgICAgIDwvZGl2PlxyXG4gICAgPC9kaXY+XHJcbiAgKVxyXG59XHJcbiJdLCJmaWxlIjoiQzovUHJvamV0b3MvZGV2L0NvbW1hbmRfQW5hbHl0aWNzL3NyYy9wYWdlcy9pbXBsYW50YWNhby9PcmNhbWVudG8udHN4In0=

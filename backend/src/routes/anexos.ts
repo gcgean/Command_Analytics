@@ -7,10 +7,10 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 
-type TabelaAnexo = 'agenda' | 'agendamento_programado'
+type TabelaAnexo = 'agenda' | 'agendamento_programado' | 'cliente_prontuario'
 
 function isTabelaAnexo(value: unknown): value is TabelaAnexo {
-  return value === 'agenda' || value === 'agendamento_programado'
+  return value === 'agenda' || value === 'agendamento_programado' || value === 'cliente_prontuario'
 }
 
 function toInt(value: unknown): number | null {
@@ -25,7 +25,10 @@ function sanitizeFilename(name: string): string {
   return collapsed.slice(0, 180) || 'arquivo'
 }
 
-function getUploadsDir(): string {
+function getUploadsDir(tabela: TabelaAnexo): string {
+  if (tabela === 'cliente_prontuario') {
+    return path.resolve(process.cwd(), 'uploads', 'clientes', 'prontuario')
+  }
   return path.resolve(process.cwd(), 'uploads', 'agendamentos')
 }
 
@@ -34,8 +37,8 @@ function isPathInside(parent: string, child: string): boolean {
   return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
 }
 
-async function ensureUploadsDir(): Promise<string> {
-  const dir = getUploadsDir()
+async function ensureUploadsDir(tabela: TabelaAnexo): Promise<string> {
+  const dir = getUploadsDir(tabela)
   await fs.mkdir(dir, { recursive: true })
   return dir
 }
@@ -49,6 +52,10 @@ async function drain(stream: NodeJS.ReadableStream): Promise<void> {
 async function assertRegistroExiste(tabela: TabelaAnexo, registroId: number): Promise<boolean> {
   if (tabela === 'agenda') {
     const row: any[] = await prisma.$queryRaw`SELECT cod_agenda AS id FROM agenda WHERE cod_agenda = ${registroId} LIMIT 1`
+    return row.length > 0
+  }
+  if (tabela === 'cliente_prontuario') {
+    const row: any[] = await prisma.$queryRaw`SELECT cod_cli AS id FROM cliente WHERE cod_cli = ${registroId} LIMIT 1`
     return row.length > 0
   }
   const row: any[] = await prisma.$queryRaw`SELECT id AS id FROM agendamento_programado WHERE id = ${registroId} LIMIT 1`
@@ -103,7 +110,7 @@ export async function anexosRoutes(app: FastifyInstance) {
     const exists = await assertRegistroExiste(tabela, id)
     if (!exists) return reply.status(404).send({ error: 'Registro não encontrado.' })
 
-    const uploadsDir = await ensureUploadsDir()
+    const uploadsDir = await ensureUploadsDir(tabela)
     let uploadedCount = 0
     const existingRows: any[] = await prisma.$queryRaw`
       SELECT COUNT(*) AS c FROM agendamento_anexo WHERE tabela = ${tabela} AND registro_id = ${id}
@@ -187,7 +194,7 @@ export async function anexosRoutes(app: FastifyInstance) {
     if (!anexoId) return reply.status(400).send({ error: 'id inválido.' })
 
     const rows: any[] = await prisma.$queryRaw`
-      SELECT id, original_name AS originalName, stored_name AS storedName, mime_type AS mimeType, size_bytes AS sizeBytes
+      SELECT id, tabela, original_name AS originalName, stored_name AS storedName, mime_type AS mimeType, size_bytes AS sizeBytes
       FROM agendamento_anexo
       WHERE id = ${anexoId}
       LIMIT 1
@@ -195,7 +202,7 @@ export async function anexosRoutes(app: FastifyInstance) {
     if (!rows.length) return reply.status(404).send({ error: 'Anexo não encontrado.' })
     const row = rows[0]
 
-    const uploadsDir = getUploadsDir()
+    const uploadsDir = getUploadsDir(String(row.tabela || 'agenda') as TabelaAnexo)
     const fullPath = path.resolve(uploadsDir, String(row.storedName))
     if (!isPathInside(uploadsDir, fullPath)) return reply.status(400).send({ error: 'Caminho inválido.' })
 
@@ -216,7 +223,7 @@ export async function anexosRoutes(app: FastifyInstance) {
     if (!anexoId) return reply.status(400).send({ error: 'id inválido.' })
 
     const rows: any[] = await prisma.$queryRaw`
-      SELECT id, stored_name AS storedName
+      SELECT id, tabela, stored_name AS storedName
       FROM agendamento_anexo
       WHERE id = ${anexoId}
       LIMIT 1
@@ -224,7 +231,7 @@ export async function anexosRoutes(app: FastifyInstance) {
     if (!rows.length) return reply.status(404).send({ error: 'Anexo não encontrado.' })
     const row = rows[0]
 
-    const uploadsDir = getUploadsDir()
+    const uploadsDir = getUploadsDir(String(row.tabela || 'agenda') as TabelaAnexo)
     const fullPath = path.resolve(uploadsDir, String(row.storedName))
     if (isPathInside(uploadsDir, fullPath)) {
       await fs.unlink(fullPath).catch(() => {})

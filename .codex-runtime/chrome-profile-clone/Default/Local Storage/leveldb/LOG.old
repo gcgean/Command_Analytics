@@ -1,0 +1,42 @@
+2026/04/27-09:22:36.833 3018 Reusing MANIFEST C:\Users\Pichau\AppData\Local\Google\Chrome\User Data\Default\Local Storage\leveldb/MANIFEST-000001
+2026/04/27-09:22:36.849 3018 Recovering log #40
+2026/04/27-09:22:36.859 3018 Reusing old log C:\Users\Pichau\AppData\Local\Google\Chrome\User Data\Default\Local Storage\leveldb/000040.log 
+2026/04/27-10:01:23.322 3024 Level-0 table #44: started
+2026/04/27-10:01:23.337 3024 Level-0 table #44: 19828 bytes OK
+2026/04/27-10:01:23.342 3024 Delete type=0 #40
+2026/04/27-10:02:35.132 3024 Level-0 table #46: started
+2026/04/27-10:02:35.143 3024 Level-0 table #46: 51516 bytes OK
+2026/04/27-10:02:35.148 3024 Delete type=0 #43
+2026/04/27-10:07:22.985 3024 Level-0 table #48: started
+2026/04/27-10:07:23.013 3024 Level-0 table #48: 1588078 bytes OK
+2026/04/27-10:07:23.022 3024 Delete type=0 #45
+2026/04/27-10:07:23.025 3024 Compacting 4@0 + 1@1 files
+2026/04/27-10:07:23.075 3024 Generated table #49@0: 240 keys, 1655467 bytes
+2026/04/27-10:07:23.075 3024 Compacted 4@0 + 1@1 files => 1655467 bytes
+2026/04/27-10:07:23.079 3024 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/04/27-10:07:23.081 3024 Delete type=2 #39
+2026/04/27-10:07:23.082 3024 Delete type=2 #41
+2026/04/27-10:07:23.082 3024 Delete type=2 #44
+2026/04/27-10:07:23.083 3024 Delete type=2 #46
+2026/04/27-10:07:23.083 3024 Delete type=2 #48
+2026/04/27-10:24:13.199 3024 Level-0 table #51: started
+2026/04/27-10:24:13.210 3024 Level-0 table #51: 19928 bytes OK
+2026/04/27-10:24:13.215 3024 Delete type=0 #47
+2026/04/28-11:28:01.015 3024 Level-0 table #53: started
+2026/04/28-11:28:01.028 3024 Level-0 table #53: 20215 bytes OK
+2026/04/28-11:28:01.034 3024 Delete type=0 #50
+2026/04/28-12:27:40.616 3024 Level-0 table #55: started
+2026/04/28-12:27:40.626 3024 Level-0 table #55: 17360 bytes OK
+2026/04/28-12:27:40.632 3024 Delete type=0 #52
+2026/04/28-14:43:29.919 3024 Level-0 table #57: started
+2026/04/28-14:43:29.928 3024 Level-0 table #57: 17127 bytes OK
+2026/04/28-14:43:29.933 3024 Delete type=0 #54
+2026/04/28-14:43:29.934 3024 Compacting 4@0 + 1@1 files
+2026/04/28-14:43:29.961 3024 Generated table #58@0: 261 keys, 83715 bytes
+2026/04/28-14:43:29.961 3024 Compacted 4@0 + 1@1 files => 83715 bytes
+2026/04/28-14:43:29.966 3024 compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/04/28-14:43:29.968 3024 Delete type=2 #49
+2026/04/28-14:43:29.968 3024 Delete type=2 #51
+2026/04/28-14:43:29.968 3024 Delete type=2 #53
+2026/04/28-14:43:29.969 3024 Delete type=2 #55
+2026/04/28-14:43:29.969 3024 Delete type=2 #57

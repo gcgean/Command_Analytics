@@ -5,7 +5,7 @@ import { Button } from './Button'
 import clsx from 'clsx'
 import { Modal } from './Modal'
 
-type TabelaAnexo = 'agenda' | 'agendamento_programado'
+type TabelaAnexo = 'agenda' | 'agendamento_programado' | 'cliente_prontuario'
 
 type Anexo = {
   id: number
@@ -41,7 +41,19 @@ function canPreview(mimeType: string) {
   return mimeType.startsWith('image/') || mimeType === 'application/pdf'
 }
 
-export function Anexos({ tabela, registroId }: { tabela: TabelaAnexo; registroId: number }) {
+export function Anexos({
+  tabela,
+  registroId,
+  className,
+  title = 'Anexos',
+  emptyLabel = 'Nenhum anexo.',
+}: {
+  tabela: TabelaAnexo
+  registroId: number
+  className?: string
+  title?: string
+  emptyLabel?: string
+}) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [items, setItems] = useState<Anexo[]>([])
   const [loading, setLoading] = useState(false)
@@ -73,14 +85,14 @@ export function Anexos({ tabela, registroId }: { tabela: TabelaAnexo; registroId
   function onSelectFiles(files: FileList | null) {
     if (!files) return
     if (items.length >= MAX_FILES) {
-      setError(`Limite de ${MAX_FILES} anexos por agendamento.`)
+      setError(`Limite de ${MAX_FILES} anexos por registro.`)
       return
     }
     const arr = Array.from(files)
     const available = MAX_FILES - items.length
     const limited = arr.slice(0, available)
     if (arr.length > available) {
-      setError(`Limite de ${MAX_FILES} anexos por agendamento. ${available} disponível(is).`)
+      setError(`Limite de ${MAX_FILES} anexos por registro. ${available} disponível(is).`)
     } else {
       setError(null)
     }
@@ -90,7 +102,7 @@ export function Anexos({ tabela, registroId }: { tabela: TabelaAnexo; registroId
   async function upload() {
     if (selected.length === 0) return
     if (items.length + selected.length > MAX_FILES) {
-      setError(`Limite de ${MAX_FILES} anexos por agendamento.`)
+      setError(`Limite de ${MAX_FILES} anexos por registro.`)
       return
     }
     if (selected.some(f => f.size > MAX_BYTES)) {
@@ -157,7 +169,7 @@ export function Anexos({ tabela, registroId }: { tabela: TabelaAnexo; registroId
   }
 
   return (
-    <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+    <div className={clsx('rounded-lg border border-slate-200 dark:border-slate-700 p-3', className)}>
       <Modal isOpen={!!preview?.isOpen} onClose={closePreview} title={preview?.title || 'Pré-visualização'} size="xl">
         {preview && (
           <div className="space-y-3">
@@ -175,7 +187,7 @@ export function Anexos({ tabela, registroId }: { tabela: TabelaAnexo; registroId
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Paperclip className="w-4 h-4 text-slate-500" />
-          <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Anexos</p>
+          <p className="text-sm font-medium text-slate-800 dark:text-slate-200">{title}</p>
           {loading && <span className="text-xs text-slate-500">Carregando...</span>}
         </div>
 
@@ -261,7 +273,7 @@ export function Anexos({ tabela, registroId }: { tabela: TabelaAnexo; registroId
           </div>
         ))}
         {!loading && items.length === 0 && (
-          <div className="py-4 text-xs text-slate-500">Nenhum anexo.</div>
+          <div className="py-4 text-xs text-slate-500">{emptyLabel}</div>
         )}
       </div>
     </div>

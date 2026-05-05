@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware'
 import type { Usuario } from '../types'
 import { api } from '../services/api'
 
+let refreshInFlight: Promise<boolean> | null = null
+
 interface AuthState {
   user: Usuario | null
   token: string | null
@@ -27,9 +29,17 @@ export const useAuthStore = create<AuthState>()(
       },
 
       refreshSession: async () => {
-        const { user, token } = await api.refreshToken() as unknown as { user: Usuario; token: string }
-        set({ user, token, isAuthenticated: true })
-        return true
+        if (refreshInFlight) return refreshInFlight
+        refreshInFlight = (async () => {
+          const { user, token } = await api.refreshToken() as unknown as { user: Usuario; token: string }
+          set({ user, token, isAuthenticated: true })
+          return true
+        })()
+        try {
+          return await refreshInFlight
+        } finally {
+          refreshInFlight = null
+        }
       },
 
       logout: () => {

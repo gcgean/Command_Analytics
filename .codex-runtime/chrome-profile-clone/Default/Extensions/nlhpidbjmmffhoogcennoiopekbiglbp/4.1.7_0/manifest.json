@@ -1,0 +1,43 @@
+{
+   "action": {
+      "default_icon": "32.png"
+   },
+   "background": {
+      "service_worker": "src/pages/background/index.js",
+      "type": "module"
+   },
+   "content_scripts": [ {
+      "css": [  ],
+      "js": [ "src/pages/content/index.js" ],
+      "matches": [ "http://*/*", "https://*/*", "\u003Call_urls>" ]
+   } ],
+   "content_security_policy": {
+      "extension_pages": "script-src 'self'; object-src 'self'"
+   },
+   "default_locale": "en",
+   "description": "__MSG_shortDesc__",
+   "externally_connectable": {
+      "matches": [ "https://toolserver.online/*" ]
+   },
+   "host_permissions": [ "http://*/*", "https://*/*" ],
+   "icons": {
+      "128": "128.png",
+      "32": "32.png",
+      "48": "48.png",
+      "64": "64.png"
+   },
+   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAgKactDtJX/X1rf5DjWWq9ehWSj75Z6sdRqnVEfuHL3MP6Q3NWjN4AOKEAWEJUmgLBU/EWPSxE1VLvv7eG9EDZ0AqgvGHtYlTZm9D1HmKYjMDFkGSk0V26i8CpCCi72zGo6Mn9U/tRGlQJRI6iwbqN3f4UJvfkC3o8OpRD96mZjWQfPopDNIgQQhH0IfMMnZj1cQziqOPa/kF6F1lECPQopsIVcuLQxsBlV9djwm4pEVZVTMhztkvqJ4RAW6Oe7iJsJI1VyT+FkTb3F+jz7bMy0amw64rss7rW25DeUm3t2fQmdjJ/FrARaQLGQujPqoGsNAbHkJ4fP21tA+gTFx1UwIDAQAB",
+   "manifest_version": 3,
+   "name": "__MSG_appName__",
+   "options_page": "src/pages/options/index.html",
+   "permissions": [ "contextMenus", "storage", "sidePanel" ],
+   "side_panel": {
+      "default_path": "src/pages/side-panel/index.html"
+   },
+   "update_url": "https://clients2.google.com/service/update2/crx",
+   "version": "4.1.7",
+   "web_accessible_resources": [ {
+      "matches": [ "*://*/*" ],
+      "resources": [ "assets/js/*.js", "assets/css/*.css", "assets/svg/*.svg", "assets/png/*.png", "icon.svg", "blob/*", "*.png", "*.svg" ]
+   } ]
+}

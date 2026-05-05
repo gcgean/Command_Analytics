@@ -1,0 +1,30 @@
+2026/04/28-15:00:38.905 2b10 Reusing MANIFEST C:\Users\Pichau\AppData\Local\Google\Chrome\User Data\Default\Local Storage\leveldb/MANIFEST-000001
+2026/04/28-15:00:38.926 2b10 Recovering log #56
+2026/04/28-15:00:38.931 2b10 Reusing old log C:\Users\Pichau\AppData\Local\Google\Chrome\User Data\Default\Local Storage\leveldb/000056.log 
+2026/04/28-15:36:02.807 2b1c Level-0 table #61: started
+2026/04/28-15:36:02.848 2b1c Level-0 table #61: 1663721 bytes OK
+2026/04/28-15:36:02.854 2b1c Delete type=0 #56
+2026/04/28-16:11:26.951 2b1c Level-0 table #63: started
+2026/04/28-16:11:26.978 2b1c Level-0 table #63: 1664057 bytes OK
+2026/04/28-16:11:26.984 2b1c Delete type=0 #60
+2026/04/28-16:46:51.596 2b1c Level-0 table #65: started
+2026/04/28-16:46:51.621 2b1c Level-0 table #65: 1665944 bytes OK
+2026/04/28-16:46:51.630 2b1c Delete type=0 #62
+2026/04/29-15:47:47.658 2b1c Level-0 table #67: started
+2026/04/29-15:47:47.675 2b1c Level-0 table #67: 17507 bytes OK
+2026/04/29-15:47:47.683 2b1c Delete type=0 #64
+2026/04/29-15:47:47.691 2b1c Compacting 4@0 + 1@1 files
+2026/04/29-15:47:47.740 2b1c Generated table #68@0: 262 keys, 84269 bytes
+2026/04/29-15:47:47.740 2b1c Compacted 4@0 + 1@1 files => 84269 bytes
+2026/04/29-15:47:47.745 2b1c compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/04/29-15:47:47.746 2b1c Delete type=2 #58
+2026/04/29-15:47:47.746 2b1c Delete type=2 #61
+2026/04/29-15:47:47.746 2b1c Delete type=2 #63
+2026/04/29-15:47:47.746 2b1c Delete type=2 #65
+2026/04/29-15:47:47.746 2b1c Delete type=2 #67
+2026/05/02-01:08:42.278 2b1c Level-0 table #70: started
+2026/05/02-01:08:42.311 2b1c Level-0 table #70: 18571 bytes OK
+2026/05/02-01:08:42.322 2b1c Delete type=0 #66
+2026/05/03-16:54:38.538 2b1c Level-0 table #72: started
+2026/05/03-16:54:38.551 2b1c Level-0 table #72: 17660 bytes OK
+2026/05/03-16:54:38.562 2b1c Delete type=0 #69

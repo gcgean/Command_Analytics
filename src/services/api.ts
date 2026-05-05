@@ -3,7 +3,7 @@ import type {
   Negocio, Lead, AnaliseFinanceira, Comissao, Tarefa, Video, Meta,
   AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, EtapaCadastro,
   ChecklistCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, Usuario,
-  StatusAtendimento, ProcedimentoCadastro
+  StatusAtendimento, ProcedimentoCadastro, ClienteAnexo
 } from '../types'
 
 // ============================================================
@@ -68,6 +68,12 @@ type PaginatedResponse<T> = {
   data: T[]
 }
 
+const DEFAULT_TIMEOUT_MS = (() => {
+  const raw = (import.meta.env as any)['VITE_API_TIMEOUT_MS'] as string | undefined
+  const ms = raw ? Number(raw) : 20000
+  return Number.isFinite(ms) && ms > 0 ? ms : 20000
+})()
+
 function getToken(): string | null {
   const directToken = localStorage.getItem('auth_token')
   if (directToken) return directToken
@@ -90,6 +96,41 @@ function getToken(): string | null {
   return null
 }
 
+function isAbortError(err: unknown): boolean {
+  const anyErr = err as any
+  if (!anyErr) return false
+  if (anyErr.name === 'AbortError') return true
+  const message = String(anyErr?.message ?? '')
+  return message.toLowerCase().includes('aborted')
+}
+
+async function fetchWithTimeout(input: string, init: RequestInit, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<Response> {
+  const controller = new AbortController()
+  const externalSignal = init.signal
+  if (externalSignal) {
+    if (externalSignal.aborted) {
+      controller.abort()
+    } else {
+      externalSignal.addEventListener('abort', () => controller.abort(), { once: true })
+    }
+  }
+
+  const timeoutId = window.setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    })
+  } catch (err: any) {
+    if (isAbortError(err)) {
+      throw new Error('Tempo limite excedido ao conectar na API. Tente novamente.')
+    }
+    throw err
+  } finally {
+    window.clearTimeout(timeoutId)
+  }
+}
+
 async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken()
   const baseHeaders: Record<string, string> = {
@@ -100,7 +141,7 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
   }
   let res: Response
   try {
-    res = await fetch(`${BASE_URL}${path}`, {
+    res = await fetchWithTimeout(`${BASE_URL}${path}`, {
       ...options,
       headers: {
         ...baseHeaders,
@@ -108,6 +149,9 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
       },
     })
   } catch (err: any) {
+    if (String(err?.message ?? '').toLowerCase().includes('tempo limite')) {
+      throw err
+    }
     throw new Error('Falha de conexão com a API. Verifique sua rede, CORS ou disponibilidade do servidor.')
   }
   if (!res.ok) {
@@ -130,7 +174,7 @@ export const api = {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     }
     try {
-      const res = await fetch(`${BASE_URL}/health`, { headers })
+      const res = await fetchWithTimeout(`${BASE_URL}/health`, { headers })
       return { ok: res.ok, status: res.status, statusText: res.statusText }
     } catch {
       return { ok: false, status: 0, statusText: 'network_error' }
@@ -176,9 +220,9 @@ export const api = {
     ativo?: string
     bloqueado?: string
     curvaABC?: string
-    idSegmento?: string
+    codCla?: string
     contadorId?: string
-  }) => {
+  }, options?: RequestInit) => {
     const qs = '?' + new URLSearchParams({
       page: String(params.page),
       limit: String(params.limit),
@@ -186,15 +230,18 @@ export const api = {
       ...(params.ativo !== undefined ? { ativo: params.ativo } : {}),
       ...(params.bloqueado !== undefined ? { bloqueado: params.bloqueado } : {}),
       ...(params.curvaABC ? { curvaABC: params.curvaABC } : {}),
-      ...(params.idSegmento ? { idSegmento: params.idSegmento } : {}),
+      ...(params.codCla ? { codCla: params.codCla } : {}),
       ...(params.contadorId ? { contadorId: params.contadorId } : {}),
     }).toString()
-    return fetchApi<PaginatedResponse<Cliente>>(`/clientes${qs}`)
+    return fetchApi<PaginatedResponse<Cliente>>(`/clientes${qs}`, options)
   },
   getSegmentos: () => fetchApi<Array<{ id: number; descricao: string }>>('/segmentos'),
-  getClienteById: (id: number) => fetchApi<Cliente>(`/clientes/${id}`),
+  getClassificacoes: (options?: RequestInit) => fetchApi<Array<{ id: number; nome: string | null }>>('/classificacoes', options),
+  getClienteById: (id: number, options?: RequestInit) => fetchApi<Cliente>(`/clientes/${id}`, options),
   createCliente: (data: Partial<Cliente>) => fetchApi<Cliente>('/clientes', { method: 'POST', body: JSON.stringify(data) }),
   updateCliente: (id: number, data: Partial<Cliente>) => fetchApi<Cliente>(`/clientes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateClienteProntuario: (id: number, data: { observacoes: string }) =>
+    fetchApi<Cliente>(`/clientes/${id}/prontuario`, { method: 'PUT', body: JSON.stringify(data) }),
   getMonitorClientes: () => fetchApi('/clientes/monitor/resumo'),
 
   // ─── Atendimentos ──────────────────────────────────────────
@@ -224,18 +271,18 @@ export const api = {
   deleteAgendaItem: (id: number) => fetchApi(`/agenda/${id}`, { method: 'DELETE' }),
 
   // ─── Anexos (Agenda / Agendamentos Programados) ─────────────
-  listAnexos: (params: { tabela: 'agenda' | 'agendamento_programado'; registroId: number }) => {
+  listAnexos: (params: { tabela: 'agenda' | 'agendamento_programado' | 'cliente_prontuario'; registroId: number }) => {
     const qs = '?' + new URLSearchParams({ tabela: params.tabela, registroId: String(params.registroId) }).toString()
-    return fetchApi<any[]>(`/anexos${qs}`)
+    return fetchApi<ClienteAnexo[]>(`/anexos${qs}`)
   },
-  uploadAnexos: async (params: { tabela: 'agenda' | 'agendamento_programado'; registroId: number; files: File[]; onProgress?: (percent: number) => void }) => {
+  uploadAnexos: async (params: { tabela: 'agenda' | 'agendamento_programado' | 'cliente_prontuario'; registroId: number; files: File[]; onProgress?: (percent: number) => void }) => {
     const qs = '?' + new URLSearchParams({ tabela: params.tabela, registroId: String(params.registroId) }).toString()
     const fd = new FormData()
     for (const file of params.files) fd.append('files', file)
 
     const token = getToken()
 
-    return await new Promise<any[]>((resolve, reject) => {
+    return await new Promise<ClienteAnexo[]>((resolve, reject) => {
       const xhr = new XMLHttpRequest()
       xhr.open('POST', `${BASE_URL}/anexos${qs}`)
       if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`)

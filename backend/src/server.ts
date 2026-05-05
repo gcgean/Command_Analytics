@@ -9,6 +9,7 @@ import multipart from '@fastify/multipart'
 import { authRoutes } from './routes/auth'
 import { clientesRoutes } from './routes/clientes'
 import { segmentosRoutes } from './routes/segmentos'
+import { classificacoesRoutes } from './routes/classificacoes'
 import { atendimentosRoutes } from './routes/atendimentos'
 import { agendaRoutes } from './routes/agenda'
 import { planosRoutes } from './routes/planos'
@@ -103,6 +104,7 @@ app.register(async (api) => {
   api.register(usuariosRoutes,     { prefix: '/usuarios' })
   api.register(clientesRoutes,     { prefix: '/clientes' })
   api.register(segmentosRoutes,    { prefix: '/segmentos' })
+  api.register(classificacoesRoutes,{ prefix: '/classificacoes' })
   api.register(atendimentosRoutes, { prefix: '/atendimentos' })
   api.register(agendaRoutes,       { prefix: '/agenda' })
   api.register(planosRoutes,       { prefix: '/planos' })

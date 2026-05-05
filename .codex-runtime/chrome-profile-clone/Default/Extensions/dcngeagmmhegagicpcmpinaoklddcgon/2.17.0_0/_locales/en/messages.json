@@ -1,0 +1,281 @@
+{
+   "aboutDescription": {
+      "message": "Web PKI is a Web based component that supports documents digital signing and general digital certificate operations without the need of Java."
+   },
+   "aboutTitle": {
+      "message": "About Web PKI"
+   },
+   "add": {
+      "message": "Add"
+   },
+   "advanced": {
+      "message": "Advanced"
+   },
+   "advancedSettings": {
+      "message": "Advanced Settings"
+   },
+   "askLater": {
+      "message": "Ask me later"
+   },
+   "cancel": {
+      "message": "Cancel"
+   },
+   "clickHere": {
+      "message": "click here"
+   },
+   "close": {
+      "message": "Close"
+   },
+   "configurePkcs11": {
+      "message": "Crypto devices"
+   },
+   "confirmRemoveCertificateMessagePart1": {
+      "message": "Are you sure you want to remove the certificate "
+   },
+   "confirmRemoveCertificateMessagePart2": {
+      "message": " ?"
+   },
+   "confirmRemoveCertificateTitle": {
+      "message": "Remove certificate?"
+   },
+   "confirmRemoveDeviceMessage": {
+      "message": "Are you sure you want to remove the device "
+   },
+   "confirmRemoveDeviceTitle": {
+      "message": "Remove device?"
+   },
+   "details": {
+      "message": "Details"
+   },
+   "device": {
+      "message": "Device"
+   },
+   "downloadedMessagePart1": {
+      "message": "Now "
+   },
+   "downloadedMessagePart2": {
+      "message": "run the downloaded file"
+   },
+   "downloadedMessagePart3": {
+      "message": " to update Web PKI on your PC"
+   },
+   "downloadedTitle": {
+      "message": "We're almost there"
+   },
+   "downloadingMessage": {
+      "message": "Downloading installer..."
+   },
+   "errorOccurred": {
+      "message": "An error has occurred"
+   },
+   "experimentalAccess": {
+      "message": "Experimental access"
+   },
+   "experimentalAccessDetails": {
+      "message": "Gain early access to features still under development."
+   },
+   "expiration": {
+      "message": "Expiration"
+   },
+   "expiredCertificate": {
+      "message": "Expired certificate"
+   },
+   "export": {
+      "message": "Export"
+   },
+   "hideAdvancedSettings": {
+      "message": "Hide advanced settings"
+   },
+   "importPkcs12": {
+      "message": "Import PFX"
+   },
+   "install": {
+      "message": "Install"
+   },
+   "installDeb": {
+      "message": "Install .deb"
+   },
+   "installRpm": {
+      "message": "Install .rpm"
+   },
+   "issuedBy": {
+      "message": "issued by"
+   },
+   "issuer": {
+      "message": "Issuer"
+   },
+   "loading": {
+      "message": "Loading..."
+   },
+   "mobileConnectTimeout": {
+      "message": "Could not connect to mobile {{deviceName}}. Please refresh the device pairing in the browser plugin option 'Mobiles'."
+   },
+   "mobileNotAuthorized": {
+      "message": "This computer is no longer authorized for connecting to {{deviceName}}. Please refresh or remove the pairing in the browser plugin option 'Mobiles'."
+   },
+   "mobileSendMessage": {
+      "message": "Could not send the command to mobile {{deviceName}}. Please make sure this computer is allowed in the 'Computers' menu option on Web PKI app and refresh the device pairing in the browser plugin option 'Mobiles'."
+   },
+   "mobileTimeout": {
+      "message": "The mobile {{deviceName}} is not responding. Please make sure the Web PKI app is opened in the mobile and refresh the device pairing in the browser plugin option 'Mobiles'."
+   },
+   "myCertificates": {
+      "message": "My Certificates"
+   },
+   "noDevice": {
+      "message": "No device connected. Click the 'Add' button to add a new device."
+   },
+   "noTrustedSites": {
+      "message": "Here you'll be able to review and manage the websites that you authorized to perform digital signatures (for now there are none)."
+   },
+   "notInstalledMessage": {
+      "message": "In order to use this component, you must also install the Web PKI native component on your PC"
+   },
+   "notInstalledTitle": {
+      "message": "Web PKI is not fully installed"
+   },
+   "ok": {
+      "message": "OK"
+   },
+   "outdatedMessage": {
+      "message": "There is an available update for Web PKI native component on your PC"
+   },
+   "outdatedTitle": {
+      "message": "Web PKI is not up-to-date"
+   },
+   "permissions": {
+      "message": "Permissions"
+   },
+   "personalCertificates": {
+      "message": "Personal Certificates"
+   },
+   "pkcs11CustomSubtitle": {
+      "message": "If your crypto device is not listed above, enter the name of the {{lib-ext}} file given by the manufacturer"
+   },
+   "pkcs11CustomTitle": {
+      "message": "Custom modules"
+   },
+   "pkcs11ModuleDescription_aetpkss1_dll": {
+      "message": "SafeSign AET devices"
+   },
+   "pkcs11ModuleDescription_asepkcs_dll": {
+      "message": "Athena IDProtect smartcards"
+   },
+   "pkcs11ModuleDescription_eTPKCS11_dll": {
+      "message": "SafeNet tokens"
+   },
+   "pkcs11ModuleDescription_libaetpkss_dylib": {
+      "message": "SafeSign AET devices"
+   },
+   "pkcs11ModuleDescription_libaetpkss_so_3": {
+      "message": "SafeSign AET devices"
+   },
+   "pkcs11ModuleDescription_libeToken_dylib": {
+      "message": "SafeNet tokens"
+   },
+   "pkcs11ModuleDescription_libeToken_so": {
+      "message": "SafeNet tokens"
+   },
+   "pkcs11ModuleNamePlaceholder": {
+      "message": "Type {{lib-ext}} filename (with extension)"
+   },
+   "pkcs11Subtitle": {
+      "message": "If you have certificates stored in a crypto device and want to use them via PKCS#11, mark one of the options below."
+   },
+   "pkcs11Title": {
+      "message": "Cryptographic devices (PKCS #11)"
+   },
+   "pkcs11TypeModuleName": {
+      "message": "Please fill the module filename."
+   },
+   "pleaseWait": {
+      "message": "Please wait..."
+   },
+   "productName": {
+      "message": "Web PKI"
+   },
+   "redownloadMessageLinux": {
+      "message": "If something went wrong, choose a package to download again:"
+   },
+   "redownloadMessageLinuxDeb": {
+      "message": "Package .deb for Debian-based distributions (e.g. Ubuntu, Mint): "
+   },
+   "redownloadMessageLinuxRpm": {
+      "message": "Package .rpm for RedHat- and Slackware-based distributions (e.g. Fedora, openSUSE): "
+   },
+   "redownloadMessagePart1": {
+      "message": "If something went wrong, "
+   },
+   "redownloadMessagePart2": {
+      "message": " to download the installer again"
+   },
+   "refresh": {
+      "message": "Refresh"
+   },
+   "remoteDevices": {
+      "message": "Mobiles"
+   },
+   "remove": {
+      "message": "Remove"
+   },
+   "settings": {
+      "message": "Settings"
+   },
+   "showAdvancedSettings": {
+      "message": "Show advanced settings..."
+   },
+   "showTrustedSites": {
+      "message": "Trusted sites..."
+   },
+   "signatureDemos": {
+      "message": "Signature Demos"
+   },
+   "site": {
+      "message": "Site"
+   },
+   "subject": {
+      "message": "Subject"
+   },
+   "syncDevice1": {
+      "message": "Open the \u003Ca href=\"https://get.webpkiplugin.com/Mobile?brand=\" target=\"_blank\">Web PKI app\u003C/a> on your mobile"
+   },
+   "syncDevice2": {
+      "message": "Tap on 'Scan QR code'"
+   },
+   "syncDevice3": {
+      "message": "Point your mobile to the code below"
+   },
+   "trustedSites": {
+      "message": "Trusted Sites"
+   },
+   "trustedSitesSubtitle": {
+      "message": "The following websites are authorized to perform digital signatures using the certificates below"
+   },
+   "update": {
+      "message": "Update"
+   },
+   "updateDeb": {
+      "message": "Update .deb"
+   },
+   "updateRpm": {
+      "message": "Update .rpm"
+   },
+   "userCancelled": {
+      "message": "The user cancelled the operation"
+   },
+   "verboseLogging": {
+      "message": "Verbose logging"
+   },
+   "versionLabel": {
+      "message": "Version: "
+   },
+   "welcomeMessage": {
+      "message": "In order to start using Web PKI, you must import a PKCS #12 (PFX) certificate or enable the use of a cryptographic device."
+   },
+   "welcomeTitle": {
+      "message": "Welcome to Web PKI"
+   },
+   "yesRemove": {
+      "message": "Yes, remove"
+   }
+}
