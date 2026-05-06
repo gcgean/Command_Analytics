@@ -9,6 +9,7 @@ import { initProcedimentos } from '../utils/procedimentos'
 const nomeTecnico = (u: any) => u?.nomeCompleto || u?.nomeUsu || 'Usuário'
 
 const MIN_DURACAO_PROCEDIMENTO = 15
+const MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO = 500
 
 interface DisponibilidadeDiaPayload {
   diaSemana: number
@@ -1001,8 +1002,12 @@ export async function agendaRoutes(app: FastifyInstance) {
     }
     const payload = request.user as { id: number }
     const procId = Number(procedimentoId ?? 0)
+    const descricaoNormalizada = typeof descricao === 'string' ? descricao.trim() : ''
     if (!Number.isFinite(procId) || procId <= 0) {
       return reply.status(400).send({ error: 'Selecione o procedimento do agendamento.' })
+    }
+    if (descricaoNormalizada.length > MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO) {
+      return reply.status(400).send({ error: `A descrição pode ter no máximo ${MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO} caracteres.` })
     }
 
     const procRows: any[] = await prisma.$queryRaw`
@@ -1051,7 +1056,7 @@ export async function agendaRoutes(app: FastifyInstance) {
       INSERT INTO agendamento_programado
         (cod_tecnico, cod_cli, procedimento_id, data_agendamento, hora_inicio, duracao_min, descricao, status)
       VALUES
-        (${tecnicoId}, ${clienteId ?? null}, ${procId}, ${data}, ${horaInicio}, ${duracaoFinal}, ${descricao ?? null}, 1)
+        (${tecnicoId}, ${clienteId ?? null}, ${procId}, ${data}, ${horaInicio}, ${duracaoFinal}, ${descricaoNormalizada || null}, 1)
     `
 
     // Enviar notificação via Telegram
@@ -1061,7 +1066,7 @@ export async function agendaRoutes(app: FastifyInstance) {
       data,
       horaIni: horaInicio,
       tipo: 'PROGRAMADO',
-      observacao: descricao,
+      observacao: descricaoNormalizada || undefined,
       isProgramado: true
     })
 
@@ -1079,7 +1084,7 @@ export async function agendaRoutes(app: FastifyInstance) {
         data,
         horaInicio,
         duracao: duracaoFinal,
-        descricao: descricao ?? null,
+        descricao: descricaoNormalizada || null,
       },
     })
 
@@ -1128,6 +1133,12 @@ export async function agendaRoutes(app: FastifyInstance) {
       descricao?: string | null
     }
     const payload = request.user as { id: number }
+    const descricaoNormalizada =
+      descricao === undefined
+        ? undefined
+        : typeof descricao === 'string'
+          ? descricao.trim()
+          : null
 
     const [before]: any[] = await prisma.$queryRaw`
       SELECT cod_tecnico AS tecnicoId, cod_cli AS clienteId,
@@ -1174,6 +1185,9 @@ export async function agendaRoutes(app: FastifyInstance) {
         return reply.status(409).send({ error: janelaOk.motivo })
       }
     }
+    if (descricaoNormalizada !== undefined && descricaoNormalizada !== null && descricaoNormalizada.length > MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO) {
+      return reply.status(400).send({ error: `A descrição pode ter no máximo ${MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO} caracteres.` })
+    }
 
     if (tecnicoId !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET cod_tecnico = ${tecnicoId} WHERE id = ${Number(id)}`
     if (clienteId !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET cod_cli = ${clienteId ?? null} WHERE id = ${Number(id)}`
@@ -1181,7 +1195,7 @@ export async function agendaRoutes(app: FastifyInstance) {
     if (data !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET data_agendamento = ${data} WHERE id = ${Number(id)}`
     if (horaInicio !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET hora_inicio = ${horaInicio} WHERE id = ${Number(id)}`
     if (duracao !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET duracao_min = ${duracao} WHERE id = ${Number(id)}`
-    if (descricao !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET descricao = ${descricao ?? null} WHERE id = ${Number(id)}`
+    if (descricao !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET descricao = ${descricaoNormalizada ?? null} WHERE id = ${Number(id)}`
 
     registrarAuditoria({
       tabela: 'agendamento_programado', registroId: Number(id), acao: 'ALTERACAO', usuarioId: payload.id,
@@ -1193,7 +1207,7 @@ export async function agendaRoutes(app: FastifyInstance) {
         data: data !== undefined ? data : dadosAntes?.data,
         horaInicio: horaInicio !== undefined ? horaInicio : dadosAntes?.horaInicio,
         duracao: duracao !== undefined ? duracao : dadosAntes?.duracao,
-        descricao: descricao !== undefined ? descricao : dadosAntes?.descricao,
+        descricao: descricao !== undefined ? descricaoNormalizada : dadosAntes?.descricao,
       },
     })
 

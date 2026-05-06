@@ -1,5 +1,6 @@
 import { useState, useEffect, Fragment } from 'react'
-import { ChevronLeft, ChevronRight, Plus, Clock, User, Search, Calendar, Pencil, CheckSquare, Trash2, History } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { ChevronLeft, ChevronRight, Plus, Clock, User, Search, Calendar, Pencil, CheckSquare, Trash2, History, Eye } from 'lucide-react'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -95,6 +96,7 @@ function fromBRDate(br: string) {
   return `${y}-${m}-${d}`
 }
 export function Agenda() {
+  const navigate = useNavigate()
   const [currentMonth, setCurrentMonth] = useState(() => {
     const t = new Date()
     return new Date(t.getFullYear(), t.getMonth(), 1)
@@ -598,6 +600,15 @@ export function Agenda() {
                       </span>
                     </div>
                     <div className="col-span-1 flex gap-0.5 justify-end flex-nowrap">
+                      {item.clienteId ? (
+                        <button
+                          onClick={() => navigate(`/clientes/${item.clienteId}`)}
+                          title="Ver cliente"
+                          className="p-1 rounded-lg text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                      ) : null}
                       <button
                         onClick={() => setAuditoriaItem({
                           tabela: (item as any).origem === 'programado' ? 'agendamento_programado' : 'agenda',

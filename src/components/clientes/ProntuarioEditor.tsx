@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import {
   Bold,
   History,
@@ -73,25 +73,84 @@ export function ProntuarioEditor({
   onSave,
 }: ProntuarioEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null)
+  const historyRef = useRef<string[]>([])
+  const historyIndexRef = useRef(-1)
+  const applyingHistoryRef = useRef(false)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState(() => normalizeEditorHtml(initialValue))
   const [showHistory, setShowHistory] = useState(false)
 
+  function getEditorHtml() {
+    return editorRef.current?.innerHTML?.trim() || ''
+  }
+
+  function syncEditorFromHtml(value: string) {
+    if (!editorRef.current) return
+    editorRef.current.innerHTML = value || '<p></p>'
+  }
+
+  function resetHistory(value: string) {
+    const html = value || '<p></p>'
+    historyRef.current = [html]
+    historyIndexRef.current = 0
+  }
+
+  function recordHistory(value: string) {
+    if (applyingHistoryRef.current) return
+
+    const html = value || '<p></p>'
+    const current = historyRef.current[historyIndexRef.current]
+    if (current === html) return
+
+    const nextHistory = historyRef.current.slice(0, historyIndexRef.current + 1)
+    nextHistory.push(html)
+    if (nextHistory.length > 200) {
+      nextHistory.shift()
+    }
+    historyRef.current = nextHistory
+    historyIndexRef.current = nextHistory.length - 1
+  }
+
+  function applyHistory(direction: 'undo' | 'redo') {
+    const delta = direction === 'undo' ? -1 : 1
+    const nextIndex = historyIndexRef.current + delta
+    if (nextIndex < 0 || nextIndex >= historyRef.current.length) return
+
+    const nextHtml = historyRef.current[nextIndex] || '<p></p>'
+    applyingHistoryRef.current = true
+    historyIndexRef.current = nextIndex
+    syncEditorFromHtml(nextHtml)
+    setDraft(nextHtml)
+    requestAnimationFrame(() => {
+      applyingHistoryRef.current = false
+      focusEditorAtEnd()
+    })
+  }
+
   useEffect(() => {
     const normalized = normalizeEditorHtml(initialValue)
     setDraft(normalized)
-    if (!editing && editorRef.current) {
-      editorRef.current.innerHTML = normalized || '<p></p>'
+    resetHistory(normalized)
+    if (editorRef.current) {
+      syncEditorFromHtml(normalized)
     }
-  }, [initialValue, editing])
+  }, [initialValue])
 
   useEffect(() => {
-    if (editing && editorRef.current) {
-      editorRef.current.innerHTML = draft || '<p></p>'
+    if (!editorRef.current) return
+
+    if (editing) {
+      syncEditorFromHtml(draft)
+      document.execCommand('defaultParagraphSeparator', false, 'p')
+      resetHistory(draft)
+      focusEditorAtEnd()
+      return
     }
-  }, [editing, draft])
+
+    syncEditorFromHtml(draft)
+  }, [editing])
 
   const plainPreview = useMemo(() => stripHtml(draft), [draft])
   const characterCount = useMemo(() => plainPreview.length, [plainPreview])
@@ -100,35 +159,70 @@ export function ProntuarioEditor({
     editorRef.current?.focus()
   }
 
+  function focusEditorAtEnd() {
+    const editor = editorRef.current
+    if (!editor) return
+    editor.focus()
+
+    const selection = window.getSelection()
+    if (!selection) return
+
+    const range = document.createRange()
+    range.selectNodeContents(editor)
+    range.collapse(false)
+    selection.removeAllRanges()
+    selection.addRange(range)
+  }
+
   function exec(command: string, value?: string) {
     focusEditor()
     document.execCommand(command, false, value)
-    if (editorRef.current) {
-      setDraft(editorRef.current.innerHTML)
-    }
+    const nextHtml = getEditorHtml()
+    setDraft(nextHtml)
+    recordHistory(nextHtml)
   }
 
   function handleInput() {
-    setDraft(editorRef.current?.innerHTML ?? '')
+    const nextHtml = getEditorHtml()
+    setDraft(nextHtml)
+    recordHistory(nextHtml)
+  }
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!editing) return
+    const isModifierPressed = event.ctrlKey || event.metaKey
+    if (!isModifierPressed) return
+
+    const key = event.key.toLowerCase()
+    if (key === 'z' && !event.shiftKey) {
+      event.preventDefault()
+      applyHistory('undo')
+      return
+    }
+
+    if (key === 'y' || (key === 'z' && event.shiftKey)) {
+      event.preventDefault()
+      applyHistory('redo')
+    }
   }
 
   function handleCancel() {
     const normalized = normalizeEditorHtml(initialValue)
     setDraft(normalized)
-    if (editorRef.current) {
-      editorRef.current.innerHTML = normalized || '<p></p>'
-    }
+    resetHistory(normalized)
+    syncEditorFromHtml(normalized)
     setError(null)
     setEditing(false)
   }
 
   async function handleSave() {
-    const html = (editorRef.current?.innerHTML ?? draft).trim()
+    const html = getEditorHtml() || draft
     setSaving(true)
     setError(null)
     try {
       await onSave(html)
       setDraft(html)
+      resetHistory(html)
       setEditing(false)
     } catch (e: any) {
       setError(e?.message || 'Não foi possível salvar o prontuário.')
@@ -235,8 +329,10 @@ export function ProntuarioEditor({
               contentEditable={editing}
               suppressContentEditableWarning
               onInput={handleInput}
-              className="min-h-[320px] w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-4 text-sm leading-7 text-slate-800 shadow-[0_10px_30px_rgba(15,23,42,0.04)] break-words focus:outline-none dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-200 sm:min-h-[420px] sm:px-6 sm:py-5 sm:leading-8"
-              dangerouslySetInnerHTML={{ __html: draft || '<p></p>' }}
+              onKeyDown={handleKeyDown}
+              dir="ltr"
+              spellCheck
+              className="min-h-[320px] w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-4 text-left text-sm leading-7 text-slate-800 shadow-[0_10px_30px_rgba(15,23,42,0.04)] break-words focus:outline-none dark:border-slate-700 dark:bg-slate-900/85 dark:text-slate-200 sm:min-h-[420px] sm:px-6 sm:py-5 sm:leading-8"
             />
           </div>
 

@@ -75,6 +75,7 @@ const STATUS_COLOR: Record<number, string> = {
 const STATUS_LABEL: Record<number, string> = {
   1: 'Aguardando', 2: 'Efetuado', 3: 'Não efetuado', 4: 'Reagendado',
 }
+const MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO = 500
 
 // Use local date (not UTC) to avoid timezone bugs
 function today() {
@@ -669,6 +670,11 @@ export function AgendamentoProgramado() {
     if (!bookTecnico || selectedSlots.length === 0 || !bookForm.clienteId) { setBookError('Selecione um cliente.'); return }
     const procedimentoIdEfetivo = bookForm.procedimentoId || selectedProcedimento
     if (!procedimentoIdEfetivo) { setBookError('Selecione o procedimento.'); return }
+    const descricaoNormalizada = bookForm.descricao.trim()
+    if (descricaoNormalizada.length > MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO) {
+      setBookError(`A descrição pode ter no máximo ${MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO} caracteres.`)
+      return
+    }
     const procedimento = findProcedimentoById(procedimentoIdEfetivo)
     if (!procedimento) { setBookError('Procedimento inválido.'); return }
     const step = Number(procedimento.duracaoMin)
@@ -691,7 +697,7 @@ export function AgendamentoProgramado() {
         data: bookTecnico.data,
         horaInicio: block.start,
         duracao: block.duration,
-        descricao: bookForm.descricao || undefined,
+        descricao: descricaoNormalizada || undefined,
       })
       const createdId = Number(created?.id)
       if (bookFiles.length && createdId) {
@@ -737,6 +743,11 @@ export function AgendamentoProgramado() {
       alert('Selecione o procedimento.')
       return
     }
+    const descricaoNormalizada = editForm.descricao.trim()
+    if (descricaoNormalizada.length > MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO) {
+      alert(`A descrição pode ter no máximo ${MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO} caracteres.`)
+      return
+    }
 
     setSavingEdit(true)
     try {
@@ -747,7 +758,7 @@ export function AgendamentoProgramado() {
         data: dVal,
         horaInicio: editForm.horaInicio,
         duracao: Number(editForm.duracao),
-        descricao: editForm.descricao || null,
+        descricao: descricaoNormalizada || null,
       })
       setEditItem(null)
       fetchAgendamentos()
@@ -1481,9 +1492,12 @@ export function AgendamentoProgramado() {
             placeholder="Descreva o objetivo do agendamento..."
             value={bookForm.descricao}
             onChange={e => setBookForm(f => ({ ...f, descricao: e.target.value }))}
-            maxLength={5000}
+            maxLength={MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO}
             rows={4}
           />
+          <p className="text-right text-xs text-slate-500">
+            {bookForm.descricao.length}/{MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO}
+          </p>
 
           <AnexosDraft files={bookFiles} onChange={setBookFiles} />
 
@@ -1539,9 +1553,12 @@ export function AgendamentoProgramado() {
             placeholder="Descrição..."
             value={editForm.descricao}
             onChange={e => setEditForm(f => ({ ...f, descricao: e.target.value }))}
-            maxLength={5000}
+            maxLength={MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO}
             rows={4}
           />
+          <p className="text-right text-xs text-slate-500">
+            {editForm.descricao.length}/{MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO}
+          </p>
           {editItem && (
             <Anexos tabela="agendamento_programado" registroId={editItem.id} />
           )}
