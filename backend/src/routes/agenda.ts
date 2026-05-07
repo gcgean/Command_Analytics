@@ -306,7 +306,8 @@ async function enviarNotificacaoAgendamento(data: {
   descricao?: string | null,
   tipo?: string | null,
   isProgramado?: boolean,
-  observacao?: string | null
+  observacao?: string | null,
+  possuiAnexos?: boolean
 }) {
   try {
     const config = await prisma.configuracaoTelegram.findFirst({ where: { ativo: true } })
@@ -341,6 +342,7 @@ async function enviarNotificacaoAgendamento(data: {
       `⏰ Horário: ${data.horaIni}${data.horaFim ? ` ATÉ ${data.horaFim}` : ''}`,
       `📝 Tipo: ${data.tipo || 'N/A'}`,
       data.descricao || data.observacao ? `🗒️ Obs: ${data.descricao || data.observacao}` : '',
+      data.possuiAnexos ? '📎 Atenção: este agendamento possui arquivo(s) em anexo.' : '',
       `===============================`
     ].filter(Boolean).join('\n')
 
@@ -351,6 +353,86 @@ async function enviarNotificacaoAgendamento(data: {
   } catch (error) {
     console.error('Falha ao enviar notificação Telegram:', error)
   }
+}
+
+async function registroPossuiAnexos(tabela: 'agenda' | 'agendamento_programado', registroId: number): Promise<boolean> {
+  const rows: any[] = await prisma.$queryRaw`
+    SELECT COUNT(*) AS c
+    FROM agendamento_anexo
+    WHERE tabela = ${tabela} AND registro_id = ${registroId}
+  `
+  return Number(rows?.[0]?.c ?? 0) > 0
+}
+
+async function notificarAgendaPorId(id: number): Promise<void> {
+  const item = await prisma.agendaItem.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      clienteId: true,
+      tecnicoId: true,
+      tipo: true,
+      data: true,
+      horarioIni: true,
+      horarioFim: true,
+      observacoes: true,
+    }
+  })
+  if (!item?.tecnicoId || !item?.data || !item?.horarioIni) return
+
+  const dataStr = new Date(item.data).toISOString().slice(0, 10)
+  const horaIni = new Date(item.horarioIni).toISOString().slice(11, 16)
+  const horaFim = item.horarioFim ? new Date(item.horarioFim).toISOString().slice(11, 16) : undefined
+  const possuiAnexos = await registroPossuiAnexos('agenda', id)
+
+  await enviarNotificacaoAgendamento({
+    tecnicoId: Number(item.tecnicoId),
+    clienteId: item.clienteId ? Number(item.clienteId) : null,
+    data: dataStr,
+    horaIni,
+    horaFim,
+    tipo: item.tipo || 'REUNIÃO',
+    observacao: item.observacoes || undefined,
+    isProgramado: false,
+    possuiAnexos,
+  })
+}
+
+async function notificarAgendamentoProgramadoPorId(id: number): Promise<void> {
+  const item = await prisma.agendamentoProgramado.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      tecnicoId: true,
+      clienteId: true,
+      data: true,
+      horaInicio: true,
+      descricao: true,
+    }
+  })
+  if (!item?.tecnicoId || !item?.data || !item?.horaInicio) return
+
+  const dataStr = new Date(item.data).toISOString().slice(0, 10)
+  const possuiAnexos = await registroPossuiAnexos('agendamento_programado', id)
+  const procedimentoRows: any[] = await prisma.$queryRaw`
+    SELECT cp.nome
+    FROM agendamento_programado ap
+    LEFT JOIN cadastro_procedimentos cp ON cp.id = ap.procedimento_id
+    WHERE ap.id = ${id}
+    LIMIT 1
+  `
+  const procedimentoNome = String(procedimentoRows?.[0]?.nome || 'PROGRAMADO')
+
+  await enviarNotificacaoAgendamento({
+    tecnicoId: Number(item.tecnicoId),
+    clienteId: item.clienteId ? Number(item.clienteId) : null,
+    data: dataStr,
+    horaIni: item.horaInicio,
+    tipo: procedimentoNome,
+    observacao: item.descricao || undefined,
+    isProgramado: true,
+    possuiAnexos,
+  })
 }
 
 export async function agendaRoutes(app: FastifyInstance) {
@@ -991,7 +1073,7 @@ export async function agendaRoutes(app: FastifyInstance) {
 
   // POST /agenda/agendamentos-prog
   app.post('/agendamentos-prog', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
-    const { tecnicoId, clienteId, procedimentoId, data, horaInicio, duracao, descricao } = request.body as {
+    const { tecnicoId, clienteId, procedimentoId, data, horaInicio, duracao, descricao, temAnexos } = request.body as {
       tecnicoId: number
       clienteId?: number
       procedimentoId?: number
@@ -999,6 +1081,7 @@ export async function agendaRoutes(app: FastifyInstance) {
       horaInicio: string
       duracao?: number
       descricao?: string
+      temAnexos?: boolean
     }
     const payload = request.user as { id: number }
     const procId = Number(procedimentoId ?? 0)
@@ -1059,16 +1142,18 @@ export async function agendaRoutes(app: FastifyInstance) {
         (${tecnicoId}, ${clienteId ?? null}, ${procId}, ${data}, ${horaInicio}, ${duracaoFinal}, ${descricaoNormalizada || null}, 1)
     `
 
-    // Enviar notificação via Telegram
-    enviarNotificacaoAgendamento({
-      tecnicoId,
-      clienteId,
-      data,
-      horaIni: horaInicio,
-      tipo: 'PROGRAMADO',
-      observacao: descricaoNormalizada || undefined,
-      isProgramado: true
-    })
+    if (!Boolean(temAnexos)) {
+      enviarNotificacaoAgendamento({
+        tecnicoId,
+        clienteId,
+        data,
+        horaIni: horaInicio,
+        tipo: 'PROGRAMADO',
+        observacao: descricaoNormalizada || undefined,
+        isProgramado: true,
+        possuiAnexos: false
+      })
+    }
 
     const [inserted]: any[] = await prisma.$queryRaw`SELECT LAST_INSERT_ID() AS id`
     const newId = Number(inserted?.id ?? 0)
@@ -1096,7 +1181,17 @@ export async function agendaRoutes(app: FastifyInstance) {
     })
     }
 
-    return reply.status(201).send({ ok: true })
+    return reply.status(201).send({ ok: true, id: newId })
+  })
+
+  app.post('/agendamentos-prog/:id/notificar', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const agendamentoId = Number(id)
+    if (!Number.isFinite(agendamentoId) || agendamentoId <= 0) {
+      return reply.status(400).send({ error: 'id inválido.' })
+    }
+    await notificarAgendamentoProgramadoPorId(agendamentoId)
+    return reply.send({ ok: true })
   })
 
   // PATCH /agenda/agendamentos-prog/:id/status
@@ -1306,7 +1401,7 @@ export async function agendaRoutes(app: FastifyInstance) {
 
   // POST /agenda
   app.post('/', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
-    const { clienteId, tecnicoId, tipo, data, horario, dataFim, horarioFim, observacoes } = request.body as any
+    const { clienteId, tecnicoId, tipo, data, horario, dataFim, horarioFim, observacoes, temAnexos } = request.body as any
     const payload = request.user as { id: number }
     const item = await prisma.agendaItem.create({
       data: {
@@ -1324,17 +1419,19 @@ export async function agendaRoutes(app: FastifyInstance) {
     // Save criado_por and data_criacao via raw since not in schema
     await prisma.$executeRaw`UPDATE agenda SET criado_por = ${payload.id}, data_criacao = NOW() WHERE cod_agenda = ${Number(item.id)}`
 
-    // Enviar notificação via Telegram
-    enviarNotificacaoAgendamento({
-      tecnicoId: Number(tecnicoId),
-      clienteId: clienteId ? Number(clienteId) : null,
-      data,
-      horaIni: horario,
-      horaFim: horarioFim,
-      tipo: tipo || 'REUNIÃO',
-      observacao: observacoes,
-      isProgramado: false
-    })
+    if (!Boolean(temAnexos)) {
+      enviarNotificacaoAgendamento({
+        tecnicoId: Number(tecnicoId),
+        clienteId: clienteId ? Number(clienteId) : null,
+        data,
+        horaIni: horario,
+        horaFim: horarioFim,
+        tipo: tipo || 'REUNIÃO',
+        observacao: observacoes,
+        isProgramado: false,
+        possuiAnexos: false
+      })
+    }
     registrarAuditoria({
       tabela: 'agenda', registroId: Number(item.id), acao: 'CRIACAO', usuarioId: payload.id,
       dadosAntes: null,
@@ -1358,6 +1455,16 @@ export async function agendaRoutes(app: FastifyInstance) {
       origem: 'Agenda (criação)',
     })
     return reply.status(201).send({ ...item, id: Number(item.id) })
+  })
+
+  app.post('/:id/notificar', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const agendaId = Number(id)
+    if (!Number.isFinite(agendaId) || agendaId <= 0) {
+      return reply.status(400).send({ error: 'id inválido.' })
+    }
+    await notificarAgendaPorId(agendaId)
+    return reply.send({ ok: true })
   })
 
   // PUT /agenda/:id

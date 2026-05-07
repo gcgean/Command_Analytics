@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, Trash2, Ban, Pencil, CheckSquare } from 'lucide-react'
+import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, Trash2, Ban, Pencil, CheckSquare, Eye } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -245,6 +246,7 @@ function defaultDiaConfig() {
 }
 
 export function AgendamentoProgramado() {
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'slots' | 'lista'>('slots')
 
   const [disponibilidades, setDisponibilidades] = useState<DispItem[]>([])
@@ -341,6 +343,12 @@ export function AgendamentoProgramado() {
     if (!tecnicoIdsProcedimento.length) return disponibilidades
     return disponibilidades.filter((disp) => tecnicoIdsProcedimento.includes(Number(disp.tecnicoId)))
   }, [disponibilidades, tecnicoIdsProcedimento])
+
+  function openClienteDetalhe(clienteId?: string | number | null) {
+    const id = Number(clienteId)
+    if (!Number.isFinite(id) || id <= 0) return
+    navigate(`/clientes/${id}`)
+  }
 
   // ── Load initial data ──────────────────────────────────────────
   useEffect(() => {
@@ -698,10 +706,12 @@ export function AgendamentoProgramado() {
         horaInicio: block.start,
         duracao: block.duration,
         descricao: descricaoNormalizada || undefined,
+        temAnexos: bookFiles.length > 0,
       })
       const createdId = Number(created?.id)
       if (bookFiles.length && createdId) {
         await api.uploadAnexos({ tabela: 'agendamento_programado', registroId: createdId, files: bookFiles })
+        await api.notifyAgendamentoProg(createdId)
       }
 
       setShowBookModal(false)
@@ -1162,6 +1172,15 @@ export function AgendamentoProgramado() {
                       <span className={clsx('text-xs px-2 py-1 rounded-full', STATUS_COLOR[ag.status] ?? 'bg-slate-500/20 text-slate-400')}>
                         {STATUS_LABEL[ag.status] ?? '—'}
                       </span>
+                      {ag.clienteId ? (
+                        <button
+                          onClick={() => openClienteDetalhe(ag.clienteId)}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 transition-colors"
+                          title="Ver cliente"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      ) : null}
                       {/* Alterar Status */}
                       <button
                         onClick={() => openStatusChange(ag)}
@@ -1471,12 +1490,27 @@ export function AgendamentoProgramado() {
             </div>
           </div>
 
-          <ClienteSearch
-            label="Cliente *"
-            value={bookForm.clienteId}
-            onChange={id => setBookForm(f => ({ ...f, clienteId: id }))}
-            required
-          />
+          <div className="space-y-2">
+            <ClienteSearch
+              label="Cliente *"
+              value={bookForm.clienteId}
+              onChange={id => setBookForm(f => ({ ...f, clienteId: id }))}
+              required
+            />
+            {bookForm.clienteId && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => openClienteDetalhe(bookForm.clienteId)}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-blue-500 hover:bg-blue-500/10 transition-colors"
+                  title="Ver detalhes do cliente"
+                >
+                  <Eye className="w-4 h-4" />
+                  Ver cliente
+                </button>
+              </div>
+            )}
+          </div>
 
           <Select
             label="Procedimento *"
@@ -1526,11 +1560,26 @@ export function AgendamentoProgramado() {
             value={editForm.tecnicoId}
             onChange={e => setEditForm(f => ({ ...f, tecnicoId: e.target.value }))}
           />
-          <ClienteSearch
-            label="Cliente"
-            value={editForm.clienteId}
-            onChange={id => setEditForm(f => ({ ...f, clienteId: id }))}
-          />
+          <div className="space-y-2">
+            <ClienteSearch
+              label="Cliente"
+              value={editForm.clienteId}
+              onChange={id => setEditForm(f => ({ ...f, clienteId: id }))}
+            />
+            {editForm.clienteId && (
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => openClienteDetalhe(editForm.clienteId)}
+                  className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-blue-500 hover:bg-blue-500/10 transition-colors"
+                  title="Ver detalhes do cliente"
+                >
+                  <Eye className="w-4 h-4" />
+                  Ver cliente
+                </button>
+              </div>
+            )}
+          </div>
           <Select
             label="Procedimento *"
             options={procedimentos.map((p) => ({ value: String(p.id), label: `${p.nome} · ${formatDurationLabel(p.duracaoMin)}` }))}

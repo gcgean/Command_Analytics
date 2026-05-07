@@ -230,11 +230,13 @@ export function Agenda() {
         dataFim: fromBRDate(form.dataFim) || undefined,
         horarioFim: form.horarioFim || undefined,
         observacoes: form.observacoes || undefined,
+        temAnexos: newFiles.length > 0,
       } as any)
 
       const createdId = Number(created?.id ?? created?.cod_agenda ?? created?.codAgenda)
       if (createdId && newFiles.length) {
         await api.uploadAnexos({ tabela: 'agenda', registroId: createdId, files: newFiles })
+        await api.notifyAgendaItem(createdId)
       }
 
       setShowModal(false)

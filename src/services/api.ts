@@ -271,6 +271,8 @@ export const api = {
   },
   createAgendaItem: (data: Partial<AgendaItem>) =>
     fetchApi<AgendaItem>('/agenda', { method: 'POST', body: JSON.stringify(data) }),
+  notifyAgendaItem: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/agenda/${id}/notificar`, { method: 'POST' }),
   updateAgendaStatus: (id: number, status: number) =>
     fetchApi<AgendaItem>(`/agenda/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
   updateAgendaItem: (id: number, data: Partial<AgendaItem>) =>
@@ -368,8 +370,10 @@ export const api = {
   },
   validarDuracaoAgendamentoProg: (data: { tecnicoId: number; data: string; horaInicio: string; duracao: number; agendamentoIdIgnorar?: number | null }) =>
     fetchApi<{ ok: boolean }>('/agenda/agendamentos-prog/validar-duracao', { method: 'POST', body: JSON.stringify(data) }),
-  createAgendamentoProg: (data: { tecnicoId: number; clienteId?: number; procedimentoId: number; data: string; horaInicio: string; duracao?: number; descricao?: string }) =>
+  createAgendamentoProg: (data: { tecnicoId: number; clienteId?: number; procedimentoId: number; data: string; horaInicio: string; duracao?: number; descricao?: string; temAnexos?: boolean }) =>
     fetchApi('/agenda/agendamentos-prog', { method: 'POST', body: JSON.stringify(data) }),
+  notifyAgendamentoProg: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/agenda/agendamentos-prog/${id}/notificar`, { method: 'POST' }),
   cancelAgendamentoProg: (id: number) => fetchApi(`/agenda/agendamentos-prog/${id}`, { method: 'DELETE' }),
   updateAgendamentoProg: (id: number, data: { tecnicoId?: number; clienteId?: number | null; procedimentoId?: number | null; data?: string; horaInicio?: string; duracao?: number; descricao?: string | null }) =>
     fetchApi(`/agenda/agendamentos-prog/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

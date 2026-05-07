@@ -218,6 +218,7 @@ export interface AgendaItem {
   horarioIni: string | null      // time (may come as DateTime)
   horarioFim?: string | null
   observacoes?: string | null
+  temAnexos?: boolean
   // Legacy field for compatibility
   horario?: string
 }
