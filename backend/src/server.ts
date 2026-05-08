@@ -4,6 +4,7 @@ import jwt from '@fastify/jwt'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import multipart from '@fastify/multipart'
+import { Prisma } from '@prisma/client'
 
 // Routes
 import { authRoutes } from './routes/auth'
@@ -42,6 +43,12 @@ import { initAnexos } from './utils/anexos'
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
 
+function isDatabaseUnavailableError(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientInitializationError) return true
+  const message = error instanceof Error ? error.message : String(error ?? '')
+  return /Can't reach database server|database server at/i.test(message)
+}
+
 // ─── Plugins ──────────────────────────────────────────────────
 app.register(cors, {
   origin: true,
@@ -57,6 +64,21 @@ app.register(multipart, {
   limits: {
     fileSize: 10 * 1024 * 1024,
   },
+})
+
+app.setErrorHandler((error, _request, reply) => {
+  if (isDatabaseUnavailableError(error)) {
+    return reply.status(503).send({
+      error: 'Serviço temporariamente indisponível.',
+      message: 'Não foi possível conectar ao banco de dados no momento. Tente novamente em instantes.',
+    })
+  }
+
+  app.log.error(error)
+  return reply.status(error.statusCode && error.statusCode >= 400 ? error.statusCode : 500).send({
+    error: error.name || 'Internal Server Error',
+    message: error.message || 'Erro interno do servidor.',
+  })
 })
 
 app.register(swagger, {

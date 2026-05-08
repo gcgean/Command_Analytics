@@ -375,7 +375,7 @@ export const api = {
   notifyAgendamentoProg: (id: number) =>
     fetchApi<{ ok: boolean }>(`/agenda/agendamentos-prog/${id}/notificar`, { method: 'POST' }),
   cancelAgendamentoProg: (id: number) => fetchApi(`/agenda/agendamentos-prog/${id}`, { method: 'DELETE' }),
-  updateAgendamentoProg: (id: number, data: { tecnicoId?: number; clienteId?: number | null; procedimentoId?: number | null; data?: string; horaInicio?: string; duracao?: number; descricao?: string | null }) =>
+  updateAgendamentoProg: (id: number, data: { tecnicoId?: number; clienteId?: number | null; procedimentoId?: number | null; data?: string; horaInicio?: string; duracao?: number; descricao?: string | null; tipo?: string | null }) =>
     fetchApi(`/agenda/agendamentos-prog/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   updateAgendamentoProgStatus: (id: number, status: number) =>
     fetchApi(`/agenda/agendamentos-prog/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),

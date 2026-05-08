@@ -30,27 +30,33 @@ export async function initProcedimentos(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 
-  try {
+  const [colunaProcedimentoAgendamento] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'agendamento_programado'
+      AND COLUMN_NAME = 'procedimento_id'
+  `)
+
+  if (!Number(colunaProcedimentoAgendamento?.total ?? 0)) {
     await prisma.$executeRawUnsafe(`
       ALTER TABLE agendamento_programado
       ADD COLUMN procedimento_id INT NULL AFTER cod_cli
     `)
-  } catch (err: any) {
-    const message = String(err?.message ?? '').toLowerCase()
-    if (!message.includes('duplicate column') && !message.includes('1060')) {
-      throw err
-    }
   }
 
-  try {
+  const [indiceProcedimentoAgendamento] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total
+    FROM information_schema.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'agendamento_programado'
+      AND INDEX_NAME = 'idx_agendamento_prog_procedimento'
+  `)
+
+  if (!Number(indiceProcedimentoAgendamento?.total ?? 0)) {
     await prisma.$executeRawUnsafe(`
       ALTER TABLE agendamento_programado
       ADD INDEX idx_agendamento_prog_procedimento (procedimento_id)
     `)
-  } catch (err: any) {
-    const message = String(err?.message ?? '').toLowerCase()
-    if (!message.includes('duplicate key name') && !message.includes('1061')) {
-      throw err
-    }
   }
 }

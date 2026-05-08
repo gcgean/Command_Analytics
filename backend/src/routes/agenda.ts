@@ -10,6 +10,61 @@ const nomeTecnico = (u: any) => u?.nomeCompleto || u?.nomeUsu || 'Usuário'
 
 const MIN_DURACAO_PROCEDIMENTO = 15
 const MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO = 500
+const TIPOS_AGENDA_PADRAO = ['Instalação', 'Treinamento', 'Visita', 'Retorno', 'Outros'] as const
+
+function limparPrefixoTipoAgendamentoProgramado(texto?: string | null): string {
+  return String(texto ?? '')
+    .replace(/^\s*\[TIPO_AGENDA:([^\]]+)\]\s*/i, '')
+    .trim()
+}
+
+function extrairTipoAgendamentoProgramado(texto?: string | null): string | null {
+  const match = String(texto ?? '').match(/^\s*\[TIPO_AGENDA:([^\]]+)\]/i)
+  if (!match) return null
+  const valor = String(match[1] ?? '').trim()
+  return valor || null
+}
+
+function normalizarTipoAgendaProgramado(valor?: string | null): string {
+  const bruto = String(valor ?? '').trim()
+  if (!bruto) return 'Outros'
+  const encontrado = TIPOS_AGENDA_PADRAO.find((tipo) => tipo.toLowerCase() === bruto.toLowerCase())
+  if (encontrado) return encontrado
+
+  const normalizado = bruto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+
+  if (normalizado.includes('TREIN')) return 'Treinamento'
+  if (normalizado.includes('INSTAL')) return 'Instalação'
+  if (normalizado.includes('RETORN')) return 'Retorno'
+  if (normalizado.includes('VISIT')) return 'Visita'
+  return 'Outros'
+}
+
+function normalizarTipoAgendaFiltro(valor?: string | null): string {
+  const bruto = String(valor ?? '').trim()
+  if (!bruto) return 'Outros'
+  const normalizado = bruto
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+
+  if (normalizado.includes('TREIN')) return 'Treinamento'
+  if (normalizado.includes('INSTAL')) return 'Instalação'
+  if (normalizado.includes('RETORN')) return 'Retorno'
+  if (normalizado.includes('VISIT')) return 'Visita'
+  return 'Outros'
+}
+
+function montarDescricaoAgendamentoProgramado(descricao?: string | null, tipoAgenda?: string | null): string | null {
+  const descricaoLimpa = limparPrefixoTipoAgendamentoProgramado(descricao)
+  const tipoNormalizado = tipoAgenda ? normalizarTipoAgendaProgramado(tipoAgenda) : null
+  if (!tipoNormalizado) return descricaoLimpa || null
+  const prefixo = `[TIPO_AGENDA:${tipoNormalizado}]`
+  return descricaoLimpa ? `${prefixo}\n${descricaoLimpa}` : prefixo
+}
 
 interface DisponibilidadeDiaPayload {
   diaSemana: number
@@ -421,7 +476,8 @@ async function notificarAgendamentoProgramadoPorId(id: number): Promise<void> {
     WHERE ap.id = ${id}
     LIMIT 1
   `
-  const procedimentoNome = String(procedimentoRows?.[0]?.nome || 'PROGRAMADO')
+  const tipoDescricao = extrairTipoAgendamentoProgramado(item.descricao)
+  const procedimentoNome = String(tipoDescricao || procedimentoRows?.[0]?.nome || 'PROGRAMADO')
 
   await enviarNotificacaoAgendamento({
     tecnicoId: Number(item.tecnicoId),
@@ -429,15 +485,37 @@ async function notificarAgendamentoProgramadoPorId(id: number): Promise<void> {
     data: dataStr,
     horaIni: item.horaInicio,
     tipo: procedimentoNome,
-    observacao: item.descricao || undefined,
+    observacao: limparPrefixoTipoAgendamentoProgramado(item.descricao) || undefined,
     isProgramado: true,
     possuiAnexos,
   })
 }
 
 export async function agendaRoutes(app: FastifyInstance) {
-  await initProcedimentos()
-  await initDisponibilidadePorDia()
+  const bootstrapResultados = await Promise.allSettled([
+    initProcedimentos(),
+    initDisponibilidadePorDia(),
+  ])
+
+  const falhasBootstrap = bootstrapResultados
+    .map((resultado, indice) => ({ resultado, indice }))
+    .filter(
+      (
+        item,
+      ): item is {
+        resultado: PromiseRejectedResult
+        indice: number
+      } => item.resultado.status === 'rejected',
+    )
+
+  for (const falha of falhasBootstrap) {
+    const nome = falha.indice === 0 ? 'procedimentos' : 'disponibilidade_por_dia'
+    const motivo =
+      falha.resultado.reason instanceof Error
+        ? falha.resultado.reason.message
+        : String(falha.resultado.reason)
+    app.log.warn(`Agenda bootstrap (${nome}) falhou na inicialização: ${motivo}`)
+  }
 
   // POST /agenda/correcao-status-efetuado
   // Corrige em lote agendamentos com status "Efetuado" (2) sem evidência de mudança de status para 2 na auditoria.
@@ -579,10 +657,6 @@ export async function agendaRoutes(app: FastifyInstance) {
     if (clienteId) condP.push(Prisma.sql`p.cod_cli = ${Number(clienteId)}`)
     if (statusIsAguardando) condP.push(Prisma.sql`p.status = 1`)
     else if (statusNum !== null) condP.push(Prisma.sql`p.status = ${statusNum}`)
-    // agendamento_programado não possui coluna de tipo equivalente à agenda.
-    // Quando o usuário filtra por tipo (ex.: Treinamento), evitamos misturar
-    // itens programados que poderiam aparecer como "Instalação" no formulário.
-    if (tipo && tipo !== 'Agendamento') condP.push(Prisma.sql`1 = 0`)
     if (data) {
       condP.push(Prisma.sql`p.data_agendamento = ${new Date(data + 'T12:00:00Z')}`)
     } else {
@@ -610,9 +684,9 @@ export async function agendaRoutes(app: FastifyInstance) {
       UNION ALL
 
       SELECT p.id AS id, p.cod_cli AS clienteId, p.cod_tecnico AS tecnicoId,
-             'Agendamento' AS tipo, p.status AS status,
+             COALESCE(cp.nome, 'Programado') AS tipo, p.status AS status,
              p.data_agendamento AS data, p.hora_inicio AS horarioIni, p.data_agendamento AS dataFim, NULL AS horarioFim,
-             p.descricao AS observacoes,
+              p.descricao AS observacoes,
              NULL AS criadoPorId, p.data_criacao AS dataCriacao,
              COALESCE(cliP.NOME_FANTASIA, cliP.NOME_CLI) AS clienteNome,
              COALESCE(tecP.NOME_USUARIO_COMPLETO, tecP.NOME_USU) AS tecnicoNome,
@@ -621,19 +695,37 @@ export async function agendaRoutes(app: FastifyInstance) {
       FROM agendamento_programado p
       LEFT JOIN cliente cliP ON cliP.COD_CLI = p.cod_cli
       LEFT JOIN usuario tecP ON tecP.COD_USU = p.cod_tecnico
+      LEFT JOIN cadastro_procedimentos cp ON cp.id = p.procedimento_id
       ${whereP}
 
       ORDER BY data ASC, horarioIni ASC
     `
 
-    return items.map(a => ({
-      ...a,
-      id: Number(a.id),
-      clienteId: a.clienteId ? Number(a.clienteId) : null,
-      tecnicoId: a.tecnicoId ? Number(a.tecnicoId) : null,
-      criadoPorId: a.criadoPorId ? Number(a.criadoPorId) : null,
-      status: a.status != null ? Number(a.status) : null,
-    }))
+    const itensNormalizados = items.map(a => {
+      const origem = String(a.origem || '')
+      const tipoExtraido = origem === 'programado' ? extrairTipoAgendamentoProgramado(a.observacoes) : null
+      const observacoes = origem === 'programado'
+        ? limparPrefixoTipoAgendamentoProgramado(a.observacoes)
+        : a.observacoes
+
+      return {
+        ...a,
+        tipo: origem === 'programado'
+          ? tipoExtraido || normalizarTipoAgendaProgramado(a.tipo)
+          : a.tipo,
+        observacoes,
+        id: Number(a.id),
+        clienteId: a.clienteId ? Number(a.clienteId) : null,
+        tecnicoId: a.tecnicoId ? Number(a.tecnicoId) : null,
+        criadoPorId: a.criadoPorId ? Number(a.criadoPorId) : null,
+        status: a.status != null ? Number(a.status) : null,
+      }
+    })
+
+    if (!tipo) return itensNormalizados
+
+    const tipoFiltro = normalizarTipoAgendaFiltro(tipo)
+    return itensNormalizados.filter((item) => normalizarTipoAgendaFiltro(item.tipo) === tipoFiltro)
   })
 
   // ─── DISPONIBILIDADE DE TÉCNICOS ─────────────────────────────
@@ -1073,7 +1165,7 @@ export async function agendaRoutes(app: FastifyInstance) {
 
   // POST /agenda/agendamentos-prog
   app.post('/agendamentos-prog', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
-    const { tecnicoId, clienteId, procedimentoId, data, horaInicio, duracao, descricao, temAnexos } = request.body as {
+    const { tecnicoId, clienteId, procedimentoId, data, horaInicio, duracao, descricao, temAnexos, tipo } = request.body as {
       tecnicoId: number
       clienteId?: number
       procedimentoId?: number
@@ -1082,6 +1174,7 @@ export async function agendaRoutes(app: FastifyInstance) {
       duracao?: number
       descricao?: string
       temAnexos?: boolean
+      tipo?: string
     }
     const payload = request.user as { id: number }
     const procId = Number(procedimentoId ?? 0)
@@ -1135,11 +1228,13 @@ export async function agendaRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: janelaOk.motivo })
     }
 
+    const descricaoPersistida = montarDescricaoAgendamentoProgramado(descricaoNormalizada || null, tipo)
+
     await prisma.$executeRaw`
       INSERT INTO agendamento_programado
         (cod_tecnico, cod_cli, procedimento_id, data_agendamento, hora_inicio, duracao_min, descricao, status)
       VALUES
-        (${tecnicoId}, ${clienteId ?? null}, ${procId}, ${data}, ${horaInicio}, ${duracaoFinal}, ${descricaoNormalizada || null}, 1)
+        (${tecnicoId}, ${clienteId ?? null}, ${procId}, ${data}, ${horaInicio}, ${duracaoFinal}, ${descricaoPersistida}, 1)
     `
 
     if (!Boolean(temAnexos)) {
@@ -1149,7 +1244,7 @@ export async function agendaRoutes(app: FastifyInstance) {
         data,
         horaIni: horaInicio,
         tipo: 'PROGRAMADO',
-        observacao: descricaoNormalizada || undefined,
+        observacao: limparPrefixoTipoAgendamentoProgramado(descricaoPersistida) || undefined,
         isProgramado: true,
         possuiAnexos: false
       })
@@ -1169,7 +1264,8 @@ export async function agendaRoutes(app: FastifyInstance) {
         data,
         horaInicio,
         duracao: duracaoFinal,
-        descricao: descricaoNormalizada || null,
+        descricao: limparPrefixoTipoAgendamentoProgramado(descricaoPersistida) || null,
+        tipo: normalizarTipoAgendaProgramado(tipo),
       },
     })
 
@@ -1218,7 +1314,7 @@ export async function agendaRoutes(app: FastifyInstance) {
   // PUT /agenda/agendamentos-prog/:id (full update)
   app.put('/agendamentos-prog/:id', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
     const { id } = request.params as { id: string }
-    const { tecnicoId, clienteId, procedimentoId, data, horaInicio, duracao, descricao } = request.body as {
+    const { tecnicoId, clienteId, procedimentoId, data, horaInicio, duracao, descricao, tipo } = request.body as {
       tecnicoId?: number
       clienteId?: number | null
       procedimentoId?: number | null
@@ -1226,6 +1322,7 @@ export async function agendaRoutes(app: FastifyInstance) {
       horaInicio?: string
       duracao?: number
       descricao?: string | null
+      tipo?: string | null
     }
     const payload = request.user as { id: number }
     const descricaoNormalizada =
@@ -1235,7 +1332,7 @@ export async function agendaRoutes(app: FastifyInstance) {
           ? descricao.trim()
           : null
 
-    const [before]: any[] = await prisma.$queryRaw`
+      const [before]: any[] = await prisma.$queryRaw`
       SELECT cod_tecnico AS tecnicoId, cod_cli AS clienteId,
              DATE_FORMAT(data_agendamento, '%Y-%m-%d') AS data,
              procedimento_id AS procedimentoId,
@@ -1249,7 +1346,8 @@ export async function agendaRoutes(app: FastifyInstance) {
       data: before.data ?? null,
       horaInicio: before.horaInicio ?? null,
       duracao: before.duracao != null ? Number(before.duracao) : null,
-      descricao: before.descricao ?? null,
+      descricao: limparPrefixoTipoAgendamentoProgramado(before.descricao),
+      tipo: extrairTipoAgendamentoProgramado(before.descricao),
     } : null
 
     if (procedimentoId !== undefined && procedimentoId !== null) {
@@ -1290,7 +1388,14 @@ export async function agendaRoutes(app: FastifyInstance) {
     if (data !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET data_agendamento = ${data} WHERE id = ${Number(id)}`
     if (horaInicio !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET hora_inicio = ${horaInicio} WHERE id = ${Number(id)}`
     if (duracao !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET duracao_min = ${duracao} WHERE id = ${Number(id)}`
-    if (descricao !== undefined) await prisma.$executeRaw`UPDATE agendamento_programado SET descricao = ${descricaoNormalizada ?? null} WHERE id = ${Number(id)}`
+    const tipoFinal = tipo !== undefined ? normalizarTipoAgendaProgramado(tipo) : normalizarTipoAgendaProgramado(dadosAntes?.tipo)
+    const descricaoFinal =
+      descricao !== undefined
+        ? montarDescricaoAgendamentoProgramado(descricaoNormalizada ?? null, tipoFinal)
+        : montarDescricaoAgendamentoProgramado(dadosAntes?.descricao ?? null, tipoFinal)
+    if (descricao !== undefined || tipo !== undefined) {
+      await prisma.$executeRaw`UPDATE agendamento_programado SET descricao = ${descricaoFinal} WHERE id = ${Number(id)}`
+    }
 
     registrarAuditoria({
       tabela: 'agendamento_programado', registroId: Number(id), acao: 'ALTERACAO', usuarioId: payload.id,
@@ -1302,7 +1407,8 @@ export async function agendaRoutes(app: FastifyInstance) {
         data: data !== undefined ? data : dadosAntes?.data,
         horaInicio: horaInicio !== undefined ? horaInicio : dadosAntes?.horaInicio,
         duracao: duracao !== undefined ? duracao : dadosAntes?.duracao,
-        descricao: descricao !== undefined ? descricaoNormalizada : dadosAntes?.descricao,
+        descricao: limparPrefixoTipoAgendamentoProgramado(descricaoFinal),
+        tipo: tipoFinal,
       },
     })
 

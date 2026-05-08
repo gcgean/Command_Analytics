@@ -20,12 +20,15 @@ export async function initChecklists(): Promise<void> {
   `)
 
   // Compatibilidade com bancos onde a tabela já existia sem a coluna "etapas".
-  try {
+  const [colunaEtapas] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'cadastro_checklists'
+      AND COLUMN_NAME = 'etapas'
+  `)
+
+  if (!Number(colunaEtapas?.total ?? 0)) {
     await prisma.$executeRawUnsafe(`ALTER TABLE cadastro_checklists ADD COLUMN etapas TEXT NULL`)
-  } catch (err: any) {
-    const message = String(err?.message ?? '').toLowerCase()
-    if (!message.includes('duplicate column') && !message.includes('1060')) {
-      throw err
-    }
   }
 }

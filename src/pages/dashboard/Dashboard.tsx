@@ -64,12 +64,14 @@ export function Dashboard() {
   const navigate = useNavigate()
   const [kpis, setKpis] = useState<KPIData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [errorMessage, setErrorMessage] = useState('')
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [agendaHoje, setAgendaHoje] = useState<AgendaItem[]>([])
   const [ultimosAtendimentos, setUltimosAtendimentos] = useState<Atendimento[]>([])
 
   useEffect(() => {
     const hoje = format(new Date(), 'yyyy-MM-dd')
+    setErrorMessage('')
     Promise.all([
       api.getDashboardKPIs(),
       api.getClientes(),
@@ -81,7 +83,10 @@ export function Dashboard() {
       setAgendaHoje(agendaData as AgendaItem[])
       setUltimosAtendimentos((atendimentosData as any).data?.slice(0, 6) ?? [])
       setLoading(false)
-    }).catch(() => setLoading(false))
+    }).catch((error: any) => {
+      setErrorMessage(error?.message || 'Não foi possível carregar o dashboard.')
+      setLoading(false)
+    })
   }, [])
 
   // certificadoVencimento field no longer exists — use empty array
@@ -104,6 +109,12 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {errorMessage && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+          {errorMessage}
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <KPICard

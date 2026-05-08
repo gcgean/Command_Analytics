@@ -27,6 +27,21 @@ const tipoColors: Record<string, string> = {
 }
 const defaultTipoColor = 'bg-slate-500/20 text-slate-600 dark:text-slate-400 border-slate-500/30'
 
+function normalizarTipoAgenda(valor?: string | null): string {
+  const raw = String(valor ?? '').trim()
+  if (!raw) return 'Outros'
+  const normalized = raw
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+
+  if (normalized.includes('TREIN')) return 'Treinamento'
+  if (normalized.includes('INSTAL')) return 'Instalação'
+  if (normalized.includes('RETORN')) return 'Retorno'
+  if (normalized.includes('VISIT')) return 'Visita'
+  return 'Outros'
+}
+
 const statusColors: Record<string, string> = {
   'Aguardando':    'bg-amber-500/20 text-amber-400',
   'Efetuado':      'bg-emerald-500/20 text-emerald-400',
@@ -109,6 +124,7 @@ export function Agenda() {
   const [results, setResults] = useState<AgendaItem[]>([])
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
+  const [errorMessage, setErrorMessage] = useState('')
 
   // Filters
   const [filters, setFilters] = useState({
@@ -149,6 +165,7 @@ export function Agenda() {
     horarioFim: '',
     observacoes: '',
   })
+  const [editError, setEditError] = useState('')
   const [savingEdit, setSavingEdit] = useState(false)
 
   // New appointment saving state
@@ -185,9 +202,13 @@ export function Agenda() {
     const ini = `${y}-${String(m + 1).padStart(2, '0')}-01`
     const lastDay = new Date(y, m + 1, 0).getDate()
     const fim = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`
+    setErrorMessage('')
     api.getAgenda({ dataInicio: ini, dataFim: fim })
       .then(d => setAgendaMes(d as AgendaItem[]))
-      .catch(() => {})
+      .catch((error: any) => {
+        setAgendaMes([])
+        setErrorMessage(error?.message || 'Não foi possível carregar a agenda.')
+      })
   }
 
   function buscar(overrides?: typeof filters) {
@@ -198,6 +219,7 @@ export function Agenda() {
 
     setLoading(true)
     setSearched(true)
+    setErrorMessage('')
     const params: Record<string, string> = {}
     if (dIni) params.dataInicio = dIni
     if (dFim) params.dataFim = dFim
@@ -207,7 +229,10 @@ export function Agenda() {
     if (f.status) params.status = f.status
     api.getAgenda(params)
       .then(d => setResults(d as AgendaItem[]))
-      .catch(() => setResults([]))
+      .catch((error: any) => {
+        setResults([])
+        setErrorMessage(error?.message || 'Não foi possível carregar os agendamentos.')
+      })
       .finally(() => setLoading(false))
   }
 
@@ -253,6 +278,7 @@ export function Agenda() {
 
   function openEdit(item: AgendaItem) {
     setEditItem(item)
+    setEditError('')
     
     // Safety checks for dates
     let dataIniStr = ''
@@ -270,7 +296,7 @@ export function Agenda() {
     setEditForm({
       clienteId: String(item.clienteId ?? ''),
       tecnicoId: String(item.tecnicoId ?? ''),
-      tipo: item.tipo ?? '',
+      tipo: (item as any).origem === 'programado' ? normalizarTipoAgenda(item.tipo) : (item.tipo ?? ''),
       data: dataIniStr ? toBRDate(dataIniStr) : '',
       horario: formatTime((item as any).horario || item.horarioIni || (item as any).horaInicio),
       dataFim: dataFimStr ? toBRDate(dataFimStr) : '',
@@ -282,6 +308,7 @@ export function Agenda() {
   async function saveEdit() {
     if (!editItem) return
     setSavingEdit(true)
+    setEditError('')
     try {
       const isProg = (editItem as any).origem === 'programado'
       if (isProg) {
@@ -291,6 +318,7 @@ export function Agenda() {
           data: fromBRDate(editForm.data) || undefined,
           horaInicio: editForm.horario || undefined,
           descricao: editForm.observacoes || null,
+          tipo: editForm.tipo || null,
         })
       } else {
         await api.updateAgendaItem(editItem.id, {
@@ -306,7 +334,9 @@ export function Agenda() {
       }
       setEditItem(null)
       buscar()
-    } catch { } finally {
+    } catch (e: any) {
+      setEditError(e?.message || 'Não foi possível salvar as alterações.')
+    } finally {
       setSavingEdit(false)
     }
   }
@@ -487,6 +517,12 @@ export function Agenda() {
           </Button>
         </div>
 
+        {errorMessage && (
+          <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+            {errorMessage}
+          </div>
+        )}
+
         {/* Counter */}
         {searched && !loading && (
           <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-200 dark:border-slate-800">
@@ -504,7 +540,7 @@ export function Agenda() {
         )}
 
         {/* Empty state */}
-        {!loading && searched && results.length === 0 && (
+        {!loading && searched && results.length === 0 && !errorMessage && (
           <div className="text-center py-10 text-slate-500">
             <Calendar className="w-8 h-8 mx-auto mb-2 opacity-30" />
             <p className="text-sm">Nenhum agendamento encontrado para os filtros selecionados.</p>
@@ -586,15 +622,16 @@ export function Agenda() {
                       <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{item.tecnicoNome || '—'}</span>
                     </div>
                     <div className="col-span-1">
-                      {(item as any).origem === 'programado' ? (
-                        <span className="text-xs px-2 py-0.5 rounded-full border bg-indigo-500/20 text-indigo-400 border-indigo-500/30">
-                          Programado
-                        </span>
-                      ) : (
-                        <span className={clsx('text-xs px-2 py-0.5 rounded-full border', tipoClass)}>
-                          {tipoKey || '—'}
-                        </span>
-                      )}
+                      <span
+                        className={clsx(
+                          'text-xs px-2 py-0.5 rounded-full border',
+                          (item as any).origem === 'programado'
+                            ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
+                            : tipoClass
+                        )}
+                      >
+                        {tipoKey || '—'}
+                      </span>
                     </div>
                     <div className="col-span-1">
                       <span className={clsx('text-xs px-2 py-0.5 rounded-full', statusColors[statusLabel] ?? '')}>
@@ -756,13 +793,15 @@ export function Agenda() {
             onChange={e => setEditForm(f => ({ ...f, tecnicoId: e.target.value }))}
           />
           <div className="grid grid-cols-2 gap-4">
-            <Select
-              label="Tipo"
-              options={TIPOS.map(t => ({ value: t, label: t }))}
-              value={editForm.tipo}
-              onChange={e => setEditForm(f => ({ ...f, tipo: e.target.value }))}
-            />
-            <div className="hidden"></div>
+            <>
+              <Select
+                label="Tipo"
+                options={TIPOS.map(t => ({ value: t, label: t }))}
+                value={editForm.tipo}
+                onChange={e => setEditForm(f => ({ ...f, tipo: e.target.value }))}
+              />
+              <div className="hidden"></div>
+            </>
           </div>
           <div className="grid grid-cols-2 gap-4">
             <DateInput
@@ -805,6 +844,11 @@ export function Agenda() {
               tabela={(editItem as any).origem === 'programado' ? 'agendamento_programado' : 'agenda'}
               registroId={editItem.id}
             />
+          )}
+          {editError && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+              {editError}
+            </div>
           )}
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setEditItem(null)}>Cancelar</Button>
