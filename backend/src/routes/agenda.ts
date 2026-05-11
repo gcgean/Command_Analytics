@@ -362,11 +362,15 @@ async function enviarNotificacaoAgendamento(data: {
   tipo?: string | null,
   isProgramado?: boolean,
   observacao?: string | null,
-  possuiAnexos?: boolean
-}) {
+  possuiAnexos?: boolean,
+  titulo?: string
+}): Promise<boolean> {
   try {
     const config = await prisma.configuracaoTelegram.findFirst({ where: { ativo: true } })
-    if (!config) return
+    if (!config) {
+      console.warn('[agenda] Notificação Telegram ignorada: nenhuma configuração ativa encontrada.')
+      return false
+    }
 
     const tecnico = await prisma.usuario.findUnique({ 
       where: { id: data.tecnicoId },
@@ -375,7 +379,10 @@ async function enviarNotificacaoAgendamento(data: {
     
     // Prioriza o idTelegram do técnico, se não houver usa o padrão da configuração
     const targetUserId = tecnico?.idTelegram || config.userIdPadrao
-    if (!targetUserId) return
+    if (!targetUserId) {
+      console.warn(`[agenda] Notificação Telegram ignorada: técnico ${data.tecnicoId} sem idTelegram e sem userId padrão configurado.`)
+      return false
+    }
 
     let clienteNome = 'Cliente não informado'
     if (data.clienteId) {
@@ -387,7 +394,7 @@ async function enviarNotificacaoAgendamento(data: {
     }
 
     const dataFormatada = new Date(data.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    const titulo = data.isProgramado ? '📅 AGENDAMENTO PROGRAMADO' : '📅 NOVO AGENDAMENTO'
+    const titulo = data.titulo || (data.isProgramado ? '📅 AGENDAMENTO PROGRAMADO' : '📅 NOVO AGENDAMENTO')
     
     const msg = [
       `======== ${titulo} ========`,
@@ -401,12 +408,19 @@ async function enviarNotificacaoAgendamento(data: {
       `===============================`
     ].filter(Boolean).join('\n')
 
-    await TelegramService.enviar({
+    const envio = await TelegramService.enviar({
       userId: targetUserId,
       mensagem: msg
     })
+    if (!envio.success) {
+      console.warn(`[agenda] Falha ao enviar notificação Telegram para técnico ${tecnico?.nomeCompleto || tecnico?.nomeUsu || data.tecnicoId} (userId ${targetUserId}): ${envio.error || 'erro não informado'}`)
+      return false
+    }
+    console.info(`[agenda] Notificação Telegram enviada para técnico ${tecnico?.nomeCompleto || tecnico?.nomeUsu || data.tecnicoId} (userId ${targetUserId}) com título "${titulo}".`)
+    return true
   } catch (error) {
     console.error('Falha ao enviar notificação Telegram:', error)
+    return false
   }
 }
 
@@ -419,7 +433,7 @@ async function registroPossuiAnexos(tabela: 'agenda' | 'agendamento_programado',
   return Number(rows?.[0]?.c ?? 0) > 0
 }
 
-async function notificarAgendaPorId(id: number): Promise<void> {
+async function notificarAgendaPorId(id: number, titulo?: string): Promise<void> {
   const item = await prisma.agendaItem.findUnique({
     where: { id },
     select: {
@@ -450,10 +464,11 @@ async function notificarAgendaPorId(id: number): Promise<void> {
     observacao: item.observacoes || undefined,
     isProgramado: false,
     possuiAnexos,
+    titulo,
   })
 }
 
-async function notificarAgendamentoProgramadoPorId(id: number): Promise<void> {
+async function notificarAgendamentoProgramadoPorId(id: number, titulo?: string): Promise<void> {
   const item = await prisma.agendamentoProgramado.findUnique({
     where: { id },
     select: {
@@ -476,8 +491,12 @@ async function notificarAgendamentoProgramadoPorId(id: number): Promise<void> {
     WHERE ap.id = ${id}
     LIMIT 1
   `
+  const procedimentoNome = String(procedimentoRows?.[0]?.nome || 'PROGRAMADO')
   const tipoDescricao = extrairTipoAgendamentoProgramado(item.descricao)
-  const procedimentoNome = String(tipoDescricao || procedimentoRows?.[0]?.nome || 'PROGRAMADO')
+  const observacaoLimpa = limparPrefixoTipoAgendamentoProgramado(item.descricao)
+  const observacaoComTipo = tipoDescricao
+    ? `Tipo selecionado: ${tipoDescricao}${observacaoLimpa ? `\n${observacaoLimpa}` : ''}`
+    : observacaoLimpa
 
   await enviarNotificacaoAgendamento({
     tecnicoId: Number(item.tecnicoId),
@@ -485,9 +504,10 @@ async function notificarAgendamentoProgramadoPorId(id: number): Promise<void> {
     data: dataStr,
     horaIni: item.horaInicio,
     tipo: procedimentoNome,
-    observacao: limparPrefixoTipoAgendamentoProgramado(item.descricao) || undefined,
+    observacao: observacaoComTipo || undefined,
     isProgramado: true,
     possuiAnexos,
+    titulo,
   })
 }
 
@@ -1420,6 +1440,8 @@ export async function agendaRoutes(app: FastifyInstance) {
       origem: 'Agenda Programada (edição)',
     })
 
+    await notificarAgendamentoProgramadoPorId(Number(id))
+
     return { ok: true }
   })
 
@@ -1638,6 +1660,8 @@ export async function agendaRoutes(app: FastifyInstance) {
       usuarioId: payload.id,
       origem: 'Agenda (edição)',
     })
+
+    await notificarAgendaPorId(Number(id), '📅 AGENDAMENTO ALTERADO')
 
     return { ok: true }
   })
