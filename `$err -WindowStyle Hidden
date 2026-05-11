@@ -1,0 +1,16 @@
+Start-Process : NÆo ‚ poss¡vel localizar um parƒmetro posicional que aceite o argumento 
+'C:\Projetos\dev\Command_Analytics'.
+No linha:1 caractere:149
++ ... d.err.log'; Start-Process powershell -ArgumentList '-NoProfile','-Com ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : InvalidArgument: (:) [Start-Process], ParameterBindingException
+    + FullyQualifiedErrorId : PositionalParameterNotFound,Microsoft.PowerShell.Commands.StartProcessCommand
+ 
+npm : O arquivo C:\Program Files\nodejs\npm.ps1 nÆo pode ser carregado porque a execu‡Æo de scripts foi desabilitada 
+neste sistema. Para obter mais informa‡äes, consulte about_Execution_Policies em 
+https://go.microsoft.com/fwlink/?LinkID=135170.
+No linha:1 caractere:250
++ ... Profile','-Command',cd C:\Projetos\dev\Command_Analytics; npm run dev ...
++                                                               ~~~
+    + CategoryInfo          : ErrodeSeguran‡a: (:) [], PSSecurityException
+    + FullyQualifiedErrorId : UnauthorizedAccess

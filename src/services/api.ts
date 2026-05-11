@@ -370,7 +370,7 @@ export const api = {
   },
   validarDuracaoAgendamentoProg: (data: { tecnicoId: number; data: string; horaInicio: string; duracao: number; agendamentoIdIgnorar?: number | null }) =>
     fetchApi<{ ok: boolean }>('/agenda/agendamentos-prog/validar-duracao', { method: 'POST', body: JSON.stringify(data) }),
-  createAgendamentoProg: (data: { tecnicoId: number; clienteId?: number; procedimentoId: number; data: string; horaInicio: string; duracao?: number; descricao?: string; temAnexos?: boolean }) =>
+  createAgendamentoProg: (data: { tecnicoId: number; clienteId?: number; procedimentoId: number; data: string; horaInicio: string; duracao?: number; descricao?: string; temAnexos?: boolean; tipo?: string }) =>
     fetchApi('/agenda/agendamentos-prog', { method: 'POST', body: JSON.stringify(data) }),
   notifyAgendamentoProg: (id: number) =>
     fetchApi<{ ok: boolean }>(`/agenda/agendamentos-prog/${id}/notificar`, { method: 'POST' }),

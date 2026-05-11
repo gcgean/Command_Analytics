@@ -685,8 +685,9 @@ export async function agendaRoutes(app: FastifyInstance) {
     }
     const whereP = Prisma.sql`WHERE ${Prisma.join(condP, ' AND ')}`
 
-    const items: any[] = await prisma.$queryRaw`
+    const agendaRows: any[] = await prisma.$queryRaw`
       SELECT a.cod_agenda AS id, a.cod_cli AS clienteId, a.cod_colaborador AS tecnicoId,
+             NULL AS procedimentoId, NULL AS procedimentoNome, NULL AS duracao,
              a.Tipo AS tipo, a.Status_agendamento AS status,
              a.data_agendamento AS data, a.hora_ini AS horarioIni, a.data_fin_agendamento AS dataFim, a.hora_fin AS horarioFim,
              a.descricao AS observacoes,
@@ -700,13 +701,15 @@ export async function agendaRoutes(app: FastifyInstance) {
       LEFT JOIN usuario tec ON tec.COD_USU = a.cod_colaborador
       LEFT JOIN usuario cri ON cri.COD_USU = a.criado_por
       ${whereA}
+      ORDER BY a.data_agendamento ASC, a.hora_ini ASC
+    `
 
-      UNION ALL
-
+    const programadoRows: any[] = await prisma.$queryRaw`
       SELECT p.id AS id, p.cod_cli AS clienteId, p.cod_tecnico AS tecnicoId,
-             COALESCE(cp.nome, 'Programado') AS tipo, p.status AS status,
+             p.procedimento_id AS procedimentoId, COALESCE(cp.nome, 'Programado') AS procedimentoNome,
+             p.duracao_min AS duracao, COALESCE(cp.nome, 'Programado') AS tipo, p.status AS status,
              p.data_agendamento AS data, p.hora_inicio AS horarioIni, p.data_agendamento AS dataFim, NULL AS horarioFim,
-              p.descricao AS observacoes,
+             p.descricao AS observacoes,
              NULL AS criadoPorId, p.data_criacao AS dataCriacao,
              COALESCE(cliP.NOME_FANTASIA, cliP.NOME_CLI) AS clienteNome,
              COALESCE(tecP.NOME_USUARIO_COMPLETO, tecP.NOME_USU) AS tecnicoNome,
@@ -717,9 +720,10 @@ export async function agendaRoutes(app: FastifyInstance) {
       LEFT JOIN usuario tecP ON tecP.COD_USU = p.cod_tecnico
       LEFT JOIN cadastro_procedimentos cp ON cp.id = p.procedimento_id
       ${whereP}
-
-      ORDER BY data ASC, horarioIni ASC
+      ORDER BY p.data_agendamento ASC, p.hora_inicio ASC
     `
+
+    const items: any[] = [...agendaRows, ...programadoRows]
 
     const itensNormalizados = items.map(a => {
       const origem = String(a.origem || '')
@@ -737,9 +741,17 @@ export async function agendaRoutes(app: FastifyInstance) {
         id: Number(a.id),
         clienteId: a.clienteId ? Number(a.clienteId) : null,
         tecnicoId: a.tecnicoId ? Number(a.tecnicoId) : null,
+        procedimentoId: a.procedimentoId ? Number(a.procedimentoId) : null,
+        duracao: a.duracao != null ? Number(a.duracao) : null,
         criadoPorId: a.criadoPorId ? Number(a.criadoPorId) : null,
         status: a.status != null ? Number(a.status) : null,
       }
+    })
+
+    itensNormalizados.sort((a, b) => {
+      const dataA = `${a.data instanceof Date ? a.data.toISOString() : String(a.data ?? '')}|${String(a.horarioIni ?? '')}`
+      const dataB = `${b.data instanceof Date ? b.data.toISOString() : String(b.data ?? '')}|${String(b.horarioIni ?? '')}`
+      return dataA.localeCompare(dataB)
     })
 
     if (!tipo) return itensNormalizados
@@ -1151,6 +1163,8 @@ export async function agendaRoutes(app: FastifyInstance) {
       procedimentoId: r.procedimentoId != null ? Number(r.procedimentoId) : null,
       duracao: r.duracao != null ? Number(r.duracao) : null,
       status: r.status != null ? Number(r.status) : null,
+      tipo: extrairTipoAgendamentoProgramado(r.descricao),
+      descricao: limparPrefixoTipoAgendamentoProgramado(r.descricao),
     }))
   })
 

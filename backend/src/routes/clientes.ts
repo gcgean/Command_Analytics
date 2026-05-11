@@ -29,6 +29,20 @@ type LegacyVendaRow = {
   observacaoNegocio?: string | null
 }
 
+type ClienteNuvemRow = {
+  idGrupo?: number | null
+  descricaoNuvemCliente?: string | null
+  descPlanoNuvem?: string | null
+  portaPrincipal?: number | string | null
+  portaArquivos?: number | string | null
+  portaAplicativos?: number | string | null
+  idServerNuvem?: number | null
+  nomeServidor?: string | null
+  descricaoNuvem?: string | null
+  numeroServidor?: number | string | null
+  portaApiServidor?: number | string | null
+}
+
 function toTimeText(value: Date | string | null | undefined) {
   if (!value) return null
   const date = value instanceof Date ? value : new Date(value)
@@ -156,6 +170,64 @@ async function getClienteLegacyData(clienteId: number) {
       numero: String(contato.numero ?? '').trim(),
       setor: contato.setor ? String(contato.setor).trim() : null,
     })).filter((contato) => contato.descricao || contato.numero || contato.setor),
+  }
+}
+
+async function getClienteNuvemData(clienteId: number) {
+  try {
+    const rows = await prisma.$queryRawUnsafe<ClienteNuvemRow[]>(
+      `SELECT DISTINCT
+        gu.id_grupo AS idGrupo,
+        gu.descricao AS descricaoNuvemCliente,
+        p.descricao AS descPlanoNuvem,
+        gu.porta_principal AS portaPrincipal,
+        gu.porta_arquivos AS portaArquivos,
+        gu.porta_aplicativos AS portaAplicativos,
+        sn.id_server_nuvem AS idServerNuvem,
+        sn.nome_servidor AS nomeServidor,
+        sn.descricao_nuvem AS descricaoNuvem,
+        sn.numero_servidor AS numeroServidor,
+        sn.porta_api_servidor AS portaApiServidor
+      FROM cliente c
+      INNER JOIN grupo_clientes_dados_gerais gc
+        ON gc.cod_cli = c.cod_cli
+      INNER JOIN grupo_clientes gu
+        ON gu.id_grupo = gc.id_grupo
+      LEFT JOIN servidor_nuvem sn
+        ON sn.id_server_nuvem = gu.id_servidor_nuvem
+      LEFT JOIN planos p
+        ON p.id = (
+          SELECT cp.id_plano
+          FROM cliente_planos cp
+          INNER JOIN planos p2
+            ON p2.id = cp.id_plano
+          WHERE cp.id_cli = c.cod_cli
+            AND COALESCE(p2.tamanho_max_nuvem, 0) > 0
+          ORDER BY cp.id
+          LIMIT 1
+        )
+      WHERE c.cod_cli = ?
+        AND c.ativo = 'S'
+        AND COALESCE(gu.ativo, '') <> 'N'
+      ORDER BY sn.numero_servidor, sn.nome_servidor, gu.id_grupo`,
+      clienteId,
+    )
+
+    return rows.map((row) => ({
+      idGrupo: row.idGrupo != null ? Number(row.idGrupo) : null,
+      descricaoNuvemCliente: row.descricaoNuvemCliente ? String(row.descricaoNuvemCliente).trim() : null,
+      descPlanoNuvem: row.descPlanoNuvem ? String(row.descPlanoNuvem).trim() : null,
+      portaPrincipal: row.portaPrincipal != null && row.portaPrincipal !== '' ? String(row.portaPrincipal).trim() : null,
+      portaArquivos: row.portaArquivos != null && row.portaArquivos !== '' ? String(row.portaArquivos).trim() : null,
+      portaAplicativos: row.portaAplicativos != null && row.portaAplicativos !== '' ? String(row.portaAplicativos).trim() : null,
+      idServerNuvem: row.idServerNuvem != null ? Number(row.idServerNuvem) : null,
+      nomeServidor: row.nomeServidor ? String(row.nomeServidor).trim() : null,
+      descricaoNuvem: row.descricaoNuvem ? String(row.descricaoNuvem).trim() : null,
+      numeroServidor: row.numeroServidor != null && row.numeroServidor !== '' ? String(row.numeroServidor).trim() : null,
+      portaApiServidor: row.portaApiServidor != null && row.portaApiServidor !== '' ? String(row.portaApiServidor).trim() : null,
+    }))
+  } catch {
+    return []
   }
 }
 
@@ -305,6 +377,7 @@ export async function clientesRoutes(app: FastifyInstance) {
     if (!cliente) return reply.status(404).send({ error: 'Cliente não encontrado.' })
 
     const legacy = await getClienteLegacyData(Number(id))
+    const nuvens = await getClienteNuvemData(Number(id))
     const atendimentosHistorico = await prisma.$queryRawUnsafe<Array<{
       id: number
       clienteId: number | null
@@ -447,6 +520,7 @@ export async function clientesRoutes(app: FastifyInstance) {
         desenvolvedorNome: item.desenvolvedorNome ?? null,
       })),
       assinaturas,
+      nuvens,
       legado: {
         observacaoPlataforma: legacy.observacaoPlataforma,
         contatos: legacy.contatos,

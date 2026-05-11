@@ -42,6 +42,19 @@ function normalizarTipoAgenda(valor?: string | null): string {
   return 'Outros'
 }
 
+function limparMarcadorTipoAgenda(valor?: string | null): string {
+  return String(valor ?? '').replace(/^\s*\[TIPO_AGENDA:[^\]]+\]\s*/i, '')
+}
+
+function formatDurationLabel(duracaoMin: number | string | null | undefined): string {
+  const total = Number(duracaoMin ?? 0)
+  if (!Number.isFinite(total) || total <= 0) return ''
+  if (total < 60) return `${total} min`
+  const horas = Math.floor(total / 60)
+  const resto = total % 60
+  return resto ? `${horas}h ${resto}min` : `${horas}h`
+}
+
 const statusColors: Record<string, string> = {
   'Aguardando':    'bg-amber-500/20 text-amber-400',
   'Efetuado':      'bg-emerald-500/20 text-emerald-400',
@@ -138,6 +151,7 @@ export function Agenda() {
 
   // Supporting data
   const [tecnicos, setTecnicos] = useState<{ id: number; nome: string }[]>([])
+  const [procedimentos, setProcedimentos] = useState<{ id: number; nome: string; duracaoMin: number; ativo: boolean }[]>([])
 
   // New appointment modal
   const [showModal, setShowModal] = useState(false)
@@ -159,10 +173,12 @@ export function Agenda() {
     clienteId: '',
     tecnicoId: '',
     tipo: '',
+    procedimentoId: '',
     data: '',
     horario: '',
     dataFim: '',
     horarioFim: '',
+    duracao: '',
     observacoes: '',
   })
   const [editError, setEditError] = useState('')
@@ -184,6 +200,9 @@ export function Agenda() {
     api.getUsuarios().then((u: any) =>
       setTecnicos(u.map((x: any) => ({ id: x.id, nome: x.nome || x.nomeUsu || `#${x.id}` })))
     ).catch(() => {})
+    api.getProcedimentos({ ativo: '1' })
+      .then((p: any) => setProcedimentos(Array.isArray(p) ? p : []))
+      .catch(() => {})
   }, [])
 
   // Load month events whenever month changes
@@ -297,11 +316,13 @@ export function Agenda() {
       clienteId: String(item.clienteId ?? ''),
       tecnicoId: String(item.tecnicoId ?? ''),
       tipo: (item as any).origem === 'programado' ? normalizarTipoAgenda(item.tipo) : (item.tipo ?? ''),
+      procedimentoId: (item as any).procedimentoId ? String((item as any).procedimentoId) : '',
       data: dataIniStr ? toBRDate(dataIniStr) : '',
       horario: formatTime((item as any).horario || item.horarioIni || (item as any).horaInicio),
       dataFim: dataFimStr ? toBRDate(dataFimStr) : '',
       horarioFim: (item as any).horarioFim ? formatTime((item as any).horarioFim) : '',
-      observacoes: (item as any).observacoes ?? '',
+      duracao: (item as any).duracao != null ? String((item as any).duracao) : '',
+      observacoes: limparMarcadorTipoAgenda((item as any).observacoes),
     })
   }
 
@@ -312,11 +333,17 @@ export function Agenda() {
     try {
       const isProg = (editItem as any).origem === 'programado'
       if (isProg) {
+        if (!editForm.procedimentoId) {
+          setEditError('Selecione o procedimento.')
+          return
+        }
         await api.updateAgendamentoProg(editItem.id, {
           tecnicoId: editForm.tecnicoId ? Number(editForm.tecnicoId) : undefined,
           clienteId: editForm.clienteId ? Number(editForm.clienteId) : null,
+          procedimentoId: editForm.procedimentoId ? Number(editForm.procedimentoId) : null,
           data: fromBRDate(editForm.data) || undefined,
           horaInicio: editForm.horario || undefined,
+          duracao: editForm.duracao ? Number(editForm.duracao) : undefined,
           descricao: editForm.observacoes || null,
           tipo: editForm.tipo || null,
         })
@@ -780,65 +807,135 @@ export function Agenda() {
       {/* Edit Appointment Modal */}
       <Modal isOpen={!!editItem} onClose={() => setEditItem(null)} title="Alterar Agendamento" size="md">
         <div className="space-y-4">
-          <ClienteSearch
-            label="Cliente"
-            value={editForm.clienteId}
-            onChange={id => setEditForm(f => ({ ...f, clienteId: id }))}
-          />
-          <Select
-            label="Técnico"
-            options={tecnicos.map(u => ({ value: String(u.id), label: u.nome }))}
-            placeholder="Selecione o técnico"
-            value={editForm.tecnicoId}
-            onChange={e => setEditForm(f => ({ ...f, tecnicoId: e.target.value }))}
-          />
-          <div className="grid grid-cols-2 gap-4">
+          {(editItem as any)?.origem === 'programado' ? (
             <>
+              <ClienteSearch
+                label="Cliente"
+                value={editForm.clienteId}
+                onChange={id => setEditForm(f => ({ ...f, clienteId: id }))}
+              />
+              <Select
+                label="Técnico"
+                options={tecnicos.map(u => ({ value: String(u.id), label: u.nome }))}
+                placeholder="Selecione o técnico"
+                value={editForm.tecnicoId}
+                onChange={e => setEditForm(f => ({ ...f, tecnicoId: e.target.value }))}
+              />
               <Select
                 label="Tipo"
                 options={TIPOS.map(t => ({ value: t, label: t }))}
                 value={editForm.tipo}
                 onChange={e => setEditForm(f => ({ ...f, tipo: e.target.value }))}
               />
-              <div className="hidden"></div>
+              <Select
+                label="Procedimento *"
+                options={procedimentos.map((p) => ({
+                  value: String(p.id),
+                  label: `${p.nome} · ${formatDurationLabel(p.duracaoMin)}`,
+                }))}
+                placeholder="Selecione o procedimento"
+                value={editForm.procedimentoId}
+                onChange={e => {
+                  const procedimentoId = e.target.value
+                  const procedimento = procedimentos.find((p) => String(p.id) === procedimentoId)
+                  setEditForm((f) => ({
+                    ...f,
+                    procedimentoId,
+                    duracao: procedimento ? String(procedimento.duracaoMin) : f.duracao,
+                  }))
+                }}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <DateInput
+                  label="Data"
+                  mode="br"
+                  value={editForm.data}
+                  onChange={(value) => setEditForm(f => ({ ...f, data: value }))}
+                />
+                <Input
+                  label="Hora início"
+                  type="time"
+                  value={editForm.horario}
+                  onChange={e => setEditForm(f => ({ ...f, horario: e.target.value }))}
+                />
+              </div>
+              <Input
+                label="Duração calculada"
+                value={formatDurationLabel(editForm.duracao)}
+                readOnly
+              />
+              <Textarea
+                label="Descrição"
+                placeholder="Descreva o objetivo do agendamento..."
+                value={editForm.observacoes}
+                onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))}
+                maxLength={500}
+                rows={4}
+              />
             </>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <DateInput
-              label="Data Inicial"
-              mode="br"
-              value={editForm.data}
-              onChange={(value) => setEditForm(f => ({ ...f, data: value }))}
-            />
-            <Input
-              label="Horário Inicial"
-              type="time"
-              value={editForm.horario}
-              onChange={e => setEditForm(f => ({ ...f, horario: e.target.value }))}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <DateInput
-              label="Data Final"
-              mode="br"
-              value={editForm.dataFim}
-              onChange={(value) => setEditForm(f => ({ ...f, dataFim: value }))}
-            />
-            <Input
-              label="Horário Final"
-              type="time"
-              value={editForm.horarioFim}
-              onChange={e => setEditForm(f => ({ ...f, horarioFim: e.target.value }))}
-            />
-          </div>
-          <Textarea
-            label="Observações"
-            placeholder="Observações do agendamento..."
-            value={editForm.observacoes}
-            onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))}
-            maxLength={5000}
-            rows={4}
-          />
+          ) : (
+            <>
+              <ClienteSearch
+                label="Cliente"
+                value={editForm.clienteId}
+                onChange={id => setEditForm(f => ({ ...f, clienteId: id }))}
+              />
+              <Select
+                label="Técnico"
+                options={tecnicos.map(u => ({ value: String(u.id), label: u.nome }))}
+                placeholder="Selecione o técnico"
+                value={editForm.tecnicoId}
+                onChange={e => setEditForm(f => ({ ...f, tecnicoId: e.target.value }))}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <>
+                  <Select
+                    label="Tipo"
+                    options={TIPOS.map(t => ({ value: t, label: t }))}
+                    value={editForm.tipo}
+                    onChange={e => setEditForm(f => ({ ...f, tipo: e.target.value }))}
+                  />
+                  <div className="hidden"></div>
+                </>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <DateInput
+                  label="Data Inicial"
+                  mode="br"
+                  value={editForm.data}
+                  onChange={(value) => setEditForm(f => ({ ...f, data: value }))}
+                />
+                <Input
+                  label="Horário Inicial"
+                  type="time"
+                  value={editForm.horario}
+                  onChange={e => setEditForm(f => ({ ...f, horario: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <DateInput
+                  label="Data Final"
+                  mode="br"
+                  value={editForm.dataFim}
+                  onChange={(value) => setEditForm(f => ({ ...f, dataFim: value }))}
+                />
+                <Input
+                  label="Horário Final"
+                  type="time"
+                  value={editForm.horarioFim}
+                  onChange={e => setEditForm(f => ({ ...f, horarioFim: e.target.value }))}
+                />
+              </div>
+              <Textarea
+                label="Observações"
+                placeholder="Observações do agendamento..."
+                value={editForm.observacoes}
+                onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))}
+                maxLength={5000}
+                rows={4}
+              />
+            </>
+          )}
           {editItem && (
             <Anexos
               tabela={(editItem as any).origem === 'programado' ? 'agendamento_programado' : 'agenda'}

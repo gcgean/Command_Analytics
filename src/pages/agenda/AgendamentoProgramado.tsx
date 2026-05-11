@@ -66,6 +66,7 @@ const STATUS_OPTS = [
   { value: 3, label: 'Não efetuado', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
   { value: 4, label: 'Reagendado',   color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
 ] as const
+const TIPOS_AGENDA = ['Instalação', 'Treinamento', 'Visita', 'Retorno', 'Outros']
 
 const STATUS_COLOR: Record<number, string> = {
   1: 'bg-amber-500/20 text-amber-400',
@@ -142,6 +143,11 @@ function formatDurationLabel(duracaoMin: number): string {
   return `${horas}h ${resto}min`
 }
 
+function limparMarcadorTipoAgenda(texto?: string | null): string {
+  const valor = String(texto ?? '')
+  return valor.replace(/^\s*\[TIPO_AGENDA:[^\]]+\]\s*/i, '').trimStart()
+}
+
 function slotMotivoLabel(motivo?: string | null): string {
   switch (motivo) {
     case 'agenda':
@@ -201,6 +207,7 @@ interface AgProg {
   clienteNome: string | null
   procedimentoId?: number | null
   procedimentoNome?: string | null
+  tipo?: string | null
   data: any
   horaInicio: string
   duracao: number
@@ -302,7 +309,7 @@ export function AgendamentoProgramado() {
   const [showBookModal, setShowBookModal] = useState(false)
   const [bookTecnico, setBookTecnico] = useState<{ tecnicoId: number; tecnicoNome: string; data: string } | null>(null)
   const [selectedSlots, setSelectedSlots] = useState<string[]>([])
-  const [bookForm, setBookForm] = useState({ clienteId: '', procedimentoId: '', descricao: '', duracao: '60' })
+  const [bookForm, setBookForm] = useState({ clienteId: '', procedimentoId: '', tipo: 'Outros', descricao: '', duracao: '60' })
   const [bookFiles, setBookFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [bookError, setBookError] = useState('')
@@ -315,6 +322,7 @@ export function AgendamentoProgramado() {
     tecnicoId: '',
     clienteId: '',
     procedimentoId: '',
+    tipo: 'Outros',
     data: '',
     horaInicio: '',
     duracao: '60',
@@ -617,6 +625,7 @@ export function AgendamentoProgramado() {
     setBookForm({
       clienteId: '',
       procedimentoId: selectedProcedimento || '',
+      tipo: 'Outros',
       descricao: '',
       duracao: String(procedimentoSelecionado?.duracaoMin ?? 60),
     })
@@ -633,6 +642,7 @@ export function AgendamentoProgramado() {
       setBookForm({
         clienteId: '',
         procedimentoId: selectedProcedimento || '',
+        tipo: 'Outros',
         descricao: '',
         duracao: String(procedimentoSelecionado?.duracaoMin ?? 60),
       })
@@ -705,6 +715,7 @@ export function AgendamentoProgramado() {
         data: bookTecnico.data,
         horaInicio: block.start,
         duracao: block.duration,
+        tipo: bookForm.tipo || 'Outros',
         descricao: descricaoNormalizada || undefined,
         temAnexos: bookFiles.length > 0,
       })
@@ -718,6 +729,7 @@ export function AgendamentoProgramado() {
       setSelectedSlots([])
       setBookTecnico(null)
       setBookFiles([])
+      setBookForm({ clienteId: '', procedimentoId: '', tipo: 'Outros', descricao: '', duracao: '60' })
       fetchSlots()
       fetchAgendamentos()
       setActiveTab('lista')
@@ -738,10 +750,11 @@ export function AgendamentoProgramado() {
       tecnicoId: String(ag.tecnicoId),
       clienteId: ag.clienteId ? String(ag.clienteId) : '',
       procedimentoId: ag.procedimentoId ? String(ag.procedimentoId) : '',
+      tipo: ag.tipo || 'Outros',
       data: toBRDate(rawData),
       horaInicio: formatTime(ag.horaInicio),
       duracao: String(ag.duracao),
-      descricao: ag.descricao ?? '',
+      descricao: limparMarcadorTipoAgenda(ag.descricao),
     })
   }
 
@@ -765,6 +778,7 @@ export function AgendamentoProgramado() {
         tecnicoId: Number(editForm.tecnicoId),
         clienteId: editForm.clienteId ? Number(editForm.clienteId) : null,
         procedimentoId: editForm.procedimentoId ? Number(editForm.procedimentoId) : null,
+        tipo: editForm.tipo || 'Outros',
         data: dVal,
         horaInicio: editForm.horaInicio,
         duracao: Number(editForm.duracao),
@@ -1211,7 +1225,9 @@ export function AgendamentoProgramado() {
                       </button>
                     </div>
                   </div>
-                  {ag.descricao && <p className="text-xs text-slate-500 mt-2">{ag.descricao}</p>}
+                  {limparMarcadorTipoAgenda(ag.descricao) && (
+                    <p className="text-xs text-slate-500 mt-2">{limparMarcadorTipoAgenda(ag.descricao)}</p>
+                  )}
                 </Card>
               ))}
             </div>
@@ -1513,6 +1529,12 @@ export function AgendamentoProgramado() {
           </div>
 
           <Select
+            label="Tipo"
+            options={TIPOS_AGENDA.map((tipo) => ({ value: tipo, label: tipo }))}
+            value={bookForm.tipo}
+            onChange={e => setBookForm(f => ({ ...f, tipo: e.target.value }))}
+          />
+          <Select
             label="Procedimento *"
             options={procedimentos.map((p) => ({ value: String(p.id), label: `${p.nome} · ${formatDurationLabel(p.duracaoMin)}` }))}
             placeholder={procedimentos.length ? 'Selecione o procedimento' : 'Nenhum procedimento ativo'}
@@ -1580,6 +1602,13 @@ export function AgendamentoProgramado() {
               </div>
             )}
           </div>
+          <Select
+            label="Tipo"
+            options={TIPOS_AGENDA.map((tipo) => ({ value: tipo, label: tipo }))}
+            placeholder="Selecione o tipo"
+            value={editForm.tipo}
+            onChange={e => setEditForm(f => ({ ...f, tipo: e.target.value }))}
+          />
           <Select
             label="Procedimento *"
             options={procedimentos.map((p) => ({ value: String(p.id), label: `${p.nome} · ${formatDurationLabel(p.duracaoMin)}` }))}

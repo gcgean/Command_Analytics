@@ -126,6 +126,20 @@ export interface ClienteLegadoVendaCampo {
   value: string
 }
 
+export interface ClienteNuvemInfo {
+  idGrupo?: number | null
+  descricaoNuvemCliente?: string | null
+  descPlanoNuvem?: string | null
+  portaPrincipal?: string | null
+  portaArquivos?: string | null
+  portaAplicativos?: string | null
+  idServerNuvem?: number | null
+  nomeServidor?: string | null
+  descricaoNuvem?: string | null
+  numeroServidor?: string | null
+  portaApiServidor?: string | null
+}
+
 export interface ClienteLegadoAgenda {
   id: number
   origem?: 'agenda' | 'agendamento_programado'
@@ -212,6 +226,9 @@ export interface AgendaItem {
   tecnicoId: number | null
   tecnicoNome: string
   tipo: string | null
+  procedimentoId?: number | null
+  procedimentoNome?: string | null
+  duracao?: number | null
   status: number | null          // int: 1=Aguardando, 2=Realizado, etc.
   data: string | null            // date string
   dataFim?: string | null        // date string
@@ -219,6 +236,7 @@ export interface AgendaItem {
   horarioFim?: string | null
   observacoes?: string | null
   temAnexos?: boolean
+  origem?: string
   // Legacy field for compatibility
   horario?: string
 }

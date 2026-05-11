@@ -27,6 +27,7 @@ import type {
   Assinatura,
   Cliente,
   ClienteHistoricoDesenvolvimento,
+  ClienteNuvemInfo,
   ClienteResumoAtendimentos,
   ClienteLegadoAgenda,
   ClienteLegadoContato,
@@ -78,6 +79,7 @@ type ClienteDetalhe = Cliente & {
   resumoAtendimentos?: ClienteResumoAtendimentos
   historicoDesenvolvimento?: ClienteHistoricoDesenvolvimento[]
   assinaturas?: Assinatura[]
+  nuvens?: ClienteNuvemInfo[]
   contador?: {
     id: number
     nome?: string | null
@@ -234,6 +236,9 @@ export function DetalheCliente() {
   const navigate = useNavigate()
   const { can } = usePermissions()
   const [cliente, setCliente] = useState<ClienteDetalhe | undefined>()
+  const [notFound, setNotFound] = useState(false)
+  const [showNotFound, setShowNotFound] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState(0)
   const [loading, setLoading] = useState(true)
   const canViewFinanceiro = can('clientes-valores')
@@ -256,9 +261,32 @@ export function DetalheCliente() {
   }, [activeTab, tabs.length])
 
   useEffect(() => {
+    if (!notFound) {
+      setShowNotFound(false)
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setShowNotFound(true)
+    }, 350)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [notFound])
+
+  useEffect(() => {
+    if (!id) {
+      setLoading(true)
+      setCliente(undefined)
+      setNotFound(false)
+      setLoadError(null)
+      return
+    }
+
     const parsedId = Number(id)
     if (!Number.isFinite(parsedId) || parsedId <= 0) {
       setCliente(undefined)
+      setNotFound(true)
+      setLoadError(null)
       setLoading(false)
       return
     }
@@ -266,20 +294,30 @@ export function DetalheCliente() {
     const controller = new AbortController()
     setLoading(true)
     setCliente(undefined)
+    setNotFound(false)
+    setLoadError(null)
 
     api.getClienteById(parsedId, { signal: controller.signal })
       .then((c: any) => {
         setCliente(c as ClienteDetalhe)
+        setNotFound(false)
+        setLoadError(null)
         setLoading(false)
       })
       .catch((err: any) => {
+        const message = String(err?.message ?? '')
         if (String(err?.message ?? '').toLowerCase().includes('tempo limite')) {
           setCliente(undefined)
+          setNotFound(false)
+          setLoadError('Não foi possível carregar o cliente no momento.')
           setLoading(false)
           return
         }
         const isAbort = err?.name === 'AbortError' || String(err?.message ?? '').toLowerCase().includes('aborted')
         if (isAbort) return
+        const isNotFound = message.toLowerCase().includes('cliente não encontrado')
+        setNotFound(isNotFound)
+        setLoadError(isNotFound ? null : 'Não foi possível carregar o cliente no momento.')
         setLoading(false)
       })
 
@@ -291,11 +329,54 @@ export function DetalheCliente() {
     [cliente?.legado?.observacaoPlataforma],
   )
 
-  if (loading) {
+  if (loading || (!cliente && !loadError && ((!notFound) || !showNotFound))) {
     return (
-      <div className="flex items-center justify-center h-40 text-slate-600 dark:text-slate-400">
-        <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mr-3" />
-        Carregando cliente...
+      <div className="space-y-4 md:space-y-6 max-w-full min-w-0 animate-pulse">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
+          <div className="h-9 w-full rounded-xl bg-slate-200 dark:bg-slate-800 md:w-28" />
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="h-7 w-56 rounded-xl bg-slate-200 dark:bg-slate-800" />
+              <div className="h-6 w-20 rounded-full bg-slate-200 dark:bg-slate-800" />
+              <div className="h-6 w-16 rounded-full bg-slate-200 dark:bg-slate-800" />
+            </div>
+            <div className="h-4 w-44 rounded-xl bg-slate-200 dark:bg-slate-800" />
+          </div>
+          <div className="h-10 w-full rounded-xl bg-slate-200 dark:bg-slate-800 md:w-36" />
+        </div>
+
+        <div className="-mx-4 overflow-x-auto border-b border-slate-200 px-4 dark:border-slate-700 sm:mx-0 sm:px-0">
+          <div className="flex min-w-max gap-3 py-2">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div key={idx} className="h-9 w-32 rounded-xl bg-slate-200 dark:bg-slate-800" />
+            ))}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, cardIdx) => (
+            <Card key={cardIdx} className="min-w-0">
+              <div className="mb-4 h-5 w-40 rounded-xl bg-slate-200 dark:bg-slate-800" />
+              <div className="space-y-3">
+                {Array.from({ length: 6 }).map((__, rowIdx) => (
+                  <div key={rowIdx} className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="h-3 w-24 rounded-xl bg-slate-200 dark:bg-slate-800" />
+                    <div className="h-3 w-44 rounded-xl bg-slate-200 dark:bg-slate-800" />
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  if (loadError) {
+    return (
+      <div className="text-center py-20 text-slate-500">
+        <p>{loadError}</p>
+        <Button className="mt-4" variant="secondary" onClick={() => navigate('/clientes')}>Voltar</Button>
       </div>
     )
   }
@@ -664,7 +745,7 @@ export function DetalheCliente() {
       )}
 
       {tabKey === 'tecnico' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
           <Card className="min-w-0">
             <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Dados do sistema</h3>
             <dl className="space-y-3">
@@ -681,6 +762,51 @@ export function DetalheCliente() {
                 </div>
               ))}
             </dl>
+          </Card>
+
+          <Card className="min-w-0">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4 flex items-center gap-2">
+              <Cpu className="w-4 h-4 text-blue-400" /> Dados da nuvem
+            </h3>
+            {cliente.nuvens && cliente.nuvens.length > 0 ? (
+              <div className="space-y-4">
+                {cliente.nuvens.map((nuvem, index) => (
+                  <div
+                    key={`${nuvem.idGrupo ?? 'grupo'}-${nuvem.idServerNuvem ?? 'server'}-${index}`}
+                    className={clsx(
+                      'space-y-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700',
+                      index > 0 && 'mt-4',
+                    )}
+                  >
+                    <dl className="space-y-3">
+                      {[
+                        { label: 'Nuvem do cliente', value: nuvem.descricaoNuvemCliente ?? nuvem.descricaoNuvem ?? '—' },
+                        { label: 'Plano de nuvem', value: nuvem.descPlanoNuvem ?? '—' },
+                        {
+                          label: 'Servidor',
+                          value: [nuvem.nomeServidor, nuvem.numeroServidor ? `#${nuvem.numeroServidor}` : null].filter(Boolean).join(' · ') || '—',
+                        },
+                        { label: 'Porta principal', value: nuvem.portaPrincipal ?? '—' },
+                        { label: 'Porta de arquivos', value: nuvem.portaArquivos ?? '—' },
+                        { label: 'Porta de aplicativos', value: nuvem.portaAplicativos ?? '—' },
+                        { label: 'Porta API do servidor', value: nuvem.portaApiServidor ?? '—' },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                          <dt className="text-xs text-slate-500">{label}</dt>
+                          <dd className="break-words text-left text-xs font-medium text-slate-700 dark:text-slate-300 sm:text-right">
+                            {String(value)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-700 dark:text-slate-300">
+                Cliente sem hospedagem em nuvem identificada.
+              </p>
+            )}
           </Card>
 
           <Card className="min-w-0">

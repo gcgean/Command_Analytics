@@ -10,7 +10,9 @@
 ## Operação local (dev)
 
 - Ao iniciar **backend** e **frontend**, verificar se a porta alvo já está ocupada.
-- Se estiver ocupada por outro processo, iniciar em outra porta disponível e informar as URLs ativas.
+- **Só usar a porta padrão se ela estiver livre.**
+- Se a porta padrão estiver ocupada por outro processo, **não forçar reutilização e não encerrar o processo só para tomar a porta**.
+- Nesses casos, iniciar em **outra porta disponível** e informar claramente as URLs ativas.
 - Portas padrão: backend `3333`, frontend `5173`.
 
 ## Segurança de arquivos
