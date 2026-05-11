@@ -1,5 +1,10 @@
 import { prisma } from '../database/client'
 
+function isDuplicateSchemaError(error: unknown, snippets: string[]): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return snippets.some((snippet) => message.includes(snippet))
+}
+
 /** Cria a tabela de cadastro de checklists caso ainda não exista. */
 export async function initChecklists(): Promise<void> {
   await prisma.$executeRawUnsafe(`
@@ -29,6 +34,12 @@ export async function initChecklists(): Promise<void> {
   `)
 
   if (!Number(colunaEtapas?.total ?? 0)) {
-    await prisma.$executeRawUnsafe(`ALTER TABLE cadastro_checklists ADD COLUMN etapas TEXT NULL`)
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE cadastro_checklists ADD COLUMN etapas TEXT NULL`)
+    } catch (error) {
+      if (!isDuplicateSchemaError(error, ["Duplicate column name 'etapas'"])) {
+        throw error
+      }
+    }
   }
 }

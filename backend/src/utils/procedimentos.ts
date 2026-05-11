@@ -1,5 +1,10 @@
 import { prisma } from '../database/client'
 
+function isDuplicateSchemaError(error: unknown, snippets: string[]): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return snippets.some((snippet) => message.includes(snippet))
+}
+
 /** Cria a tabela de procedimentos e campos relacionados aos agendamentos programados. */
 export async function initProcedimentos(): Promise<void> {
   await prisma.$executeRawUnsafe(`
@@ -39,10 +44,16 @@ export async function initProcedimentos(): Promise<void> {
   `)
 
   if (!Number(colunaProcedimentoAgendamento?.total ?? 0)) {
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE agendamento_programado
-      ADD COLUMN procedimento_id INT NULL AFTER cod_cli
-    `)
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE agendamento_programado
+        ADD COLUMN procedimento_id INT NULL AFTER cod_cli
+      `)
+    } catch (error) {
+      if (!isDuplicateSchemaError(error, ["Duplicate column name 'procedimento_id'"])) {
+        throw error
+      }
+    }
   }
 
   const [indiceProcedimentoAgendamento] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
@@ -54,9 +65,15 @@ export async function initProcedimentos(): Promise<void> {
   `)
 
   if (!Number(indiceProcedimentoAgendamento?.total ?? 0)) {
-    await prisma.$executeRawUnsafe(`
-      ALTER TABLE agendamento_programado
-      ADD INDEX idx_agendamento_prog_procedimento (procedimento_id)
-    `)
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE agendamento_programado
+        ADD INDEX idx_agendamento_prog_procedimento (procedimento_id)
+      `)
+    } catch (error) {
+      if (!isDuplicateSchemaError(error, ["Duplicate key name 'idx_agendamento_prog_procedimento'"])) {
+        throw error
+      }
+    }
   }
 }

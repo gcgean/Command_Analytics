@@ -8,6 +8,17 @@ const META_ARACATI  = 6333
 
 function n(v: any) { return v == null ? 0 : Number(v) }
 
+async function tabelaExiste(nomeTabela: string): Promise<boolean> {
+  const [row] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total
+    FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = '${nomeTabela}'
+  `)
+
+  return Number(row?.total ?? 0) > 0
+}
+
 export async function metasRoutes(app: FastifyInstance) {
 
   // ── GET /metas/comercial ─────────────────────────────────────────
@@ -28,6 +39,7 @@ export async function metasRoutes(app: FastifyInstance) {
     const diasRestantes = Math.max(0, Math.ceil(
       (new Date(ano, mesNum - 1, lastDay).getTime() - now.getTime()) / 86400000
     ))
+    const possuiMotivoClienteDesativado = await tabelaExiste('motivo_cliente_desativado').catch(() => false)
 
     const labelMes = new Date(ano, mesNum - 1, 1)
       .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
@@ -238,37 +250,64 @@ export async function metasRoutes(app: FastifyInstance) {
     `.catch((err) => { console.error('Erro novos por segmento:', err); return [] as any[] })
 
     // Clientes perdidos detalhado
-    const clientesPerdidosDetalhado = await prisma.$queryRaw<any[]>`
-      SELECT DISTINCT c.cod_cli AS codigo, c.NOME_FANTASIA AS nome,
-             c.valor_mensalidade AS valor,
-             CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) AS data_desativacao,
-             c.CIDRES_CLI AS cidade, c.telres_cli AS telefone,
-             COALESCE(m.descricao, 'Não informado') AS motivo
-      FROM historico_bloqueio_cliente hb
-      INNER JOIN cliente c ON c.cod_cli = hb.cod_cli
-      LEFT JOIN motivo_cliente_desativado m ON m.cod_motivo = hb.cod_motivo_desativacao
-      WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
-        AND c.ATIVO = 'N'
-        AND CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) BETWEEN ${dataIni} AND ${dataFim}
-        AND c.cod_cla <> 30
-        AND hb.tipo = 'D'
-      ORDER BY hb.data_hora_bloqueio_desbloqueio DESC
-    `.catch((err) => { console.error('Erro clientes perdidos detalhado:', err); return [] as any[] })
+    const clientesPerdidosDetalhado = possuiMotivoClienteDesativado
+      ? await prisma.$queryRaw<any[]>`
+          SELECT DISTINCT c.cod_cli AS codigo, c.NOME_FANTASIA AS nome,
+                 c.valor_mensalidade AS valor,
+                 CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) AS data_desativacao,
+                 c.CIDRES_CLI AS cidade, c.telres_cli AS telefone,
+                 COALESCE(m.descricao, 'Não informado') AS motivo
+          FROM historico_bloqueio_cliente hb
+          INNER JOIN cliente c ON c.cod_cli = hb.cod_cli
+          LEFT JOIN motivo_cliente_desativado m ON m.cod_motivo = hb.cod_motivo_desativacao
+          WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
+            AND c.ATIVO = 'N'
+            AND CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) BETWEEN ${dataIni} AND ${dataFim}
+            AND c.cod_cla <> 30
+            AND hb.tipo = 'D'
+          ORDER BY hb.data_hora_bloqueio_desbloqueio DESC
+        `.catch((err) => { console.error('Erro clientes perdidos detalhado:', err); return [] as any[] })
+      : await prisma.$queryRaw<any[]>`
+          SELECT DISTINCT c.cod_cli AS codigo, c.NOME_FANTASIA AS nome,
+                 c.valor_mensalidade AS valor,
+                 CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) AS data_desativacao,
+                 c.CIDRES_CLI AS cidade, c.telres_cli AS telefone,
+                 'Não informado' AS motivo
+          FROM historico_bloqueio_cliente hb
+          INNER JOIN cliente c ON c.cod_cli = hb.cod_cli
+          WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
+            AND c.ATIVO = 'N'
+            AND CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) BETWEEN ${dataIni} AND ${dataFim}
+            AND c.cod_cla <> 30
+            AND hb.tipo = 'D'
+          ORDER BY hb.data_hora_bloqueio_desbloqueio DESC
+        `.catch((err) => { console.error('Erro clientes perdidos detalhado:', err); return [] as any[] })
 
     // Clientes perdidos por motivo (resumido)
-    const perdidosPorMotivo = await prisma.$queryRaw<any[]>`
-      SELECT COALESCE(m.descricao, 'Não informado') AS motivo,
-             COUNT(DISTINCT hb.cod_cli) AS quantidade
-      FROM historico_bloqueio_cliente hb
-      INNER JOIN cliente c ON c.cod_cli = hb.cod_cli
-      LEFT JOIN motivo_cliente_desativado m ON m.cod_motivo = hb.cod_motivo_desativacao
-      WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
-        AND CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) BETWEEN ${dataIni} AND ${dataFim}
-        AND c.cod_cla <> 30
-        AND hb.tipo = 'D'
-      GROUP BY m.descricao
-      ORDER BY quantidade DESC
-    `.catch((err) => { console.error('Erro perdidos por motivo:', err); return [] as any[] })
+    const perdidosPorMotivo = possuiMotivoClienteDesativado
+      ? await prisma.$queryRaw<any[]>`
+          SELECT COALESCE(m.descricao, 'Não informado') AS motivo,
+                 COUNT(DISTINCT hb.cod_cli) AS quantidade
+          FROM historico_bloqueio_cliente hb
+          INNER JOIN cliente c ON c.cod_cli = hb.cod_cli
+          LEFT JOIN motivo_cliente_desativado m ON m.cod_motivo = hb.cod_motivo_desativacao
+          WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
+            AND CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) BETWEEN ${dataIni} AND ${dataFim}
+            AND c.cod_cla <> 30
+            AND hb.tipo = 'D'
+          GROUP BY m.descricao
+          ORDER BY quantidade DESC
+        `.catch((err) => { console.error('Erro perdidos por motivo:', err); return [] as any[] })
+      : await prisma.$queryRaw<any[]>`
+          SELECT 'Não informado' AS motivo,
+                 COUNT(DISTINCT hb.cod_cli) AS quantidade
+          FROM historico_bloqueio_cliente hb
+          INNER JOIN cliente c ON c.cod_cli = hb.cod_cli
+          WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
+            AND CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) BETWEEN ${dataIni} AND ${dataFim}
+            AND c.cod_cla <> 30
+            AND hb.tipo = 'D'
+        `.catch((err) => { console.error('Erro perdidos por motivo:', err); return [] as any[] })
 
     const response = {
       periodo: { ano, mes: mesNum, inicio: dataIni, fim: dataFim, diasRestantes, label: labelMes },
