@@ -12,6 +12,11 @@ const MIN_DURACAO_PROCEDIMENTO = 15
 const MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO = 500
 const TIPOS_AGENDA_PADRAO = ['Instalação', 'Treinamento', 'Visita', 'Retorno', 'Outros'] as const
 
+function isDuplicateSchemaError(error: unknown, snippets: string[]): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return snippets.some((snippet) => message.includes(snippet))
+}
+
 function limparPrefixoTipoAgendamentoProgramado(texto?: string | null): string {
   return String(texto ?? '')
     .replace(/^\s*\[TIPO_AGENDA:([^\]]+)\]\s*/i, '')
@@ -424,6 +429,50 @@ async function enviarNotificacaoAgendamento(data: {
   }
 }
 
+async function initNotasAgenda(): Promise<void> {
+  const [colunaNotaAgenda] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'agenda'
+      AND COLUMN_NAME = 'nota'
+  `)
+
+  if (!Number(colunaNotaAgenda?.total ?? 0)) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE agenda
+        ADD COLUMN nota VARCHAR(255) NULL AFTER descricao
+      `)
+    } catch (error) {
+      if (!isDuplicateSchemaError(error, ["Duplicate column name 'nota'"])) {
+        throw error
+      }
+    }
+  }
+
+  const [colunaNotaProgramado] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'agendamento_programado'
+      AND COLUMN_NAME = 'nota'
+  `)
+
+  if (!Number(colunaNotaProgramado?.total ?? 0)) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE agendamento_programado
+        ADD COLUMN nota VARCHAR(255) NULL AFTER descricao
+      `)
+    } catch (error) {
+      if (!isDuplicateSchemaError(error, ["Duplicate column name 'nota'"])) {
+        throw error
+      }
+    }
+  }
+}
+
 async function registroPossuiAnexos(tabela: 'agenda' | 'agendamento_programado', registroId: number): Promise<boolean> {
   const rows: any[] = await prisma.$queryRaw`
     SELECT COUNT(*) AS c
@@ -515,6 +564,7 @@ export async function agendaRoutes(app: FastifyInstance) {
   const bootstrapResultados = await Promise.allSettled([
     initProcedimentos(),
     initDisponibilidadePorDia(),
+    initNotasAgenda(),
   ])
 
   const falhasBootstrap = bootstrapResultados
@@ -529,7 +579,11 @@ export async function agendaRoutes(app: FastifyInstance) {
     )
 
   for (const falha of falhasBootstrap) {
-    const nome = falha.indice === 0 ? 'procedimentos' : 'disponibilidade_por_dia'
+    const nome = falha.indice === 0
+      ? 'procedimentos'
+      : falha.indice === 1
+        ? 'disponibilidade_por_dia'
+        : 'notas_agenda'
     const motivo =
       falha.resultado.reason instanceof Error
         ? falha.resultado.reason.message
@@ -689,8 +743,8 @@ export async function agendaRoutes(app: FastifyInstance) {
       SELECT a.cod_agenda AS id, a.cod_cli AS clienteId, a.cod_colaborador AS tecnicoId,
              NULL AS procedimentoId, NULL AS procedimentoNome, NULL AS duracao,
              a.Tipo AS tipo, a.Status_agendamento AS status,
-             a.data_agendamento AS data, a.hora_ini AS horarioIni, a.data_fin_agendamento AS dataFim, a.hora_fin AS horarioFim,
-             a.descricao AS observacoes,
+              a.data_agendamento AS data, a.hora_ini AS horarioIni, a.data_fin_agendamento AS dataFim, a.hora_fin AS horarioFim,
+             a.descricao AS observacoes, a.nota AS nota,
              a.criado_por AS criadoPorId, a.data_criacao AS dataCriacao,
              COALESCE(cli.NOME_FANTASIA, cli.NOME_CLI) AS clienteNome,
              COALESCE(tec.NOME_USUARIO_COMPLETO, tec.NOME_USU) AS tecnicoNome,
@@ -708,8 +762,8 @@ export async function agendaRoutes(app: FastifyInstance) {
       SELECT p.id AS id, p.cod_cli AS clienteId, p.cod_tecnico AS tecnicoId,
              p.procedimento_id AS procedimentoId, COALESCE(cp.nome, 'Programado') AS procedimentoNome,
              p.duracao_min AS duracao, COALESCE(cp.nome, 'Programado') AS tipo, p.status AS status,
-             p.data_agendamento AS data, p.hora_inicio AS horarioIni, p.data_agendamento AS dataFim, NULL AS horarioFim,
-             p.descricao AS observacoes,
+              p.data_agendamento AS data, p.hora_inicio AS horarioIni, p.data_agendamento AS dataFim, NULL AS horarioFim,
+             p.descricao AS observacoes, p.nota AS nota,
              NULL AS criadoPorId, p.data_criacao AS dataCriacao,
              COALESCE(cliP.NOME_FANTASIA, cliP.NOME_CLI) AS clienteNome,
              COALESCE(tecP.NOME_USUARIO_COMPLETO, tecP.NOME_USU) AS tecnicoNome,
