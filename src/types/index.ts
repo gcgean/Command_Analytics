@@ -236,6 +236,9 @@ export interface AgendaItem {
   horarioFim?: string | null
   observacoes?: string | null
   nota?: string | null
+  notaUsuarioId?: number | null
+  notaUsuarioNome?: string | null
+  notaAtualizadaEm?: string | null
   temAnexos?: boolean
   origem?: string
   // Legacy field for compatibility

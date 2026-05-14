@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Calendar, GraduationCap, Search } from 'lucide-react'
+import { Calendar, GraduationCap, PencilLine, Search, Star } from 'lucide-react'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
 import { DateInput } from '../../components/ui/DateInput'
+import { Input } from '../../components/ui/Input'
+import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import { api } from '../../services/api'
+import { useAuthStore } from '../../store/authStore'
 import type { AgendaItem } from '../../types'
 
 const TIPOS = ['Treinamento', 'Instalação', 'Visita', 'Retorno', 'Outros']
@@ -75,7 +79,19 @@ function normalizeTipo(tipo?: string | null): string {
   return 'Outros'
 }
 
+function formatNotaUsuario(item: AgendaItem) {
+  if (!item.notaUsuarioNome) return ''
+  if (!item.notaAtualizadaEm) return `Lançado por ${item.notaUsuarioNome}`
+
+  const data = new Date(item.notaAtualizadaEm)
+  if (Number.isNaN(data.getTime())) return `Lançado por ${item.notaUsuarioNome}`
+
+  return `Lançado por ${item.notaUsuarioNome} em ${data.toLocaleDateString('pt-BR')}`
+}
+
 export function HistoricoTreinamentos() {
+  const { can } = usePermissions()
+  const user = useAuthStore((state) => state.user)
   const [filters, setFilters] = useState({
     dataInicio: toBRDate(todayStr()),
     dataFim: toBRDate(todayStr()),
@@ -89,6 +105,12 @@ export function HistoricoTreinamentos() {
   const [loading, setLoading] = useState(false)
   const [searched, setSearched] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  const [notaModalItem, setNotaModalItem] = useState<AgendaItem | null>(null)
+  const [notaValor, setNotaValor] = useState('')
+  const [notaErro, setNotaErro] = useState('')
+  const [savingNota, setSavingNota] = useState(false)
+
+  const podeAvaliarTreinamento = can('historico-treinamentos') && !!user
 
   useEffect(() => {
     api.getUsuarios()
@@ -143,6 +165,54 @@ export function HistoricoTreinamentos() {
         setErrorMessage(error?.message || 'Não foi possível carregar o histórico de treinamentos.')
       })
       .finally(() => setLoading(false))
+  }
+
+  function abrirModalNota(item: AgendaItem) {
+    setNotaModalItem(item)
+    setNotaValor(item.nota ? String(item.nota) : '')
+    setNotaErro('')
+  }
+
+  function fecharModalNota() {
+    if (savingNota) return
+    setNotaModalItem(null)
+    setNotaValor('')
+    setNotaErro('')
+  }
+
+  async function salvarNota() {
+    if (!notaModalItem) return
+
+    const valorNormalizado = notaValor.replace(',', '.').trim()
+    const numeroNota = Number(valorNormalizado)
+
+    if (!valorNormalizado) {
+      setNotaErro('Informe uma nota de 0 a 10.')
+      return
+    }
+
+    if (!Number.isFinite(numeroNota) || numeroNota < 0 || numeroNota > 10) {
+      setNotaErro('A nota precisa estar entre 0 e 10.')
+      return
+    }
+
+    setSavingNota(true)
+    setNotaErro('')
+
+    try {
+      if (notaModalItem.origem === 'programado') {
+        await api.updateAgendamentoProgNota(notaModalItem.id, valorNormalizado)
+      } else {
+        await api.updateAgendaNota(notaModalItem.id, valorNormalizado)
+      }
+
+      await buscar()
+      fecharModalNota()
+    } catch (error: any) {
+      setNotaErro(error?.message || 'Não foi possível salvar a nota do treinamento.')
+    } finally {
+      setSavingNota(false)
+    }
   }
 
   return (
@@ -252,7 +322,26 @@ export function HistoricoTreinamentos() {
                         {statusLabel}
                       </span>
                     </td>
-                    <td className="table-cell text-slate-600 dark:text-slate-400">{item.nota || '—'}</td>
+                    <td className="table-cell text-slate-600 dark:text-slate-400">
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-900 dark:text-slate-100">{item.nota || '—'}</span>
+                          {podeAvaliarTreinamento && (
+                            <button
+                              type="button"
+                              onClick={() => abrirModalNota(item)}
+                              className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-2 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-500/30 dark:text-blue-300 dark:hover:bg-blue-500/10"
+                            >
+                              {item.nota ? <PencilLine className="h-3.5 w-3.5" /> : <Star className="h-3.5 w-3.5" />}
+                              {item.nota ? 'Editar' : 'Dar nota'}
+                            </button>
+                          )}
+                        </div>
+                        {item.nota && formatNotaUsuario(item) && (
+                          <span className="text-xs text-slate-500 dark:text-slate-400">{formatNotaUsuario(item)}</span>
+                        )}
+                      </div>
+                    </td>
                     <td className="table-cell text-slate-500">{item.observacoes || '—'}</td>
                   </tr>
                 )
@@ -277,6 +366,46 @@ export function HistoricoTreinamentos() {
           </table>
         </div>
       </Card>
+
+      <Modal
+        isOpen={!!notaModalItem}
+        onClose={fecharModalNota}
+        title={notaModalItem?.nota ? 'Editar nota do treinamento' : 'Dar nota ao treinamento'}
+        size="sm"
+      >
+        <div className="space-y-4">
+          <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-300">
+            <div className="font-medium text-slate-900 dark:text-slate-100">{notaModalItem?.clienteNome || 'Treinamento'}</div>
+            <div>{notaModalItem?.tipo || 'Treinamento'} em {notaModalItem ? formatDate(notaModalItem.data) : '—'}</div>
+            <div>Técnico: {notaModalItem?.tecnicoNome || '—'}</div>
+          </div>
+
+          <Input
+            label="Nota"
+            type="number"
+            min="0"
+            max="10"
+            step="0.1"
+            value={notaValor}
+            onChange={(event) => setNotaValor(event.target.value)}
+            error={notaErro}
+            placeholder="Informe uma nota de 0 a 10"
+          />
+
+          <div className="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={fecharModalNota}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+            >
+              Cancelar
+            </button>
+            <Button onClick={() => void salvarNota()} disabled={savingNota}>
+              {savingNota ? 'Salvando...' : 'Salvar nota'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

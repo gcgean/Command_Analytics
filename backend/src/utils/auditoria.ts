@@ -21,7 +21,7 @@
 
 import { prisma } from '../database/client'
 
-export type AcaoAuditoria = 'CRIACAO' | 'ALTERACAO' | 'EXCLUSAO' | 'STATUS'
+export type AcaoAuditoria = 'CRIACAO' | 'ALTERACAO' | 'EXCLUSAO' | 'STATUS' | 'NOTA'
 
 /** Cria a tabela auditoria se ainda não existir. Chamado na inicialização do servidor. */
 export async function initAuditoria(): Promise<void> {

@@ -275,6 +275,8 @@ export const api = {
     fetchApi<{ ok: boolean }>(`/agenda/${id}/notificar`, { method: 'POST' }),
   updateAgendaStatus: (id: number, status: number) =>
     fetchApi<AgendaItem>(`/agenda/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  updateAgendaNota: (id: number, nota: string) =>
+    fetchApi<AgendaItem>(`/agenda/${id}/nota`, { method: 'PATCH', body: JSON.stringify({ nota }) }),
   updateAgendaItem: (id: number, data: Partial<AgendaItem>) =>
     fetchApi<AgendaItem>(`/agenda/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAgendaItem: (id: number) => fetchApi(`/agenda/${id}`, { method: 'DELETE' }),
@@ -379,6 +381,8 @@ export const api = {
     fetchApi(`/agenda/agendamentos-prog/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   updateAgendamentoProgStatus: (id: number, status: number) =>
     fetchApi(`/agenda/agendamentos-prog/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+  updateAgendamentoProgNota: (id: number, nota: string) =>
+    fetchApi(`/agenda/agendamentos-prog/${id}/nota`, { method: 'PATCH', body: JSON.stringify({ nota }) }),
 
   // ─── Bloqueios ─────────────────────────────────────────────
   getBloqueios: (params?: Record<string, string>) => {

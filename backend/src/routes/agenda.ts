@@ -451,6 +451,48 @@ async function initNotasAgenda(): Promise<void> {
     }
   }
 
+  const [colunaNotaUsuarioAgenda] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'agenda'
+      AND COLUMN_NAME = 'nota_usuario_id'
+  `)
+
+  if (!Number(colunaNotaUsuarioAgenda?.total ?? 0)) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE agenda
+        ADD COLUMN nota_usuario_id INT NULL AFTER nota
+      `)
+    } catch (error) {
+      if (!isDuplicateSchemaError(error, ["Duplicate column name 'nota_usuario_id'"])) {
+        throw error
+      }
+    }
+  }
+
+  const [colunaNotaAtualizadaAgenda] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'agenda'
+      AND COLUMN_NAME = 'nota_atualizada_em'
+  `)
+
+  if (!Number(colunaNotaAtualizadaAgenda?.total ?? 0)) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE agenda
+        ADD COLUMN nota_atualizada_em DATETIME NULL AFTER nota_usuario_id
+      `)
+    } catch (error) {
+      if (!isDuplicateSchemaError(error, ["Duplicate column name 'nota_atualizada_em'"])) {
+        throw error
+      }
+    }
+  }
+
   const [colunaNotaProgramado] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
     SELECT COUNT(*) AS total
     FROM information_schema.COLUMNS
@@ -467,6 +509,48 @@ async function initNotasAgenda(): Promise<void> {
       `)
     } catch (error) {
       if (!isDuplicateSchemaError(error, ["Duplicate column name 'nota'"])) {
+        throw error
+      }
+    }
+  }
+
+  const [colunaNotaUsuarioProgramado] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'agendamento_programado'
+      AND COLUMN_NAME = 'nota_usuario_id'
+  `)
+
+  if (!Number(colunaNotaUsuarioProgramado?.total ?? 0)) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE agendamento_programado
+        ADD COLUMN nota_usuario_id INT NULL AFTER nota
+      `)
+    } catch (error) {
+      if (!isDuplicateSchemaError(error, ["Duplicate column name 'nota_usuario_id'"])) {
+        throw error
+      }
+    }
+  }
+
+  const [colunaNotaAtualizadaProgramado] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'agendamento_programado'
+      AND COLUMN_NAME = 'nota_atualizada_em'
+  `)
+
+  if (!Number(colunaNotaAtualizadaProgramado?.total ?? 0)) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE agendamento_programado
+        ADD COLUMN nota_atualizada_em DATETIME NULL AFTER nota_usuario_id
+      `)
+    } catch (error) {
+      if (!isDuplicateSchemaError(error, ["Duplicate column name 'nota_atualizada_em'"])) {
         throw error
       }
     }
@@ -744,15 +828,17 @@ export async function agendaRoutes(app: FastifyInstance) {
              NULL AS procedimentoId, NULL AS procedimentoNome, NULL AS duracao,
              a.Tipo AS tipo, a.Status_agendamento AS status,
               a.data_agendamento AS data, a.hora_ini AS horarioIni, a.data_fin_agendamento AS dataFim, a.hora_fin AS horarioFim,
-             a.descricao AS observacoes, a.nota AS nota,
+             a.descricao AS observacoes, a.nota AS nota, a.nota_usuario_id AS notaUsuarioId, a.nota_atualizada_em AS notaAtualizadaEm,
              a.criado_por AS criadoPorId, a.data_criacao AS dataCriacao,
              COALESCE(cli.NOME_FANTASIA, cli.NOME_CLI) AS clienteNome,
              COALESCE(tec.NOME_USUARIO_COMPLETO, tec.NOME_USU) AS tecnicoNome,
+             COALESCE(notaUsu.NOME_USUARIO_COMPLETO, notaUsu.NOME_USU) AS notaUsuarioNome,
              COALESCE(cri.NOME_USUARIO_COMPLETO, cri.NOME_USU) AS criadoPorNome,
              'agenda' AS origem
       FROM agenda a
       LEFT JOIN cliente cli ON cli.COD_CLI = a.cod_cli
       LEFT JOIN usuario tec ON tec.COD_USU = a.cod_colaborador
+      LEFT JOIN usuario notaUsu ON notaUsu.COD_USU = a.nota_usuario_id
       LEFT JOIN usuario cri ON cri.COD_USU = a.criado_por
       ${whereA}
       ORDER BY a.data_agendamento ASC, a.hora_ini ASC
@@ -763,15 +849,17 @@ export async function agendaRoutes(app: FastifyInstance) {
              p.procedimento_id AS procedimentoId, COALESCE(cp.nome, 'Programado') AS procedimentoNome,
              p.duracao_min AS duracao, COALESCE(cp.nome, 'Programado') AS tipo, p.status AS status,
               p.data_agendamento AS data, p.hora_inicio AS horarioIni, p.data_agendamento AS dataFim, NULL AS horarioFim,
-             p.descricao AS observacoes, p.nota AS nota,
+             p.descricao AS observacoes, p.nota AS nota, p.nota_usuario_id AS notaUsuarioId, p.nota_atualizada_em AS notaAtualizadaEm,
              NULL AS criadoPorId, p.data_criacao AS dataCriacao,
              COALESCE(cliP.NOME_FANTASIA, cliP.NOME_CLI) AS clienteNome,
              COALESCE(tecP.NOME_USUARIO_COMPLETO, tecP.NOME_USU) AS tecnicoNome,
+             COALESCE(notaUsuP.NOME_USUARIO_COMPLETO, notaUsuP.NOME_USU) AS notaUsuarioNome,
              NULL AS criadoPorNome,
              'programado' AS origem
       FROM agendamento_programado p
       LEFT JOIN cliente cliP ON cliP.COD_CLI = p.cod_cli
       LEFT JOIN usuario tecP ON tecP.COD_USU = p.cod_tecnico
+      LEFT JOIN usuario notaUsuP ON notaUsuP.COD_USU = p.nota_usuario_id
       LEFT JOIN cadastro_procedimentos cp ON cp.id = p.procedimento_id
       ${whereP}
       ORDER BY p.data_agendamento ASC, p.hora_inicio ASC
@@ -797,6 +885,7 @@ export async function agendaRoutes(app: FastifyInstance) {
         tecnicoId: a.tecnicoId ? Number(a.tecnicoId) : null,
         procedimentoId: a.procedimentoId ? Number(a.procedimentoId) : null,
         duracao: a.duracao != null ? Number(a.duracao) : null,
+        notaUsuarioId: a.notaUsuarioId != null ? Number(a.notaUsuarioId) : null,
         criadoPorId: a.criadoPorId ? Number(a.criadoPorId) : null,
         status: a.status != null ? Number(a.status) : null,
       }
@@ -1399,6 +1488,50 @@ export async function agendaRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
+  app.patch('/agendamentos-prog/:id/nota', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { nota } = request.body as { nota?: string | number | null }
+    const payload = request.user as { id: number }
+
+    const notaTexto = String(nota ?? '').replace(',', '.').trim()
+    const notaNumero = Number(notaTexto)
+    if (!notaTexto || !Number.isFinite(notaNumero) || notaNumero < 0 || notaNumero > 10) {
+      return reply.status(400).send({ error: 'Informe uma nota válida entre 0 e 10.' })
+    }
+
+    const [before]: any[] = await prisma.$queryRaw`
+      SELECT nota, nota_usuario_id AS notaUsuarioId, nota_atualizada_em AS notaAtualizadaEm
+      FROM agendamento_programado
+      WHERE id = ${Number(id)}
+    `
+
+    await prisma.$executeRaw`
+      UPDATE agendamento_programado
+      SET nota = ${notaTexto},
+          nota_usuario_id = ${payload.id},
+          nota_atualizada_em = NOW()
+      WHERE id = ${Number(id)}
+    `
+
+    registrarAuditoria({
+      tabela: 'agendamento_programado',
+      registroId: Number(id),
+      acao: 'NOTA',
+      usuarioId: payload.id,
+      dadosAntes: {
+        nota: before?.nota ?? null,
+        notaUsuarioId: before?.notaUsuarioId != null ? Number(before.notaUsuarioId) : null,
+        notaAtualizadaEm: before?.notaAtualizadaEm ?? null,
+      },
+      dadosDepois: {
+        nota: notaTexto,
+        notaUsuarioId: payload.id,
+      },
+    })
+
+    return { ok: true }
+  })
+
   // PUT /agenda/agendamentos-prog/:id (full update)
   app.put('/agendamentos-prog/:id', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
     const { id } = request.params as { id: string }
@@ -1661,6 +1794,50 @@ export async function agendaRoutes(app: FastifyInstance) {
     }
     await notificarAgendaPorId(agendaId)
     return reply.send({ ok: true })
+  })
+
+  app.patch('/:id/nota', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { nota } = request.body as { nota?: string | number | null }
+    const payload = request.user as { id: number }
+
+    const notaTexto = String(nota ?? '').replace(',', '.').trim()
+    const notaNumero = Number(notaTexto)
+    if (!notaTexto || !Number.isFinite(notaNumero) || notaNumero < 0 || notaNumero > 10) {
+      return reply.status(400).send({ error: 'Informe uma nota válida entre 0 e 10.' })
+    }
+
+    const [before]: any[] = await prisma.$queryRaw`
+      SELECT nota, nota_usuario_id AS notaUsuarioId, nota_atualizada_em AS notaAtualizadaEm
+      FROM agenda
+      WHERE cod_agenda = ${Number(id)}
+    `
+
+    await prisma.$executeRaw`
+      UPDATE agenda
+      SET nota = ${notaTexto},
+          nota_usuario_id = ${payload.id},
+          nota_atualizada_em = NOW()
+      WHERE cod_agenda = ${Number(id)}
+    `
+
+    registrarAuditoria({
+      tabela: 'agenda',
+      registroId: Number(id),
+      acao: 'NOTA',
+      usuarioId: payload.id,
+      dadosAntes: {
+        nota: before?.nota ?? null,
+        notaUsuarioId: before?.notaUsuarioId != null ? Number(before.notaUsuarioId) : null,
+        notaAtualizadaEm: before?.notaAtualizadaEm ?? null,
+      },
+      dadosDepois: {
+        nota: notaTexto,
+        notaUsuarioId: payload.id,
+      },
+    })
+
+    return { ok: true }
   })
 
   // PUT /agenda/:id
