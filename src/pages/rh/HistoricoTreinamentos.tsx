@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { Calendar, GraduationCap, PencilLine, Search, Star } from 'lucide-react'
+import { Calendar, Eye, GraduationCap, PencilLine, Search, Star } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
@@ -111,6 +112,7 @@ function parseNotaValida(nota?: string | null) {
 export function HistoricoTreinamentos() {
   const { can } = usePermissions()
   const user = useAuthStore((state) => state.user)
+  const navigate = useNavigate()
   const [abaAtiva, setAbaAtiva] = useState<AbaHistorico>('lista')
   const [filters, setFilters] = useState({
     dataInicio: toBRDate(todayStr()),
@@ -407,7 +409,21 @@ export function HistoricoTreinamentos() {
                   return (
                     <tr key={`${item.origem ?? 'agenda'}-${item.id}`} className="table-row">
                       <td className="table-cell font-mono text-blue-400 font-semibold">#{item.id}</td>
-                      <td className="table-cell font-medium text-slate-900 dark:text-slate-100">{item.clienteNome || '—'}</td>
+                      <td className="table-cell">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-slate-900 dark:text-slate-100">{item.clienteNome || '—'}</span>
+                          {item.clienteId ? (
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/clientes/${item.clienteId}`)}
+                              title="Ver cliente"
+                              className="rounded-lg p-1 text-slate-500 transition-colors hover:bg-emerald-500/10 hover:text-emerald-400"
+                            >
+                              <Eye className="h-3.5 w-3.5" />
+                            </button>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className="table-cell text-slate-600 dark:text-slate-400">{item.tecnicoNome || '—'}</td>
                       <td className="table-cell text-slate-600 dark:text-slate-400">{formatDate(item.data)}</td>
                       <td className="table-cell text-slate-600 dark:text-slate-400">{item.tipo || 'Treinamento'}</td>
