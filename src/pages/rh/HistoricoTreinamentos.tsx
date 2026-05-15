@@ -167,6 +167,7 @@ export function HistoricoTreinamentos() {
     .sort((a, b) => {
       if (b.mediaNota !== a.mediaNota) return b.mediaNota - a.mediaNota
       if (b.quantidadeTreinamentos !== a.quantidadeTreinamentos) return b.quantidadeTreinamentos - a.quantidadeTreinamentos
+      if (b.quantidadeAvaliacoes !== a.quantidadeAvaliacoes) return b.quantidadeAvaliacoes - a.quantidadeAvaliacoes
       return a.tecnicoNome.localeCompare(b.tecnicoNome)
     })
 
