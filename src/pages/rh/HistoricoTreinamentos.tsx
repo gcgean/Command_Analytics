@@ -89,9 +89,29 @@ function formatNotaUsuario(item: AgendaItem) {
   return `Lançado por ${item.notaUsuarioNome} em ${data.toLocaleDateString('pt-BR')}`
 }
 
+type AbaHistorico = 'lista' | 'ranking'
+
+type RankingTreinamentoItem = {
+  tecnicoId: number | null
+  tecnicoNome: string
+  mediaNota: number
+  quantidadeTreinamentos: number
+  quantidadeAvaliacoes: number
+}
+
+function parseNotaValida(nota?: string | null) {
+  if (nota == null) return null
+  const valor = String(nota).replace(',', '.').trim()
+  if (!valor) return null
+  const numero = Number(valor)
+  if (!Number.isFinite(numero) || numero <= 0) return null
+  return numero
+}
+
 export function HistoricoTreinamentos() {
   const { can } = usePermissions()
   const user = useAuthStore((state) => state.user)
+  const [abaAtiva, setAbaAtiva] = useState<AbaHistorico>('lista')
   const [filters, setFilters] = useState({
     dataInicio: toBRDate(todayStr()),
     dataFim: toBRDate(todayStr()),
@@ -111,6 +131,44 @@ export function HistoricoTreinamentos() {
   const [savingNota, setSavingNota] = useState(false)
 
   const podeAvaliarTreinamento = can('historico-treinamentos') && !!user
+  const rankingMap = results.reduce<Map<string, RankingTreinamentoItem & { somaNotas: number }>>((acc, item) => {
+    const tecnicoId = item.tecnicoId ?? null
+    const tecnicoNome = item.tecnicoNome?.trim() || 'Técnico não informado'
+    const chave = `${tecnicoId ?? 'sem-id'}::${tecnicoNome}`
+    const notaValida = parseNotaValida(item.nota)
+    const existente = acc.get(chave)
+
+    if (existente) {
+      existente.quantidadeTreinamentos += 1
+      if (notaValida !== null) {
+        existente.somaNotas += notaValida
+        existente.quantidadeAvaliacoes += 1
+      }
+      return acc
+    }
+
+    acc.set(chave, {
+      tecnicoId,
+      tecnicoNome,
+      mediaNota: 0,
+      quantidadeTreinamentos: 1,
+      quantidadeAvaliacoes: notaValida !== null ? 1 : 0,
+      somaNotas: notaValida ?? 0,
+    })
+    return acc
+  }, new Map())
+
+  const rankingNotas = Array.from(rankingMap.values())
+    .filter((item) => item.quantidadeAvaliacoes > 0)
+    .map((item) => ({
+      ...item,
+      mediaNota: item.somaNotas / item.quantidadeAvaliacoes,
+    }))
+    .sort((a, b) => {
+      if (b.mediaNota !== a.mediaNota) return b.mediaNota - a.mediaNota
+      if (b.quantidadeTreinamentos !== a.quantidadeTreinamentos) return b.quantidadeTreinamentos - a.quantidadeTreinamentos
+      return a.tecnicoNome.localeCompare(b.tecnicoNome)
+    })
 
   useEffect(() => {
     api.getUsuarios()
@@ -228,6 +286,31 @@ export function HistoricoTreinamentos() {
       </div>
 
       <Card>
+        <div className="mb-5 flex flex-wrap gap-2 border-b border-slate-200 pb-4 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() => setAbaAtiva('lista')}
+            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              abaAtiva === 'lista'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            Listagem
+          </button>
+          <button
+            type="button"
+            onClick={() => setAbaAtiva('ranking')}
+            className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+              abaAtiva === 'ranking'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+            }`}
+          >
+            Ranking de notas
+          </button>
+        </div>
+
         <div className="flex flex-wrap gap-3 items-end mb-4">
           <div className="flex-1 min-w-[130px]">
             <DateInput
@@ -292,79 +375,133 @@ export function HistoricoTreinamentos() {
           <div className="flex items-center gap-2 mb-3 pb-3 border-b border-slate-200 dark:border-slate-800">
             <Calendar className="w-4 h-4 text-slate-500 dark:text-slate-400" />
             <span className="text-sm text-slate-500 dark:text-slate-400">
-              <span className="font-semibold text-slate-800 dark:text-slate-200">{results.length}</span>
-              {' '}treinamento{results.length !== 1 ? 's' : ''} encontrado{results.length !== 1 ? 's' : ''}
+              {abaAtiva === 'lista' ? (
+                <>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{results.length}</span>
+                  {' '}treinamento{results.length !== 1 ? 's' : ''} encontrado{results.length !== 1 ? 's' : ''}
+                </>
+              ) : (
+                <>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{rankingNotas.length}</span>
+                  {' '}técnico{rankingNotas.length !== 1 ? 's' : ''} com nota válida no período
+                </>
+              )}
             </span>
           </div>
         )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-200 dark:border-slate-700">
-                {['ID', 'Cliente', 'Técnico', 'Data', 'Tipo', 'Status', 'Nota', 'Observação'].map((header) => (
-                  <th key={header} className="table-header text-left">{header}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {results.map((item) => {
-                const statusLabel = getStatusLabel(item.status)
-                return (
-                  <tr key={`${item.origem ?? 'agenda'}-${item.id}`} className="table-row">
-                    <td className="table-cell font-mono text-blue-400 font-semibold">#{item.id}</td>
-                    <td className="table-cell font-medium text-slate-900 dark:text-slate-100">{item.clienteNome || '—'}</td>
-                    <td className="table-cell text-slate-600 dark:text-slate-400">{item.tecnicoNome || '—'}</td>
-                    <td className="table-cell text-slate-600 dark:text-slate-400">{formatDate(item.data)}</td>
-                    <td className="table-cell text-slate-600 dark:text-slate-400">{item.tipo || 'Treinamento'}</td>
-                    <td className="table-cell">
-                      <span className={`badge text-xs ${statusColors[statusLabel] ?? 'bg-slate-500/20 text-slate-500'}`}>
-                        {statusLabel}
-                      </span>
-                    </td>
-                    <td className="table-cell text-slate-600 dark:text-slate-400">
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-slate-900 dark:text-slate-100">{item.nota || '—'}</span>
-                          {podeAvaliarTreinamento && (
-                            <button
-                              type="button"
-                              onClick={() => abrirModalNota(item)}
-                              className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-2 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-500/30 dark:text-blue-300 dark:hover:bg-blue-500/10"
-                            >
-                              {item.nota ? <PencilLine className="h-3.5 w-3.5" /> : <Star className="h-3.5 w-3.5" />}
-                              {item.nota ? 'Editar' : 'Dar nota'}
-                            </button>
+        {abaAtiva === 'lista' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  {['ID', 'Cliente', 'Técnico', 'Data', 'Tipo', 'Status', 'Nota', 'Observação'].map((header) => (
+                    <th key={header} className="table-header text-left">{header}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((item) => {
+                  const statusLabel = getStatusLabel(item.status)
+                  return (
+                    <tr key={`${item.origem ?? 'agenda'}-${item.id}`} className="table-row">
+                      <td className="table-cell font-mono text-blue-400 font-semibold">#{item.id}</td>
+                      <td className="table-cell font-medium text-slate-900 dark:text-slate-100">{item.clienteNome || '—'}</td>
+                      <td className="table-cell text-slate-600 dark:text-slate-400">{item.tecnicoNome || '—'}</td>
+                      <td className="table-cell text-slate-600 dark:text-slate-400">{formatDate(item.data)}</td>
+                      <td className="table-cell text-slate-600 dark:text-slate-400">{item.tipo || 'Treinamento'}</td>
+                      <td className="table-cell">
+                        <span className={`badge text-xs ${statusColors[statusLabel] ?? 'bg-slate-500/20 text-slate-500'}`}>
+                          {statusLabel}
+                        </span>
+                      </td>
+                      <td className="table-cell text-slate-600 dark:text-slate-400">
+                        <div className="flex flex-col gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium text-slate-900 dark:text-slate-100">{item.nota || '—'}</span>
+                            {podeAvaliarTreinamento && (
+                              <button
+                                type="button"
+                                onClick={() => abrirModalNota(item)}
+                                className="inline-flex items-center gap-1 rounded-md border border-blue-200 px-2 py-1 text-xs font-medium text-blue-600 transition-colors hover:bg-blue-50 dark:border-blue-500/30 dark:text-blue-300 dark:hover:bg-blue-500/10"
+                              >
+                                {item.nota ? <PencilLine className="h-3.5 w-3.5" /> : <Star className="h-3.5 w-3.5" />}
+                                {item.nota ? 'Editar' : 'Dar nota'}
+                              </button>
+                            )}
+                          </div>
+                          {item.nota && formatNotaUsuario(item) && (
+                            <span className="text-xs text-slate-500 dark:text-slate-400">{formatNotaUsuario(item)}</span>
                           )}
                         </div>
-                        {item.nota && formatNotaUsuario(item) && (
-                          <span className="text-xs text-slate-500 dark:text-slate-400">{formatNotaUsuario(item)}</span>
-                        )}
-                      </div>
+                      </td>
+                      <td className="table-cell text-slate-500">{item.observacoes || '—'}</td>
+                    </tr>
+                  )
+                })}
+
+                {!loading && results.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="table-cell text-center text-slate-500 py-10">
+                      Nenhum treinamento encontrado para os filtros informados.
                     </td>
-                    <td className="table-cell text-slate-500">{item.observacoes || '—'}</td>
                   </tr>
-                )
-              })}
+                )}
 
-              {!loading && results.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="table-cell text-center text-slate-500 py-10">
-                    Nenhum treinamento encontrado para os filtros informados.
-                  </td>
+                {loading && (
+                  <tr>
+                    <td colSpan={8} className="table-cell text-center text-slate-500 py-10">
+                      Carregando treinamentos...
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 dark:border-slate-700">
+                  {['Posição', 'Técnico', 'Nota média', 'Qtd. treinamentos', 'Qtd. avaliações válidas'].map((header) => (
+                    <th key={header} className="table-header text-left">{header}</th>
+                  ))}
                 </tr>
-              )}
+              </thead>
+              <tbody>
+                {rankingNotas.map((item, index) => (
+                  <tr key={`${item.tecnicoId ?? 'sem-id'}-${item.tecnicoNome}`} className="table-row">
+                    <td className="table-cell font-semibold text-slate-900 dark:text-slate-100">#{index + 1}</td>
+                    <td className="table-cell font-medium text-slate-900 dark:text-slate-100">{item.tecnicoNome}</td>
+                    <td className="table-cell">
+                      <span className="inline-flex rounded-full bg-amber-500/15 px-3 py-1 text-xs font-semibold text-amber-500">
+                        {item.mediaNota.toFixed(2)}
+                      </span>
+                    </td>
+                    <td className="table-cell text-slate-600 dark:text-slate-400">{item.quantidadeTreinamentos}</td>
+                    <td className="table-cell text-slate-600 dark:text-slate-400">{item.quantidadeAvaliacoes}</td>
+                  </tr>
+                ))}
 
-              {loading && (
-                <tr>
-                  <td colSpan={8} className="table-cell text-center text-slate-500 py-10">
-                    Carregando treinamentos...
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+                {!loading && rankingNotas.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="table-cell text-center text-slate-500 py-10">
+                      Nenhuma nota válida encontrada para montar o ranking no período filtrado.
+                    </td>
+                  </tr>
+                )}
+
+                {loading && (
+                  <tr>
+                    <td colSpan={5} className="table-cell text-center text-slate-500 py-10">
+                      Carregando ranking...
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
 
       <Modal
