@@ -245,6 +245,26 @@ export interface AgendaItem {
   horario?: string
 }
 
+export interface ConfiguracaoNotificacaoAgendamento {
+  ativoPlataforma: boolean
+  ativoTelegram: boolean
+  horarioResumoDia: string
+  antecedenciaMin: number
+}
+
+export interface NotificacaoPlataforma {
+  id: number
+  titulo: string
+  mensagem: string
+  tipo: 'agenda_dia' | 'agenda_lembrete'
+  lida: boolean
+  criadoEm: string
+  agendaOrigem?: 'agenda' | 'programado' | null
+  agendaId?: number | null
+  agendamentoData?: string | null
+  agendamentoHora?: string | null
+}
+
 // ============================================================
 // PLANO / ASSINATURA
 // ============================================================

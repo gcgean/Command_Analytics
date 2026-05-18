@@ -4,7 +4,7 @@ import { useToast } from '../../components/ui/Toast'
 import { api } from '../../services/api'
 import clsx from 'clsx'
 
-type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'parametros'
+type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'notificacoes' | 'parametros'
 
 interface TokenWhats {
   id: number
@@ -72,10 +72,19 @@ export function Configuracoes() {
   })
   const [msgTeste, setMsgTeste] = useState('')
   const [enviandoTeste, setEnviandoTeste] = useState(false)
+  const [notificacoesAgendamento, setNotificacoesAgendamento] = useState({
+    ativoPlataforma: true,
+    ativoTelegram: true,
+    horarioResumoDia: '08:00',
+    antecedenciaMin: 30,
+  })
 
   useEffect(() => {
     if (aba === 'telegram') {
       carregarConfigTelegram()
+    }
+    if (aba === 'notificacoes') {
+      carregarConfigNotificacoesAgendamento()
     }
   }, [aba])
 
@@ -125,6 +134,35 @@ export function Configuracoes() {
     }
   }
 
+  const carregarConfigNotificacoesAgendamento = async () => {
+    try {
+      const config = await api.getNotificacoesAgendamentoConfig()
+      setNotificacoesAgendamento({
+        ativoPlataforma: config.ativoPlataforma,
+        ativoTelegram: config.ativoTelegram,
+        horarioResumoDia: config.horarioResumoDia || '08:00',
+        antecedenciaMin: Number(config.antecedenciaMin || 30),
+      })
+    } catch {
+      toast.error('Erro ao carregar as notificações de agendamento.')
+    }
+  }
+
+  const handleSalvarNotificacoesAgendamento = async () => {
+    setLoading(true)
+    try {
+      await api.updateNotificacoesAgendamentoConfig({
+        ...notificacoesAgendamento,
+        antecedenciaMin: Number(notificacoesAgendamento.antecedenciaMin || 30),
+      })
+      toast.success('Notificações de agendamento salvas!')
+    } catch {
+      toast.error('Erro ao salvar as notificações de agendamento.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleSalvar = async () => {
     setLoading(true)
     try {
@@ -159,6 +197,7 @@ export function Configuracoes() {
     { key: 'whatsapp', label: 'WhatsApp' },
     { key: 'email', label: 'E-mail' },
     { key: 'telegram', label: 'Telegram' },
+    { key: 'notificacoes', label: 'Notificações' },
     { key: 'parametros', label: 'Parâmetros' },
   ]
 
@@ -373,6 +412,82 @@ export function Configuracoes() {
                 {enviandoTeste ? <><Loader2 size={15} className="animate-spin" /> Enviando...</> : <><Send size={15} /> Enviar Mensagem de Teste</>}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Aba Notificações */} 
+      {aba === 'notificacoes' && (
+        <div className="space-y-5 max-w-2xl">
+          <div className="card space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Notificações de Agendamento</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Defina quando a plataforma deve avisar os usuários sobre os compromissos do dia e sobre a antecedência de cada agendamento.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Horário do aviso diário</label>
+                <input
+                  type="time"
+                  className="input-field"
+                  value={notificacoesAgendamento.horarioResumoDia}
+                  onChange={e => setNotificacoesAgendamento(prev => ({ ...prev, horarioResumoDia: e.target.value }))}
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Nesse horário a plataforma lembra o usuário dos agendamentos dele no dia.
+                </p>
+              </div>
+
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Antecedência do lembrete (min)</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={1440}
+                  className="input-field"
+                  value={notificacoesAgendamento.antecedenciaMin}
+                  onChange={e => setNotificacoesAgendamento(prev => ({ ...prev, antecedenciaMin: Number(e.target.value || 30) }))}
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Exemplo: com 30 minutos, um agendamento às 14:00 será avisado às 13:30.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notificacoesAgendamento.ativoPlataforma}
+                  onChange={e => setNotificacoesAgendamento(prev => ({ ...prev, ativoPlataforma: e.target.checked }))}
+                  className="rounded border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600"
+                />
+                <div>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Notificar na plataforma</p>
+                  <p className="text-[11px] text-slate-500">Mostra os avisos no sino do sistema.</p>
+                </div>
+              </label>
+
+              <label className="flex items-center gap-3 p-3 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={notificacoesAgendamento.ativoTelegram}
+                  onChange={e => setNotificacoesAgendamento(prev => ({ ...prev, ativoTelegram: e.target.checked }))}
+                  className="rounded border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600"
+                />
+                <div>
+                  <p className="text-sm font-medium text-slate-800 dark:text-slate-200">Notificar no Telegram</p>
+                  <p className="text-[11px] text-slate-500">Usa o Telegram do técnico ou o destino padrão configurado.</p>
+                </div>
+              </label>
+            </div>
+
+            <button onClick={handleSalvarNotificacoesAgendamento} disabled={loading} className="btn-primary disabled:opacity-60">
+              {loading ? <><Loader2 size={15} className="animate-spin" /> Salvando...</> : <><Save size={15} /> Salvar Configurações</>}
+            </button>
           </div>
         </div>
       )}

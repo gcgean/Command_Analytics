@@ -1,8 +1,10 @@
-import { Bell, Menu, ChevronDown, LogOut, User, KeyRound, Sun, Moon } from 'lucide-react'
-import { useState } from 'react'
+import { Bell, Menu, ChevronDown, LogOut, User, KeyRound, Sun, Moon, Loader2 } from 'lucide-react'
+import { useEffect, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { useThemeStore } from '../../store/themeStore'
+import { api } from '../../services/api'
+import type { NotificacaoPlataforma } from '../../types'
 
 const routeTitles: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -50,6 +52,8 @@ export function Header({ onToggleSidebar }: HeaderProps) {
   const { theme, toggleTheme } = useThemeStore()
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [notifications, setNotifications] = useState<NotificacaoPlataforma[]>([])
+  const [loadingNotifications, setLoadingNotifications] = useState(false)
 
   const title = routeTitles[location.pathname] || 'Command Analytics'
 
@@ -58,11 +62,57 @@ export function Header({ onToggleSidebar }: HeaderProps) {
     navigate('/login')
   }
 
-  const notifications = [
-    { id: 1, text: 'Certificado de Supermercado Bom Preço vence em 28 dias', time: '10 min', urgent: true },
-    { id: 2, text: '2 atendimentos ultrapassaram 2h sem resolução', time: '25 min', urgent: true },
-    { id: 3, text: 'Nova tarefa de desenvolvimento criada', time: '1h', urgent: false },
-  ]
+  const carregarNotificacoes = async () => {
+    if (!user) return
+    setLoadingNotifications(true)
+    try {
+      const items = await api.getNotificacoesPlataforma(20)
+      setNotifications(items)
+    } catch {
+      // Silencioso para não poluir a navegação principal.
+    } finally {
+      setLoadingNotifications(false)
+    }
+  }
+
+  useEffect(() => {
+    if (!user) return
+    carregarNotificacoes()
+
+    const interval = window.setInterval(() => {
+      carregarNotificacoes()
+    }, 60_000)
+
+    return () => window.clearInterval(interval)
+  }, [user?.id])
+
+  useEffect(() => {
+    if (showNotifications) {
+      carregarNotificacoes()
+    }
+  }, [showNotifications])
+
+  const unreadCount = notifications.filter((item) => !item.lida).length
+
+  const formatarTempoRelativo = (valor: string) => {
+    const data = new Date(valor)
+    if (Number.isNaN(data.getTime())) return ''
+
+    const diffMin = Math.max(0, Math.round((Date.now() - data.getTime()) / 60000))
+    if (diffMin < 1) return 'Agora mesmo'
+    if (diffMin < 60) return `${diffMin} min atrás`
+    if (diffMin < 24 * 60) return `${Math.floor(diffMin / 60)}h atrás`
+    return `${Math.floor(diffMin / (24 * 60))}d atrás`
+  }
+
+  const marcarComoLida = async (id: number) => {
+    try {
+      await api.markNotificacaoPlataformaLida(id)
+      setNotifications((prev) => prev.map((item) => (item.id === id ? { ...item, lida: true } : item)))
+    } catch {
+      // Sem toast; falha não pode quebrar o header.
+    }
+  }
 
   return (
     <header className="h-20 pt-3 sm:h-16 sm:pt-0 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-4 sm:px-6 flex-shrink-0 transition-colors duration-300">
@@ -84,7 +134,9 @@ export function Header({ onToggleSidebar }: HeaderProps) {
             className="relative text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
           >
             <Bell className="w-5 h-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900" />
+            {unreadCount > 0 && (
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900" />
+            )}
           </button>
 
           {showNotifications && (
@@ -93,21 +145,40 @@ export function Header({ onToggleSidebar }: HeaderProps) {
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Notificações</h3>
               </div>
               <div className="divide-y divide-slate-200 dark:divide-slate-700">
-                {notifications.map((n) => (
-                  <div key={n.id} className="p-4 hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer">
+                {loadingNotifications && (
+                  <div className="p-4 flex items-center gap-2 text-xs text-slate-500">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Carregando notificações...
+                  </div>
+                )}
+
+                {!loadingNotifications && notifications.length === 0 && (
+                  <div className="p-4 text-xs text-slate-500">
+                    Nenhuma notificação no momento.
+                  </div>
+                )}
+
+                {!loadingNotifications && notifications.map((n) => (
+                  <button
+                    key={n.id}
+                    type="button"
+                    onClick={() => marcarComoLida(n.id)}
+                    className="w-full text-left p-4 hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer"
+                  >
                     <div className="flex items-start gap-3">
-                      <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${n.urgent ? 'bg-red-400' : 'bg-blue-400'}`} />
+                      <div className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${n.lida ? 'bg-slate-300 dark:bg-slate-600' : 'bg-blue-400'}`} />
                       <div>
-                        <p className="text-xs text-slate-600 dark:text-slate-300">{n.text}</p>
-                        <p className="text-xs text-slate-500 mt-1">{n.time} atrás</p>
+                        <p className="text-xs font-medium text-slate-700 dark:text-slate-200">{n.titulo}</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{n.mensagem}</p>
+                        <p className="text-xs text-slate-500 mt-1">{formatarTempoRelativo(n.criadoEm)}</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
               <div className="p-3 border-t border-slate-200 dark:border-slate-700">
                 <button className="w-full text-xs text-blue-500 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 text-center">
-                  Ver todas as notificações
+                  {unreadCount > 0 ? `${unreadCount} notificação(ões) não lida(s)` : 'Tudo em dia'}
                 </button>
               </div>
             </div>

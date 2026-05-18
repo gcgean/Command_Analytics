@@ -34,11 +34,13 @@ import { etapasRoutes } from './routes/etapas'
 import { checklistsRoutes } from './routes/checklists'
 import { procedimentosRoutes } from './routes/procedimentos'
 import { anexosRoutes } from './routes/anexos'
+import { notificacoesRoutes } from './routes/notificacoes'
 import { initAuditoria } from './utils/auditoria'
 import { initEtapas } from './utils/etapas'
 import { initChecklists } from './utils/checklists'
 import { initProcedimentos } from './utils/procedimentos'
 import { initAnexos } from './utils/anexos'
+import { initNotificacoesAgendamento, startNotificacoesAgendamentoScheduler } from './utils/notificacoesAgendamento'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
@@ -149,6 +151,7 @@ app.register(async (api) => {
   api.register(checklistsRoutes,   { prefix: '/checklists' })
   api.register(procedimentosRoutes,{ prefix: '/procedimentos' })
   api.register(anexosRoutes,       { prefix: '/anexos' })
+  api.register(notificacoesRoutes, { prefix: '/notificacoes' })
 }, { prefix: '/api' })
 
 // ─── Start ─────────────────────────────────────────────────────
@@ -176,4 +179,8 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initAnexos()
     .then(() => console.log('✓ Tabela de anexos verificada'))
     .catch(e => console.warn('⚠ Anexos init:', e.message))
+  initNotificacoesAgendamento()
+    .then(() => console.log('✓ Tabelas de notificações de agendamento verificadas'))
+    .catch(e => console.warn('⚠ Notificações init:', e.message))
+  startNotificacoesAgendamentoScheduler()
 })

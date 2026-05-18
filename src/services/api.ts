@@ -3,7 +3,7 @@ import type {
   Negocio, Lead, AnaliseFinanceira, Comissao, Tarefa, Video, Meta,
   AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, EtapaCadastro,
   ChecklistCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, Usuario,
-  StatusAtendimento, ProcedimentoCadastro, ClienteAnexo
+  StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma
 } from '../types'
 
 // ============================================================
@@ -538,6 +538,16 @@ export const api = {
     fetchApi('/telegram/config', { method: 'PUT', body: JSON.stringify(data) }),
   sendTelegramMessage: (data: { userId: string; mensagem: string }) =>
     fetchApi('/telegram/enviar', { method: 'POST', body: JSON.stringify(data) }),
+
+  // ─── Notificações de Agendamento ───────────────────────────
+  getNotificacoesAgendamentoConfig: () =>
+    fetchApi<ConfiguracaoNotificacaoAgendamento>('/notificacoes/config-agendamento'),
+  updateNotificacoesAgendamentoConfig: (data: ConfiguracaoNotificacaoAgendamento) =>
+    fetchApi<ConfiguracaoNotificacaoAgendamento>('/notificacoes/config-agendamento', { method: 'PUT', body: JSON.stringify(data) }),
+  getNotificacoesPlataforma: (limit = 20) =>
+    fetchApi<NotificacaoPlataforma[]>(`/notificacoes/plataforma?limit=${limit}`),
+  markNotificacaoPlataformaLida: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/notificacoes/plataforma/${id}/lida`, { method: 'PATCH' }),
 
   // ─── Cadastro de Etapas ───────────────────────────────────
   getEtapas: (params?: { tela?: string; ativo?: '0' | '1' }) => {
