@@ -132,7 +132,7 @@ export function HistoricoTreinamentos() {
   const [notaErro, setNotaErro] = useState('')
   const [savingNota, setSavingNota] = useState(false)
 
-  const podeAvaliarTreinamento = can('historico-treinamentos') && !!user
+  const podeAvaliarTreinamento = can('historico-treinamentos-nota') && !!user
   const rankingMap = results.reduce<Map<string, RankingTreinamentoItem & { somaNotas: number }>>((acc, item) => {
     const tecnicoId = item.tecnicoId ?? null
     const tecnicoNome = item.tecnicoNome?.trim() || 'Técnico não informado'

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { Prisma } from '@prisma/client'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
+import { getUserPermissions } from './grupos'
 import { registrarAuditoria } from '../utils/auditoria'
 import { TelegramService } from '../services/telegram'
 import { initProcedimentos } from '../utils/procedimentos'
@@ -61,6 +62,11 @@ function normalizarTipoAgendaFiltro(valor?: string | null): string {
   if (normalizado.includes('RETORN')) return 'Retorno'
   if (normalizado.includes('VISIT')) return 'Visita'
   return 'Outros'
+}
+
+async function usuarioPodeDarNota(usuarioId: number): Promise<boolean> {
+  const permissoes = await getUserPermissions(usuarioId)
+  return permissoes.includes('*') || permissoes.includes('historico-treinamentos-nota')
 }
 
 function montarDescricaoAgendamentoProgramado(descricao?: string | null, tipoAgenda?: string | null): string | null {
@@ -1493,6 +1499,10 @@ export async function agendaRoutes(app: FastifyInstance) {
     const { nota } = request.body as { nota?: string | number | null }
     const payload = request.user as { id: number }
 
+    if (!(await usuarioPodeDarNota(payload.id))) {
+      return reply.status(403).send({ error: 'Você não tem permissão para lançar nota de treinamento.' })
+    }
+
     const notaTexto = String(nota ?? '').replace(',', '.').trim()
     const notaNumero = Number(notaTexto)
     if (!notaTexto || !Number.isFinite(notaNumero) || notaNumero < 0 || notaNumero > 10) {
@@ -1800,6 +1810,10 @@ export async function agendaRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string }
     const { nota } = request.body as { nota?: string | number | null }
     const payload = request.user as { id: number }
+
+    if (!(await usuarioPodeDarNota(payload.id))) {
+      return reply.status(403).send({ error: 'Você não tem permissão para lançar nota de treinamento.' })
+    }
 
     const notaTexto = String(nota ?? '').replace(',', '.').trim()
     const notaNumero = Number(notaTexto)

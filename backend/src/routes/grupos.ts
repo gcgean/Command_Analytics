@@ -35,6 +35,7 @@ export const SYSTEM_RESOURCES = [
   // RH
   { id: 'banco-horas',              label: 'Banco de Horas',                  grupo: 'RH' },
   { id: 'historico-treinamentos',   label: 'Histórico de Treinamentos',       grupo: 'RH' },
+  { id: 'historico-treinamentos-nota', label: 'Histórico de Treinamentos — Dar nota', grupo: 'RH' },
   // SISTEMA
   { id: 'servidores',               label: 'Servidores em Nuvem',             grupo: 'INFRAESTRUTURA' },
   { id: 'configuracoes',            label: 'Configurações',                   grupo: 'INFRAESTRUTURA' },
