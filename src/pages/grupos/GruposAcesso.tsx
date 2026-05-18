@@ -35,6 +35,7 @@ interface Recurso {
 
 const EXTRA_RECURSOS: Recurso[] = [
   { id: 'historico-treinamentos', label: 'Histórico de Treinamentos', grupo: 'RH' },
+  { id: 'historico-treinamentos-nota', label: 'Histórico de Treinamentos — Inserir/Alterar nota', grupo: 'RH' },
 ]
 
 interface Tecnico { id: number; nome: string; nomeUsu?: string }
