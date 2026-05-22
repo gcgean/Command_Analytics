@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type FormEvent, type ReactNode } from 'react'
 import { useThemeStore } from '../../store/themeStore'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
@@ -8,10 +8,12 @@ import {
 import {
   TrendingUp, TrendingDown, Users, Target, ChevronLeft,
   ChevronRight, Zap, Award, AlertTriangle, CheckCircle2,
-  Building2, Loader2, RefreshCw,
+  Building2, Loader2, RefreshCw, Save, Plus, Settings2, Layers3, Pencil,
 } from 'lucide-react'
 import { api } from '../../services/api'
+import { useToast } from '../../components/ui/Toast'
 import clsx from 'clsx'
+import type { Departamento, MetaCadastroItem, TipoMetaCadastro, Usuario } from '../../types'
 
 // ── tipos ──────────────────────────────────────────────────────────
 interface Resumo {
@@ -45,6 +47,18 @@ interface DadosComercial {
   clientesPerdidosDetalhado: ClientePerdidoDetalhado[]
   perdidosPorMotivo: MotivoPerda[]
 }
+
+const SETORES_META: Departamento[] = [
+  'Suporte',
+  'Fiscal',
+  'Financeiro',
+  'Comercial',
+  'Certificado',
+  'CS',
+  'Instalação',
+  'Treinamento',
+  'Técnico',
+]
 
 // ── helpers ────────────────────────────────────────────────────────
 const brl = (v: number) =>
@@ -94,7 +108,7 @@ function ChartTooltip({ active, payload, label }: any) {
 }
 
 // ── componente principal ───────────────────────────────────────────
-export function Metas() {
+function BoletimComercialTab() {
   const now = new Date()
   const theme = useThemeStore(s => s.theme)
   const isDark = theme === 'dark'
@@ -692,6 +706,590 @@ export function Metas() {
         </div>
       )}
 
+    </div>
+  )
+}
+
+type AbaMetas = 'cadastro' | 'tipos' | 'boletim'
+
+type TipoMetaForm = {
+  id: number | null
+  nome: string
+  descricao: string
+  ordem: string
+  ativo: boolean
+}
+
+type MetaCadastroForm = {
+  id: number | null
+  nome: string
+  descricao: string
+  tipoMetaId: string
+  setorResponsavel: Departamento
+  valorMeta: string
+  competencia: string
+  ativo: boolean
+  usuariosVisualizacao: number[]
+}
+
+const emptyTipoMetaForm = (): TipoMetaForm => ({
+  id: null,
+  nome: '',
+  descricao: '',
+  ordem: '0',
+  ativo: true,
+})
+
+const emptyMetaCadastroForm = (): MetaCadastroForm => ({
+  id: null,
+  nome: '',
+  descricao: '',
+  tipoMetaId: '',
+  setorResponsavel: 'Comercial',
+  valorMeta: '',
+  competencia: '',
+  ativo: true,
+  usuariosVisualizacao: [],
+})
+
+function AbaButton({
+  active,
+  icon,
+  label,
+  onClick,
+}: {
+  active: boolean
+  icon: ReactNode
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx(
+        'inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors',
+        active
+          ? 'bg-blue-600 text-white shadow-sm'
+          : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700/60'
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}
+
+export function Metas() {
+  const { toast } = useToast()
+  const [aba, setAba] = useState<AbaMetas>('cadastro')
+  const [loadingCadastros, setLoadingCadastros] = useState(true)
+  const [salvandoTipo, setSalvandoTipo] = useState(false)
+  const [salvandoMeta, setSalvandoMeta] = useState(false)
+  const [tiposMeta, setTiposMeta] = useState<TipoMetaCadastro[]>([])
+  const [metasCadastro, setMetasCadastro] = useState<MetaCadastroItem[]>([])
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [tipoForm, setTipoForm] = useState<TipoMetaForm>(emptyTipoMetaForm())
+  const [metaForm, setMetaForm] = useState<MetaCadastroForm>(emptyMetaCadastroForm())
+
+  const carregarCadastros = async () => {
+    try {
+      setLoadingCadastros(true)
+      const [tipos, metas, usuariosTodos] = await Promise.all([
+        api.getTiposMeta(),
+        api.getMetasCadastro(),
+        api.getUsuariosTodos(),
+      ])
+      setTiposMeta(tipos)
+      setMetasCadastro(metas)
+      setUsuarios(usuariosTodos.filter((usuario) => usuario.ativo))
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao carregar cadastro de metas.')
+    } finally {
+      setLoadingCadastros(false)
+    }
+  }
+
+  useEffect(() => {
+    carregarCadastros()
+  }, [])
+
+  const editarTipo = (tipo: TipoMetaCadastro) => {
+    setTipoForm({
+      id: tipo.id,
+      nome: tipo.nome,
+      descricao: tipo.descricao,
+      ordem: String(tipo.ordem ?? 0),
+      ativo: tipo.ativo,
+    })
+    setAba('tipos')
+  }
+
+  const editarMeta = (meta: MetaCadastroItem) => {
+    setMetaForm({
+      id: meta.id,
+      nome: meta.nome,
+      descricao: meta.descricao,
+      tipoMetaId: meta.tipoMetaId ? String(meta.tipoMetaId) : '',
+      setorResponsavel: meta.setorResponsavel,
+      valorMeta: String(meta.valorMeta ?? ''),
+      competencia: meta.competencia || '',
+      ativo: meta.ativo,
+      usuariosVisualizacao: meta.usuariosVisualizacao.map((item) => item.usuarioId),
+    })
+    setAba('cadastro')
+  }
+
+  const salvarTipo = async (event: FormEvent) => {
+    event.preventDefault()
+    try {
+      setSalvandoTipo(true)
+      const payload = {
+        nome: tipoForm.nome.trim(),
+        descricao: tipoForm.descricao.trim(),
+        ordem: Number(tipoForm.ordem || 0),
+        ativo: tipoForm.ativo,
+      }
+      if (tipoForm.id) {
+        await api.updateTipoMeta(tipoForm.id, payload)
+        toast.success('Tipo de meta atualizado.')
+      } else {
+        await api.createTipoMeta(payload)
+        toast.success('Tipo de meta criado.')
+      }
+      setTipoForm(emptyTipoMetaForm())
+      await carregarCadastros()
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao salvar tipo de meta.')
+    } finally {
+      setSalvandoTipo(false)
+    }
+  }
+
+  const salvarMeta = async (event: FormEvent) => {
+    event.preventDefault()
+    try {
+      setSalvandoMeta(true)
+      const payload = {
+        nome: metaForm.nome.trim(),
+        descricao: metaForm.descricao.trim(),
+        tipoMetaId: metaForm.tipoMetaId ? Number(metaForm.tipoMetaId) : null,
+        setorResponsavel: metaForm.setorResponsavel,
+        valorMeta: Number(metaForm.valorMeta || 0),
+        competencia: metaForm.competencia.trim(),
+        ativo: metaForm.ativo,
+        usuariosVisualizacao: metaForm.usuariosVisualizacao,
+      }
+      if (metaForm.id) {
+        await api.updateMetaCadastro(metaForm.id, payload)
+        toast.success('Meta atualizada.')
+      } else {
+        await api.createMetaCadastro(payload)
+        toast.success('Meta criada.')
+      }
+      setMetaForm(emptyMetaCadastroForm())
+      await carregarCadastros()
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao salvar meta.')
+    } finally {
+      setSalvandoMeta(false)
+    }
+  }
+
+  const toggleUsuarioVisualizacao = (usuarioId: number) => {
+    setMetaForm((current) => ({
+      ...current,
+      usuariosVisualizacao: current.usuariosVisualizacao.includes(usuarioId)
+        ? current.usuariosVisualizacao.filter((id) => id !== usuarioId)
+        : [...current.usuariosVisualizacao, usuarioId],
+    }))
+  }
+
+  return (
+    <div className="space-y-5 pb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Target className="w-5 h-5 text-blue-500" />
+            Metas
+          </h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            Cadastre metas por setor, organize tipos de meta e controle a visualização por usuário.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <AbaButton active={aba === 'cadastro'} icon={<Target className="w-4 h-4" />} label="Cadastro de Metas" onClick={() => setAba('cadastro')} />
+          <AbaButton active={aba === 'tipos'} icon={<Layers3 className="w-4 h-4" />} label="Tipos de Meta" onClick={() => setAba('tipos')} />
+          <AbaButton active={aba === 'boletim'} icon={<Settings2 className="w-4 h-4" />} label="Boletim Comercial" onClick={() => setAba('boletim')} />
+        </div>
+      </div>
+
+      {aba === 'boletim' ? (
+        <BoletimComercialTab />
+      ) : (
+        <>
+          {loadingCadastros ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                <p className="text-sm text-slate-400">Carregando cadastro de metas...</p>
+              </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 xl:grid-cols-[440px_minmax(0,1fr)] gap-5">
+              {aba === 'cadastro' ? (
+                <>
+                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                          {metaForm.id ? 'Editar meta' : 'Nova meta'}
+                        </h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          Defina valor, setor responsável, tipo e quem pode visualizar.
+                        </p>
+                      </div>
+                      {metaForm.id && (
+                        <button
+                          type="button"
+                          onClick={() => setMetaForm(emptyMetaCadastroForm())}
+                          className="text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          Limpar edição
+                        </button>
+                      )}
+                    </div>
+
+                    <form onSubmit={salvarMeta} className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Nome da meta</label>
+                        <input
+                          value={metaForm.nome}
+                          onChange={(e) => setMetaForm((current) => ({ ...current, nome: e.target.value }))}
+                          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+                          placeholder="Ex.: Meta de treinamentos do comercial"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Descrição</label>
+                        <textarea
+                          value={metaForm.descricao}
+                          onChange={(e) => setMetaForm((current) => ({ ...current, descricao: e.target.value }))}
+                          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm min-h-[88px]"
+                          placeholder="Detalhe o objetivo da meta"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Tipo de meta</label>
+                          <select
+                            value={metaForm.tipoMetaId}
+                            onChange={(e) => setMetaForm((current) => ({ ...current, tipoMetaId: e.target.value }))}
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+                          >
+                            <option value="">Sem tipo</option>
+                            {tiposMeta.map((tipo) => (
+                              <option key={tipo.id} value={tipo.id}>{tipo.nome}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Setor responsável</label>
+                          <select
+                            value={metaForm.setorResponsavel}
+                            onChange={(e) => setMetaForm((current) => ({ ...current, setorResponsavel: e.target.value as Departamento }))}
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+                          >
+                            {SETORES_META.map((setor) => (
+                              <option key={setor} value={setor}>{setor}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Valor da meta</label>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={metaForm.valorMeta}
+                            onChange={(e) => setMetaForm((current) => ({ ...current, valorMeta: e.target.value }))}
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+                            placeholder="0,00"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Competência</label>
+                          <input
+                            value={metaForm.competencia}
+                            onChange={(e) => setMetaForm((current) => ({ ...current, competencia: e.target.value }))}
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+                            placeholder="Ex.: 2026-05 ou Maio/2026"
+                          />
+                        </div>
+                      </div>
+
+                      <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={metaForm.ativo}
+                          onChange={(e) => setMetaForm((current) => ({ ...current, ativo: e.target.checked }))}
+                          className="rounded border-slate-300"
+                        />
+                        Meta ativa
+                      </label>
+
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200">Usuários que podem visualizar</label>
+                          <span className="text-xs text-slate-500">{metaForm.usuariosVisualizacao.length} selecionado(s)</span>
+                        </div>
+                        <div className="max-h-64 overflow-y-auto rounded-2xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
+                          {usuarios.map((usuario) => (
+                            <label key={usuario.id} className="flex items-center gap-3 px-3 py-2 text-sm text-slate-700 dark:text-slate-200">
+                              <input
+                                type="checkbox"
+                                checked={metaForm.usuariosVisualizacao.includes(usuario.id)}
+                                onChange={() => toggleUsuarioVisualizacao(usuario.id)}
+                                className="rounded border-slate-300"
+                              />
+                              <span className="flex-1">{usuario.nome}</span>
+                              <span className="text-xs text-slate-400">{usuario.departamento}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={salvandoMeta}
+                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-4 py-2 text-sm font-medium text-white"
+                      >
+                        {salvandoMeta ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        {metaForm.id ? 'Salvar alterações' : 'Criar meta'}
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Metas cadastradas</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">{metasCadastro.length} meta(s) cadastrada(s)</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setMetaForm(emptyMetaCadastroForm())}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-200"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Nova
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {metasCadastro.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 p-6 text-center text-sm text-slate-500">
+                          Nenhuma meta cadastrada ainda.
+                        </div>
+                      ) : metasCadastro.map((meta) => (
+                        <div key={meta.id} className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{meta.nome}</h3>
+                                <span className={clsx(
+                                  'rounded-full px-2.5 py-0.5 text-xs font-medium',
+                                  meta.ativo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                                )}>
+                                  {meta.ativo ? 'Ativa' : 'Inativa'}
+                                </span>
+                                {meta.tipoMetaNome && (
+                                  <span className="rounded-full bg-blue-100 text-blue-700 px-2.5 py-0.5 text-xs font-medium">
+                                    {meta.tipoMetaNome}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm text-slate-500 dark:text-slate-400">{meta.descricao || 'Sem descrição informada.'}</p>
+                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                                <div>
+                                  <span className="text-slate-400">Setor:</span>{' '}
+                                  <span className="text-slate-700 dark:text-slate-200 font-medium">{meta.setorResponsavel}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Valor:</span>{' '}
+                                  <span className="text-slate-700 dark:text-slate-200 font-medium">{brl(meta.valorMeta)}</span>
+                                </div>
+                                <div>
+                                  <span className="text-slate-400">Competência:</span>{' '}
+                                  <span className="text-slate-700 dark:text-slate-200 font-medium">{meta.competencia || 'Não definida'}</span>
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-xs uppercase tracking-wide text-slate-400 mb-1">Visualização</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {meta.usuariosVisualizacao.length > 0 ? meta.usuariosVisualizacao.map((usuario) => (
+                                    <span key={`${meta.id}-${usuario.usuarioId}`} className="rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 px-2.5 py-1 text-xs">
+                                      {usuario.usuarioNome}
+                                    </span>
+                                  )) : (
+                                    <span className="text-sm text-slate-500">Nenhum usuário vinculado.</span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => editarMeta(meta)}
+                              className="inline-flex items-center gap-2 rounded-xl border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-2 text-sm"
+                            >
+                              <Pencil className="w-4 h-4" />
+                              Editar
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                          {tipoForm.id ? 'Editar tipo de meta' : 'Novo tipo de meta'}
+                        </h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                          Organize metas por categorias para reutilizar entre setores.
+                        </p>
+                      </div>
+                      {tipoForm.id && (
+                        <button
+                          type="button"
+                          onClick={() => setTipoForm(emptyTipoMetaForm())}
+                          className="text-sm text-blue-600 hover:text-blue-700"
+                        >
+                          Limpar edição
+                        </button>
+                      )}
+                    </div>
+
+                    <form onSubmit={salvarTipo} className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Nome</label>
+                        <input
+                          value={tipoForm.nome}
+                          onChange={(e) => setTipoForm((current) => ({ ...current, nome: e.target.value }))}
+                          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+                          placeholder="Ex.: Receita, Qualidade, Treinamento"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Descrição</label>
+                        <textarea
+                          value={tipoForm.descricao}
+                          onChange={(e) => setTipoForm((current) => ({ ...current, descricao: e.target.value }))}
+                          className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm min-h-[96px]"
+                          placeholder="Explique para que esse tipo será usado"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Ordem</label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={tipoForm.ordem}
+                            onChange={(e) => setTipoForm((current) => ({ ...current, ordem: e.target.value }))}
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+                          />
+                        </div>
+                        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200 pt-8">
+                          <input
+                            type="checkbox"
+                            checked={tipoForm.ativo}
+                            onChange={(e) => setTipoForm((current) => ({ ...current, ativo: e.target.checked }))}
+                            className="rounded border-slate-300"
+                          />
+                          Tipo ativo
+                        </label>
+                      </div>
+
+                      <button
+                        type="submit"
+                        disabled={salvandoTipo}
+                        className="inline-flex items-center gap-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 px-4 py-2 text-sm font-medium text-white"
+                      >
+                        {salvandoTipo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                        {tipoForm.id ? 'Salvar alterações' : 'Criar tipo'}
+                      </button>
+                    </form>
+                  </div>
+
+                  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Tipos de meta</h2>
+                        <p className="text-sm text-slate-500 dark:text-slate-400">{tiposMeta.length} tipo(s) cadastrado(s)</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setTipoForm(emptyTipoMetaForm())}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm text-slate-700 dark:text-slate-200"
+                      >
+                        <Plus className="w-4 h-4" />
+                        Novo
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {tiposMeta.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 p-6 text-center text-sm text-slate-500">
+                          Nenhum tipo de meta cadastrado ainda.
+                        </div>
+                      ) : tiposMeta.map((tipo) => (
+                        <div key={tipo.id} className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tipo.nome}</h3>
+                              <span className={clsx(
+                                'rounded-full px-2.5 py-0.5 text-xs font-medium',
+                                tipo.ativo ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'
+                              )}>
+                                {tipo.ativo ? 'Ativo' : 'Inativo'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-slate-500 dark:text-slate-400">{tipo.descricao || 'Sem descrição informada.'}</p>
+                            <p className="text-xs text-slate-400">Ordem: {tipo.ordem}</p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => editarTipo(tipo)}
+                            className="inline-flex items-center gap-2 rounded-xl border border-blue-200 text-blue-700 hover:bg-blue-50 px-3 py-2 text-sm"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            Editar
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }

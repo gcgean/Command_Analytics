@@ -56,6 +56,9 @@ import { Videos } from './pages/videos/Videos'
 // Metas
 import { Metas } from './pages/metas/Metas'
 
+// Certificados Digitais
+import { CertificadosDigitais } from './pages/certificados/CertificadosDigitais'
+
 // Monitor
 import { MonitorAtendimentos } from './pages/monitor/MonitorAtendimentos'
 
@@ -215,6 +218,7 @@ export default function App() {
         <Route path="desenvolvimento" element={<PermissionRoute recurso="desenvolvimento"><Tarefas /></PermissionRoute>} />
         <Route path="videos" element={<PermissionRoute recurso="videos"><Videos /></PermissionRoute>} />
         <Route path="metas" element={<PermissionRoute recurso={['boletim-comercial', 'metas']}><Metas /></PermissionRoute>} />
+        <Route path="certificados-digitais" element={<PermissionRoute recurso="certificados-digitais"><CertificadosDigitais /></PermissionRoute>} />
         <Route path="monitor" element={<PermissionRoute recurso="monitor"><MonitorAtendimentos /></PermissionRoute>} />
         <Route path="campanhas" element={<PermissionRoute recurso="campanhas"><Campanhas /></PermissionRoute>} />
         <Route path="contadores" element={<PermissionRoute recurso="contadores"><Contadores /></PermissionRoute>} />

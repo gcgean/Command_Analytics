@@ -23,6 +23,7 @@ import { metasRoutes } from './routes/metas'
 import { monitorRoutes } from './routes/monitor'
 import { campanhasRoutes } from './routes/campanhas'
 import { contadoresRoutes } from './routes/contadores'
+import { certificadosRoutes } from './routes/certificados'
 import { versoesRoutes } from './routes/versoes'
 import { servidoresRoutes } from './routes/servidores'
 import { dashboardRoutes } from './routes/dashboard'
@@ -40,6 +41,7 @@ import { initEtapas } from './utils/etapas'
 import { initChecklists } from './utils/checklists'
 import { initProcedimentos } from './utils/procedimentos'
 import { initAnexos } from './utils/anexos'
+import { initMetasCadastro } from './utils/metasCadastro'
 import { initNotificacoesAgendamento, startNotificacoesAgendamentoScheduler } from './utils/notificacoesAgendamento'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
@@ -101,6 +103,7 @@ app.register(swagger, {
       { name: 'Monitor', description: 'Monitor de atendimentos em tempo real' },
       { name: 'Campanhas', description: 'Campanhas de marketing' },
       { name: 'Contadores', description: 'Contadores parceiros' },
+      { name: 'Certificados', description: 'Controle de certificados digitais' },
       { name: 'Versões', description: 'Versões e licenças' },
       { name: 'Servidores', description: 'Infraestrutura em nuvem' },
       { name: 'Dashboard', description: 'KPIs do dashboard' },
@@ -141,6 +144,7 @@ app.register(async (api) => {
   api.register(monitorRoutes,      { prefix: '/monitor' })
   api.register(campanhasRoutes,    { prefix: '/campanhas' })
   api.register(contadoresRoutes,   { prefix: '/contadores' })
+  api.register(certificadosRoutes, { prefix: '/certificados' })
   api.register(versoesRoutes,      { prefix: '/versoes' })
   api.register(servidoresRoutes,   { prefix: '/servidores' })
   api.register(dashboardRoutes,    { prefix: '/dashboard' })
@@ -179,6 +183,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initAnexos()
     .then(() => console.log('✓ Tabela de anexos verificada'))
     .catch(e => console.warn('⚠ Anexos init:', e.message))
+  initMetasCadastro()
+    .then(() => console.log('✓ Tabelas de cadastro de metas verificadas'))
+    .catch(e => console.warn('⚠ Metas cadastro init:', e.message))
   initNotificacoesAgendamento()
     .then(() => console.log('✓ Tabelas de notificações de agendamento verificadas'))
     .catch(e => console.warn('⚠ Notificações init:', e.message))

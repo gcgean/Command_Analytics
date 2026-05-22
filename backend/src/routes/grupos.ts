@@ -32,6 +32,8 @@ export const SYSTEM_RESOURCES = [
   { id: 'videos',                   label: 'Vídeos',                          grupo: 'MARKETING' },
   // METAS
   { id: 'boletim-comercial',        label: 'Boletim Comercial',               grupo: 'METAS' },
+  // CERTIFICADOS DIGITAIS
+  { id: 'certificados-digitais',    label: 'Controle de Certificados Digitais', grupo: 'CERTIFICADOS DIGITAIS' },
   // RH
   { id: 'banco-horas',              label: 'Banco de Horas',                  grupo: 'RH' },
   { id: 'historico-treinamentos',   label: 'Histórico de Treinamentos',       grupo: 'RH' },

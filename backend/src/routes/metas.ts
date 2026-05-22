@@ -8,6 +8,8 @@ const META_ARACATI  = 6333
 
 function n(v: any) { return v == null ? 0 : Number(v) }
 
+const SETORES_META = ['Suporte', 'Fiscal', 'Financeiro', 'Comercial', 'Certificado', 'CS', 'Instalação', 'Treinamento', 'Técnico'] as const
+
 async function tabelaExiste(nomeTabela: string): Promise<boolean> {
   const [row] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
     SELECT COUNT(*) AS total
@@ -20,6 +22,222 @@ async function tabelaExiste(nomeTabela: string): Promise<boolean> {
 }
 
 export async function metasRoutes(app: FastifyInstance) {
+
+  app.get('/tipos', { preHandler: authMiddleware }, async () => {
+    const rows = await prisma.$queryRaw<any[]>`
+      SELECT id, nome, descricao, ativo, ordem, criado_em AS criadoEm, atualizado_em AS atualizadoEm
+      FROM tipo_meta
+      ORDER BY ordem ASC, nome ASC
+    `
+
+    return rows.map((row) => ({
+      id: n(row.id),
+      nome: row.nome,
+      descricao: row.descricao || '',
+      ativo: Number(row.ativo ?? 0) === 1,
+      ordem: n(row.ordem),
+      criadoEm: row.criadoEm,
+      atualizadoEm: row.atualizadoEm,
+    }))
+  })
+
+  app.post('/tipos', { preHandler: authMiddleware }, async (request, reply) => {
+    const body = request.body as { nome?: string; descricao?: string; ativo?: boolean; ordem?: number }
+    const nome = String(body.nome || '').trim()
+
+    if (!nome) {
+      return reply.status(400).send({ error: 'Informe o nome do tipo de meta.' })
+    }
+
+    await prisma.$executeRaw`
+      INSERT INTO tipo_meta (nome, descricao, ativo, ordem, criado_em, atualizado_em)
+      VALUES (${nome}, ${String(body.descricao || '').trim() || null}, ${body.ativo === false ? 0 : 1}, ${n(body.ordem)}, NOW(), NOW())
+    `
+
+    const [row] = await prisma.$queryRaw<any[]>`
+      SELECT id, nome, descricao, ativo, ordem, criado_em AS criadoEm, atualizado_em AS atualizadoEm
+      FROM tipo_meta
+      WHERE nome = ${nome}
+      ORDER BY id DESC
+      LIMIT 1
+    `
+
+    return {
+      id: n(row?.id),
+      nome: row?.nome || nome,
+      descricao: row?.descricao || '',
+      ativo: Number(row?.ativo ?? 0) === 1,
+      ordem: n(row?.ordem),
+      criadoEm: row?.criadoEm ?? null,
+      atualizadoEm: row?.atualizadoEm ?? null,
+    }
+  })
+
+  app.put('/tipos/:id', { preHandler: authMiddleware }, async (request, reply) => {
+    const id = n((request.params as any)?.id)
+    const body = request.body as { nome?: string; descricao?: string; ativo?: boolean; ordem?: number }
+    const nome = String(body.nome || '').trim()
+
+    if (!id) return reply.status(400).send({ error: 'Tipo de meta inválido.' })
+    if (!nome) return reply.status(400).send({ error: 'Informe o nome do tipo de meta.' })
+
+    await prisma.$executeRaw`
+      UPDATE tipo_meta
+         SET nome = ${nome},
+             descricao = ${String(body.descricao || '').trim() || null},
+             ativo = ${body.ativo === false ? 0 : 1},
+             ordem = ${n(body.ordem)},
+             atualizado_em = NOW()
+       WHERE id = ${id}
+    `
+
+    return { ok: true }
+  })
+
+  app.get('/cadastro', { preHandler: authMiddleware }, async () => {
+    const metas = await prisma.$queryRaw<any[]>`
+      SELECT m.id, m.nome, m.descricao, m.tipo_meta_id AS tipoMetaId, tm.nome AS tipoMetaNome,
+             m.setor_responsavel AS setorResponsavel, m.valor_meta AS valorMeta,
+             m.competencia, m.ativo, m.criado_em AS criadoEm, m.atualizado_em AS atualizadoEm
+        FROM meta_cadastro m
+        LEFT JOIN tipo_meta tm ON tm.id = m.tipo_meta_id
+       ORDER BY m.ativo DESC, m.setor_responsavel ASC, m.nome ASC
+    `
+
+    const vinculos = await prisma.$queryRaw<any[]>`
+      SELECT mu.meta_id AS metaId, mu.usuario_id AS usuarioId,
+             COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS usuarioNome
+        FROM meta_cadastro_usuario mu
+        INNER JOIN usuario u ON u.COD_USU = mu.usuario_id
+    `
+
+    const vinculosPorMeta = new Map<number, Array<{ usuarioId: number; usuarioNome: string }>>()
+    for (const vinculo of vinculos) {
+      const metaId = n(vinculo.metaId)
+      if (!vinculosPorMeta.has(metaId)) vinculosPorMeta.set(metaId, [])
+      vinculosPorMeta.get(metaId)!.push({
+        usuarioId: n(vinculo.usuarioId),
+        usuarioNome: vinculo.usuarioNome || 'Usuário',
+      })
+    }
+
+    return metas.map((row) => ({
+      id: n(row.id),
+      nome: row.nome,
+      descricao: row.descricao || '',
+      tipoMetaId: row.tipoMetaId ? n(row.tipoMetaId) : null,
+      tipoMetaNome: row.tipoMetaNome || null,
+      setorResponsavel: row.setorResponsavel,
+      valorMeta: n(row.valorMeta),
+      competencia: row.competencia || '',
+      ativo: Number(row.ativo ?? 0) === 1,
+      usuariosVisualizacao: vinculosPorMeta.get(n(row.id)) || [],
+      criadoEm: row.criadoEm,
+      atualizadoEm: row.atualizadoEm,
+    }))
+  })
+
+  app.post('/cadastro', { preHandler: authMiddleware }, async (request, reply) => {
+    const body = request.body as {
+      nome?: string
+      descricao?: string
+      tipoMetaId?: number | null
+      setorResponsavel?: string
+      valorMeta?: number
+      competencia?: string
+      ativo?: boolean
+      usuariosVisualizacao?: number[]
+    }
+
+    const nome = String(body.nome || '').trim()
+    const setorResponsavel = String(body.setorResponsavel || '').trim()
+
+    if (!nome) return reply.status(400).send({ error: 'Informe o nome da meta.' })
+    if (!setorResponsavel) return reply.status(400).send({ error: 'Informe o setor responsável.' })
+    if (!SETORES_META.includes(setorResponsavel as any)) return reply.status(400).send({ error: 'Setor responsável inválido.' })
+
+    await prisma.$executeRaw`
+      INSERT INTO meta_cadastro (
+        nome, descricao, tipo_meta_id, setor_responsavel, valor_meta, competencia, ativo, criado_em, atualizado_em
+      ) VALUES (
+        ${nome},
+        ${String(body.descricao || '').trim() || null},
+        ${body.tipoMetaId ? n(body.tipoMetaId) : null},
+        ${setorResponsavel},
+        ${Number(body.valorMeta || 0)},
+        ${String(body.competencia || '').trim() || null},
+        ${body.ativo === false ? 0 : 1},
+        NOW(),
+        NOW()
+      )
+    `
+
+    const [metaCriada] = await prisma.$queryRaw<any[]>`
+      SELECT id FROM meta_cadastro
+      WHERE nome = ${nome}
+      ORDER BY id DESC
+      LIMIT 1
+    `
+
+    const metaId = n(metaCriada?.id)
+    const usuarios = Array.from(new Set((body.usuariosVisualizacao || []).map((id) => n(id)).filter(Boolean)))
+
+    for (const usuarioId of usuarios) {
+      await prisma.$executeRaw`
+        INSERT IGNORE INTO meta_cadastro_usuario (meta_id, usuario_id, criado_em)
+        VALUES (${metaId}, ${usuarioId}, NOW())
+      `
+    }
+
+    return { ok: true, id: metaId }
+  })
+
+  app.put('/cadastro/:id', { preHandler: authMiddleware }, async (request, reply) => {
+    const id = n((request.params as any)?.id)
+    const body = request.body as {
+      nome?: string
+      descricao?: string
+      tipoMetaId?: number | null
+      setorResponsavel?: string
+      valorMeta?: number
+      competencia?: string
+      ativo?: boolean
+      usuariosVisualizacao?: number[]
+    }
+
+    const nome = String(body.nome || '').trim()
+    const setorResponsavel = String(body.setorResponsavel || '').trim()
+
+    if (!id) return reply.status(400).send({ error: 'Meta inválida.' })
+    if (!nome) return reply.status(400).send({ error: 'Informe o nome da meta.' })
+    if (!setorResponsavel) return reply.status(400).send({ error: 'Informe o setor responsável.' })
+    if (!SETORES_META.includes(setorResponsavel as any)) return reply.status(400).send({ error: 'Setor responsável inválido.' })
+
+    await prisma.$executeRaw`
+      UPDATE meta_cadastro
+         SET nome = ${nome},
+             descricao = ${String(body.descricao || '').trim() || null},
+             tipo_meta_id = ${body.tipoMetaId ? n(body.tipoMetaId) : null},
+             setor_responsavel = ${setorResponsavel},
+             valor_meta = ${Number(body.valorMeta || 0)},
+             competencia = ${String(body.competencia || '').trim() || null},
+             ativo = ${body.ativo === false ? 0 : 1},
+             atualizado_em = NOW()
+       WHERE id = ${id}
+    `
+
+    await prisma.$executeRaw`DELETE FROM meta_cadastro_usuario WHERE meta_id = ${id}`
+
+    const usuarios = Array.from(new Set((body.usuariosVisualizacao || []).map((usuarioId) => n(usuarioId)).filter(Boolean)))
+    for (const usuarioId of usuarios) {
+      await prisma.$executeRaw`
+        INSERT IGNORE INTO meta_cadastro_usuario (meta_id, usuario_id, criado_em)
+        VALUES (${id}, ${usuarioId}, NOW())
+      `
+    }
+
+    return { ok: true }
+  })
 
   // ── GET /metas/comercial ─────────────────────────────────────────
   app.get('/comercial', { preHandler: authMiddleware }, async (request) => {

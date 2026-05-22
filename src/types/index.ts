@@ -544,6 +544,62 @@ export interface Meta {
   status: 'Em andamento' | 'Concluída' | 'Atrasada'
 }
 
+export interface TipoMetaCadastro {
+  id: number
+  nome: string
+  descricao: string
+  ativo: boolean
+  ordem: number
+  criadoEm?: string | null
+  atualizadoEm?: string | null
+}
+
+export interface MetaCadastroVisualizacao {
+  usuarioId: number
+  usuarioNome: string
+}
+
+export interface MetaCadastroItem {
+  id: number
+  nome: string
+  descricao: string
+  tipoMetaId: number | null
+  tipoMetaNome: string | null
+  setorResponsavel: Departamento
+  valorMeta: number
+  competencia: string
+  ativo: boolean
+  usuariosVisualizacao: MetaCadastroVisualizacao[]
+  criadoEm?: string | null
+  atualizadoEm?: string | null
+}
+
+export interface CertificadoDigitalItem {
+  id: number
+  razaoEmpresa: string
+  nomeFantasia: string
+  cidade: string
+  telefone: string
+  celular: string
+  email: string
+  cnpj: string
+  tipo: string
+  validade: string | null
+  ultimaSincronizacao: string | null
+  tipoCliente: string
+  contadorNome: string
+  contadorTelefone: string
+  contadorEmail: string
+  diasParaVencimento: number | null
+  situacao: string
+}
+
+export interface CertificadoDigitalGraficoItem {
+  referencia: string
+  mesLabel: string
+  total: number
+}
+
 export interface AvaliacaoNPS {
   id: number
   clienteId: number

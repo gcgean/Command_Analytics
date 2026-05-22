@@ -7,7 +7,7 @@ import {
   Code2, Tag, Video, Target, Server,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
-  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity
+  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '../../store/authStore'
@@ -96,6 +96,12 @@ const navGroups: { group: string; items: NavItem[] }[] = [
     group: 'METAS',
     items: [
       { label: 'Boletim Comercial', icon: <Target className="w-4 h-4" />, to: '/metas', recurso: 'boletim-comercial' },
+    ]
+  },
+  {
+    group: 'CERTIFICADOS DIGITAIS',
+    items: [
+      { label: 'Controle de Certificados Digitais', icon: <KeyRound className="w-4 h-4" />, to: '/certificados-digitais', recurso: 'certificados-digitais' },
     ]
   },
   {

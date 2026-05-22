@@ -4,7 +4,7 @@ import type {
   AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, EtapaCadastro,
   ChecklistCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
-  StatusProcessamentoNotificacaoAgendamento
+  StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem
 } from '../types'
 
 // ============================================================
@@ -474,6 +474,34 @@ export const api = {
   getNPS: () => fetchApi<AvaliacaoNPS[]>('/metas/nps'),
   getNPSKpi: () => fetchApi('/metas/nps/kpi'),
   getMetasComercial: (mes?: string) => fetchApi(`/metas/comercial${mes ? `?mes=${mes}` : ''}`),
+  getTiposMeta: () => fetchApi<TipoMetaCadastro[]>('/metas/tipos'),
+  createTipoMeta: (data: Partial<TipoMetaCadastro>) =>
+    fetchApi<TipoMetaCadastro>('/metas/tipos', { method: 'POST', body: JSON.stringify(data) }),
+  updateTipoMeta: (id: number, data: Partial<TipoMetaCadastro>) =>
+    fetchApi(`/metas/tipos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  getMetasCadastro: () => fetchApi<MetaCadastroItem[]>('/metas/cadastro'),
+  createMetaCadastro: (data: {
+    nome?: string
+    descricao?: string
+    tipoMetaId?: number | null
+    setorResponsavel?: string
+    valorMeta?: number
+    competencia?: string
+    ativo?: boolean
+    usuariosVisualizacao?: number[]
+  }) =>
+    fetchApi('/metas/cadastro', { method: 'POST', body: JSON.stringify(data) }),
+  updateMetaCadastro: (id: number, data: {
+    nome?: string
+    descricao?: string
+    tipoMetaId?: number | null
+    setorResponsavel?: string
+    valorMeta?: number
+    competencia?: string
+    ativo?: boolean
+    usuariosVisualizacao?: number[]
+  }) =>
+    fetchApi(`/metas/cadastro/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   createNPS: (data: Partial<AvaliacaoNPS>) =>
     fetchApi<AvaliacaoNPS>('/metas/nps', { method: 'POST', body: JSON.stringify(data) }),
 
@@ -494,6 +522,11 @@ export const api = {
     const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
     return fetchApi(`/contadores${qs}`)
   },
+  getCertificadosDigitais: (params?: { dataIni?: string; dataFin?: string }) => {
+    const qs = params ? '?' + new URLSearchParams(Object.entries(params).filter(([, value]) => !!value) as [string, string][]).toString() : ''
+    return fetchApi<CertificadoDigitalItem[]>(`/certificados/listagem${qs}`)
+  },
+  getCertificadosDigitaisGrafico: () => fetchApi<CertificadoDigitalGraficoItem[]>('/certificados/proximos-12-meses'),
   getContador: (id: number) => fetchApi(`/contadores/${id}`),
   createContador: (data: Partial<Contador> | Record<string, unknown>) =>
     fetchApi('/contadores', { method: 'POST', body: JSON.stringify(data) }),
