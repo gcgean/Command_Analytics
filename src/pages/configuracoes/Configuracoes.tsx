@@ -3,6 +3,7 @@ import { Save, Loader2, Plus, X, CheckCircle, Wifi, Send } from 'lucide-react'
 import { useToast } from '../../components/ui/Toast'
 import { api } from '../../services/api'
 import clsx from 'clsx'
+import type { StatusProcessamentoNotificacaoAgendamento } from '../../types'
 
 type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'notificacoes' | 'parametros'
 
@@ -78,6 +79,8 @@ export function Configuracoes() {
     horarioResumoDia: '08:00',
     antecedenciaMin: 30,
   })
+  const [statusNotificacoes, setStatusNotificacoes] = useState<StatusProcessamentoNotificacaoAgendamento | null>(null)
+  const [processandoNotificacoesAgora, setProcessandoNotificacoesAgora] = useState(false)
 
   useEffect(() => {
     if (aba === 'telegram') {
@@ -85,6 +88,7 @@ export function Configuracoes() {
     }
     if (aba === 'notificacoes') {
       carregarConfigNotificacoesAgendamento()
+      carregarStatusNotificacoesAgendamento()
     }
   }, [aba])
 
@@ -161,6 +165,35 @@ export function Configuracoes() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const carregarStatusNotificacoesAgendamento = async () => {
+    try {
+      const status = await api.getNotificacoesAgendamentoStatus()
+      setStatusNotificacoes(status)
+    } catch {
+      // sem toast para não poluir a tela
+    }
+  }
+
+  const handleProcessarNotificacoesAgora = async () => {
+    setProcessandoNotificacoesAgora(true)
+    try {
+      const status = await api.processarNotificacoesAgendamentoAgora()
+      setStatusNotificacoes(status)
+      toast.success('Processamento manual concluído. Confira o sino e o Telegram.')
+    } catch (error: any) {
+      toast.error(error?.message || 'Erro ao processar notificações agora.')
+    } finally {
+      setProcessandoNotificacoesAgora(false)
+    }
+  }
+
+  const formatarDataHora = (valor?: string | null) => {
+    if (!valor) return 'Ainda não executado'
+    const data = new Date(valor)
+    if (Number.isNaN(data.getTime())) return valor
+    return data.toLocaleString('pt-BR')
   }
 
   const handleSalvar = async () => {
@@ -488,6 +521,65 @@ export function Configuracoes() {
             <button onClick={handleSalvarNotificacoesAgendamento} disabled={loading} className="btn-primary disabled:opacity-60">
               {loading ? <><Loader2 size={15} className="animate-spin" /> Salvando...</> : <><Save size={15} /> Salvar Configurações</>}
             </button>
+          </div>
+
+          <div className="card space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Teste e monitoramento</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Use este botão para forçar a verificação agora e confirmar se os avisos automáticos estão sendo gerados.
+                </p>
+              </div>
+              <button
+                onClick={handleProcessarNotificacoesAgora}
+                disabled={processandoNotificacoesAgora}
+                className="btn-secondary disabled:opacity-60"
+              >
+                {processandoNotificacoesAgora
+                  ? <><Loader2 size={15} className="animate-spin" /> Processando...</>
+                  : <><Send size={15} /> Processar agora</>}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                <p className="text-xs text-slate-500 mb-1">Última execução</p>
+                <p className="text-slate-800 dark:text-slate-200">{formatarDataHora(statusNotificacoes?.ultimaExecucaoEm)}</p>
+              </div>
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                <p className="text-xs text-slate-500 mb-1">Último sucesso</p>
+                <p className="text-slate-800 dark:text-slate-200">{formatarDataHora(statusNotificacoes?.ultimoSucessoEm)}</p>
+              </div>
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                <p className="text-xs text-slate-500 mb-1">Agendamentos do dia lidos</p>
+                <p className="text-slate-800 dark:text-slate-200">{statusNotificacoes?.ultimoResumo.agendamentosHoje ?? 0}</p>
+              </div>
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                <p className="text-xs text-slate-500 mb-1">Agendamentos na janela</p>
+                <p className="text-slate-800 dark:text-slate-200">{statusNotificacoes?.ultimoResumo.agendamentosJanela ?? 0}</p>
+              </div>
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                <p className="text-xs text-slate-500 mb-1">Notificações na plataforma</p>
+                <p className="text-slate-800 dark:text-slate-200">{statusNotificacoes?.ultimoResumo.plataformaGeradas ?? 0}</p>
+              </div>
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                <p className="text-xs text-slate-500 mb-1">Telegram enviados</p>
+                <p className="text-slate-800 dark:text-slate-200">{statusNotificacoes?.ultimoResumo.telegramEnviados ?? 0}</p>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+              <p className="text-xs text-slate-500 mb-1">Situação da última tentativa</p>
+              {statusNotificacoes?.ultimaMensagemErro ? (
+                <p className="text-sm text-red-500">{statusNotificacoes.ultimaMensagemErro}</p>
+              ) : (
+                <p className="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                  <CheckCircle size={14} />
+                  Sem erro registrado na última execução.
+                </p>
+              )}
+            </div>
           </div>
         </div>
       )}

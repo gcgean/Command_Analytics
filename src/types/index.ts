@@ -265,6 +265,22 @@ export interface NotificacaoPlataforma {
   agendamentoHora?: string | null
 }
 
+export interface StatusProcessamentoNotificacaoAgendamento {
+  executando: boolean
+  ultimaExecucaoEm: string | null
+  ultimoSucessoEm: string | null
+  ultimaFalhaEm: string | null
+  ultimaMensagemErro: string | null
+  ultimoResumo: {
+    agendamentosHoje: number
+    agendamentosJanela: number
+    resumosGerados: number
+    lembretesGerados: number
+    telegramEnviados: number
+    plataformaGeradas: number
+  }
+}
+
 // ============================================================
 // PLANO / ASSINATURA
 // ============================================================

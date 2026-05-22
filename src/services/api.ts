@@ -3,7 +3,8 @@ import type {
   Negocio, Lead, AnaliseFinanceira, Comissao, Tarefa, Video, Meta,
   AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, EtapaCadastro,
   ChecklistCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, Usuario,
-  StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma
+  StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
+  StatusProcessamentoNotificacaoAgendamento
 } from '../types'
 
 // ============================================================
@@ -548,6 +549,10 @@ export const api = {
     fetchApi<NotificacaoPlataforma[]>(`/notificacoes/plataforma?limit=${limit}`),
   markNotificacaoPlataformaLida: (id: number) =>
     fetchApi<{ ok: boolean }>(`/notificacoes/plataforma/${id}/lida`, { method: 'PATCH' }),
+  getNotificacoesAgendamentoStatus: () =>
+    fetchApi<StatusProcessamentoNotificacaoAgendamento>('/notificacoes/status-agendamento'),
+  processarNotificacoesAgendamentoAgora: () =>
+    fetchApi<StatusProcessamentoNotificacaoAgendamento>('/notificacoes/processar-agendamento', { method: 'POST' }),
 
   // ─── Cadastro de Etapas ───────────────────────────────────
   getEtapas: (params?: { tela?: string; ativo?: '0' | '1' }) => {

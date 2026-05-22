@@ -2,8 +2,10 @@ import { FastifyInstance } from 'fastify'
 import { authMiddleware } from '../middleware/auth'
 import {
   getConfigNotificacaoAgendamento,
+  getStatusProcessamentoNotificacoesAgendamento,
   listNotificacoesPlataforma,
   marcarNotificacaoLida,
+  processarNotificacoesAgendamento,
   saveConfigNotificacaoAgendamento,
 } from '../utils/notificacoesAgendamento'
 
@@ -38,6 +40,19 @@ export async function notificacoesRoutes(app: FastifyInstance) {
       return await listNotificacoesPlataforma(usuarioId, limit)
     } catch (error: any) {
       return reply.status(500).send({ error: 'Erro ao listar notificações.', message: error?.message })
+    }
+  })
+
+  app.get('/status-agendamento', { preHandler: [authMiddleware] }, async () => {
+    return getStatusProcessamentoNotificacoesAgendamento()
+  })
+
+  app.post('/processar-agendamento', { preHandler: [authMiddleware] }, async (request, reply) => {
+    try {
+      await processarNotificacoesAgendamento()
+      return getStatusProcessamentoNotificacoesAgendamento()
+    } catch (error: any) {
+      return reply.status(500).send({ error: 'Erro ao processar notificações de agendamento.', message: error?.message })
     }
   })
 

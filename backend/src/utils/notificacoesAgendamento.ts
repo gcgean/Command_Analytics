@@ -21,6 +21,22 @@ export interface NotificacaoPlataformaItem {
   agendamentoHora?: string | null
 }
 
+export interface StatusProcessamentoNotificacaoAgendamento {
+  executando: boolean
+  ultimaExecucaoEm: string | null
+  ultimoSucessoEm: string | null
+  ultimaFalhaEm: string | null
+  ultimaMensagemErro: string | null
+  ultimoResumo: {
+    agendamentosHoje: number
+    agendamentosJanela: number
+    resumosGerados: number
+    lembretesGerados: number
+    telegramEnviados: number
+    plataformaGeradas: number
+  }
+}
+
 type CanalNotificacao = 'plataforma' | 'telegram'
 type TipoNotificacao = 'agenda_dia' | 'agenda_lembrete'
 
@@ -41,6 +57,21 @@ interface AgendamentoBase {
 
 let schedulerHandle: NodeJS.Timeout | null = null
 let schedulerRodando = false
+let statusProcessamento: StatusProcessamentoNotificacaoAgendamento = {
+  executando: false,
+  ultimaExecucaoEm: null,
+  ultimoSucessoEm: null,
+  ultimaFalhaEm: null,
+  ultimaMensagemErro: null,
+  ultimoResumo: {
+    agendamentosHoje: 0,
+    agendamentosJanela: 0,
+    resumosGerados: 0,
+    lembretesGerados: 0,
+    telegramEnviados: 0,
+    plataformaGeradas: 0,
+  },
+}
 
 const CONFIG_DEFAULT: ConfiguracaoNotificacaoAgendamento = {
   ativoPlataforma: true,
@@ -235,7 +266,8 @@ async function gerarResumoDiario(
   tecnicoNome: string | null,
   agendamentos: AgendamentoBase[],
   config: ConfiguracaoNotificacaoAgendamento,
-  dataRef: string
+  dataRef: string,
+  stats: StatusProcessamentoNotificacaoAgendamento['ultimoResumo']
 ): Promise<void> {
   const resumo = construirMensagemResumo(agendamentos, dataRef, tecnicoNome)
 
@@ -257,6 +289,8 @@ async function gerarResumoDiario(
         mensagem: resumo.mensagem,
         agendamentoData: dataRef,
       })
+      stats.plataformaGeradas += 1
+      stats.resumosGerados += 1
     }
   }
 
@@ -288,6 +322,7 @@ async function gerarResumoDiario(
             mensagem: resumo.mensagem,
             agendamentoData: dataRef,
           })
+          stats.telegramEnviados += 1
         }
       }
     }
@@ -296,7 +331,8 @@ async function gerarResumoDiario(
 
 async function gerarLembreteAgendamento(
   agendamento: AgendamentoBase,
-  config: ConfiguracaoNotificacaoAgendamento
+  config: ConfiguracaoNotificacaoAgendamento,
+  stats: StatusProcessamentoNotificacaoAgendamento['ultimoResumo']
 ): Promise<void> {
   const tecnicoId = Number(agendamento.tecnicoId || 0)
   if (!tecnicoId) return
@@ -328,6 +364,8 @@ async function gerarLembreteAgendamento(
         agendamentoData: agendamento.data,
         agendamentoHora: agendamento.horarioIni,
       })
+      stats.plataformaGeradas += 1
+      stats.lembretesGerados += 1
     }
   }
 
@@ -366,6 +404,7 @@ async function gerarLembreteAgendamento(
             agendamentoData: agendamento.data,
             agendamentoHora: agendamento.horarioIni,
           })
+          stats.telegramEnviados += 1
         }
       }
     }
@@ -545,6 +584,18 @@ export async function marcarNotificacaoLida(id: number, usuarioId: number): Prom
 export async function processarNotificacoesAgendamento(agora = new Date()): Promise<void> {
   if (schedulerRodando) return
   schedulerRodando = true
+  statusProcessamento.executando = true
+  statusProcessamento.ultimaExecucaoEm = new Date().toISOString()
+  statusProcessamento.ultimaMensagemErro = null
+
+  const resumoExecucao: StatusProcessamentoNotificacaoAgendamento['ultimoResumo'] = {
+    agendamentosHoje: 0,
+    agendamentosJanela: 0,
+    resumosGerados: 0,
+    lembretesGerados: 0,
+    telegramEnviados: 0,
+    plataformaGeradas: 0,
+  }
 
   try {
     const config = await getConfigNotificacaoAgendamento()
@@ -554,6 +605,7 @@ export async function processarNotificacoesAgendamento(agora = new Date()): Prom
     const amanha = formatarDataISO(new Date(agora.getTime() + 24 * 60 * 60 * 1000))
 
     const agendamentosHoje = await listarAgendamentosEntre(hoje, hoje)
+    resumoExecucao.agendamentosHoje = agendamentosHoje.length
     const [horaResumo, minResumo] = config.horarioResumoDia.split(':').map((parte) => Number(parte))
     const resumoLiberado = agora.getHours() > horaResumo || (agora.getHours() === horaResumo && agora.getMinutes() >= minResumo)
 
@@ -570,11 +622,12 @@ export async function processarNotificacoesAgendamento(agora = new Date()): Prom
       for (const [tecnicoId, itens] of porTecnico.entries()) {
         const tecnicoTelegramId = itens[0]?.tecnicoTelegramId || null
         const tecnicoNome = itens[0]?.tecnicoNome || null
-        await gerarResumoDiario(tecnicoId, tecnicoTelegramId, tecnicoNome, itens, config, hoje)
+        await gerarResumoDiario(tecnicoId, tecnicoTelegramId, tecnicoNome, itens, config, hoje, resumoExecucao)
       }
     }
 
     const agendamentosJanela = await listarAgendamentosEntre(hoje, amanha)
+    resumoExecucao.agendamentosJanela = agendamentosJanela.length
     for (const agendamento of agendamentosJanela) {
       const inicio = parseDateTimeLocal(agendamento.data, agendamento.horarioIni)
       if (!inicio) continue
@@ -582,13 +635,22 @@ export async function processarNotificacoesAgendamento(agora = new Date()): Prom
       const lembreteEm = new Date(inicio.getTime() - config.antecedenciaMin * 60 * 1000)
       if (agora < lembreteEm || agora >= inicio) continue
 
-      await gerarLembreteAgendamento(agendamento, config)
+      await gerarLembreteAgendamento(agendamento, config, resumoExecucao)
     }
+    statusProcessamento.ultimoSucessoEm = new Date().toISOString()
   } catch (error: any) {
+    statusProcessamento.ultimaFalhaEm = new Date().toISOString()
+    statusProcessamento.ultimaMensagemErro = error?.message || String(error)
     console.warn('[notificacoes-agendamento] Falha ao processar notificações:', error?.message || error)
   } finally {
+    statusProcessamento.ultimoResumo = resumoExecucao
+    statusProcessamento.executando = false
     schedulerRodando = false
   }
+}
+
+export function getStatusProcessamentoNotificacoesAgendamento(): StatusProcessamentoNotificacaoAgendamento {
+  return JSON.parse(JSON.stringify(statusProcessamento))
 }
 
 export function startNotificacoesAgendamentoScheduler(): void {
