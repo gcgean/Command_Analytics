@@ -234,7 +234,11 @@ function construirMensagemResumo(agendamentos: AgendamentoBase[], dataRef: strin
   const linhas = agendamentos
     .sort((a, b) => String(a.horarioIni || '').localeCompare(String(b.horarioIni || '')))
     .slice(0, 8)
-    .map((item) => `• ${item.horarioIni || '--:--'} - ${item.clienteNome || 'Cliente não informado'} (${item.tipo || 'Agendamento'})`)
+    .map((item) => {
+      const titulo = `• ${item.horarioIni || '--:--'} - ${item.clienteNome || 'Cliente não informado'} (${item.tipo || 'Agendamento'})`
+      const observacao = String(item.observacoes || '').trim()
+      return observacao ? `${titulo}\n  Obs: ${observacao}` : titulo
+    })
 
   const total = agendamentos.length
   const restante = total > linhas.length ? `\nE mais ${total - linhas.length} agendamento(s).` : ''
