@@ -256,70 +256,90 @@ export function ProntuarioEditor({
             </div>
           </div>
 
-          <div className="sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700 bg-white/95 px-4 py-3 backdrop-blur dark:bg-slate-800/95">
-            <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
-              <Button size="sm" variant="secondary" disabled={!editing} icon={<Bold className="w-4 h-4" />} onClick={() => exec('bold')}>
-                Negrito
-              </Button>
-              <Button size="sm" variant="secondary" disabled={!editing} icon={<Italic className="w-4 h-4" />} onClick={() => exec('italic')}>
-                Itálico
-              </Button>
-              <Button size="sm" variant="secondary" disabled={!editing} icon={<Underline className="w-4 h-4" />} onClick={() => exec('underline')}>
-                Sublinhado
-              </Button>
-              <Button size="sm" variant="secondary" disabled={!editing} icon={<List className="w-4 h-4" />} onClick={() => exec('insertUnorderedList')}>
-                Lista
-              </Button>
-              <Button size="sm" variant="secondary" disabled={!editing} icon={<ListOrdered className="w-4 h-4" />} onClick={() => exec('insertOrderedList')}>
-                Numerada
-              </Button>
-              <Button size="sm" variant="secondary" disabled={!editing} icon={<Heading1 className="w-4 h-4" />} onClick={() => exec('formatBlock', '<h1>')}>
-                Título 1
-              </Button>
-              <Button size="sm" variant="secondary" disabled={!editing} icon={<Heading2 className="w-4 h-4" />} onClick={() => exec('formatBlock', '<h2>')}>
-                Título 2
-              </Button>
+          <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 shadow-sm backdrop-blur dark:border-slate-700 dark:bg-slate-800/95">
+            {editing && (
+              <div className="border-b border-slate-200/80 px-4 py-3 dark:border-slate-700/80 sm:px-5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                    Editando prontuário...
+                  </div>
+                  <div className="flex w-full flex-col items-stretch gap-2 sm:w-auto sm:flex-row sm:justify-end">
+                    <Button className="w-full sm:w-auto" size="sm" variant="secondary" icon={<X className="w-4 h-4" />} onClick={handleCancel}>
+                      Cancelar
+                    </Button>
+                    <Button className="w-full sm:w-auto" size="sm" icon={<Save className="w-4 h-4" />} loading={saving} onClick={() => void handleSave()}>
+                      Salvar prontuário
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
 
-              <label className="flex min-w-max shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <Type className="w-4 h-4" />
-                Fonte
-                <select
-                  disabled={!editing}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs"
-                  defaultValue={fontOptions[0].value}
-                  onChange={(e) => exec('fontName', e.target.value)}
-                >
-                  {fontOptions.map((option) => (
-                    <option key={option.label} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
+            <div className="px-4 py-3 sm:px-5">
+              <div className="flex gap-2 overflow-x-auto pb-1 sm:flex-wrap sm:overflow-visible">
+                <Button size="sm" variant="secondary" disabled={!editing} icon={<Bold className="w-4 h-4" />} onClick={() => exec('bold')}>
+                  Negrito
+                </Button>
+                <Button size="sm" variant="secondary" disabled={!editing} icon={<Italic className="w-4 h-4" />} onClick={() => exec('italic')}>
+                  Itálico
+                </Button>
+                <Button size="sm" variant="secondary" disabled={!editing} icon={<Underline className="w-4 h-4" />} onClick={() => exec('underline')}>
+                  Sublinhado
+                </Button>
+                <Button size="sm" variant="secondary" disabled={!editing} icon={<List className="w-4 h-4" />} onClick={() => exec('insertUnorderedList')}>
+                  Lista
+                </Button>
+                <Button size="sm" variant="secondary" disabled={!editing} icon={<ListOrdered className="w-4 h-4" />} onClick={() => exec('insertOrderedList')}>
+                  Numerada
+                </Button>
+                <Button size="sm" variant="secondary" disabled={!editing} icon={<Heading1 className="w-4 h-4" />} onClick={() => exec('formatBlock', '<h1>')}>
+                  Título 1
+                </Button>
+                <Button size="sm" variant="secondary" disabled={!editing} icon={<Heading2 className="w-4 h-4" />} onClick={() => exec('formatBlock', '<h2>')}>
+                  Título 2
+                </Button>
 
-              <label className="flex min-w-max shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <Heading2 className="w-4 h-4" />
-                Tamanho
-                <select
-                  disabled={!editing}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 px-2 py-1 text-xs"
-                  defaultValue="3"
-                  onChange={(e) => exec('fontSize', e.target.value)}
-                >
-                  {sizeOptions.map((option) => (
-                    <option key={option.label} value={option.value}>{option.label}</option>
-                  ))}
-                </select>
-              </label>
+                <label className="flex min-w-max shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                  <Type className="w-4 h-4" />
+                  Fonte
+                  <select
+                    disabled={!editing}
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+                    defaultValue={fontOptions[0].value}
+                    onChange={(e) => exec('fontName', e.target.value)}
+                  >
+                    {fontOptions.map((option) => (
+                      <option key={option.label} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
 
-              <label className="flex min-w-max shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <Palette className="w-4 h-4" />
-                Cor
-                <input
-                  disabled={!editing}
-                  type="color"
-                  className="h-8 w-10 rounded border border-slate-200 dark:border-slate-700 bg-transparent p-1"
-                  onChange={(e) => exec('foreColor', e.target.value)}
-                />
-              </label>
+                <label className="flex min-w-max shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                  <Heading2 className="w-4 h-4" />
+                  Tamanho
+                  <select
+                    disabled={!editing}
+                    className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-xs dark:border-slate-700 dark:bg-slate-800"
+                    defaultValue="3"
+                    onChange={(e) => exec('fontSize', e.target.value)}
+                  >
+                    {sizeOptions.map((option) => (
+                      <option key={option.label} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="flex min-w-max shrink-0 items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                  <Palette className="w-4 h-4" />
+                  Cor
+                  <input
+                    disabled={!editing}
+                    type="color"
+                    className="h-8 w-10 rounded border border-slate-200 bg-transparent p-1 dark:border-slate-700"
+                    onChange={(e) => exec('foreColor', e.target.value)}
+                  />
+                </label>
+              </div>
             </div>
           </div>
 

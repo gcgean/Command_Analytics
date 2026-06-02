@@ -1,3 +1,4 @@
+import React from 'react'
 import clsx from 'clsx'
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -6,7 +7,10 @@ interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   icon?: React.ReactNode
 }
 
-export function Input({ label, error, icon, className, ...props }: InputProps) {
+export const Input = React.forwardRef<HTMLInputElement, InputProps>(function Input(
+  { label, error, icon, className, ...props },
+  ref,
+) {
   return (
     <div className="w-full">
       {label && (
@@ -22,6 +26,7 @@ export function Input({ label, error, icon, className, ...props }: InputProps) {
         )}
         <input
           {...props}
+          ref={ref}
           className={clsx(
             'bg-white dark:bg-slate-900 border text-slate-900 dark:text-slate-100 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent placeholder-slate-400 dark:placeholder-slate-500 transition-colors duration-200',
             error ? 'border-red-500' : 'border-slate-300 dark:border-slate-700',
@@ -33,7 +38,7 @@ export function Input({ label, error, icon, className, ...props }: InputProps) {
       {error && <p className="mt-1 text-xs text-red-400">{error}</p>}
     </div>
   )
-}
+})
 
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   label?: string

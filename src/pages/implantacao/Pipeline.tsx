@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   GripVertical, LayoutList, Loader2, RefreshCcw, Search,
@@ -54,6 +54,29 @@ function formatTempoDesde(value?: string | null) {
   return `${anos.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} anos`
 }
 
+function normalizarBusca(value?: string | null) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function clienteCorrespondeBusca(cliente: ImplantacaoCliente, search: string) {
+  const termo = normalizarBusca(search)
+  if (!termo) return true
+
+  const campos = [
+    cliente.nomeFantasia,
+    cliente.clienteNome,
+    cliente.cnpj,
+    cliente.cidade,
+    cliente.uf,
+  ]
+
+  return campos.some((campo) => normalizarBusca(campo).includes(termo))
+}
+
 function getNomeDestaque(cliente: ImplantacaoCliente) {
   const fantasia = String(cliente.nomeFantasia || '').trim()
   const razao = String(cliente.clienteNome || '').trim()
@@ -66,6 +89,34 @@ function getNomeSecundario(cliente: ImplantacaoCliente) {
   if (!fantasia) return ''
   if (!razao || fantasia.toLowerCase() === razao.toLowerCase()) return ''
   return razao
+}
+
+function getDiasNaEtapa(cliente: ImplantacaoCliente) {
+  if (typeof cliente.diasNaEtapa === 'number' && Number.isFinite(cliente.diasNaEtapa)) {
+    return Math.max(0, cliente.diasNaEtapa)
+  }
+
+  if (!cliente.dataInicioStatusAtual) return 0
+  const date = new Date(cliente.dataInicioStatusAtual)
+  if (Number.isNaN(date.getTime())) return 0
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000))
+}
+
+function getBadgeUrgencia(cliente: ImplantacaoCliente) {
+  const dias = getDiasNaEtapa(cliente)
+  if (dias > 7) {
+    return {
+      label: `🔴 ${dias} dias`,
+      className: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
+    }
+  }
+  if (dias > 3) {
+    return {
+      label: `⚠ ${dias} dias`,
+      className: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
+    }
+  }
+  return null
 }
 
 function StageBadge({ etapa }: { etapa: ImplantacaoEtapa | undefined }) {
@@ -103,6 +154,7 @@ function colorWithAlpha(color: string, alpha: number) {
 
 export function Pipeline() {
   const navigate = useNavigate()
+  const buscaRef = useRef<HTMLInputElement | null>(null)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [viewMode, setViewMode] = useState<ViewMode>('lista')
@@ -157,7 +209,6 @@ export function Pipeline() {
     setLoading(true)
     try {
       const data = await api.getImplantacaoPainel({
-        search: search.trim() || undefined,
         status: status !== 'all' ? status : undefined,
       })
       setPainel(data)
@@ -171,7 +222,32 @@ export function Pipeline() {
       void carregarPainel()
     }, 250)
     return () => window.clearTimeout(id)
-  }, [search, status])
+  }, [status])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey) return
+      const key = event.key.toLowerCase()
+
+      if (key === 'k') {
+        event.preventDefault()
+        buscaRef.current?.focus()
+      }
+
+      if (key === 'p') {
+        event.preventDefault()
+        navigate('/implantacao')
+      }
+
+      if (key === 'd') {
+        event.preventDefault()
+        navigate('/implantacao/dashboard')
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [navigate])
 
   async function aplicarFiltros() {
     await carregarPainel()
@@ -297,6 +373,18 @@ export function Pipeline() {
   const clientes = painel?.clientes || []
   const etapas = painel?.etapas || []
   const etapasKanban = useMemo(() => etapas.filter((etapa) => etapa.status !== 7), [etapas])
+  const clientesFiltrados = useMemo(
+    () => clientes.filter((cliente) => clienteCorrespondeBusca(cliente, search)),
+    [clientes, search],
+  )
+  const mediaClientesPorEtapa = useMemo(() => {
+    if (!etapasKanban.length) return 0
+    const total = etapasKanban.reduce(
+      (acc, etapa) => acc + ((clientesPorEtapa.get(etapa.status) || []).length),
+      0,
+    )
+    return total / etapasKanban.length
+  }, [clientesPorEtapa, etapasKanban])
   const timelineOrdenada = useMemo(() => {
     if (!historyData?.timeline) return []
     return [...historyData.timeline].sort((a: any, b: any) => {
@@ -326,26 +414,37 @@ export function Pipeline() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Implantação &gt; Pipeline</p>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">Pipeline de Implantação</h1>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
             Visualização em lista ou kanban. Arraste clientes entre etapas para avançar o processo.
           </p>
         </div>
-        <Button
-          variant="secondary"
-          icon={<RefreshCcw className="w-4 h-4" />}
-          onClick={aplicarFiltros}
-          loading={loading || updating}
-          className="w-full sm:w-auto justify-center"
-        >
-          Atualizar
-        </Button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            title="Atalhos: Ctrl+K busca de cliente | Ctrl+P Pipeline | Ctrl+D Dashboard"
+            className="h-8 w-8 rounded-full border border-slate-300 text-sm font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300"
+          >
+            ?
+          </button>
+          <Button
+            variant="secondary"
+            icon={<RefreshCcw className="w-4 h-4" />}
+            onClick={aplicarFiltros}
+            loading={loading || updating}
+            className="w-full sm:w-auto justify-center"
+          >
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       <Card padding="sm">
         <div className="grid grid-cols-1 md:grid-cols-11 gap-2 items-center">
           <div className="md:col-span-4">
             <Input
+              ref={buscaRef}
               icon={<Search className="w-3.5 h-3.5" />}
               placeholder="Buscar por nome, fantasia ou CNPJ"
               value={search}
@@ -382,14 +481,18 @@ export function Pipeline() {
       {viewMode === 'lista' ? (
         <Card padding="none">
           <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Clientes ({clientes.length})</h2>
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Clientes ({clientesFiltrados.length})</h2>
             {loading ? <Loader2 className="w-4 h-4 animate-spin text-slate-500" /> : null}
           </div>
           <div className="md:hidden p-2.5 space-y-2">
-            {clientes.map((cliente) => (
+            {clientesFiltrados.map((cliente) => (
               <div key={cliente.clienteId} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-900">
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{getNomeDestaque(cliente)}</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">{getNomeSecundario(cliente) || 'Sem razão social'} • {cliente.cnpj || 'Sem CNPJ'}</p>
+                {(getNomeSecundario(cliente) || cliente.cnpj) && (
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {getNomeSecundario(cliente) ? `${getNomeSecundario(cliente)}${cliente.cnpj ? ' • ' : ''}` : ''}{cliente.cnpj || ''}
+                  </p>
+                )}
                 <p className="text-[11px] text-slate-600 dark:text-slate-300 mt-1.5">Cidade/UF: {formatCidadeUf(cliente.cidade, cliente.uf)}</p>
                 <p className="text-[11px] text-slate-600 dark:text-slate-300">Responsável: {cliente.responsavelNome || 'Não definido'}</p>
                 <p className="text-[11px] text-slate-600 dark:text-slate-300">Status Pgto: {cliente.statusPrimeiroPgto || '—'}</p>
@@ -404,7 +507,7 @@ export function Pipeline() {
                 </div>
               </div>
             ))}
-            {!loading && clientes.length === 0 ? (
+            {!loading && clientesFiltrados.length === 0 ? (
               <div className="px-4 py-8 text-center text-slate-500 text-sm">Nenhum cliente encontrado.</div>
             ) : null}
           </div>
@@ -413,6 +516,7 @@ export function Pipeline() {
               <thead className="bg-slate-50 dark:bg-slate-900/50">
                 <tr className="text-left text-slate-600 dark:text-slate-400">
                   <th className="px-4 py-3">Cliente</th>
+                  <th className="px-4 py-3">Etapa</th>
                   <th className="px-4 py-3">Status Pgto</th>
                   <th className="px-4 py-3">Data 1º Pgto</th>
                   <th className="px-4 py-3">Cidade/UF</th>
@@ -420,18 +524,30 @@ export function Pipeline() {
                   <th className="px-4 py-3">Tempo Últ Venda</th>
                   <th className="px-4 py-3">Tempo Cadastrado</th>
                   <th className="px-4 py-3">Responsável</th>
-                  <th className="px-4 py-3">Etapa</th>
                   <th className="px-4 py-3 text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
-                {clientes.map((cliente) => (
+                {clientesFiltrados.map((cliente) => (
                   <tr key={cliente.clienteId} className="border-t border-slate-200 dark:border-slate-700">
                     <td className="px-4 py-3">
                       <p className="font-semibold text-slate-800 dark:text-slate-100">{getNomeDestaque(cliente)}</p>
-                      <p className="text-xs text-slate-500">
-                        {getNomeSecundario(cliente) || 'Sem razão social'} • {cliente.cnpj || 'Sem CNPJ'}
-                      </p>
+                      {(getNomeSecundario(cliente) || cliente.cnpj) && (
+                        <p className="text-xs text-slate-500">
+                          {getNomeSecundario(cliente) ? `${getNomeSecundario(cliente)}${cliente.cnpj ? ' • ' : ''}` : ''}{cliente.cnpj || ''}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: etapaMap.get(cliente.statusInstal)?.cor || '#94a3b8' }}
+                        />
+                        <span className="text-sm text-slate-700 dark:text-slate-200">
+                          {etapaMap.get(cliente.statusInstal)?.nome || 'Sem etapa'}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <span className={clsx(
@@ -449,7 +565,6 @@ export function Pipeline() {
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{formatTempoDesde(cliente.dataUltimaVenda)}</td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{formatTempoDesde(cliente.dataCadastro)}</td>
                     <td className="px-4 py-3 text-xs text-slate-700 dark:text-slate-300">{cliente.responsavelNome || 'Não definido'}</td>
-                    <td className="px-4 py-3"><StageBadge etapa={etapaMap.get(cliente.statusInstal)} /></td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button
@@ -472,7 +587,7 @@ export function Pipeline() {
                     </td>
                   </tr>
                 ))}
-                {!loading && clientes.length === 0 ? (
+                {!loading && clientesFiltrados.length === 0 ? (
                   <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={10}>Nenhum cliente encontrado.</td></tr>
                 ) : null}
               </tbody>
@@ -484,85 +599,124 @@ export function Pipeline() {
           <div className="p-4 border-b border-slate-200 dark:border-slate-700">
             <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Kanban da Implantação</h2>
           </div>
+          <div className="px-4 pt-3 text-xs text-slate-500 xl:hidden">
+            Arraste horizontalmente para ver mais etapas →
+          </div>
           <div className="overflow-x-auto p-2 sm:p-4">
             <div className="flex gap-2 min-w-max">
-              {etapasKanban.map((etapa) => (
-                <div
-                  key={etapa.status}
-                  className="w-48 sm:w-56 rounded-lg border border-slate-200 dark:border-slate-700"
-                  style={{ backgroundColor: colorWithAlpha(etapa.cor, 0.1) }}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={() => void onDropToStage(etapa.status)}
-                >
-                  <div className="p-2 sm:p-2.5 border-b border-slate-200 dark:border-slate-700">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 leading-tight whitespace-normal break-words">
-                        {etapa.status}. {etapa.nome}
-                      </p>
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: etapa.cor }} />
+              {etapasKanban.map((etapa) => {
+                const clientesDaEtapa = clientesPorEtapa.get(etapa.status) || []
+                const colunaSobrecarregada = mediaClientesPorEtapa > 0 && clientesDaEtapa.length > mediaClientesPorEtapa * 2
+
+                return (
+                  <div
+                    key={etapa.status}
+                    className="w-48 sm:w-56 rounded-lg border border-slate-200 dark:border-slate-700"
+                    style={{ backgroundColor: colorWithAlpha(etapa.cor, 0.1) }}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={() => void onDropToStage(etapa.status)}
+                  >
+                    <div
+                      className={clsx(
+                        'p-2 sm:p-2.5 border-b border-slate-200 dark:border-slate-700',
+                        colunaSobrecarregada && 'bg-amber-100/90 dark:bg-amber-950/40',
+                      )}
+                      title={colunaSobrecarregada ? 'Atenção: volume acima da média do pipeline' : undefined}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 leading-tight whitespace-normal break-words">
+                          {etapa.status}. {etapa.nome}
+                        </p>
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: etapa.cor }} />
+                      </div>
+                      <p className="text-[11px] sm:text-xs text-slate-500 mt-1">{clientesDaEtapa.length} clientes</p>
                     </div>
-                    <p className="text-[11px] sm:text-xs text-slate-500 mt-1">{(clientesPorEtapa.get(etapa.status) || []).length} clientes</p>
-                  </div>
-                  <div className="p-1.5 sm:p-2 space-y-2 min-h-[180px] sm:min-h-[220px]">
-                    {(clientesPorEtapa.get(etapa.status) || []).map((cliente) => (
-                      <div key={cliente.clienteId} draggable onDragStart={() => onDragStart(cliente)} className={clsx('rounded-lg border bg-white dark:bg-slate-800 p-1.5 sm:p-2 cursor-grab border-slate-200 dark:border-slate-700', draggingClienteId === cliente.clienteId && 'opacity-50')}>
-                        <div className="flex items-start gap-2">
-                          <GripVertical className="w-4 h-4 text-slate-400 mt-0.5" />
-                          <div className="min-w-0">
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 leading-tight whitespace-normal break-words">
-                                {getNomeDestaque(cliente)}
-                              </p>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                icon={<Pencil className="w-3.5 h-3.5" />}
-                                className="h-6 px-2 text-[11px] leading-none"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  void abrirEdicaoCliente(cliente)
-                                }}
-                                title="Editar implantação do cliente"
-                              >
-                                Editar
-                              </Button>
-                            </div>
-                            <p className="text-[11px] sm:text-xs text-slate-500 leading-tight whitespace-normal break-words mt-0.5">
-                              {getNomeSecundario(cliente) || 'Sem razão social'}
-                            </p>
-                            <p className="text-[11px] sm:text-xs text-slate-500 mt-1">{cliente.progressoChecklist}% checklist • {cliente.responsavelNome || 'Sem responsável'}</p>
-                            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                              <button
-                                type="button"
-                                className="text-[11px] text-blue-600 hover:text-blue-700"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  void abrirHistoricoCliente(cliente)
-                                }}
-                              >
-                                Ver histórico
-                              </button>
-                              <button
-                                type="button"
-                                className="text-[11px] text-blue-600 hover:text-blue-700"
-                                onMouseDown={(e) => e.stopPropagation()}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  navigate(`/implantacao/acompanhamento?cliente=${cliente.clienteId}`)
-                                }}
-                              >
-                                Abrir acompanhamento
-                              </button>
+                    <div className="p-1.5 sm:p-2 space-y-2 min-h-[180px] sm:min-h-[220px]">
+                      {clientesDaEtapa.map((cliente) => {
+                        const correspondeBusca = clienteCorrespondeBusca(cliente, search)
+                        const badgeUrgencia = getBadgeUrgencia(cliente)
+
+                        return (
+                          <div
+                            key={cliente.clienteId}
+                            draggable
+                            onDragStart={() => onDragStart(cliente)}
+                            className={clsx(
+                              'rounded-lg border bg-white dark:bg-slate-800 p-1.5 sm:p-2 cursor-grab transition-all',
+                              correspondeBusca
+                                ? 'border-blue-400 dark:border-blue-500 opacity-100 shadow-sm'
+                                : 'border-slate-200 dark:border-slate-700 opacity-30',
+                              draggingClienteId === cliente.clienteId && 'opacity-50',
+                            )}
+                          >
+                            <div className="flex items-start gap-2">
+                              <GripVertical className="w-4 h-4 text-slate-400 mt-0.5" />
+                              <div className="min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 leading-tight whitespace-normal break-words">
+                                    {getNomeDestaque(cliente)}
+                                  </p>
+                                  <div className="flex items-center gap-1">
+                                    {badgeUrgencia && (
+                                      <span className={clsx('inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold', badgeUrgencia.className)}>
+                                        {badgeUrgencia.label}
+                                      </span>
+                                    )}
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      icon={<Pencil className="w-3.5 h-3.5" />}
+                                      className="h-6 px-2 text-[11px] leading-none"
+                                      onMouseDown={(e) => e.stopPropagation()}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        void abrirEdicaoCliente(cliente)
+                                      }}
+                                      title="Editar implantação do cliente"
+                                    >
+                                      Editar
+                                    </Button>
+                                  </div>
+                                </div>
+                                {getNomeSecundario(cliente) && (
+                                  <p className="text-[11px] sm:text-xs text-slate-500 leading-tight whitespace-normal break-words mt-0.5">
+                                    {getNomeSecundario(cliente)}
+                                  </p>
+                                )}
+                                <p className="text-[11px] sm:text-xs text-slate-500 mt-1">{cliente.progressoChecklist}% checklist • {cliente.responsavelNome || 'Sem responsável'}</p>
+                                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                                  <button
+                                    type="button"
+                                    className="text-[11px] text-blue-600 hover:text-blue-700"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void abrirHistoricoCliente(cliente)
+                                    }}
+                                  >
+                                    Ver histórico
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="text-[11px] text-blue-600 hover:text-blue-700"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      navigate(`/implantacao/acompanhamento?cliente=${cliente.clienteId}`)
+                                    }}
+                                  >
+                                    Abrir acompanhamento
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                    ))}
+                        )
+                      })}
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </Card>
