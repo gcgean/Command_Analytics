@@ -26,6 +26,7 @@ import { AgendamentoProgramado } from './pages/agenda/AgendamentoProgramado'
 import { Clientes } from './pages/clientes/Clientes'
 import { DetalheCliente } from './pages/clientes/DetalheCliente'
 import { MonitorClientes } from './pages/clientes/MonitorClientes'
+import { DashboardMensalidades } from './pages/clientes/DashboardMensalidades'
 
 // Planos
 import { Planos } from './pages/planos/Planos'
@@ -201,6 +202,7 @@ export default function App() {
         <Route path="clientes" element={<PermissionRoute recurso="clientes"><Clientes /></PermissionRoute>} />
         <Route path="clientes/:id" element={<DetalheCliente />} />
         <Route path="clientes/monitor" element={<PermissionRoute recurso="monitor-clientes"><MonitorClientes /></PermissionRoute>} />
+        <Route path="clientes/dashboard-mensalidades" element={<PermissionRoute recurso="clientes-valores"><DashboardMensalidades /></PermissionRoute>} />
 
         <Route path="planos" element={<PermissionRoute recurso="planos"><Planos /></PermissionRoute>} />
         <Route path="planos/assinaturas" element={<PermissionRoute recurso="planos"><AssinaturaCliente /></PermissionRoute>} />

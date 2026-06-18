@@ -4,7 +4,10 @@ import type {
   AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, EtapaCadastro,
   ChecklistCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
-  StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem
+  StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
+  DashboardMensalidadesAbc, DashboardMensalidadesAgrupamento, DashboardMensalidadesConcentracao,
+  DashboardMensalidadesEstatisticas, DashboardMensalidadesFaixa, DashboardMensalidadesFiltros,
+  DashboardMensalidadesOpcoesFiltros, DashboardMensalidadesRanking, DashboardMensalidadesResumo
 } from '../types'
 
 // ============================================================
@@ -215,6 +218,39 @@ export const api = {
 
   // ─── Dashboard ─────────────────────────────────────────────
   getDashboardKPIs: () => fetchApi('/dashboard/kpis'),
+  getDashboardMensalidadesResumo: (params?: DashboardMensalidadesFiltros) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi<DashboardMensalidadesResumo>(`/dashboard/mensalidades/resumo${qs}`)
+  },
+  getDashboardMensalidadesFaixas: (params?: DashboardMensalidadesFiltros) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi<DashboardMensalidadesFaixa[]>(`/dashboard/mensalidades/faixas${qs}`)
+  },
+  getDashboardMensalidadesAbc: (params?: DashboardMensalidadesFiltros) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi<DashboardMensalidadesAbc>(`/dashboard/mensalidades/abc${qs}`)
+  },
+  getDashboardMensalidadesConcentracao: (params?: DashboardMensalidadesFiltros) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi<DashboardMensalidadesConcentracao>(`/dashboard/mensalidades/concentracao${qs}`)
+  },
+  getDashboardMensalidadesEstatisticas: (params?: DashboardMensalidadesFiltros) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi<DashboardMensalidadesEstatisticas>(`/dashboard/mensalidades/estatisticas${qs}`)
+  },
+  getDashboardMensalidadesRankings: (params: DashboardMensalidadesFiltros & { tipo: string; page?: string; limit?: string }) => {
+    const qs = '?' + new URLSearchParams(params as unknown as Record<string, string>).toString()
+    return fetchApi<DashboardMensalidadesRanking>(`/dashboard/mensalidades/rankings${qs}`)
+  },
+  getDashboardMensalidadesAgrupamentos: (params: DashboardMensalidadesFiltros & { agruparPor: string }) => {
+    const qs = '?' + new URLSearchParams(params as unknown as Record<string, string>).toString()
+    return fetchApi<DashboardMensalidadesAgrupamento[]>(`/dashboard/mensalidades/agrupamentos${qs}`)
+  },
+  getDashboardMensalidadesInsights: (params?: DashboardMensalidadesFiltros) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi<string[]>(`/dashboard/mensalidades/insights${qs}`)
+  },
+  getDashboardMensalidadesOpcoes: () => fetchApi<DashboardMensalidadesOpcoesFiltros>('/dashboard/mensalidades/opcoes'),
 
   // ─── Clientes ──────────────────────────────────────────────
   getClientes: (params?: { status?: string; segmento?: string; curvaABC?: string; search?: string; contadorId?: string; page?: string; limit?: string }) => {

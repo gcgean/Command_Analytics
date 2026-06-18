@@ -14,7 +14,478 @@ const DEPARTAMENTOS: Record<number, string> = {
   5: 'Desenvolvimento',
 }
 
+const FAIXAS_MENSALIDADE = [
+  { faixa: 'Até R$ 100', valorInicial: 0, valorFinal: 100 },
+  { faixa: 'R$ 101 a R$ 200', valorInicial: 100.01, valorFinal: 200 },
+  { faixa: 'R$ 201 a R$ 300', valorInicial: 200.01, valorFinal: 300 },
+  { faixa: 'R$ 301 a R$ 400', valorInicial: 300.01, valorFinal: 400 },
+  { faixa: 'R$ 401 a R$ 500', valorInicial: 400.01, valorFinal: 500 },
+  { faixa: 'R$ 501 a R$ 600', valorInicial: 500.01, valorFinal: 600 },
+  { faixa: 'R$ 601 a R$ 800', valorInicial: 600.01, valorFinal: 800 },
+  { faixa: 'R$ 801 a R$ 1.000', valorInicial: 800.01, valorFinal: 1000 },
+  { faixa: 'R$ 1.001 a R$ 1.500', valorInicial: 1000.01, valorFinal: 1500 },
+  { faixa: 'R$ 1.501 a R$ 2.000', valorInicial: 1500.01, valorFinal: 2000 },
+  { faixa: 'Acima de R$ 2.000', valorInicial: 2000.01, valorFinal: null },
+]
+
+type MensalidadesQuery = Record<string, string | undefined>
+
+type ClienteCarteira = {
+  id: number
+  nome: string
+  mensalidade: number
+  plano: string | null
+  cidade: string | null
+  uf: string | null
+  segmento: string | null
+  tipoContrato: string | null
+  vendedor: string | null
+  status: string
+  classeAbc: 'A' | 'B' | 'C'
+  faixaMensalidade: string
+  percentualReceita: number
+  percentualAcumulado: number
+  dataEntrada: Date | null
+}
+
+const round2 = (value: number) => Math.round((Number.isFinite(value) ? value : 0) * 100) / 100
+
+function percentual(parte: number, total: number) {
+  return total > 0 ? round2((parte / total) * 100) : 0
+}
+
+function mediana(values: number[]) {
+  if (!values.length) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  return sorted.length % 2 === 0 ? round2((sorted[mid - 1] + sorted[mid]) / 2) : round2(sorted[mid])
+}
+
+function percentil(values: number[], p: number) {
+  if (!values.length) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const index = (sorted.length - 1) * p
+  const lower = Math.floor(index)
+  const upper = Math.ceil(index)
+  if (lower === upper) return round2(sorted[lower])
+  return round2(sorted[lower] + (sorted[upper] - sorted[lower]) * (index - lower))
+}
+
+function moda(values: number[]) {
+  if (!values.length) return null
+  const counts = new Map<number, number>()
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1)
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1])
+  return ranked[0]?.[1] > 1 ? ranked[0][0] : null
+}
+
+function faixaMensalidade(valor: number) {
+  return FAIXAS_MENSALIDADE.find(f => valor >= f.valorInicial && (f.valorFinal === null || valor <= f.valorFinal))?.faixa ?? 'Sem faixa'
+}
+
+function statusCliente(cliente: { ativo: string | null; bloqueado: string | null }) {
+  if (cliente.ativo === 'N') return 'Inativo'
+  if (cliente.bloqueado === 'S') return 'Bloqueado'
+  return 'Ativo'
+}
+
+function buildDateEnd(value: string) {
+  const date = new Date(value)
+  date.setDate(date.getDate() + 1)
+  return date
+}
+
+async function loadCarteiraMensalidades(query: MensalidadesQuery) {
+  const where: Record<string, any> = {}
+  const status = query.status
+
+  if (status === 'Inativo') {
+    where.ativo = 'N'
+  } else if (status === 'Bloqueado') {
+    where.ativo = 'S'
+    where.bloqueado = 'S'
+  } else {
+    where.ativo = 'S'
+    where.bloqueado = 'N'
+  }
+
+  if (query.dataEntradaInicial || query.dataEntradaFinal) {
+    where.dataContrato = {}
+    if (query.dataEntradaInicial) where.dataContrato.gte = new Date(query.dataEntradaInicial)
+    if (query.dataEntradaFinal) where.dataContrato.lt = buildDateEnd(query.dataEntradaFinal)
+  }
+
+  const clientes = await prisma.cliente.findMany({
+    where,
+    select: {
+      id: true,
+      nome: true,
+      nomeRazao: true,
+      cidade: true,
+      uf: true,
+      ativo: true,
+      bloqueado: true,
+      mensalidade: true,
+      dataContrato: true,
+      responsavel: true,
+      idPlano: true,
+      idSegmento: true,
+    },
+    orderBy: { nome: 'asc' },
+  })
+
+  const [planos, segmentos] = await Promise.all([
+    prisma.plano.findMany({ select: { id: true, descricao: true } }),
+    prisma.segmento.findMany({ select: { id: true, descricao: true } }),
+  ])
+
+  const planoPorId = new Map(planos.map(p => [p.id, p.descricao]))
+  const segmentoPorId = new Map(segmentos.map(s => [s.id, s.descricao]))
+
+  const base: ClienteCarteira[] = clientes.map(cliente => {
+    const mensalidade = Number(cliente.mensalidade ?? 0)
+    const plano = cliente.idPlano ? planoPorId.get(cliente.idPlano) ?? null : null
+    const segmento = cliente.idSegmento ? segmentoPorId.get(cliente.idSegmento) ?? null : null
+    return {
+      id: cliente.id,
+      nome: cliente.nome || cliente.nomeRazao || `Cliente ${cliente.id}`,
+      mensalidade,
+      plano,
+      cidade: cliente.cidade?.trim() || null,
+      uf: cliente.uf?.trim() || null,
+      segmento,
+      tipoContrato: null,
+      vendedor: cliente.responsavel?.trim() || null,
+      status: statusCliente(cliente),
+      classeAbc: 'C' as const,
+      faixaMensalidade: mensalidade > 0 ? faixaMensalidade(mensalidade) : 'Mensalidade zerada',
+      percentualReceita: 0,
+      percentualAcumulado: 0,
+      dataEntrada: cliente.dataContrato,
+    }
+  })
+
+  const filtered = base.filter(cliente => {
+    if (query.faixaMensalidade && cliente.faixaMensalidade !== query.faixaMensalidade) return false
+    if (query.plano && cliente.plano !== query.plano) return false
+    if (query.cidade && cliente.cidade !== query.cidade) return false
+    if (query.uf && cliente.uf !== query.uf) return false
+    if (query.segmento && cliente.segmento !== query.segmento) return false
+    if (query.tipoContrato && cliente.tipoContrato !== query.tipoContrato) return false
+    if (query.vendedor && cliente.vendedor !== query.vendedor) return false
+    return true
+  })
+
+  const pagantesOrdenados = filtered
+    .filter(cliente => cliente.mensalidade > 0)
+    .sort((a, b) => b.mensalidade - a.mensalidade)
+
+  const totalReceita = pagantesOrdenados.reduce((sum, cliente) => sum + cliente.mensalidade, 0)
+  let acumulado = 0
+  const classificados: ClienteCarteira[] = pagantesOrdenados.map(cliente => {
+    acumulado += cliente.mensalidade
+    const percentualAcumulado = percentual(acumulado, totalReceita)
+    const classeAbc: 'A' | 'B' | 'C' = percentualAcumulado <= 70 ? 'A' : percentualAcumulado <= 90 ? 'B' : 'C'
+    return {
+      ...cliente,
+      classeAbc,
+      percentualReceita: percentual(cliente.mensalidade, totalReceita),
+      percentualAcumulado,
+    }
+  })
+
+  const invalidos = filtered.filter(cliente => cliente.mensalidade <= 0)
+  const data = [...classificados, ...invalidos]
+    .filter(cliente => !query.classeAbc || cliente.classeAbc === query.classeAbc)
+
+  return { data, pagantes: data.filter(cliente => cliente.mensalidade > 0), totalReceita }
+}
+
+function resumoCarteira(data: ClienteCarteira[]) {
+  const totalClientesAtivos = data.length
+  const pagantes = data.filter(cliente => cliente.mensalidade > 0)
+  const valores = pagantes.map(cliente => cliente.mensalidade)
+  const mrr = round2(valores.reduce((sum, value) => sum + value, 0))
+  const ticketMedio = pagantes.length ? round2(mrr / pagantes.length) : 0
+  const medianaValor = mediana(valores)
+  const clientesAbaixoTicketMedio = pagantes.filter(cliente => cliente.mensalidade < ticketMedio).length
+  const clientesAcimaTicketMedio = pagantes.filter(cliente => cliente.mensalidade >= ticketMedio).length
+
+  return {
+    totalClientesAtivos,
+    totalClientesPagantes: pagantes.length,
+    totalMensalidadeZerada: data.filter(cliente => cliente.mensalidade <= 0).length,
+    mrr,
+    arr: round2(mrr * 12),
+    ticketMedio,
+    mediana: medianaValor,
+    menorMensalidade: valores.length ? Math.min(...valores) : 0,
+    maiorMensalidade: valores.length ? Math.max(...valores) : 0,
+    clientesAbaixoTicketMedio,
+    clientesAcimaTicketMedio,
+    percentualAbaixoTicketMedio: percentual(clientesAbaixoTicketMedio, pagantes.length),
+    percentualAcimaTicketMedio: percentual(clientesAcimaTicketMedio, pagantes.length),
+  }
+}
+
+function resumoFaixas(pagantes: ClienteCarteira[]) {
+  const totalClientes = pagantes.length
+  const totalReceita = pagantes.reduce((sum, cliente) => sum + cliente.mensalidade, 0)
+
+  return FAIXAS_MENSALIDADE.map(faixa => {
+    const clientesFaixa = pagantes.filter(cliente => cliente.faixaMensalidade === faixa.faixa)
+    const valores = clientesFaixa.map(cliente => cliente.mensalidade)
+    const receitaTotal = round2(valores.reduce((sum, value) => sum + value, 0))
+    return {
+      faixa: faixa.faixa,
+      valorInicial: faixa.valorInicial,
+      valorFinal: faixa.valorFinal,
+      quantidadeClientes: clientesFaixa.length,
+      percentualClientes: percentual(clientesFaixa.length, totalClientes),
+      receitaTotal,
+      percentualReceita: percentual(receitaTotal, totalReceita),
+      ticketMedioFaixa: clientesFaixa.length ? round2(receitaTotal / clientesFaixa.length) : 0,
+      menorValor: valores.length ? Math.min(...valores) : 0,
+      maiorValor: valores.length ? Math.max(...valores) : 0,
+    }
+  })
+}
+
+function resumoAbc(pagantes: ClienteCarteira[]) {
+  const totalClientes = pagantes.length
+  const totalReceita = pagantes.reduce((sum, cliente) => sum + cliente.mensalidade, 0)
+  const classes: Array<'A' | 'B' | 'C'> = ['A', 'B', 'C']
+
+  return classes.map(classe => {
+    const clientesClasse = pagantes.filter(cliente => cliente.classeAbc === classe)
+    const receitaTotal = round2(clientesClasse.reduce((sum, cliente) => sum + cliente.mensalidade, 0))
+    return {
+      classe,
+      quantidadeClientes: clientesClasse.length,
+      percentualClientes: percentual(clientesClasse.length, totalClientes),
+      receitaTotal,
+      percentualReceita: percentual(receitaTotal, totalReceita),
+      ticketMedio: clientesClasse.length ? round2(receitaTotal / clientesClasse.length) : 0,
+    }
+  })
+}
+
+function participacaoTop(pagantes: ClienteCarteira[], quantidade: number) {
+  const totalReceita = pagantes.reduce((sum, cliente) => sum + cliente.mensalidade, 0)
+  const receitaTop = pagantes.slice(0, quantidade).reduce((sum, cliente) => sum + cliente.mensalidade, 0)
+  return percentual(receitaTop, totalReceita)
+}
+
+function clientesParaReceita(pagantes: ClienteCarteira[], alvo: number) {
+  const totalReceita = pagantes.reduce((sum, cliente) => sum + cliente.mensalidade, 0)
+  let acumulado = 0
+  for (let i = 0; i < pagantes.length; i += 1) {
+    acumulado += pagantes[i].mensalidade
+    if (percentual(acumulado, totalReceita) >= alvo) return i + 1
+  }
+  return 0
+}
+
 export async function dashboardRoutes(app: FastifyInstance) {
+  app.get(
+    '/mensalidades/resumo',
+    { preHandler: authMiddleware, schema: { tags: ['Dashboard'], summary: 'Resumo da carteira de mensalidades' } },
+    async (request) => {
+      const { data } = await loadCarteiraMensalidades(request.query as MensalidadesQuery)
+      return resumoCarteira(data)
+    }
+  )
+
+  app.get(
+    '/mensalidades/faixas',
+    { preHandler: authMiddleware, schema: { tags: ['Dashboard'], summary: 'Distribuição por faixa de mensalidade' } },
+    async (request) => {
+      const { pagantes } = await loadCarteiraMensalidades(request.query as MensalidadesQuery)
+      return resumoFaixas(pagantes)
+    }
+  )
+
+  app.get(
+    '/mensalidades/abc',
+    { preHandler: authMiddleware, schema: { tags: ['Dashboard'], summary: 'Curva ABC da carteira' } },
+    async (request) => {
+      const { pagantes } = await loadCarteiraMensalidades(request.query as MensalidadesQuery)
+      return {
+        resumoPorClasse: resumoAbc(pagantes),
+        clientesClassificados: pagantes.slice(0, 100),
+        curvaReceitaAcumulada: pagantes.slice(0, 100).map((cliente, index) => ({
+          posicao: index + 1,
+          cliente: cliente.nome,
+          receitaAcumulada: round2(pagantes.slice(0, index + 1).reduce((sum, item) => sum + item.mensalidade, 0)),
+          percentualAcumulado: cliente.percentualAcumulado,
+        })),
+      }
+    }
+  )
+
+  app.get(
+    '/mensalidades/concentracao',
+    { preHandler: authMiddleware, schema: { tags: ['Dashboard'], summary: 'Concentração de receita' } },
+    async (request) => {
+      const { pagantes } = await loadCarteiraMensalidades(request.query as MensalidadesQuery)
+      return {
+        clientesPara50Receita: clientesParaReceita(pagantes, 50),
+        clientesPara70Receita: clientesParaReceita(pagantes, 70),
+        clientesPara80Receita: clientesParaReceita(pagantes, 80),
+        clientesPara90Receita: clientesParaReceita(pagantes, 90),
+        participacaoTop10: participacaoTop(pagantes, 10),
+        participacaoTop20: participacaoTop(pagantes, 20),
+        participacaoTop50: participacaoTop(pagantes, 50),
+        participacaoTop100: participacaoTop(pagantes, 100),
+        curvaAcumulada: pagantes.slice(0, 100).map((cliente, index) => ({
+          posicao: index + 1,
+          percentualClientes: percentual(index + 1, pagantes.length),
+          percentualReceita: cliente.percentualAcumulado,
+        })),
+      }
+    }
+  )
+
+  app.get(
+    '/mensalidades/estatisticas',
+    { preHandler: authMiddleware, schema: { tags: ['Dashboard'], summary: 'Estatísticas da carteira' } },
+    async (request) => {
+      const { pagantes } = await loadCarteiraMensalidades(request.query as MensalidadesQuery)
+      const valores = pagantes.map(cliente => cliente.mensalidade)
+      const media = valores.length ? round2(valores.reduce((sum, value) => sum + value, 0) / valores.length) : 0
+      const medianaValor = mediana(valores)
+      const desvioPadrao = valores.length
+        ? round2(Math.sqrt(valores.reduce((sum, value) => sum + Math.pow(value - media, 2), 0) / valores.length))
+        : 0
+
+      return {
+        media,
+        mediana: medianaValor,
+        moda: moda(valores),
+        desvioPadrao,
+        percentil25: percentil(valores, 0.25),
+        percentil50: percentil(valores, 0.5),
+        percentil75: percentil(valores, 0.75),
+        percentil90: percentil(valores, 0.9),
+        percentil95: percentil(valores, 0.95),
+        minimo: valores.length ? Math.min(...valores) : 0,
+        maximo: valores.length ? Math.max(...valores) : 0,
+        leitura: medianaValor < media
+          ? 'A mediana abaixo da média indica concentração em mensalidades menores, com alguns clientes maiores puxando o ticket para cima.'
+          : 'A média e a mediana estão próximas, indicando uma carteira mais distribuída entre as faixas.',
+      }
+    }
+  )
+
+  app.get(
+    '/mensalidades/rankings',
+    { preHandler: authMiddleware, schema: { tags: ['Dashboard'], summary: 'Rankings da carteira' } },
+    async (request) => {
+      const query = request.query as MensalidadesQuery
+      const page = Math.max(Number(query.page ?? 1), 1)
+      const limit = Math.min(Math.max(Number(query.limit ?? 20), 1), 100)
+      const { pagantes } = await loadCarteiraMensalidades(query)
+      const resumo = resumoCarteira(pagantes)
+      const tipo = query.tipo ?? 'maiores'
+      const rankingMap: Record<string, ClienteCarteira[]> = {
+        maiores: [...pagantes].sort((a, b) => b.mensalidade - a.mensalidade),
+        menores: [...pagantes].sort((a, b) => a.mensalidade - b.mensalidade),
+        'abaixo-media': pagantes.filter(cliente => cliente.mensalidade < resumo.ticketMedio),
+        'acima-media': pagantes.filter(cliente => cliente.mensalidade >= resumo.ticketMedio),
+        'abaixo-mediana': pagantes.filter(cliente => cliente.mensalidade < resumo.mediana),
+        'acima-mediana': pagantes.filter(cliente => cliente.mensalidade >= resumo.mediana),
+        'classe-a': pagantes.filter(cliente => cliente.classeAbc === 'A'),
+        'classe-b': pagantes.filter(cliente => cliente.classeAbc === 'B'),
+        'classe-c': pagantes.filter(cliente => cliente.classeAbc === 'C'),
+      }
+      const data = rankingMap[tipo] ?? rankingMap.maiores
+      const start = (page - 1) * limit
+      return {
+        total: data.length,
+        page,
+        limit,
+        pages: Math.max(Math.ceil(data.length / limit), 1),
+        data: data.slice(start, start + limit),
+      }
+    }
+  )
+
+  app.get(
+    '/mensalidades/agrupamentos',
+    { preHandler: authMiddleware, schema: { tags: ['Dashboard'], summary: 'Agrupamentos da carteira' } },
+    async (request) => {
+      const query = request.query as MensalidadesQuery
+      const agruparPor = query.agruparPor ?? 'plano'
+      const { pagantes } = await loadCarteiraMensalidades(query)
+      const totalReceita = pagantes.reduce((sum, cliente) => sum + cliente.mensalidade, 0)
+      const grupos = new Map<string, ClienteCarteira[]>()
+
+      for (const cliente of pagantes) {
+        const key = String((cliente as any)[agruparPor] || 'Não informado')
+        grupos.set(key, [...(grupos.get(key) ?? []), cliente])
+      }
+
+      return [...grupos.entries()]
+        .map(([grupo, clientesGrupo]) => {
+          const receitaMensalTotal = round2(clientesGrupo.reduce((sum, cliente) => sum + cliente.mensalidade, 0))
+          return {
+            grupo,
+            quantidadeClientes: clientesGrupo.length,
+            receitaMensalTotal,
+            ticketMedio: clientesGrupo.length ? round2(receitaMensalTotal / clientesGrupo.length) : 0,
+            percentualCarteira: percentual(clientesGrupo.length, pagantes.length),
+            percentualReceitaTotal: percentual(receitaMensalTotal, totalReceita),
+          }
+        })
+        .sort((a, b) => b.receitaMensalTotal - a.receitaMensalTotal)
+    }
+  )
+
+  app.get(
+    '/mensalidades/insights',
+    { preHandler: authMiddleware, schema: { tags: ['Dashboard'], summary: 'Insights automáticos da carteira' } },
+    async (request) => {
+      const { data, pagantes } = await loadCarteiraMensalidades(request.query as MensalidadesQuery)
+      const resumo = resumoCarteira(data)
+      const faixas = resumoFaixas(pagantes)
+      const abc = resumoAbc(pagantes)
+      const maiorFaixaClientes = [...faixas].sort((a, b) => b.quantidadeClientes - a.quantidadeClientes)[0]
+      const maiorFaixaReceita = [...faixas].sort((a, b) => b.receitaTotal - a.receitaTotal)[0]
+      const classeA = abc.find(item => item.classe === 'A')
+      const insights = [
+        maiorFaixaClientes ? `A maior concentração de clientes está na faixa ${maiorFaixaClientes.faixa}, com ${maiorFaixaClientes.quantidadeClientes} clientes.` : null,
+        maiorFaixaReceita ? `A faixa que mais gera receita é ${maiorFaixaReceita.faixa}, somando R$ ${maiorFaixaReceita.receitaTotal.toLocaleString('pt-BR')}.` : null,
+        `${resumo.percentualAbaixoTicketMedio}% dos clientes pagantes estão abaixo do ticket médio.`,
+        `${resumo.percentualAcimaTicketMedio}% dos clientes pagantes estão acima ou iguais ao ticket médio.`,
+        classeA ? `Clientes Classe A representam ${classeA.percentualReceita}% da receita e ${classeA.percentualClientes}% da base pagante.` : null,
+        `Os 20 maiores clientes representam ${participacaoTop(pagantes, 20)}% da receita mensal.`,
+        resumo.mediana < resumo.ticketMedio ? 'A mediana é menor que a média, indicando que poucos clientes maiores puxam o ticket médio para cima.' : null,
+        resumo.totalMensalidadeZerada > 0 ? `Existem ${resumo.totalMensalidadeZerada} clientes com mensalidade zerada ou inválida na seleção.` : null,
+      ]
+      return insights.filter(Boolean)
+    }
+  )
+
+  app.get(
+    '/mensalidades/opcoes',
+    { preHandler: authMiddleware, schema: { tags: ['Dashboard'], summary: 'Opções de filtros da dashboard de mensalidades' } },
+    async () => {
+      const { data } = await loadCarteiraMensalidades({})
+      const unique = (values: Array<string | null>) => [...new Set(values.filter(Boolean) as string[])].sort()
+      return {
+        status: ['Ativo', 'Bloqueado', 'Inativo'],
+        faixas: [...FAIXAS_MENSALIDADE.map(faixa => faixa.faixa), 'Mensalidade zerada'],
+        classesAbc: ['A', 'B', 'C'],
+        planos: unique(data.map(cliente => cliente.plano)),
+        cidades: unique(data.map(cliente => cliente.cidade)),
+        ufs: unique(data.map(cliente => cliente.uf)),
+        segmentos: unique(data.map(cliente => cliente.segmento)),
+        tiposContrato: [],
+        vendedores: unique(data.map(cliente => cliente.vendedor)),
+      }
+    }
+  )
+
   app.get(
     '/kpis',
     { preHandler: authMiddleware, schema: { tags: ['Dashboard'], summary: 'KPIs principais do dashboard' } },

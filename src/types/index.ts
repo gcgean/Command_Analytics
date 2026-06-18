@@ -115,6 +115,140 @@ export interface Cliente {
   codigo?: string
 }
 
+// ============================================================
+// DASHBOARD DE MENSALIDADES
+// ============================================================
+export type DashboardMensalidadesClasseAbc = 'A' | 'B' | 'C'
+
+export interface DashboardMensalidadesFiltros {
+  status?: string
+  faixaMensalidade?: string
+  classeAbc?: DashboardMensalidadesClasseAbc | ''
+  plano?: string
+  cidade?: string
+  uf?: string
+  segmento?: string
+  tipoContrato?: string
+  vendedor?: string
+  dataEntradaInicial?: string
+  dataEntradaFinal?: string
+}
+
+export interface DashboardMensalidadesResumo {
+  totalClientesAtivos: number
+  totalClientesPagantes: number
+  totalMensalidadeZerada: number
+  mrr: number
+  arr: number
+  ticketMedio: number
+  mediana: number
+  menorMensalidade: number
+  maiorMensalidade: number
+  clientesAbaixoTicketMedio: number
+  clientesAcimaTicketMedio: number
+  percentualAbaixoTicketMedio: number
+  percentualAcimaTicketMedio: number
+}
+
+export interface DashboardMensalidadesFaixa {
+  faixa: string
+  valorInicial: number
+  valorFinal: number | null
+  quantidadeClientes: number
+  percentualClientes: number
+  receitaTotal: number
+  percentualReceita: number
+  ticketMedioFaixa: number
+  menorValor: number
+  maiorValor: number
+}
+
+export interface DashboardMensalidadesCliente {
+  id: number
+  nome: string
+  mensalidade: number
+  plano: string | null
+  cidade: string | null
+  uf: string | null
+  segmento: string | null
+  status: string
+  classeAbc: DashboardMensalidadesClasseAbc
+  faixaMensalidade: string
+  percentualReceita: number
+  percentualAcumulado: number
+}
+
+export interface DashboardMensalidadesResumoClasse {
+  classe: DashboardMensalidadesClasseAbc
+  quantidadeClientes: number
+  percentualClientes: number
+  receitaTotal: number
+  percentualReceita: number
+  ticketMedio: number
+}
+
+export interface DashboardMensalidadesAbc {
+  resumoPorClasse: DashboardMensalidadesResumoClasse[]
+  clientesClassificados: DashboardMensalidadesCliente[]
+  curvaReceitaAcumulada: Array<{ posicao: number; cliente: string; receitaAcumulada: number; percentualAcumulado: number }>
+}
+
+export interface DashboardMensalidadesConcentracao {
+  clientesPara50Receita: number
+  clientesPara70Receita: number
+  clientesPara80Receita: number
+  clientesPara90Receita: number
+  participacaoTop10: number
+  participacaoTop20: number
+  participacaoTop50: number
+  participacaoTop100: number
+  curvaAcumulada: Array<{ posicao: number; percentualClientes: number; percentualReceita: number }>
+}
+
+export interface DashboardMensalidadesEstatisticas {
+  media: number
+  mediana: number
+  moda: number | null
+  desvioPadrao: number
+  percentil25: number
+  percentil50: number
+  percentil75: number
+  percentil90: number
+  percentil95: number
+  minimo: number
+  maximo: number
+  leitura: string
+}
+
+export interface DashboardMensalidadesRanking {
+  total: number
+  page: number
+  limit: number
+  pages: number
+  data: DashboardMensalidadesCliente[]
+}
+
+export interface DashboardMensalidadesAgrupamento {
+  grupo: string
+  quantidadeClientes: number
+  receitaMensalTotal: number
+  ticketMedio: number
+  percentualCarteira: number
+  percentualReceitaTotal: number
+}
+
+export interface DashboardMensalidadesOpcoesFiltros {
+  status: string[]
+  faixas: string[]
+  classesAbc: DashboardMensalidadesClasseAbc[]
+  planos: string[]
+  cidades: string[]
+  ufs: string[]
+  segmentos: string[]
+  tiposContrato: string[]
+  vendedores: string[]
+}
+
 export interface ClienteLegadoContato {
   descricao: string
   numero: string

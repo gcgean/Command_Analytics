@@ -7,7 +7,7 @@ import {
   Code2, Tag, Video, Target, Server,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
-  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound
+  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '../../store/authStore'
@@ -48,6 +48,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
     items: [
       { label: 'Clientes',         icon: <Users className="w-4 h-4" />,    to: '/clientes',         recurso: 'clientes' },
       { label: 'Monitor Clientes', icon: <BarChart3 className="w-4 h-4" />,to: '/clientes/monitor', recurso: 'monitor-clientes' },
+      { label: 'Dashboard de Mensalidades', icon: <WalletCards className="w-4 h-4" />, to: '/clientes/dashboard-mensalidades', recurso: 'clientes-valores' },
       {
         label: 'Implantação', icon: <GitBranch className="w-4 h-4" />, recurso: 'implantacao', children: [
           { label: 'Dashboard',      icon: <Activity className="w-4 h-4" />,     to: '/implantacao/dashboard',        recurso: 'implantacao' },
