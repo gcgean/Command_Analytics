@@ -14,6 +14,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'clientes',                 label: 'Clientes',                        grupo: 'CLIENTES' },
   { id: 'clientes-valores',         label: 'Clientes — Plano/Mensalidade',     grupo: 'CLIENTES' },
   { id: 'monitor-clientes',         label: 'Monitor de Clientes',             grupo: 'CLIENTES' },
+  { id: 'dashboard-mensalidades',   label: 'Dashboard de Mensalidades',        grupo: 'CLIENTES' },
   { id: 'implantacao',              label: 'Pipeline de Implantação',         grupo: 'CLIENTES' },
   { id: 'implantacao-orcamento',    label: 'Orçamento',                       grupo: 'CLIENTES' },
   { id: 'implantacao-acompanhamento', label: 'Acompanhamento Implantação',    grupo: 'CLIENTES' },

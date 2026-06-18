@@ -48,7 +48,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
     items: [
       { label: 'Clientes',         icon: <Users className="w-4 h-4" />,    to: '/clientes',         recurso: 'clientes' },
       { label: 'Monitor Clientes', icon: <BarChart3 className="w-4 h-4" />,to: '/clientes/monitor', recurso: 'monitor-clientes' },
-      { label: 'Dashboard de Mensalidades', icon: <WalletCards className="w-4 h-4" />, to: '/clientes/dashboard-mensalidades', recurso: 'clientes-valores' },
+      { label: 'Dashboard de Mensalidades', icon: <WalletCards className="w-4 h-4" />, to: '/clientes/dashboard-mensalidades', recurso: 'dashboard-mensalidades' },
       {
         label: 'Implantação', icon: <GitBranch className="w-4 h-4" />, recurso: 'implantacao', children: [
           { label: 'Dashboard',      icon: <Activity className="w-4 h-4" />,     to: '/implantacao/dashboard',        recurso: 'implantacao' },
