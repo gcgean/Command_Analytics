@@ -251,15 +251,21 @@ function construirMensagemResumo(agendamentos: AgendamentoBase[], dataRef: strin
 }
 
 function construirMensagemLembrete(agendamento: AgendamentoBase, antecedenciaMin: number): { titulo: string; mensagem: string } {
-  const titulo = 'Lembrete de agendamento'
   const cliente = agendamento.clienteNome || 'Cliente não informado'
   const tipo = agendamento.tipo || 'Agendamento'
   const horario = agendamento.horarioIni || '--:--'
   const data = formatarDataPtBr(agendamento.data)
   const obs = agendamento.observacoes ? `\nObservação: ${agendamento.observacoes}` : ''
 
+  if (antecedenciaMin <= 0) {
+    return {
+      titulo: 'Agendamento iniciando agora',
+      mensagem: `Seu agendamento com ${cliente} está começando agora, às ${horario} de ${data}.\nTipo: ${tipo}${obs}`,
+    }
+  }
+
   return {
-    titulo,
+    titulo: 'Lembrete de agendamento',
     mensagem: `Seu agendamento com ${cliente} começa às ${horario} de ${data}, em ${antecedenciaMin} minuto(s).\nTipo: ${tipo}${obs}`,
   }
 }
@@ -336,12 +342,13 @@ async function gerarResumoDiario(
 async function gerarLembreteAgendamento(
   agendamento: AgendamentoBase,
   config: ConfiguracaoNotificacaoAgendamento,
-  stats: StatusProcessamentoNotificacaoAgendamento['ultimoResumo']
+  stats: StatusProcessamentoNotificacaoAgendamento['ultimoResumo'],
+  antecedenciaMin = config.antecedenciaMin
 ): Promise<void> {
   const tecnicoId = Number(agendamento.tecnicoId || 0)
   if (!tecnicoId) return
 
-  const lembrete = construirMensagemLembrete(agendamento, config.antecedenciaMin)
+  const lembrete = construirMensagemLembrete(agendamento, antecedenciaMin)
 
   if (config.ativoPlataforma) {
     const chavePlataforma = construirChaveEvento({
@@ -352,7 +359,7 @@ async function gerarLembreteAgendamento(
       agendaId: agendamento.id,
       dataRef: agendamento.data || '',
       horarioRef: agendamento.horarioIni,
-      antecedenciaMin: config.antecedenciaMin,
+      antecedenciaMin,
     })
 
     if (!(await existeNotificacao(chavePlataforma, 'plataforma', tecnicoId))) {
@@ -382,7 +389,7 @@ async function gerarLembreteAgendamento(
       agendaId: agendamento.id,
       dataRef: agendamento.data || '',
       horarioRef: agendamento.horarioIni,
-      antecedenciaMin: config.antecedenciaMin,
+      antecedenciaMin,
     })
 
     if (!(await existeNotificacao(chaveTelegram, 'telegram', tecnicoId))) {
@@ -637,9 +644,15 @@ export async function processarNotificacoesAgendamento(agora = new Date()): Prom
       if (!inicio) continue
 
       const lembreteEm = new Date(inicio.getTime() - config.antecedenciaMin * 60 * 1000)
-      if (agora < lembreteEm || agora >= inicio) continue
+      const fimJanelaInicio = new Date(inicio.getTime() + 60 * 1000)
 
-      await gerarLembreteAgendamento(agendamento, config, resumoExecucao)
+      if (agora >= lembreteEm && agora < inicio) {
+        await gerarLembreteAgendamento(agendamento, config, resumoExecucao, config.antecedenciaMin)
+      }
+
+      if (agora >= inicio && agora < fimJanelaInicio) {
+        await gerarLembreteAgendamento(agendamento, config, resumoExecucao, 0)
+      }
     }
     statusProcessamento.ultimoSucessoEm = new Date().toISOString()
   } catch (error: any) {
