@@ -193,9 +193,53 @@ export function DashboardMensalidades() {
   const resetFilters = () => setFilters({})
 
   const topAgrupamentos = agrupamentos.slice(0, 10)
+  const handlePrintPdf = () => {
+    window.setTimeout(() => window.print(), 50)
+  }
 
   return (
     <div className="space-y-5">
+      <style>
+        {`
+          .mensalidades-print-root { display: none; }
+          @media print {
+            @page { size: A4; margin: 12mm; }
+            body * { visibility: hidden !important; }
+            .mensalidades-print-root,
+            .mensalidades-print-root * { visibility: visible !important; }
+            .mensalidades-print-root {
+              display: block !important;
+              position: absolute;
+              inset: 0 auto auto 0;
+              width: 100%;
+              background: #ffffff !important;
+              color: #0f172a !important;
+              font-family: Arial, sans-serif;
+            }
+            .mensalidades-print-page {
+              break-inside: avoid;
+              page-break-inside: avoid;
+              margin-bottom: 18px;
+            }
+            .mensalidades-print-root table {
+              width: 100%;
+              border-collapse: collapse;
+              font-size: 10px;
+            }
+            .mensalidades-print-root th,
+            .mensalidades-print-root td {
+              border: 1px solid #cbd5e1;
+              padding: 6px;
+              text-align: left;
+              vertical-align: top;
+            }
+            .mensalidades-print-root th {
+              background: #f1f5f9 !important;
+              font-weight: 700;
+            }
+          }
+        `}
+      </style>
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Dashboard de Mensalidades</h1>
@@ -203,15 +247,26 @@ export function DashboardMensalidades() {
             Análise da carteira de clientes por mensalidade, MRR, concentração e curva ABC.
           </p>
         </div>
-        <Button
-          type="button"
-          variant="secondary"
-          icon={<RefreshCw className="h-4 w-4" />}
-          onClick={() => setFilters(current => ({ ...current }))}
-          loading={loading}
-        >
-          Atualizar
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            type="button"
+            variant="secondary"
+            icon={<Download className="h-4 w-4" />}
+            onClick={handlePrintPdf}
+            disabled={loading || !resumo}
+          >
+            Gerar PDF
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            icon={<RefreshCw className="h-4 w-4" />}
+            onClick={() => setFilters(current => ({ ...current }))}
+            loading={loading}
+          >
+            Atualizar
+          </Button>
+        </div>
       </div>
 
       <section className="card p-4">
@@ -489,6 +544,268 @@ export function DashboardMensalidades() {
           )}
         </>
       )}
+      {!loading && resumo && (
+        <DashboardMensalidadesPrintReport
+          resumo={resumo}
+          faixas={faixas}
+          abc={abc}
+          concentracao={concentracao}
+          estatisticas={estatisticas}
+          ranking={ranking}
+          agrupamentos={agrupamentos}
+          insights={insights}
+        />
+      )}
+    </div>
+  )
+}
+
+function PrintSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="mensalidades-print-page">
+      <h2 style={{ fontSize: 15, margin: '0 0 8px', color: '#0f172a' }}>{title}</h2>
+      {children}
+    </section>
+  )
+}
+
+function PrintMetricGrid({ items }: { items: Array<{ label: string; value: string; detail?: string }> }) {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 14 }}>
+      {items.map(item => (
+        <div key={item.label} style={{ border: '1px solid #cbd5e1', borderRadius: 6, padding: 8 }}>
+          <div style={{ fontSize: 9, color: '#475569', textTransform: 'uppercase', fontWeight: 700 }}>{item.label}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginTop: 4 }}>{item.value}</div>
+          {item.detail && <div style={{ fontSize: 9, color: '#64748b', marginTop: 3 }}>{item.detail}</div>}
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DashboardMensalidadesPrintReport({
+  resumo,
+  faixas,
+  abc,
+  concentracao,
+  estatisticas,
+  ranking,
+  agrupamentos,
+  insights,
+}: {
+  resumo: DashboardMensalidadesResumo
+  faixas: DashboardMensalidadesFaixa[]
+  abc: DashboardMensalidadesAbc | null
+  concentracao: DashboardMensalidadesConcentracao | null
+  estatisticas: DashboardMensalidadesEstatisticas | null
+  ranking: DashboardMensalidadesRanking | null
+  agrupamentos: DashboardMensalidadesAgrupamento[]
+  insights: string[]
+}) {
+  const emittedAt = new Date().toLocaleString('pt-BR')
+
+  return (
+    <div className="mensalidades-print-root">
+      <div style={{ padding: 4 }}>
+        <header style={{ borderBottom: '2px solid #2563eb', marginBottom: 14, paddingBottom: 10 }}>
+          <h1 style={{ fontSize: 22, margin: 0, color: '#0f172a' }}>Dashboard de Mensalidades</h1>
+          <p style={{ fontSize: 11, margin: '4px 0 0', color: '#475569' }}>
+            Relatório completo da carteira de clientes. Emitido em {emittedAt}.
+          </p>
+        </header>
+
+        <PrintSection title="Resumo executivo">
+          <PrintMetricGrid
+            items={[
+              { label: 'Clientes ativos', value: number(resumo.totalClientesAtivos), detail: `${number(resumo.totalMensalidadeZerada)} com mensalidade zerada` },
+              { label: 'Clientes pagantes', value: number(resumo.totalClientesPagantes) },
+              { label: 'MRR', value: currency(resumo.mrr) },
+              { label: 'ARR', value: currency(resumo.arr) },
+              { label: 'Ticket médio', value: currency(resumo.ticketMedio) },
+              { label: 'Mediana', value: currency(resumo.mediana) },
+              { label: 'Menor mensalidade', value: currency(resumo.menorMensalidade) },
+              { label: 'Maior mensalidade', value: currency(resumo.maiorMensalidade) },
+              { label: 'Abaixo do ticket', value: number(resumo.clientesAbaixoTicketMedio), detail: percent(resumo.percentualAbaixoTicketMedio) },
+              { label: 'Acima do ticket', value: number(resumo.clientesAcimaTicketMedio), detail: percent(resumo.percentualAcimaTicketMedio) },
+            ]}
+          />
+        </PrintSection>
+
+        <PrintSection title="Insights da carteira">
+          {insights.length ? (
+            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 11, lineHeight: 1.5 }}>
+              {insights.map((insight, index) => <li key={index}>{insight}</li>)}
+            </ul>
+          ) : (
+            <p style={{ fontSize: 11, color: '#64748b' }}>Sem insights disponíveis.</p>
+          )}
+        </PrintSection>
+
+        <PrintSection title="Distribuição por faixa de mensalidade">
+          <table>
+            <thead>
+              <tr>
+                <th>Faixa</th>
+                <th>Clientes</th>
+                <th>% Carteira</th>
+                <th>Receita</th>
+                <th>% Receita</th>
+                <th>Ticket médio</th>
+                <th>Menor</th>
+                <th>Maior</th>
+              </tr>
+            </thead>
+            <tbody>
+              {faixas.map(faixa => (
+                <tr key={faixa.faixa}>
+                  <td>{faixa.faixa}</td>
+                  <td>{number(faixa.quantidadeClientes)}</td>
+                  <td>{percent(faixa.percentualClientes)}</td>
+                  <td>{currency(faixa.receitaTotal)}</td>
+                  <td>{percent(faixa.percentualReceita)}</td>
+                  <td>{currency(faixa.ticketMedioFaixa)}</td>
+                  <td>{currency(faixa.menorValor)}</td>
+                  <td>{currency(faixa.maiorValor)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </PrintSection>
+
+        {abc && (
+          <PrintSection title="Curva ABC">
+            <PrintMetricGrid
+              items={abc.resumoPorClasse.map(item => ({
+                label: `Classe ${item.classe}`,
+                value: currency(item.receitaTotal),
+                detail: `${number(item.quantidadeClientes)} clientes | ${percent(item.percentualReceita)} da receita`,
+              }))}
+            />
+            <table>
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Mensalidade</th>
+                  <th>% Receita</th>
+                  <th>% Acumulado</th>
+                  <th>Classe</th>
+                  <th>Faixa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {abc.clientesClassificados.slice(0, 30).map(cliente => (
+                  <tr key={cliente.id}>
+                    <td>{cliente.nome}</td>
+                    <td>{currency(cliente.mensalidade)}</td>
+                    <td>{percent(cliente.percentualReceita)}</td>
+                    <td>{percent(cliente.percentualAcumulado)}</td>
+                    <td>{cliente.classeAbc}</td>
+                    <td>{cliente.faixaMensalidade}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PrintSection>
+        )}
+
+        {concentracao && (
+          <PrintSection title="Concentração de receita">
+            <PrintMetricGrid
+              items={[
+                { label: '50% da receita', value: `${number(concentracao.clientesPara50Receita)} clientes` },
+                { label: '70% da receita', value: `${number(concentracao.clientesPara70Receita)} clientes` },
+                { label: '80% da receita', value: `${number(concentracao.clientesPara80Receita)} clientes` },
+                { label: '90% da receita', value: `${number(concentracao.clientesPara90Receita)} clientes` },
+                { label: 'Top 10', value: percent(concentracao.participacaoTop10) },
+                { label: 'Top 20', value: percent(concentracao.participacaoTop20) },
+                { label: 'Top 50', value: percent(concentracao.participacaoTop50) },
+                { label: 'Top 100', value: percent(concentracao.participacaoTop100) },
+              ]}
+            />
+          </PrintSection>
+        )}
+
+        {estatisticas && (
+          <PrintSection title="Estatísticas da carteira">
+            <PrintMetricGrid
+              items={[
+                { label: 'Média', value: currency(estatisticas.media) },
+                { label: 'Mediana', value: currency(estatisticas.mediana) },
+                { label: 'Moda', value: estatisticas.moda == null ? 'Sem moda' : currency(estatisticas.moda) },
+                { label: 'Desvio padrão', value: currency(estatisticas.desvioPadrao) },
+                { label: 'Percentil 25', value: currency(estatisticas.percentil25) },
+                { label: 'Percentil 50', value: currency(estatisticas.percentil50) },
+                { label: 'Percentil 75', value: currency(estatisticas.percentil75) },
+                { label: 'Percentil 90', value: currency(estatisticas.percentil90) },
+                { label: 'Percentil 95', value: currency(estatisticas.percentil95) },
+                { label: 'Mínimo', value: currency(estatisticas.minimo) },
+                { label: 'Máximo', value: currency(estatisticas.maximo) },
+              ]}
+            />
+            <p style={{ fontSize: 11, color: '#334155', lineHeight: 1.5 }}>{estatisticas.leitura}</p>
+          </PrintSection>
+        )}
+
+        {ranking && (
+          <PrintSection title="Ranking principal">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Mensalidade</th>
+                  <th>Plano</th>
+                  <th>Cidade/UF</th>
+                  <th>Segmento</th>
+                  <th>Status</th>
+                  <th>ABC</th>
+                  <th>Faixa</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ranking.data.slice(0, 30).map(cliente => (
+                  <tr key={cliente.id}>
+                    <td>{cliente.nome}</td>
+                    <td>{currency(cliente.mensalidade)}</td>
+                    <td>{cliente.plano || 'Não informado'}</td>
+                    <td>{[cliente.cidade, cliente.uf].filter(Boolean).join(' / ') || 'Não informado'}</td>
+                    <td>{cliente.segmento || 'Não informado'}</td>
+                    <td>{cliente.status}</td>
+                    <td>{cliente.classeAbc}</td>
+                    <td>{cliente.faixaMensalidade}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PrintSection>
+        )}
+
+        <PrintSection title="Análises complementares">
+          <table>
+            <thead>
+              <tr>
+                <th>Grupo</th>
+                <th>Clientes</th>
+                <th>Receita mensal</th>
+                <th>Ticket médio</th>
+                <th>% Carteira</th>
+                <th>% Receita</th>
+              </tr>
+            </thead>
+            <tbody>
+              {agrupamentos.slice(0, 30).map(item => (
+                <tr key={item.grupo}>
+                  <td>{item.grupo}</td>
+                  <td>{number(item.quantidadeClientes)}</td>
+                  <td>{currency(item.receitaMensalTotal)}</td>
+                  <td>{currency(item.ticketMedio)}</td>
+                  <td>{percent(item.percentualCarteira)}</td>
+                  <td>{percent(item.percentualReceitaTotal)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </PrintSection>
+      </div>
     </div>
   )
 }
