@@ -102,6 +102,28 @@ function formatTime(t: any): string {
   return `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`
 }
 
+function addMinutesToTime(horario: string, duracaoMin: number | string | null | undefined): string {
+  const match = /^(\d{2}):(\d{2})$/.exec(horario)
+  const duracao = Math.round(Number(duracaoMin ?? 0))
+  if (!match || !Number.isFinite(duracao) || duracao <= 0) return ''
+
+  const totalMinutos = Number(match[1]) * 60 + Number(match[2]) + duracao
+  const minutosDia = 24 * 60
+  const normalizado = ((totalMinutos % minutosDia) + minutosDia) % minutosDia
+
+  return `${String(Math.floor(normalizado / 60)).padStart(2, '0')}:${String(normalizado % 60).padStart(2, '0')}`
+}
+
+function getHorarioFinalAgenda(item: AgendaItem, inicio: string): string {
+  const fimSalvo = formatTime((item as any).horarioFim || (item as any).horaFim || (item as any).hora_fin)
+  if (fimSalvo) return fimSalvo
+
+  return addMinutesToTime(
+    inicio,
+    item.duracao ?? (item as any).duracaoMin ?? (item as any).duracao_min
+  )
+}
+
 function todayStr() {
   return new Date().toISOString().split('T')[0]
 }
@@ -595,12 +617,7 @@ export function Agenda() {
               const tipoClass = tipoColors[tipoKey] ?? defaultTipoColor
               
               const ini = formatTime((item as any).horario || item.horarioIni || (item as any).horaInicio)
-              // Handle horarioFim being null or undefined
-              const rawFim = (item as any).horarioFim
-              let fim = ''
-              if (rawFim) {
-                 fim = formatTime(rawFim)
-              }
+              const fim = getHorarioFinalAgenda(item, ini)
               
               // Se o horário final for igual ao inicial, não mostramos
               const timeStr = ini ? (fim && fim !== ini ? `${ini} – ${fim}` : ini) : (fim || '—')
