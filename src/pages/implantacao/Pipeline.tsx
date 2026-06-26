@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   GripVertical, LayoutList, Loader2, RefreshCcw, Search,
-  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History
+  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
@@ -15,6 +15,7 @@ import type {
 } from '../../types'
 
 type ViewMode = 'lista' | 'kanban'
+type UltimaVendaFiltro = 'all' | 'ate-30' | '31-90' | '91-180' | '181-365' | 'mais-365' | 'sem-venda'
 
 type TransitionItem = {
   checklistId: number
@@ -75,6 +76,26 @@ function clienteCorrespondeBusca(cliente: ImplantacaoCliente, search: string) {
   ]
 
   return campos.some((campo) => normalizarBusca(campo).includes(termo))
+}
+
+function getDiasDesde(value?: string | null): number | null {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000))
+}
+
+function clienteCorrespondeTempoUltimaVenda(cliente: ImplantacaoCliente, filtro: UltimaVendaFiltro) {
+  if (filtro === 'all') return true
+
+  const dias = getDiasDesde(cliente.dataUltimaVenda)
+  if (filtro === 'sem-venda') return dias === null
+  if (dias === null) return false
+  if (filtro === 'ate-30') return dias <= 30
+  if (filtro === '31-90') return dias >= 31 && dias <= 90
+  if (filtro === '91-180') return dias >= 91 && dias <= 180
+  if (filtro === '181-365') return dias >= 181 && dias <= 365
+  return dias > 365
 }
 
 function getNomeDestaque(cliente: ImplantacaoCliente) {
@@ -157,6 +178,7 @@ export function Pipeline() {
   const buscaRef = useRef<HTMLInputElement | null>(null)
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
+  const [ultimaVendaFiltro, setUltimaVendaFiltro] = useState<UltimaVendaFiltro>('all')
   const [viewMode, setViewMode] = useState<ViewMode>('lista')
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
@@ -195,15 +217,23 @@ export function Pipeline() {
     return map
   }, [painel?.etapas])
 
+  const clientesFiltrados = useMemo(
+    () => (painel?.clientes || []).filter((cliente) =>
+      clienteCorrespondeBusca(cliente, search) &&
+      clienteCorrespondeTempoUltimaVenda(cliente, ultimaVendaFiltro)
+    ),
+    [painel?.clientes, search, ultimaVendaFiltro],
+  )
+
   const clientesPorEtapa = useMemo(() => {
     const map = new Map<number, ImplantacaoCliente[]>()
     ;(painel?.etapas || []).forEach((e) => map.set(e.status, []))
-    ;(painel?.clientes || []).forEach((c) => {
+    clientesFiltrados.forEach((c) => {
       if (!map.has(c.statusInstal)) map.set(c.statusInstal, [])
       map.get(c.statusInstal)!.push(c)
     })
     return map
-  }, [painel?.etapas, painel?.clientes])
+  }, [painel?.etapas, clientesFiltrados])
 
   async function carregarPainel() {
     setLoading(true)
@@ -370,13 +400,8 @@ export function Pipeline() {
     }
   }
 
-  const clientes = painel?.clientes || []
   const etapas = painel?.etapas || []
   const etapasKanban = useMemo(() => etapas.filter((etapa) => etapa.status !== 7), [etapas])
-  const clientesFiltrados = useMemo(
-    () => clientes.filter((cliente) => clienteCorrespondeBusca(cliente, search)),
-    [clientes, search],
-  )
   const mediaClientesPorEtapa = useMemo(() => {
     if (!etapasKanban.length) return 0
     const total = etapasKanban.reduce(
@@ -441,8 +466,8 @@ export function Pipeline() {
       </div>
 
       <Card padding="sm">
-        <div className="grid grid-cols-1 md:grid-cols-11 gap-2 items-center">
-          <div className="md:col-span-4">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
+          <div className="md:col-span-3">
             <Input
               ref={buscaRef}
               icon={<Search className="w-3.5 h-3.5" />}
@@ -452,7 +477,7 @@ export function Pipeline() {
               className="h-7 sm:h-8 text-[11px] sm:text-xs"
             />
           </div>
-          <div className="md:col-span-4">
+          <div className="md:col-span-3">
             <div className="flex items-center gap-1.5">
               <div className="px-2 h-7 sm:h-8 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 flex items-center">
                 <SlidersHorizontal className="w-4 h-4 text-slate-500" />
@@ -466,6 +491,22 @@ export function Pipeline() {
                 {etapas.map((etapa) => (<option key={etapa.status} value={String(etapa.status)}>{etapa.status}. {etapa.nome}</option>))}
               </select>
             </div>
+          </div>
+          <div className="md:col-span-3">
+            <select
+              value={ultimaVendaFiltro}
+              onChange={(e) => setUltimaVendaFiltro(e.target.value as UltimaVendaFiltro)}
+              className="h-7 sm:h-8 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] sm:text-xs px-2.5"
+              title="Filtrar por tempo da última venda"
+            >
+              <option value="all">Tempo Últ Venda: todos</option>
+              <option value="ate-30">Até 30 dias</option>
+              <option value="31-90">31 a 90 dias</option>
+              <option value="91-180">91 a 180 dias</option>
+              <option value="181-365">181 a 365 dias</option>
+              <option value="mais-365">Acima de 1 ano</option>
+              <option value="sem-venda">Sem última venda</option>
+            </select>
           </div>
           <div className="md:col-span-3 flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden h-7 sm:h-8">
             <button className={clsx('flex-1 text-[11px] sm:text-xs flex items-center justify-center gap-1.5', viewMode === 'lista' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300')} onClick={() => setViewMode('lista')}>
@@ -500,6 +541,9 @@ export function Pipeline() {
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <Button size="sm" variant="ghost" icon={<History className="w-3.5 h-3.5" />} onClick={() => void abrirHistoricoCliente(cliente)}>
                     Histórico
+                  </Button>
+                  <Button size="sm" variant="ghost" icon={<NotebookPen className="w-3.5 h-3.5" />} onClick={() => navigate(`/clientes/${cliente.clienteId}?tab=prontuario`)}>
+                    Prontuário
                   </Button>
                   <Button size="sm" variant="ghost" icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => void abrirEdicaoCliente(cliente)}>
                     Editar
@@ -574,6 +618,14 @@ export function Pipeline() {
                           onClick={() => void abrirHistoricoCliente(cliente)}
                         >
                           Histórico
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={<NotebookPen className="w-3.5 h-3.5" />}
+                          onClick={() => navigate(`/clientes/${cliente.clienteId}?tab=prontuario`)}
+                        >
+                          Prontuário
                         </Button>
                         <Button
                           size="sm"
@@ -706,6 +758,17 @@ export function Pipeline() {
                                     }}
                                   >
                                     Abrir acompanhamento
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="text-[11px] text-blue-600 hover:text-blue-700"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      navigate(`/clientes/${cliente.clienteId}?tab=prontuario`)
+                                    }}
+                                  >
+                                    Abrir prontuário
                                   </button>
                                 </div>
                               </div>

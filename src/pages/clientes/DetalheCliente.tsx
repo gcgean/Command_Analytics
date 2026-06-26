@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft,
   Building2,
@@ -234,6 +234,7 @@ function formatDurationMinutes(value?: number | null) {
 export function DetalheCliente() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { can } = usePermissions()
   const [cliente, setCliente] = useState<ClienteDetalhe | undefined>()
   const [notFound, setNotFound] = useState(false)
@@ -255,6 +256,14 @@ export function DetalheCliente() {
     { key: 'tecnico', label: 'Técnico', icon: <Cpu className="w-4 h-4" /> },
     { key: 'implantacao', label: 'Implantação', icon: <GitBranch className="w-4 h-4" /> },
   ]
+
+  const tabParam = searchParams.get('tab')
+
+  useEffect(() => {
+    if (!tabParam) return
+    const tabIndex = tabs.findIndex((tab) => tab.key === tabParam)
+    if (tabIndex >= 0 && tabIndex !== activeTab) setActiveTab(tabIndex)
+  }, [activeTab, tabParam, tabs])
 
   useEffect(() => {
     if (activeTab >= tabs.length) setActiveTab(0)
