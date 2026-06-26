@@ -486,6 +486,7 @@ async function carregarClientesImplantacao() {
     const fantasia = String(row.nomeFantasia || '').trim()
     const statusAtual = normalizeStatus(Number(row.statusInstal ?? 0))
     const dataInicioStatusAtual = getDataInicioEtapaByStatus(row, statusAtual)
+    const dataUltimaVenda = row.ultimaVenda ? row.ultimaVenda.toISOString() : null
     return {
       clienteId: Number(row.clienteId),
       clienteNome: nomeCompleto || fantasia || `Cliente #${row.clienteId}`,
@@ -499,7 +500,8 @@ async function carregarClientesImplantacao() {
       statusInstal: statusAtual,
       statusPrimeiroPgto: row.statusPrimPgto || null,
       dataPrimeiroPgto: row.dtPrimeiroPgto ? row.dtPrimeiroPgto.toISOString() : null,
-      dataUltimaVenda: row.ultimaVenda ? row.ultimaVenda.toISOString() : null,
+      dataUltimaVenda,
+      diasUltimaVenda: dataUltimaVenda ? diffDays(dataUltimaVenda) : null,
       dataCadastro: row.dataCadastro ? row.dataCadastro.toISOString() : null,
       dataInicioStatusAtual: dataInicioStatusAtual ? dataInicioStatusAtual.toISOString() : null,
       observacoes: row.observacoes || null,

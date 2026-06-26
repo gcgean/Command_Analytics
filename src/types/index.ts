@@ -480,6 +480,7 @@ export interface ImplantacaoCliente {
   statusPrimeiroPgto?: string | null
   dataPrimeiroPgto?: string | null
   dataUltimaVenda?: string | null
+  diasUltimaVenda?: number | null
   dataCadastro?: string | null
   dataInicioStatusAtual?: string | null
   observacoes?: string | null

@@ -48,7 +48,11 @@ function formatTempoDesde(value?: string | null) {
   if (!value) return '—'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '—'
-  const dias = Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000))
+  return formatTempoDias(Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000)))
+}
+
+function formatTempoDias(dias: number | null | undefined) {
+  if (dias === null || dias === undefined || !Number.isFinite(dias)) return '—'
   if (dias < 30) return `${dias} dias`
   if (dias < 365) return `${Math.floor(dias / 30)} meses`
   const anos = dias / 365
@@ -85,10 +89,18 @@ function getDiasDesde(value?: string | null): number | null {
   return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000))
 }
 
+function getDiasUltimaVenda(cliente: ImplantacaoCliente): number | null {
+  if (typeof cliente.diasUltimaVenda === 'number' && Number.isFinite(cliente.diasUltimaVenda)) {
+    return Math.max(0, cliente.diasUltimaVenda)
+  }
+
+  return getDiasDesde(cliente.dataUltimaVenda)
+}
+
 function clienteCorrespondeTempoUltimaVenda(cliente: ImplantacaoCliente, filtro: UltimaVendaFiltro) {
   if (filtro === 'all') return true
 
-  const dias = getDiasDesde(cliente.dataUltimaVenda)
+  const dias = getDiasUltimaVenda(cliente)
   if (filtro === 'sem-venda') return dias === null
   if (dias === null) return false
   if (filtro === 'ate-30') return dias <= 30
@@ -606,7 +618,7 @@ export function Pipeline() {
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{formatDate(cliente.dataPrimeiroPgto)}</td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{formatCidadeUf(cliente.cidade, cliente.uf)}</td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{formatDate(cliente.dataCadastro)}</td>
-                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{formatTempoDesde(cliente.dataUltimaVenda)}</td>
+                    <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{formatTempoDias(getDiasUltimaVenda(cliente))}</td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{formatTempoDesde(cliente.dataCadastro)}</td>
                     <td className="px-4 py-3 text-xs text-slate-700 dark:text-slate-300">{cliente.responsavelNome || 'Não definido'}</td>
                     <td className="px-4 py-3 text-right">
