@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { PermissionsProvider } from '../../contexts/PermissionsContext'
 import { PwaUpdateBanner } from '../ui/PwaUpdateBanner'
+import { PwaInstallPrompt } from '../ui/PwaInstallPrompt'
 import clsx from 'clsx'
 
 export function MainLayout() {
@@ -39,6 +40,7 @@ export function MainLayout() {
           </main>
         </div>
         <PwaUpdateBanner />
+        <PwaInstallPrompt />
       </div>
     </PermissionsProvider>
   )
