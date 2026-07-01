@@ -87,6 +87,14 @@ function normalizarHorario(horario: string | null | undefined): string {
   return /^\d{2}:\d{2}$/.test(valor) ? valor : CONFIG_DEFAULT.horarioResumoDia
 }
 
+function normalizarHorarioEvento(horario: string | null | undefined): string | null {
+  const valor = String(horario || '').trim()
+  if (!valor) return null
+
+  const horaCurta = valor.slice(0, 5)
+  return /^\d{2}:\d{2}$/.test(horaCurta) ? horaCurta : null
+}
+
 function normalizarAntecedencia(valor: unknown): number {
   const numero = Number(valor)
   if (!Number.isFinite(numero)) return CONFIG_DEFAULT.antecedenciaMin
@@ -352,6 +360,7 @@ async function gerarLembreteAgendamento(
 
   const lembrete = construirMensagemLembrete(agendamento, antecedenciaMin)
   const tipoNotificacao: TipoNotificacao = antecedenciaMin <= 0 ? 'agenda_inicio' : 'agenda_lembrete'
+  const horarioEvento = normalizarHorarioEvento(agendamento.horarioIni)
 
   if (config.ativoPlataforma) {
     const chavePlataforma = construirChaveEvento({
@@ -361,7 +370,7 @@ async function gerarLembreteAgendamento(
       origem: agendamento.origem,
       agendaId: agendamento.id,
       dataRef: agendamento.data || '',
-      horarioRef: agendamento.horarioIni,
+      horarioRef: horarioEvento,
       antecedenciaMin,
     })
 
@@ -376,7 +385,7 @@ async function gerarLembreteAgendamento(
         agendaOrigem: agendamento.origem,
         agendaId: agendamento.id,
         agendamentoData: agendamento.data,
-        agendamentoHora: agendamento.horarioIni,
+        agendamentoHora: horarioEvento,
       })
       stats.plataformaGeradas += 1
       stats.lembretesGerados += 1
@@ -391,7 +400,7 @@ async function gerarLembreteAgendamento(
       origem: agendamento.origem,
       agendaId: agendamento.id,
       dataRef: agendamento.data || '',
-      horarioRef: agendamento.horarioIni,
+      horarioRef: horarioEvento,
       antecedenciaMin,
     })
 
@@ -416,7 +425,7 @@ async function gerarLembreteAgendamento(
             agendaOrigem: agendamento.origem,
             agendaId: agendamento.id,
             agendamentoData: agendamento.data,
-            agendamentoHora: agendamento.horarioIni,
+            agendamentoHora: horarioEvento,
           })
           stats.telegramEnviados += 1
         }
