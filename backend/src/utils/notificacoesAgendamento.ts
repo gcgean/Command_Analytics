@@ -12,7 +12,7 @@ export interface NotificacaoPlataformaItem {
   id: number
   titulo: string
   mensagem: string
-  tipo: 'agenda_dia' | 'agenda_lembrete'
+  tipo: 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio'
   lida: boolean
   criadoEm: string
   agendaOrigem?: 'agenda' | 'programado' | null
@@ -38,7 +38,9 @@ export interface StatusProcessamentoNotificacaoAgendamento {
 }
 
 type CanalNotificacao = 'plataforma' | 'telegram'
-type TipoNotificacao = 'agenda_dia' | 'agenda_lembrete'
+type TipoNotificacao = 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio'
+
+const JANELA_ALERTA_INICIO_MINUTOS = 5
 
 interface AgendamentoBase {
   id: number
@@ -349,11 +351,12 @@ async function gerarLembreteAgendamento(
   if (!tecnicoId) return
 
   const lembrete = construirMensagemLembrete(agendamento, antecedenciaMin)
+  const tipoNotificacao: TipoNotificacao = antecedenciaMin <= 0 ? 'agenda_inicio' : 'agenda_lembrete'
 
   if (config.ativoPlataforma) {
     const chavePlataforma = construirChaveEvento({
       canal: 'plataforma',
-      tipo: 'agenda_lembrete',
+      tipo: tipoNotificacao,
       usuarioId: tecnicoId,
       origem: agendamento.origem,
       agendaId: agendamento.id,
@@ -366,7 +369,7 @@ async function gerarLembreteAgendamento(
       await registrarNotificacao({
         usuarioId: tecnicoId,
         canal: 'plataforma',
-        tipo: 'agenda_lembrete',
+        tipo: tipoNotificacao,
         chaveEvento: chavePlataforma,
         titulo: lembrete.titulo,
         mensagem: lembrete.mensagem,
@@ -383,7 +386,7 @@ async function gerarLembreteAgendamento(
   if (config.ativoTelegram) {
     const chaveTelegram = construirChaveEvento({
       canal: 'telegram',
-      tipo: 'agenda_lembrete',
+      tipo: tipoNotificacao,
       usuarioId: tecnicoId,
       origem: agendamento.origem,
       agendaId: agendamento.id,
@@ -406,7 +409,7 @@ async function gerarLembreteAgendamento(
           await registrarNotificacao({
             usuarioId: tecnicoId,
             canal: 'telegram',
-            tipo: 'agenda_lembrete',
+            tipo: tipoNotificacao,
             chaveEvento: chaveTelegram,
             titulo: lembrete.titulo,
             mensagem: lembrete.mensagem,
@@ -644,7 +647,7 @@ export async function processarNotificacoesAgendamento(agora = new Date()): Prom
       if (!inicio) continue
 
       const lembreteEm = new Date(inicio.getTime() - config.antecedenciaMin * 60 * 1000)
-      const fimJanelaInicio = new Date(inicio.getTime() + 60 * 1000)
+      const fimJanelaInicio = new Date(inicio.getTime() + JANELA_ALERTA_INICIO_MINUTOS * 60 * 1000)
 
       if (agora >= lembreteEm && agora < inicio) {
         await gerarLembreteAgendamento(agendamento, config, resumoExecucao, config.antecedenciaMin)
