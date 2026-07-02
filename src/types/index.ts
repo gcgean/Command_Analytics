@@ -467,6 +467,10 @@ export interface ImplantacaoEtapa {
 }
 
 export interface ImplantacaoCliente {
+  processoId?: number
+  processoTipo?: 'novo_cliente' | 'novo_servico'
+  processoTitulo?: string | null
+  servicoNome?: string | null
   clienteId: number
   clienteNome: string
   nomeFantasia?: string | null
@@ -506,6 +510,12 @@ export interface ImplantacaoPainel {
     atrasados?: number
   }
   clientes: ImplantacaoCliente[]
+  clientesDisponiveis?: Array<{
+    clienteId: number
+    clienteNome: string
+    nomeFantasia?: string | null
+    cnpj?: string | null
+  }>
 }
 
 export interface ImplantacaoChecklistDetalhe {

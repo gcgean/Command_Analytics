@@ -443,34 +443,44 @@ export const api = {
   getPipeline: () => fetchApi<PipelineItem[]>('/pipeline'),
   updatePipelineEtapa: (id: number, etapa: number, observacoes?: string) =>
     fetchApi<PipelineItem>(`/pipeline/${id}/etapa`, { method: 'PATCH', body: JSON.stringify({ etapa, observacoes }) }),
-  getImplantacaoPainel: (params?: { search?: string; status?: string }) => {
+  getImplantacaoPainel: (params?: { search?: string; status?: string; dataCadastroInicial?: string; dataCadastroFinal?: string }) => {
     const searchParams = new URLSearchParams()
     if (params?.search) searchParams.set('search', params.search)
     if (params?.status) searchParams.set('status', params.status)
+    if (params?.dataCadastroInicial) searchParams.set('dataCadastroInicial', params.dataCadastroInicial)
+    if (params?.dataCadastroFinal) searchParams.set('dataCadastroFinal', params.dataCadastroFinal)
     const qs = searchParams.toString() ? `?${searchParams.toString()}` : ''
     return fetchApi<ImplantacaoPainel>(`/pipeline/implantacao/painel${qs}`)
   },
-  getImplantacaoChecklist: (clienteId: number, status?: number) =>
-    fetchApi<ImplantacaoChecklistDetalhe>(`/pipeline/implantacao/${clienteId}/checklist${status ? `?status=${status}` : ''}`),
-  getImplantacaoConfiguracao: (clienteId: number) =>
-    fetchApi<ImplantacaoConfiguracaoCliente>(`/pipeline/implantacao/${clienteId}/configuracao`),
+  getImplantacaoChecklist: (clienteId: number, status?: number, processoId?: number) => {
+    const params = new URLSearchParams()
+    if (status) params.set('status', String(status))
+    if (processoId) params.set('processoId', String(processoId))
+    const qs = params.toString()
+    return fetchApi<ImplantacaoChecklistDetalhe>(`/pipeline/implantacao/${clienteId}/checklist${qs ? `?${qs}` : ''}`)
+  },
+  getImplantacaoConfiguracao: (clienteId: number, processoId?: number) =>
+    fetchApi<ImplantacaoConfiguracaoCliente>(`/pipeline/implantacao/${clienteId}/configuracao${processoId ? `?processoId=${processoId}` : ''}`),
   updateImplantacaoConfiguracao: (
     clienteId: number,
-    data: { statusInstal?: number; responsavelId?: number | null; checklistIds?: number[]; observacao?: string }
+    data: { statusInstal?: number; responsavelId?: number | null; checklistIds?: number[]; observacao?: string; processoId?: number }
   ) => fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/configuracao`, { method: 'PUT', body: JSON.stringify(data) }),
-  updateImplantacaoStatus: (clienteId: number, status: number, observacao?: string) =>
-    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/status`, { method: 'PATCH', body: JSON.stringify({ status, observacao }) }),
-  updateImplantacaoResponsavel: (clienteId: number, responsavelId: number | null, observacao?: string) =>
-    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/responsavel`, { method: 'PATCH', body: JSON.stringify({ responsavelId, observacao }) }),
-  marcarItemChecklistImplantacao: (clienteId: number, data: { checklistId: number; itemIndex: number; marcado: boolean; observacao?: string }) =>
+  updateImplantacaoStatus: (clienteId: number, status: number, observacao?: string, processoId?: number) =>
+    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/status`, { method: 'PATCH', body: JSON.stringify({ status, observacao, processoId }) }),
+  updateImplantacaoResponsavel: (clienteId: number, responsavelId: number | null, observacao?: string, processoId?: number) =>
+    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/responsavel`, { method: 'PATCH', body: JSON.stringify({ responsavelId, observacao, processoId }) }),
+  marcarItemChecklistImplantacao: (clienteId: number, data: { checklistId: number; itemIndex: number; marcado: boolean; observacao?: string; processoId?: number }) =>
     fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/checklist`, { method: 'PATCH', body: JSON.stringify(data) }),
   transicaoImplantacao: (clienteId: number, data: {
     statusDestino: number
     observacao?: string
     checklist?: Array<{ checklistId: number; itemIndex: number; marcado: boolean; observacao?: string }>
+    processoId?: number
   }) => fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/transicao`, { method: 'PATCH', body: JSON.stringify(data) }),
-  addImplantacaoObservacao: (clienteId: number, observacao: string) =>
-    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/observacao`, { method: 'POST', body: JSON.stringify({ observacao }) }),
+  addImplantacaoObservacao: (clienteId: number, observacao: string, processoId?: number) =>
+    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/observacao`, { method: 'POST', body: JSON.stringify({ observacao, processoId }) }),
+  criarProcessoImplantacao: (data: { clienteId: number; tipo: 'novo_cliente' | 'novo_servico'; titulo: string; servicoNome?: string; statusInstal?: number; responsavelId?: number | null; observacao?: string }) =>
+    fetchApi<{ ok: boolean; processoId: number }>('/pipeline/implantacao/processos', { method: 'POST', body: JSON.stringify(data) }),
 
   // ─── CRM ───────────────────────────────────────────────────
   getNegocios: () => fetchApi<Negocio[]>('/crm/negocios'),

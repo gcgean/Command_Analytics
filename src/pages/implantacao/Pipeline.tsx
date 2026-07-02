@@ -122,12 +122,23 @@ function clienteCorrespondeTempoUltimaVenda(cliente: ImplantacaoCliente, filtro:
 }
 
 function getNomeDestaque(cliente: ImplantacaoCliente) {
+  if (cliente.processoTipo === 'novo_servico') {
+    const tituloProcesso = String(cliente.processoTitulo || cliente.servicoNome || '').trim()
+    if (tituloProcesso) return tituloProcesso
+  }
   const fantasia = String(cliente.nomeFantasia || '').trim()
   const razao = String(cliente.clienteNome || '').trim()
   return fantasia || razao || 'Cliente sem nome'
 }
 
 function getNomeSecundario(cliente: ImplantacaoCliente) {
+  if (cliente.processoTipo === 'novo_servico') {
+    const nomeCliente = String(cliente.clienteNome || '').trim()
+    const fantasia = String(cliente.nomeFantasia || '').trim()
+    return fantasia && fantasia.toLowerCase() !== nomeCliente.toLowerCase()
+      ? `${fantasia} • ${nomeCliente}`
+      : nomeCliente
+  }
   const fantasia = String(cliente.nomeFantasia || '').trim()
   const razao = String(cliente.clienteNome || '').trim()
   if (!fantasia) return ''
@@ -136,7 +147,29 @@ function getNomeSecundario(cliente: ImplantacaoCliente) {
 }
 
 function getClienteRenderKey(cliente: ImplantacaoCliente, index: number) {
-  return `${cliente.clienteId}-${cliente.statusInstal}-${cliente.responsavelId ?? 'none'}-${index}`
+  return `${cliente.processoId ?? cliente.clienteId}-${cliente.statusInstal}-${cliente.responsavelId ?? 'none'}-${index}`
+}
+
+function getTipoProcessoLabel(cliente: ImplantacaoCliente) {
+  if (cliente.processoTipo === 'novo_servico') return 'Serviço implantado'
+  return 'Novo cliente'
+}
+
+function normalizarDataFiltro(value?: string | null) {
+  const data = String(value || '').trim()
+  return /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : ''
+}
+
+function clienteCorrespondeDataCadastro(cliente: ImplantacaoCliente, dataInicial?: string, dataFinal?: string) {
+  const dataCliente = String(cliente.dataCadastro || '').slice(0, 10)
+  if (!dataCliente) return false
+
+  const inicio = normalizarDataFiltro(dataInicial)
+  const fim = normalizarDataFiltro(dataFinal)
+
+  if (inicio && dataCliente < inicio) return false
+  if (fim && dataCliente > fim) return false
+  return true
 }
 
 function getDiasNaEtapa(cliente: ImplantacaoCliente) {
@@ -206,6 +239,8 @@ export function Pipeline() {
   const [search, setSearch] = useState('')
   const [status, setStatus] = useState('all')
   const [ultimaVendaFiltro, setUltimaVendaFiltro] = useState<UltimaVendaFiltro>('all')
+  const [dataCadastroInicial, setDataCadastroInicial] = useState('')
+  const [dataCadastroFinal, setDataCadastroFinal] = useState('')
   const [viewMode, setViewMode] = useState<ViewMode>('lista')
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
@@ -238,6 +273,16 @@ export function Pipeline() {
   const [historyData, setHistoryData] = useState<any | null>(null)
   const [historyCliente, setHistoryCliente] = useState<ImplantacaoCliente | null>(null)
 
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createSaving, setCreateSaving] = useState(false)
+  const [createClienteId, setCreateClienteId] = useState('')
+  const [createTipo, setCreateTipo] = useState<'novo_cliente' | 'novo_servico'>('novo_servico')
+  const [createTitulo, setCreateTitulo] = useState('')
+  const [createServicoNome, setCreateServicoNome] = useState('')
+  const [createStatus, setCreateStatus] = useState<number>(1)
+  const [createResponsavel, setCreateResponsavel] = useState<string>('none')
+  const [createObs, setCreateObs] = useState('')
+
   const etapaMap = useMemo(() => {
     const map = new Map<number, ImplantacaoEtapa>()
     ;(painel?.etapas || []).forEach((e) => map.set(e.status, e))
@@ -245,10 +290,11 @@ export function Pipeline() {
   }, [painel?.etapas])
 
   const clientesBase = useMemo(() => {
-    const unicos = new Map<number, ImplantacaoCliente>()
+    const unicos = new Map<string, ImplantacaoCliente>()
     ;(painel?.clientes || []).forEach((cliente) => {
-      if (!unicos.has(cliente.clienteId)) {
-        unicos.set(cliente.clienteId, cliente)
+      const key = String(cliente.processoId || `${cliente.clienteId}-principal`)
+      if (!unicos.has(key)) {
+        unicos.set(key, cliente)
       }
     })
     return Array.from(unicos.values())
@@ -257,9 +303,10 @@ export function Pipeline() {
   const clientesFiltrados = useMemo(
     () => clientesBase.filter((cliente) =>
       clienteCorrespondeBusca(cliente, search) &&
-      clienteCorrespondeTempoUltimaVenda(cliente, ultimaVendaFiltro)
+      clienteCorrespondeTempoUltimaVenda(cliente, ultimaVendaFiltro) &&
+      clienteCorrespondeDataCadastro(cliente, dataCadastroInicial, dataCadastroFinal)
     ),
-    [clientesBase, search, ultimaVendaFiltro],
+    [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal],
   )
 
   const clientesPorEtapa = useMemo(() => {
@@ -272,11 +319,15 @@ export function Pipeline() {
     return map
   }, [painel?.etapas, clientesFiltrados])
 
+  const clientesDisponiveis = painel?.clientesDisponiveis || []
+
   async function carregarPainel() {
     setLoading(true)
     try {
       const data = await api.getImplantacaoPainel({
         status: status !== 'all' ? status : undefined,
+        dataCadastroInicial: normalizarDataFiltro(dataCadastroInicial) || undefined,
+        dataCadastroFinal: normalizarDataFiltro(dataCadastroFinal) || undefined,
       })
       setPainel(data)
     } finally {
@@ -289,7 +340,7 @@ export function Pipeline() {
       void carregarPainel()
     }, 250)
     return () => window.clearTimeout(id)
-  }, [status])
+  }, [status, dataCadastroInicial, dataCadastroFinal])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -320,13 +371,44 @@ export function Pipeline() {
     await carregarPainel()
   }
 
+  function abrirCriacaoProcesso() {
+    setCreateClienteId(clientesDisponiveis[0]?.clienteId ? String(clientesDisponiveis[0].clienteId) : '')
+    setCreateTipo('novo_servico')
+    setCreateTitulo('')
+    setCreateServicoNome('')
+    setCreateStatus(1)
+    setCreateResponsavel('none')
+    setCreateObs('')
+    setCreateOpen(true)
+  }
+
+  async function salvarNovoProcesso() {
+    if (!createClienteId) return
+    setCreateSaving(true)
+    try {
+      await api.criarProcessoImplantacao({
+        clienteId: Number(createClienteId),
+        tipo: createTipo,
+        titulo: createTitulo.trim() || (createTipo === 'novo_servico' ? 'Novo serviço implantado' : 'Novo processo'),
+        servicoNome: createServicoNome.trim() || undefined,
+        statusInstal: createStatus,
+        responsavelId: createResponsavel === 'none' ? null : Number(createResponsavel),
+        observacao: createObs.trim() || undefined,
+      })
+      setCreateOpen(false)
+      await carregarPainel()
+    } finally {
+      setCreateSaving(false)
+    }
+  }
+
   async function abrirEdicaoCliente(cliente: ImplantacaoCliente) {
     setEditOpen(true)
     setEditLoading(true)
     setEditCliente(cliente)
     setEditObs('')
     try {
-      const data = await api.getImplantacaoConfiguracao(cliente.clienteId)
+      const data = await api.getImplantacaoConfiguracao(cliente.clienteId, cliente.processoId)
       setEditEtapasDisponiveis(data.etapas)
       setEditResponsaveis(data.responsaveis || [])
       setEditChecklists(data.checklists || [])
@@ -347,6 +429,7 @@ export function Pipeline() {
         responsavelId: editResponsavel === 'none' ? null : Number(editResponsavel),
         checklistIds: editChecklistIds,
         observacao: editObs.trim() || undefined,
+        processoId: editCliente.processoId,
       })
       setEditOpen(false)
       await carregarPainel()
@@ -367,7 +450,7 @@ export function Pipeline() {
     setHistoryLoading(true)
     setHistoryCliente(cliente)
     try {
-      const data = await api.getImplantacaoChecklist(cliente.clienteId)
+      const data = await api.getImplantacaoChecklist(cliente.clienteId, undefined, cliente.processoId)
       setHistoryData(data)
     } finally {
       setHistoryLoading(false)
@@ -375,7 +458,7 @@ export function Pipeline() {
   }
 
   function onDragStart(cliente: ImplantacaoCliente) {
-    setDraggingClienteId(cliente.clienteId)
+    setDraggingClienteId(cliente.processoId || cliente.clienteId)
     setDraggingFromStatus(cliente.statusInstal)
   }
 
@@ -388,7 +471,7 @@ export function Pipeline() {
     setTransitionOpen(true)
     setLoadingTransitionChecklist(true)
     try {
-      const data = await api.getImplantacaoChecklist(cliente.clienteId, targetStatus)
+      const data = await api.getImplantacaoChecklist(cliente.clienteId, targetStatus, cliente.processoId)
       const items: TransitionItem[] = []
       data.checklists.forEach((checklist) => {
         checklist.itens.forEach((item) => {
@@ -409,7 +492,7 @@ export function Pipeline() {
 
   async function onDropToStage(targetStatus: number) {
     if (!draggingClienteId || !draggingFromStatus) return
-    const cliente = (painel?.clientes || []).find((c) => c.clienteId === draggingClienteId)
+    const cliente = (painel?.clientes || []).find((c) => (c.processoId || c.clienteId) === draggingClienteId)
     setDraggingClienteId(null)
     setDraggingFromStatus(null)
     if (!cliente) return
@@ -423,6 +506,7 @@ export function Pipeline() {
       await api.transicaoImplantacao(transitionCliente.clienteId, {
         statusDestino: transitionTargetStatus,
         observacao: transitionObs.trim() || undefined,
+        processoId: transitionCliente.processoId,
         checklist: transitionItems.map((item) => ({
           checklistId: item.checklistId,
           itemIndex: item.itemIndex,
@@ -479,10 +563,17 @@ export function Pipeline() {
           <p className="text-xs text-slate-500 dark:text-slate-400">Implantação &gt; Pipeline</p>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">Pipeline de Implantação</h1>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Visualização em lista ou kanban. Arraste clientes entre etapas para avançar o processo.
+            Visualização em lista ou kanban. Cada cliente pode ter mais de um processo de implantação, incluindo novos serviços.
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="primary"
+            onClick={abrirCriacaoProcesso}
+            className="w-full sm:w-auto justify-center"
+          >
+            Novo processo
+          </Button>
           <button
             type="button"
             title="Atalhos: Ctrl+K busca de cliente | Ctrl+P Pipeline | Ctrl+D Dashboard"
@@ -504,7 +595,7 @@ export function Pipeline() {
 
       <Card padding="sm">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
-          <div className="md:col-span-3">
+          <div className="md:col-span-4">
             <Input
               ref={buscaRef}
               icon={<Search className="w-3.5 h-3.5" />}
@@ -545,7 +636,25 @@ export function Pipeline() {
               <option value="sem-venda">Sem última venda</option>
             </select>
           </div>
-          <div className="md:col-span-3 flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden h-7 sm:h-8">
+          <div className="md:col-span-2">
+            <input
+              type="date"
+              value={dataCadastroInicial}
+              onChange={(e) => setDataCadastroInicial(e.target.value)}
+              className="h-7 sm:h-8 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] sm:text-xs px-2.5"
+              title="Filtrar por data de cadastro inicial"
+            />
+          </div>
+          <div className="md:col-span-2">
+            <input
+              type="date"
+              value={dataCadastroFinal}
+              onChange={(e) => setDataCadastroFinal(e.target.value)}
+              className="h-7 sm:h-8 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] sm:text-xs px-2.5"
+              title="Filtrar por data de cadastro final"
+            />
+          </div>
+          <div className="md:col-span-4 flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden h-7 sm:h-8">
             <button className={clsx('flex-1 text-[11px] sm:text-xs flex items-center justify-center gap-1.5', viewMode === 'lista' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300')} onClick={() => setViewMode('lista')}>
               <LayoutList className="w-3.5 h-3.5" /> Lista
             </button>
@@ -559,12 +668,13 @@ export function Pipeline() {
       {viewMode === 'lista' ? (
         <Card padding="none">
           <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Clientes ({clientesFiltrados.length})</h2>
+            <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">Processos ({clientesFiltrados.length})</h2>
             {loading ? <Loader2 className="w-4 h-4 animate-spin text-slate-500" /> : null}
           </div>
           <div className="md:hidden p-2.5 space-y-2">
             {clientesFiltrados.map((cliente, index) => (
               <div key={getClienteRenderKey(cliente, index)} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-900">
+                <p className="text-[11px] font-medium text-blue-600">{getTipoProcessoLabel(cliente)}</p>
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{getNomeDestaque(cliente)}</p>
                 {(getNomeSecundario(cliente) || cliente.cnpj) && (
                   <p className="text-[11px] text-slate-500 mt-0.5">
@@ -596,6 +706,7 @@ export function Pipeline() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50 dark:bg-slate-900/50">
                 <tr className="text-left text-slate-600 dark:text-slate-400">
+                  <th className="px-4 py-3">Processo</th>
                   <th className="px-4 py-3">Cliente</th>
                   <th className="px-4 py-3">Etapa</th>
                   <th className="px-4 py-3">Status Pgto</th>
@@ -611,6 +722,10 @@ export function Pipeline() {
               <tbody>
                 {clientesFiltrados.map((cliente, index) => (
                   <tr key={getClienteRenderKey(cliente, index)} className="border-t border-slate-200 dark:border-slate-700">
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-slate-800 dark:text-slate-100">{cliente.processoTitulo || getTipoProcessoLabel(cliente)}</p>
+                      <p className="text-xs text-slate-500">{getTipoProcessoLabel(cliente)}</p>
+                    </td>
                     <td className="px-4 py-3">
                       <p className="font-semibold text-slate-800 dark:text-slate-100">{getNomeDestaque(cliente)}</p>
                       {(getNomeSecundario(cliente) || cliente.cnpj) && (
@@ -677,7 +792,7 @@ export function Pipeline() {
                   </tr>
                 ))}
                 {!loading && clientesFiltrados.length === 0 ? (
-                  <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={10}>Nenhum cliente encontrado.</td></tr>
+                  <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={11}>Nenhum processo encontrado.</td></tr>
                 ) : null}
               </tbody>
             </table>
@@ -718,7 +833,7 @@ export function Pipeline() {
                         </p>
                         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: etapa.cor }} />
                       </div>
-                      <p className="text-[11px] sm:text-xs text-slate-500 mt-1">{clientesDaEtapa.length} clientes</p>
+                      <p className="text-[11px] sm:text-xs text-slate-500 mt-1">{clientesDaEtapa.length} processos</p>
                     </div>
                     <div className="p-1.5 sm:p-2 space-y-2 min-h-[180px] sm:min-h-[220px]">
                       {clientesDaEtapa.map((cliente, index) => {
@@ -772,6 +887,7 @@ export function Pipeline() {
                                     {getNomeSecundario(cliente)}
                                   </p>
                                 )}
+                                <p className="text-[11px] sm:text-xs text-blue-600 mt-0.5">{getTipoProcessoLabel(cliente)}</p>
                                 <p className="text-[11px] sm:text-xs text-slate-500 mt-1">{cliente.progressoChecklist}% checklist • {cliente.responsavelNome || 'Sem responsável'}</p>
                                 <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
                                   <button
@@ -821,6 +937,86 @@ export function Pipeline() {
           </div>
         </Card>
       )}
+
+      <Modal
+        isOpen={createOpen}
+        onClose={() => !createSaving && setCreateOpen(false)}
+        title="Novo processo de implantação"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Cliente</label>
+            <select
+              value={createClienteId}
+              onChange={(e) => setCreateClienteId(e.target.value)}
+              className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
+            >
+              <option value="">Selecione</option>
+              {clientesDisponiveis.map((cliente) => (
+                <option key={cliente.clienteId} value={String(cliente.clienteId)}>
+                  {cliente.nomeFantasia || cliente.clienteNome}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
+              <select
+                value={createTipo}
+                onChange={(e) => setCreateTipo(e.target.value as 'novo_cliente' | 'novo_servico')}
+                className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
+              >
+                <option value="novo_servico">Serviço implantado</option>
+                <option value="novo_cliente">Novo cliente</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Etapa inicial</label>
+              <select
+                value={String(createStatus)}
+                onChange={(e) => setCreateStatus(Number(e.target.value))}
+                className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
+              >
+                {etapas.map((etapa) => (
+                  <option key={etapa.status} value={String(etapa.status)}>{etapa.status}. {etapa.nome}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Nome do processo</label>
+            <Input
+              value={createTitulo}
+              onChange={(e) => setCreateTitulo(e.target.value)}
+              placeholder={createTipo === 'novo_servico' ? 'Ex.: Implantação do Financeiro' : 'Ex.: Implantação inicial'}
+            />
+          </div>
+          {createTipo === 'novo_servico' ? (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Serviço</label>
+              <Input
+                value={createServicoNome}
+                onChange={(e) => setCreateServicoNome(e.target.value)}
+                placeholder="Ex.: Módulo Fiscal"
+              />
+            </div>
+          ) : null}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Observação</label>
+            <textarea
+              value={createObs}
+              onChange={(e) => setCreateObs(e.target.value)}
+              className="min-h-[96px] w-full rounded-lg border border-slate-300 bg-white text-sm px-3 py-2"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setCreateOpen(false)} disabled={createSaving}>Cancelar</Button>
+            <Button variant="primary" onClick={() => void salvarNovoProcesso()} loading={createSaving}>Criar processo</Button>
+          </div>
+        </div>
+      </Modal>
 
       <Card>
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2 flex items-center gap-2">

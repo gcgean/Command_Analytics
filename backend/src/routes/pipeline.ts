@@ -49,6 +49,22 @@ type ClienteImplantacaoRow = {
   dtStatus16: Date | null
 }
 
+type ProcessoImplantacaoRow = {
+  processoId: number
+  clienteId: number
+  tipo: string
+  titulo: string | null
+  servicoNome: string | null
+  statusAtual: number | null
+  observacao: string | null
+  processoPrincipal: number | boolean
+  criadoEm: Date | null
+  atualizadoEm: Date | null
+  responsavelId: number | null
+  responsavelNome: string | null
+  responsavelAtualizadoEm: Date | null
+}
+
 type ChecklistRow = {
   id: number
   nome: string
@@ -62,6 +78,7 @@ type ChecklistRow = {
 
 type MarcacaoRow = {
   cliente_id: number
+  processo_id: number | null
   checklist_id: number
   item_indice: number
   marcado: number | boolean
@@ -69,6 +86,7 @@ type MarcacaoRow = {
 
 type ChecklistClienteRow = {
   cliente_id: number
+  processo_id: number | null
   checklist_id: number
 }
 
@@ -82,11 +100,13 @@ type EtapaConfigRow = {
 
 type StatusMovRow = {
   cliente_id: number
+  processo_id: number | null
   ultima_data: Date | null
 }
 
 type TimelineRow = {
   id: number
+  processo_id: number | null
   tipo: string
   status_origem: number | null
   status_destino: number | null
@@ -104,6 +124,17 @@ type TimelineRow = {
 type UsuarioAtivoRow = {
   id: number
   nome: string | null
+}
+
+type ProcessoContextoRow = {
+  processoId: number
+  clienteId: number
+  tipo: string
+  titulo: string | null
+  servicoNome: string | null
+  statusAtual: number | null
+  observacao: string | null
+  processoPrincipal: number | boolean
 }
 
 const ETAPAS_PADRAO: EtapaBase[] = [
@@ -214,6 +245,15 @@ function diffDays(fromIso: string | null | undefined): number {
   return Math.max(0, Math.floor((Date.now() - from.getTime()) / 86400000))
 }
 
+function normalizeDateFilter(value: string | null | undefined): string {
+  const data = String(value || '').trim()
+  return /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : ''
+}
+
+function getProcessoKey(clienteId: number, processoId: number | null | undefined) {
+  return `${Number(clienteId)}:${Number(processoId ?? 0)}`
+}
+
 function getDataInicioEtapaByStatus(row: ClienteImplantacaoRow, status: number): Date | null {
   switch (normalizeStatus(status)) {
     case 1: return row.dtStatus1
@@ -236,6 +276,55 @@ function getDataInicioEtapaByStatus(row: ClienteImplantacaoRow, status: number):
   }
 }
 
+async function getProcessoContexto(clienteId: number, processoId?: number | null) {
+  await ensureImplantacaoBootstrap()
+  const rows = processoId && Number(processoId) > 0
+    ? await prisma.$queryRaw<ProcessoContextoRow[]>`
+      SELECT
+        id AS processoId,
+        cliente_id AS clienteId,
+        tipo,
+        titulo,
+        servico_nome AS servicoNome,
+        status_atual AS statusAtual,
+        observacao,
+        processo_principal AS processoPrincipal
+      FROM implantacao_processos
+      WHERE id = ${Number(processoId)}
+        AND cliente_id = ${clienteId}
+      LIMIT 1
+    `
+    : await prisma.$queryRaw<ProcessoContextoRow[]>`
+      SELECT
+        id AS processoId,
+        cliente_id AS clienteId,
+        tipo,
+        titulo,
+        servico_nome AS servicoNome,
+        status_atual AS statusAtual,
+        observacao,
+        processo_principal AS processoPrincipal
+      FROM implantacao_processos
+      WHERE cliente_id = ${clienteId}
+        AND processo_principal = 1
+      ORDER BY id ASC
+      LIMIT 1
+    `
+
+  if (!rows.length) return null
+  const row = rows[0]
+  return {
+    processoId: Number(row.processoId),
+    clienteId: Number(row.clienteId),
+    tipo: row.tipo || 'novo_cliente',
+    titulo: row.titulo || 'Implantação inicial',
+    servicoNome: row.servicoNome || null,
+    statusAtual: normalizeStatus(Number(row.statusAtual ?? 1)),
+    observacao: row.observacao || null,
+    processoPrincipal: Number(row.processoPrincipal) === 1,
+  }
+}
+
 async function ensureImplantacaoBootstrap() {
   if (!bootstrapPromise) {
     bootstrapPromise = (async () => {
@@ -243,9 +332,30 @@ async function ensureImplantacaoBootstrap() {
       await initChecklists()
 
       await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS implantacao_processos (
+          id                 INT AUTO_INCREMENT PRIMARY KEY,
+          cliente_id         INT NOT NULL,
+          tipo               VARCHAR(30) NOT NULL DEFAULT 'novo_cliente',
+          titulo             VARCHAR(160) NOT NULL,
+          servico_nome       VARCHAR(160) NULL,
+          status_atual       INT NOT NULL DEFAULT 1,
+          observacao         VARCHAR(500) NULL,
+          processo_principal TINYINT(1) NOT NULL DEFAULT 0,
+          criado_em          DATETIME NOT NULL DEFAULT NOW(),
+          atualizado_em      DATETIME NOT NULL DEFAULT NOW(),
+          criado_por         INT NULL,
+          atualizado_por     INT NULL,
+          INDEX idx_impl_proc_cliente (cliente_id),
+          INDEX idx_impl_proc_status (status_atual),
+          INDEX idx_impl_proc_tipo (tipo)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `)
+
+      await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS implantacao_checklist_marcacoes (
           id           INT AUTO_INCREMENT PRIMARY KEY,
           cliente_id   INT NOT NULL,
+          processo_id  INT NULL,
           checklist_id INT NOT NULL,
           item_indice  INT NOT NULL,
           marcado      TINYINT(1) NOT NULL DEFAULT 0,
@@ -254,6 +364,7 @@ async function ensureImplantacaoBootstrap() {
           observacao   VARCHAR(500) NULL,
           UNIQUE KEY uniq_cliente_item (cliente_id, checklist_id, item_indice),
           INDEX idx_implantacao_cliente (cliente_id),
+          INDEX idx_implantacao_processo (processo_id),
           INDEX idx_implantacao_checklist (checklist_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `)
@@ -262,11 +373,13 @@ async function ensureImplantacaoBootstrap() {
         CREATE TABLE IF NOT EXISTS implantacao_checklist_cliente (
           id           INT AUTO_INCREMENT PRIMARY KEY,
           cliente_id   INT NOT NULL,
+          processo_id  INT NULL,
           checklist_id INT NOT NULL,
           criado_em    DATETIME NOT NULL DEFAULT NOW(),
           criado_por   INT NULL,
           UNIQUE KEY uniq_implantacao_cli_checklist (cliente_id, checklist_id),
           INDEX idx_implantacao_cli_checklist_cliente (cliente_id),
+          INDEX idx_implantacao_cli_checklist_processo (processo_id),
           INDEX idx_implantacao_cli_checklist_checklist (checklist_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `)
@@ -274,11 +387,26 @@ async function ensureImplantacaoBootstrap() {
       await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS implantacao_responsavel (
           cliente_id     INT PRIMARY KEY,
+          processo_id    INT NULL,
           responsavel_id INT NULL,
           atualizado_em  DATETIME NOT NULL DEFAULT NOW(),
           atualizado_por INT NULL,
           observacao     VARCHAR(500) NULL,
+          INDEX idx_implantacao_responsavel_processo (processo_id),
           INDEX idx_implantacao_responsavel (responsavel_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      `)
+
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS implantacao_responsavel_processo (
+          processo_id    INT PRIMARY KEY,
+          cliente_id     INT NOT NULL,
+          responsavel_id INT NULL,
+          atualizado_em  DATETIME NOT NULL DEFAULT NOW(),
+          atualizado_por INT NULL,
+          observacao     VARCHAR(500) NULL,
+          INDEX idx_implantacao_resp_proc_cliente (cliente_id),
+          INDEX idx_implantacao_resp_proc_resp (responsavel_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `)
 
@@ -286,6 +414,7 @@ async function ensureImplantacaoBootstrap() {
         CREATE TABLE IF NOT EXISTS implantacao_movimentacoes (
           id            INT AUTO_INCREMENT PRIMARY KEY,
           cliente_id    INT NOT NULL,
+          processo_id   INT NULL,
           tipo          VARCHAR(30) NOT NULL,
           status_origem INT NULL,
           status_destino INT NULL,
@@ -297,9 +426,149 @@ async function ensureImplantacaoBootstrap() {
           usuario_id    INT NULL,
           data_hora     DATETIME NOT NULL DEFAULT NOW(),
           INDEX idx_implantacao_mov_cliente_data (cliente_id, data_hora),
+          INDEX idx_implantacao_mov_processo_data (processo_id, data_hora),
           INDEX idx_implantacao_mov_tipo (tipo)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `)
+
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE implantacao_checklist_marcacoes
+        ADD COLUMN IF NOT EXISTS processo_id INT NULL AFTER cliente_id
+      `)
+
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE implantacao_checklist_cliente
+        ADD COLUMN IF NOT EXISTS processo_id INT NULL AFTER cliente_id
+      `)
+
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE implantacao_responsavel
+        ADD COLUMN IF NOT EXISTS processo_id INT NULL AFTER cliente_id
+      `)
+
+      await prisma.$executeRawUnsafe(`
+        ALTER TABLE implantacao_movimentacoes
+        ADD COLUMN IF NOT EXISTS processo_id INT NULL AFTER cliente_id
+      `)
+
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO implantacao_processos
+          (cliente_id, tipo, titulo, servico_nome, status_atual, observacao, processo_principal, criado_em, atualizado_em)
+        SELECT
+          C.cod_cli,
+          'novo_cliente',
+          'Implantação inicial',
+          NULL,
+          COALESCE(NULLIF(C.STATUS_INSTAL, 0), 1),
+          PI.obs_treinamento,
+          1,
+          NOW(),
+          NOW()
+        FROM cliente C
+        LEFT JOIN (
+          SELECT PI1.id_cli, PI1.obs_treinamento
+          FROM processo_implantacao PI1
+          INNER JOIN (
+            SELECT id_cli, MAX(id) AS max_id
+            FROM processo_implantacao
+            GROUP BY id_cli
+          ) PI2 ON PI2.id_cli = PI1.id_cli AND PI2.max_id = PI1.id
+        ) PI ON PI.id_cli = C.cod_cli
+        LEFT JOIN implantacao_processos P
+          ON P.cliente_id = C.cod_cli
+         AND P.processo_principal = 1
+        WHERE P.id IS NULL
+          AND C.ATIVO = 'S'
+          AND C.cod_cli NOT IN (0, 1, 6, 7, 8)
+          AND C.cod_cli < 10000000
+          AND C.cod_cla <> 30
+      `)
+
+      await prisma.$executeRawUnsafe(`
+        UPDATE implantacao_checklist_marcacoes M
+        INNER JOIN implantacao_processos P
+          ON P.cliente_id = M.cliente_id
+         AND P.processo_principal = 1
+        SET M.processo_id = P.id
+        WHERE M.processo_id IS NULL
+      `)
+
+      await prisma.$executeRawUnsafe(`
+        UPDATE implantacao_checklist_cliente M
+        INNER JOIN implantacao_processos P
+          ON P.cliente_id = M.cliente_id
+         AND P.processo_principal = 1
+        SET M.processo_id = P.id
+        WHERE M.processo_id IS NULL
+      `)
+
+      await prisma.$executeRawUnsafe(`
+        UPDATE implantacao_movimentacoes M
+        INNER JOIN implantacao_processos P
+          ON P.cliente_id = M.cliente_id
+         AND P.processo_principal = 1
+        SET M.processo_id = P.id
+        WHERE M.processo_id IS NULL
+      `)
+
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO implantacao_responsavel_processo
+          (processo_id, cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
+        SELECT
+          P.id,
+          IR.cliente_id,
+          IR.responsavel_id,
+          IR.atualizado_em,
+          IR.atualizado_por,
+          IR.observacao
+        FROM implantacao_responsavel IR
+        INNER JOIN implantacao_processos P
+          ON P.cliente_id = IR.cliente_id
+         AND P.processo_principal = 1
+        LEFT JOIN implantacao_responsavel_processo IRP
+          ON IRP.processo_id = P.id
+        WHERE IRP.processo_id IS NULL
+      `)
+
+      const idxMarcacoes = await prisma.$queryRaw<Array<{ INDEX_NAME: string }>>`
+        SELECT INDEX_NAME
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'implantacao_checklist_marcacoes'
+      `
+      const nomesIdxMarcacoes = new Set(idxMarcacoes.map((row) => String(row.INDEX_NAME)))
+      if (nomesIdxMarcacoes.has('uniq_cliente_item')) {
+        await prisma.$executeRawUnsafe(`
+          ALTER TABLE implantacao_checklist_marcacoes
+          DROP INDEX uniq_cliente_item
+        `)
+      }
+      if (!nomesIdxMarcacoes.has('uniq_cliente_processo_item')) {
+        await prisma.$executeRawUnsafe(`
+          ALTER TABLE implantacao_checklist_marcacoes
+          ADD UNIQUE KEY uniq_cliente_processo_item (cliente_id, processo_id, checklist_id, item_indice)
+        `)
+      }
+
+      const idxChecklistCliente = await prisma.$queryRaw<Array<{ INDEX_NAME: string }>>`
+        SELECT INDEX_NAME
+        FROM INFORMATION_SCHEMA.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'implantacao_checklist_cliente'
+      `
+      const nomesIdxChecklistCliente = new Set(idxChecklistCliente.map((row) => String(row.INDEX_NAME)))
+      if (nomesIdxChecklistCliente.has('uniq_implantacao_cli_checklist')) {
+        await prisma.$executeRawUnsafe(`
+          ALTER TABLE implantacao_checklist_cliente
+          DROP INDEX uniq_implantacao_cli_checklist
+        `)
+      }
+      if (!nomesIdxChecklistCliente.has('uniq_implantacao_cli_processo_checklist')) {
+        await prisma.$executeRawUnsafe(`
+          ALTER TABLE implantacao_checklist_cliente
+          ADD UNIQUE KEY uniq_implantacao_cli_processo_checklist (cliente_id, processo_id, checklist_id)
+        `)
+      }
 
       const etapasExistentes = await prisma.$queryRaw<EtapaConfigRow[]>`
         SELECT nome, cor, ordem, telas, ativo FROM cadastro_etapas
@@ -350,6 +619,7 @@ async function ensureImplantacaoBootstrap() {
 
 async function registrarMovimentacao(args: {
   clienteId: number
+  processoId?: number | null
   tipo: 'status' | 'checklist' | 'responsavel' | 'observacao'
   statusOrigem?: number | null
   statusDestino?: number | null
@@ -362,10 +632,11 @@ async function registrarMovimentacao(args: {
 }) {
   await prisma.$executeRaw`
     INSERT INTO implantacao_movimentacoes
-      (cliente_id, tipo, status_origem, status_destino, checklist_id, item_indice, marcado, responsavel_id, observacao, usuario_id, data_hora)
+      (cliente_id, processo_id, tipo, status_origem, status_destino, checklist_id, item_indice, marcado, responsavel_id, observacao, usuario_id, data_hora)
     VALUES
       (
         ${args.clienteId},
+        ${args.processoId ?? null},
         ${args.tipo},
         ${args.statusOrigem ?? null},
         ${args.statusDestino ?? null},
@@ -489,33 +760,91 @@ async function carregarClientesImplantacao() {
     ORDER BY C.cod_cli DESC
   `
 
-  return rows.map((row) => {
-    const nomeCompleto = String(row.clienteNome || '').trim()
-    const fantasia = String(row.nomeFantasia || '').trim()
-    const statusAtual = normalizeStatus(Number(row.statusInstal ?? 0))
-    const dataInicioStatusAtual = getDataInicioEtapaByStatus(row, statusAtual)
-    const dataUltimaVenda = row.ultimaVenda ? row.ultimaVenda.toISOString() : null
+  const processos = await prisma.$queryRaw<ProcessoImplantacaoRow[]>`
+    SELECT
+      P.id AS processoId,
+      P.cliente_id AS clienteId,
+      P.tipo,
+      P.titulo,
+      P.servico_nome AS servicoNome,
+      CASE
+        WHEN P.processo_principal = 1 THEN COALESCE(NULLIF(C.STATUS_INSTAL, 0), 1)
+        ELSE COALESCE(NULLIF(P.status_atual, 0), 1)
+      END AS statusAtual,
+      CASE
+        WHEN P.processo_principal = 1 THEN COALESCE(P.observacao, PI.obs_treinamento)
+        ELSE P.observacao
+      END AS observacao,
+      P.processo_principal AS processoPrincipal,
+      P.criado_em AS criadoEm,
+      P.atualizado_em AS atualizadoEm,
+      COALESCE(IRP.responsavel_id, IR.responsavel_id) AS responsavelId,
+      COALESCE(UR.NOME_USUARIO_COMPLETO, UR.NOME_USU) AS responsavelNome,
+      COALESCE(IRP.atualizado_em, IR.atualizado_em) AS responsavelAtualizadoEm
+    FROM implantacao_processos P
+    INNER JOIN cliente C ON C.cod_cli = P.cliente_id
+    LEFT JOIN (
+      SELECT PI1.id_cli, PI1.obs_treinamento
+      FROM processo_implantacao PI1
+      INNER JOIN (
+        SELECT id_cli, MAX(id) AS max_id
+        FROM processo_implantacao
+        GROUP BY id_cli
+      ) PI2 ON PI2.id_cli = PI1.id_cli AND PI2.max_id = PI1.id
+    ) PI ON PI.id_cli = C.cod_cli
+    LEFT JOIN implantacao_responsavel_processo IRP ON IRP.processo_id = P.id
+    LEFT JOIN implantacao_responsavel IR
+      ON P.processo_principal = 1
+     AND IR.cliente_id = P.cliente_id
+    LEFT JOIN usuario UR ON UR.COD_USU = COALESCE(IRP.responsavel_id, IR.responsavel_id)
+    WHERE C.ATIVO = 'S'
+      AND C.cod_cli NOT IN (0, 1, 6, 7, 8)
+      AND C.cod_cli < 10000000
+      AND C.cod_cla <> 30
+    ORDER BY C.cod_cli DESC, P.processo_principal DESC, P.id DESC
+  `
+
+  const clientesMap = new Map<number, ClienteImplantacaoRow>()
+  rows.forEach((row) => {
+    clientesMap.set(Number(row.clienteId), row)
+  })
+
+  return processos.map((processo) => {
+    const row = clientesMap.get(Number(processo.clienteId))
+    const nomeCompleto = String(row?.clienteNome || '').trim()
+    const fantasia = String(row?.nomeFantasia || '').trim()
+    const statusAtual = normalizeStatus(Number(processo.statusAtual ?? row?.statusInstal ?? 0))
+    const dataInicioStatusAtual = Number(processo.processoPrincipal) === 1
+      ? getDataInicioEtapaByStatus(row!, statusAtual)
+      : (processo.atualizadoEm || processo.criadoEm)
+    const dataUltimaVenda = row?.ultimaVenda ? row.ultimaVenda.toISOString() : null
+
     return {
-      clienteId: Number(row.clienteId),
-      clienteNome: nomeCompleto || fantasia || `Cliente #${row.clienteId}`,
+      processoId: Number(processo.processoId),
+      processoTipo: (processo.tipo === 'novo_servico' ? 'novo_servico' : 'novo_cliente') as 'novo_cliente' | 'novo_servico',
+      processoTitulo: processo.titulo || 'Implantação inicial',
+      servicoNome: processo.servicoNome || null,
+      processoPrincipal: Number(processo.processoPrincipal) === 1,
+      clienteId: Number(processo.clienteId),
+      clienteNome: nomeCompleto || fantasia || `Cliente #${processo.clienteId}`,
       nomeFantasia: fantasia || null,
-      cnpj: row.cnpj || null,
-      cidade: row.cidade || null,
-      uf: row.uf || null,
-      celular: row.celular || null,
-      telefone: row.telefone || null,
-      email: row.email || null,
+      cnpj: row?.cnpj || null,
+      cidade: row?.cidade || null,
+      uf: row?.uf || null,
+      celular: row?.celular || null,
+      telefone: row?.telefone || null,
+      email: row?.email || null,
       statusInstal: statusAtual,
-      statusPrimeiroPgto: row.statusPrimPgto || null,
-      dataPrimeiroPgto: row.dtPrimeiroPgto ? row.dtPrimeiroPgto.toISOString() : null,
+      statusPrimeiroPgto: row?.statusPrimPgto || null,
+      dataPrimeiroPgto: row?.dtPrimeiroPgto ? row.dtPrimeiroPgto.toISOString() : null,
       dataUltimaVenda,
       diasUltimaVenda: dataUltimaVenda ? diffDays(dataUltimaVenda) : null,
-      dataCadastro: row.dataCadastro ? row.dataCadastro.toISOString() : null,
+      dataCadastro: row?.dataCadastro ? row.dataCadastro.toISOString() : null,
       dataInicioStatusAtual: dataInicioStatusAtual ? dataInicioStatusAtual.toISOString() : null,
-      observacoes: row.observacoes || null,
-      responsavelId: row.responsavelId ? Number(row.responsavelId) : null,
-      responsavelNome: row.responsavelNome || null,
-      responsavelAtualizadoEm: row.responsavelAtualizadoEm ? row.responsavelAtualizadoEm.toISOString() : null,
+      observacoes: processo.observacao || row?.observacoes || null,
+      responsavelId: processo.responsavelId ? Number(processo.responsavelId) : null,
+      responsavelNome: processo.responsavelNome || null,
+      responsavelAtualizadoEm: processo.responsavelAtualizadoEm ? processo.responsavelAtualizadoEm.toISOString() : null,
     }
   })
 }
@@ -539,10 +868,13 @@ function resolverChecklistsDoCliente(
   return filtrarChecklistsPorStatus(checklists, statusInstal)
 }
 
-async function carregarTimelineCliente(clienteId: number) {
+async function carregarTimelineCliente(clienteId: number, processoId?: number | null) {
+  const contexto = await getProcessoContexto(clienteId, processoId)
+  if (!contexto) return []
   const rows = await prisma.$queryRaw<TimelineRow[]>`
     SELECT
       M.id,
+      M.processo_id,
       M.tipo,
       M.status_origem,
       M.status_destino,
@@ -559,12 +891,20 @@ async function carregarTimelineCliente(clienteId: number) {
     LEFT JOIN usuario U ON U.COD_USU = M.usuario_id
     LEFT JOIN usuario RU ON RU.COD_USU = M.responsavel_id
     WHERE M.cliente_id = ${clienteId}
+      AND (
+        M.processo_id = ${contexto.processoId}
+        OR (
+          ${contexto.processoPrincipal ? 1 : 0} = 1
+          AND M.processo_id IS NULL
+        )
+      )
     ORDER BY M.data_hora DESC
     LIMIT 120
   `
 
   return rows.map((r) => ({
     id: Number(r.id),
+    processoId: r.processo_id === null ? null : Number(r.processo_id),
     tipo: r.tipo,
     statusOrigem: r.status_origem === null ? null : Number(r.status_origem),
     statusDestino: r.status_destino === null ? null : Number(r.status_destino),
@@ -604,7 +944,14 @@ export async function pipelineRoutes(app: FastifyInstance) {
   })
 
   app.get('/implantacao/painel', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Painel operacional completo da implantação' } }, async (request) => {
-    const { search, status } = request.query as { search?: string; status?: string }
+    const { search, status, dataCadastroInicial, dataCadastroFinal } = request.query as {
+      search?: string
+      status?: string
+      dataCadastroInicial?: string
+      dataCadastroFinal?: string
+    }
+    const dataInicial = normalizeDateFilter(dataCadastroInicial)
+    const dataFinal = normalizeDateFilter(dataCadastroFinal)
     const [etapas, checklists, clientes] = await Promise.all([
       getEtapasConfiguradas(),
       getChecklistsImplantacaoAtivos(),
@@ -620,64 +967,102 @@ export async function pipelineRoutes(app: FastifyInstance) {
       if (status && status !== 'all') {
         const stage = Number(status)
         if (!Number.isFinite(stage)) return true
-        return cliente.statusInstal === stage
+        if (cliente.statusInstal !== stage) return false
+      }
+      const dataCadastro = String(cliente.dataCadastro || '').slice(0, 10)
+      if (dataInicial) {
+        if (!dataCadastro || dataCadastro < dataInicial) return false
+      }
+      if (dataFinal) {
+        if (!dataCadastro || dataCadastro > dataFinal) return false
       }
       return true
     })
 
     const checklistIds = checklists.map((c) => c.id)
-    const clienteIds = filtered.map((c) => c.clienteId)
+    const clienteIds = Array.from(new Set(filtered.map((c) => c.clienteId)))
+    const processoIds = Array.from(new Set(filtered.map((c) => Number(c.processoId || 0)).filter((id) => id > 0)))
+    const processosPrincipais = new Set(
+      filtered
+        .filter((c) => Boolean((c as any).processoPrincipal))
+        .map((c) => getProcessoKey(c.clienteId, Number(c.processoId || 0)))
+    )
     const checklistClienteRows = clienteIds.length
       ? await prisma.$queryRawUnsafe<ChecklistClienteRow[]>(
-        `SELECT cliente_id, checklist_id
+        `SELECT cliente_id, processo_id, checklist_id
          FROM implantacao_checklist_cliente
-         WHERE cliente_id IN (${clienteIds.map(() => '?').join(',')})`,
-        ...clienteIds
+         WHERE cliente_id IN (${clienteIds.map(() => '?').join(',')})
+           AND (
+             processo_id IS NULL
+             OR processo_id IN (${processoIds.length ? processoIds.map(() => '?').join(',') : '0'})
+           )`,
+        ...clienteIds,
+        ...processoIds
       )
       : []
-    const checklistsClienteMap = new Map<number, Set<number>>()
+    const checklistsClienteMap = new Map<string, Set<number>>()
     checklistClienteRows.forEach((row) => {
       const clienteId = Number(row.cliente_id)
+      const processoId = row.processo_id === null ? null : Number(row.processo_id)
       const checklistId = Number(row.checklist_id)
-      if (!checklistsClienteMap.has(clienteId)) checklistsClienteMap.set(clienteId, new Set())
-      checklistsClienteMap.get(clienteId)!.add(checklistId)
+      const key = processoId === null ? getProcessoKey(clienteId, 0) : getProcessoKey(clienteId, processoId)
+      if (!checklistsClienteMap.has(key)) checklistsClienteMap.set(key, new Set())
+      checklistsClienteMap.get(key)!.add(checklistId)
     })
     let marcacoes: MarcacaoRow[] = []
-    if (checklistIds.length && clienteIds.length) {
+    if (checklistIds.length && clienteIds.length && processoIds.length) {
       marcacoes = await prisma.$queryRawUnsafe<MarcacaoRow[]>(
-        `SELECT cliente_id, checklist_id, item_indice, marcado
+        `SELECT cliente_id, processo_id, checklist_id, item_indice, marcado
          FROM implantacao_checklist_marcacoes
          WHERE checklist_id IN (${checklistIds.map(() => '?').join(',')})
-           AND cliente_id IN (${clienteIds.map(() => '?').join(',')})`,
+           AND cliente_id IN (${clienteIds.map(() => '?').join(',')})
+           AND (
+             processo_id IS NULL
+             OR processo_id IN (${processoIds.map(() => '?').join(',')})
+           )`,
         ...checklistIds,
-        ...clienteIds
+        ...clienteIds,
+        ...processoIds
       )
     }
     const marcadasSet = new Set(
       marcacoes
         .filter((m) => Number(m.marcado) === 1)
-        .map((m) => `${Number(m.cliente_id)}:${Number(m.checklist_id)}:${Number(m.item_indice)}`)
+        .map((m) => `${getProcessoKey(Number(m.cliente_id), m.processo_id === null ? 0 : Number(m.processo_id))}:${Number(m.checklist_id)}:${Number(m.item_indice)}`)
     )
 
     const ultimasMudancas = clienteIds.length
       ? await prisma.$queryRawUnsafe<StatusMovRow[]>(
-        `SELECT cliente_id, MAX(data_hora) AS ultima_data
+        `SELECT cliente_id, processo_id, MAX(data_hora) AS ultima_data
          FROM implantacao_movimentacoes
          WHERE tipo = 'status' AND cliente_id IN (${clienteIds.map(() => '?').join(',')})
-         GROUP BY cliente_id`,
-        ...clienteIds
+           AND (
+             processo_id IS NULL
+             OR processo_id IN (${processoIds.length ? processoIds.map(() => '?').join(',') : '0'})
+           )
+         GROUP BY cliente_id, processo_id`,
+        ...clienteIds,
+        ...processoIds
       )
       : []
-    const stageStartMap = new Map<number, string>()
+    const stageStartMap = new Map<string, string>()
     ultimasMudancas.forEach((m) => {
-      if (m.ultima_data instanceof Date) stageStartMap.set(Number(m.cliente_id), m.ultima_data.toISOString())
+      if (m.ultima_data instanceof Date) {
+        stageStartMap.set(
+          getProcessoKey(Number(m.cliente_id), m.processo_id === null ? 0 : Number(m.processo_id)),
+          m.ultima_data.toISOString(),
+        )
+      }
     })
 
     const clientesComProgresso = filtered.map((cliente) => {
+      const processoId = Number(cliente.processoId || 0)
+      const keyProcesso = getProcessoKey(cliente.clienteId, processoId)
+      const keyLegado = getProcessoKey(cliente.clienteId, 0)
       const checklistsDaEtapa = resolverChecklistsDoCliente(
         checklists,
         cliente.statusInstal,
-        checklistsClienteMap.get(cliente.clienteId)
+        checklistsClienteMap.get(keyProcesso) || (((cliente as any).processoPrincipal && checklistsClienteMap.get(keyLegado)) ? checklistsClienteMap.get(keyLegado) : undefined)
       )
       let totalItens = 0
       let itensMarcados = 0
@@ -685,14 +1070,23 @@ export async function pipelineRoutes(app: FastifyInstance) {
       for (const checklist of checklistsDaEtapa) {
         checklist.itens.forEach((_, itemIndex) => {
           totalItens += 1
-          if (marcadasSet.has(`${cliente.clienteId}:${checklist.id}:${itemIndex}`)) itensMarcados += 1
+          if (
+            marcadasSet.has(`${keyProcesso}:${checklist.id}:${itemIndex}`)
+            || (((cliente as any).processoPrincipal) && marcadasSet.has(`${keyLegado}:${checklist.id}:${itemIndex}`))
+          ) {
+            itensMarcados += 1
+          }
         })
       }
 
       const progresso = totalItens > 0 ? Math.round((itensMarcados / totalItens) * 100) : 0
       const etapaInfo = etapas.find((e) => e.status === cliente.statusInstal)
       const slaDias = Number(etapaInfo?.slaDias ?? 0)
-      const dataBase = stageStartMap.get(cliente.clienteId) ?? cliente.dataInicioStatusAtual ?? cliente.dataCadastro ?? null
+      const dataBase = stageStartMap.get(keyProcesso)
+        ?? ((((cliente as any).processoPrincipal) ? stageStartMap.get(keyLegado) : null))
+        ?? cliente.dataInicioStatusAtual
+        ?? cliente.dataCadastro
+        ?? null
       const diasNaEtapa = diffDays(dataBase)
       const emAtraso = slaDias > 0 && diasNaEtapa > slaDias
 
@@ -725,23 +1119,35 @@ export async function pipelineRoutes(app: FastifyInstance) {
       etapas: etapasComCount,
       kpis,
       clientes: clientesComProgresso,
+      clientesDisponiveis: Array.from(new Set(clientes.map((c) => c.clienteId))).map((clienteId) => {
+        const base = clientes.find((c) => c.clienteId === clienteId)
+        return {
+          clienteId,
+          clienteNome: base?.clienteNome || `Cliente #${clienteId}`,
+          nomeFantasia: base?.nomeFantasia || null,
+          cnpj: base?.cnpj || null,
+        }
+      }),
     }
   })
 
   app.get('/implantacao/:clienteId/checklist', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Checklist aplicável ao cliente na etapa atual + camada executiva' } }, async (request, reply) => {
     const { clienteId } = request.params as { clienteId: string }
-    const { status } = request.query as { status?: string }
+    const { status, processoId } = request.query as { status?: string; processoId?: string }
     const id = Number(clienteId)
     if (!Number.isFinite(id) || id <= 0) return reply.status(400).send({ error: 'Cliente inválido.' })
 
     const clientes = await carregarClientesImplantacao()
-    const cliente = clientes.find((c) => c.clienteId === id)
+    const processoSelecionado = processoId ? Number(processoId) : null
+    const cliente = clientes.find((c) => c.clienteId === id && (processoSelecionado ? Number(c.processoId) === processoSelecionado : Boolean((c as any).processoPrincipal)))
     if (!cliente) return reply.status(404).send({ error: 'Cliente não encontrado.' })
+    const contexto = await getProcessoContexto(id, processoSelecionado ?? Number(cliente.processoId || 0))
+    if (!contexto) return reply.status(404).send({ error: 'Processo não encontrado.' })
 
     const [etapas, checklists, timeline, responsaveis] = await Promise.all([
       getEtapasConfiguradas(),
       getChecklistsImplantacaoAtivos(),
-      carregarTimelineCliente(id),
+      carregarTimelineCliente(id, contexto.processoId),
       carregarResponsaveisAtivos(),
     ])
 
@@ -751,20 +1157,30 @@ export async function pipelineRoutes(app: FastifyInstance) {
       : cliente.statusInstal
     const etapaAtual = etapas.find((e) => e.status === etapaStatus) || etapas[0]
     const checklistClienteRows = await prisma.$queryRaw<ChecklistClienteRow[]>`
-      SELECT cliente_id, checklist_id
+      SELECT cliente_id, processo_id, checklist_id
       FROM implantacao_checklist_cliente
       WHERE cliente_id = ${id}
+        AND (
+          processo_id = ${contexto.processoId}
+          OR (${contexto.processoPrincipal ? 1 : 0} = 1 AND processo_id IS NULL)
+        )
     `
     const checklistIdsCliente = new Set(checklistClienteRows.map((r) => Number(r.checklist_id)))
     const checklistsDaEtapa = resolverChecklistsDoCliente(checklists, etapaStatus, checklistIdsCliente)
 
     const marcacoes = checklistsDaEtapa.length
       ? await prisma.$queryRawUnsafe<MarcacaoRow[]>(
-        `SELECT cliente_id, checklist_id, item_indice, marcado
+        `SELECT cliente_id, processo_id, checklist_id, item_indice, marcado
          FROM implantacao_checklist_marcacoes
          WHERE cliente_id = ?
+           AND (
+             processo_id = ?
+             OR (? = 1 AND processo_id IS NULL)
+           )
            AND checklist_id IN (${checklistsDaEtapa.map(() => '?').join(',')})`,
         id,
+        contexto.processoId,
+        contexto.processoPrincipal ? 1 : 0,
         ...checklistsDaEtapa.map((c) => c.id)
       )
       : []
@@ -816,7 +1232,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
   app.patch('/implantacao/:clienteId/status', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Atualiza etapa/status de implantação do cliente' } }, async (request, reply) => {
     const { clienteId } = request.params as { clienteId: string }
     const id = Number(clienteId)
-    const { status, observacao } = request.body as { status: number; observacao?: string }
+    const { status, observacao, processoId } = request.body as { status: number; observacao?: string; processoId?: number }
     const novoStatus = Number(status)
     const usuarioId = Number((request.user as any)?.id || 0) || null
 
@@ -826,27 +1242,36 @@ export async function pipelineRoutes(app: FastifyInstance) {
     }
 
     await ensureImplantacaoBootstrap()
-    const currentStatusRows = await prisma.$queryRaw<{ status: number | null }[]>`SELECT COALESCE(STATUS_INSTAL, 0) AS status FROM cliente WHERE cod_cli = ${id} LIMIT 1`
-    const statusOrigem = normalizeStatus(Number(currentStatusRows[0]?.status ?? 0))
+    const contexto = await getProcessoContexto(id, processoId)
+    if (!contexto) return reply.status(404).send({ error: 'Processo não encontrado.' })
+    const statusOrigem = contexto.statusAtual
 
-    await prisma.$executeRaw`UPDATE cliente SET STATUS_INSTAL = ${novoStatus} WHERE cod_cli = ${id}`
-    const existing = await prisma.$queryRaw<{ id: number }[]>`SELECT id FROM processo_implantacao WHERE id_cli = ${id} ORDER BY id DESC LIMIT 1`
     const obs = String(observacao ?? '').trim()
-    if (existing.length) {
-      await prisma.$executeRaw`
-        UPDATE processo_implantacao
-        SET status = ${novoStatus}, obs_treinamento = ${obs || null}
-        WHERE id = ${Number(existing[0].id)}
-      `
-    } else {
-      await prisma.$executeRaw`
-        INSERT INTO processo_implantacao (id_cli, status, obs_treinamento)
-        VALUES (${id}, ${novoStatus}, ${obs || null})
-      `
+    await prisma.$executeRaw`
+      UPDATE implantacao_processos
+      SET status_atual = ${novoStatus}, observacao = ${obs || null}, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+      WHERE id = ${contexto.processoId}
+    `
+    if (contexto.processoPrincipal) {
+      await prisma.$executeRaw`UPDATE cliente SET STATUS_INSTAL = ${novoStatus} WHERE cod_cli = ${id}`
+      const existing = await prisma.$queryRaw<{ id: number }[]>`SELECT id FROM processo_implantacao WHERE id_cli = ${id} ORDER BY id DESC LIMIT 1`
+      if (existing.length) {
+        await prisma.$executeRaw`
+          UPDATE processo_implantacao
+          SET status = ${novoStatus}, obs_treinamento = ${obs || null}
+          WHERE id = ${Number(existing[0].id)}
+        `
+      } else {
+        await prisma.$executeRaw`
+          INSERT INTO processo_implantacao (id_cli, status, obs_treinamento)
+          VALUES (${id}, ${novoStatus}, ${obs || null})
+        `
+      }
     }
 
     await registrarMovimentacao({
       clienteId: id,
+      processoId: contexto.processoId,
       tipo: 'status',
       statusOrigem,
       statusDestino: novoStatus,
@@ -860,7 +1285,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
   app.patch('/implantacao/:clienteId/responsavel', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Define responsável atual da implantação' } }, async (request, reply) => {
     const { clienteId } = request.params as { clienteId: string }
     const id = Number(clienteId)
-    const { responsavelId, observacao } = request.body as { responsavelId?: number | null; observacao?: string }
+    const { responsavelId, observacao, processoId } = request.body as { responsavelId?: number | null; observacao?: string; processoId?: number }
     const novoResponsavelId = responsavelId === null || responsavelId === undefined ? null : Number(responsavelId)
     const usuarioId = Number((request.user as any)?.id || 0) || null
 
@@ -870,10 +1295,12 @@ export async function pipelineRoutes(app: FastifyInstance) {
     }
 
     await ensureImplantacaoBootstrap()
+    const contexto = await getProcessoContexto(id, processoId)
+    if (!contexto) return reply.status(404).send({ error: 'Processo não encontrado.' })
 
     await prisma.$executeRaw`
-      INSERT INTO implantacao_responsavel (cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
-      VALUES (${id}, ${novoResponsavelId}, NOW(), ${usuarioId}, ${String(observacao ?? '').trim() || null})
+      INSERT INTO implantacao_responsavel_processo (processo_id, cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
+      VALUES (${contexto.processoId}, ${id}, ${novoResponsavelId}, NOW(), ${usuarioId}, ${String(observacao ?? '').trim() || null})
       ON DUPLICATE KEY UPDATE
         responsavel_id = VALUES(responsavel_id),
         atualizado_em = NOW(),
@@ -883,6 +1310,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     await registrarMovimentacao({
       clienteId: id,
+      processoId: contexto.processoId,
       tipo: 'responsavel',
       responsavelId: novoResponsavelId,
       observacao: String(observacao ?? '').trim() || null,
@@ -895,11 +1323,12 @@ export async function pipelineRoutes(app: FastifyInstance) {
   app.patch('/implantacao/:clienteId/checklist', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Marca/desmarca item do checklist da implantação' } }, async (request, reply) => {
     const { clienteId } = request.params as { clienteId: string }
     const id = Number(clienteId)
-    const { checklistId, itemIndex, marcado, observacao } = request.body as {
+    const { checklistId, itemIndex, marcado, observacao, processoId } = request.body as {
       checklistId: number
       itemIndex: number
       marcado: boolean
       observacao?: string
+      processoId?: number
     }
     const checklist = Number(checklistId)
     const item = Number(itemIndex)
@@ -910,12 +1339,14 @@ export async function pipelineRoutes(app: FastifyInstance) {
     if (!Number.isFinite(item) || item < 0) return reply.status(400).send({ error: 'Item inválido.' })
 
     await ensureImplantacaoBootstrap()
+    const contexto = await getProcessoContexto(id, processoId)
+    if (!contexto) return reply.status(404).send({ error: 'Processo não encontrado.' })
 
     await prisma.$executeRaw`
       INSERT INTO implantacao_checklist_marcacoes
-        (cliente_id, checklist_id, item_indice, marcado, marcado_em, marcado_por, observacao)
+        (cliente_id, processo_id, checklist_id, item_indice, marcado, marcado_em, marcado_por, observacao)
       VALUES
-        (${id}, ${checklist}, ${item}, ${marcado ? 1 : 0}, ${marcado ? new Date() : null}, ${usuarioId}, ${String(observacao ?? '').trim() || null})
+        (${id}, ${contexto.processoId}, ${checklist}, ${item}, ${marcado ? 1 : 0}, ${marcado ? new Date() : null}, ${usuarioId}, ${String(observacao ?? '').trim() || null})
       ON DUPLICATE KEY UPDATE
         marcado = VALUES(marcado),
         marcado_em = VALUES(marcado_em),
@@ -925,6 +1356,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     await registrarMovimentacao({
       clienteId: id,
+      processoId: contexto.processoId,
       tipo: 'checklist',
       checklistId: checklist,
       itemIndice: item,
@@ -939,10 +1371,11 @@ export async function pipelineRoutes(app: FastifyInstance) {
   app.patch('/implantacao/:clienteId/transicao', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Transição de etapa com checklist e log completo' } }, async (request, reply) => {
     const { clienteId } = request.params as { clienteId: string }
     const id = Number(clienteId)
-    const { statusDestino, observacao, checklist } = request.body as {
+    const { statusDestino, observacao, checklist, processoId } = request.body as {
       statusDestino: number
       observacao?: string
       checklist?: Array<{ checklistId: number; itemIndex: number; marcado: boolean; observacao?: string }>
+      processoId?: number
     }
     const destino = Number(statusDestino)
     const usuarioId = Number((request.user as any)?.id || 0) || null
@@ -953,8 +1386,9 @@ export async function pipelineRoutes(app: FastifyInstance) {
     }
 
     await ensureImplantacaoBootstrap()
-    const statusRows = await prisma.$queryRaw<{ status: number | null }[]>`SELECT COALESCE(STATUS_INSTAL, 0) AS status FROM cliente WHERE cod_cli = ${id} LIMIT 1`
-    const origem = normalizeStatus(Number(statusRows[0]?.status ?? 0))
+    const contexto = await getProcessoContexto(id, processoId)
+    if (!contexto) return reply.status(404).send({ error: 'Processo não encontrado.' })
+    const origem = contexto.statusAtual
 
     for (const item of checklist ?? []) {
       const checklistId = Number(item.checklistId)
@@ -964,9 +1398,9 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
       await prisma.$executeRaw`
         INSERT INTO implantacao_checklist_marcacoes
-          (cliente_id, checklist_id, item_indice, marcado, marcado_em, marcado_por, observacao)
+          (cliente_id, processo_id, checklist_id, item_indice, marcado, marcado_em, marcado_por, observacao)
         VALUES
-          (${id}, ${checklistId}, ${itemIndex}, ${item.marcado ? 1 : 0}, ${item.marcado ? new Date() : null}, ${usuarioId}, ${String(item.observacao ?? '').trim() || null})
+          (${id}, ${contexto.processoId}, ${checklistId}, ${itemIndex}, ${item.marcado ? 1 : 0}, ${item.marcado ? new Date() : null}, ${usuarioId}, ${String(item.observacao ?? '').trim() || null})
         ON DUPLICATE KEY UPDATE
           marcado = VALUES(marcado),
           marcado_em = VALUES(marcado_em),
@@ -976,6 +1410,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
       await registrarMovimentacao({
         clienteId: id,
+        processoId: contexto.processoId,
         tipo: 'checklist',
         checklistId,
         itemIndice: itemIndex,
@@ -985,24 +1420,32 @@ export async function pipelineRoutes(app: FastifyInstance) {
       })
     }
 
-    await prisma.$executeRaw`UPDATE cliente SET STATUS_INSTAL = ${destino} WHERE cod_cli = ${id}`
-    const processo = await prisma.$queryRaw<{ id: number }[]>`SELECT id FROM processo_implantacao WHERE id_cli = ${id} ORDER BY id DESC LIMIT 1`
     const obs = String(observacao ?? '').trim()
-    if (processo.length) {
-      await prisma.$executeRaw`
-        UPDATE processo_implantacao
-        SET status = ${destino}, obs_treinamento = ${obs || null}
-        WHERE id = ${Number(processo[0].id)}
-      `
-    } else {
-      await prisma.$executeRaw`
-        INSERT INTO processo_implantacao (id_cli, status, obs_treinamento)
-        VALUES (${id}, ${destino}, ${obs || null})
-      `
+    await prisma.$executeRaw`
+      UPDATE implantacao_processos
+      SET status_atual = ${destino}, observacao = ${obs || null}, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+      WHERE id = ${contexto.processoId}
+    `
+    if (contexto.processoPrincipal) {
+      await prisma.$executeRaw`UPDATE cliente SET STATUS_INSTAL = ${destino} WHERE cod_cli = ${id}`
+      const processo = await prisma.$queryRaw<{ id: number }[]>`SELECT id FROM processo_implantacao WHERE id_cli = ${id} ORDER BY id DESC LIMIT 1`
+      if (processo.length) {
+        await prisma.$executeRaw`
+          UPDATE processo_implantacao
+          SET status = ${destino}, obs_treinamento = ${obs || null}
+          WHERE id = ${Number(processo[0].id)}
+        `
+      } else {
+        await prisma.$executeRaw`
+          INSERT INTO processo_implantacao (id_cli, status, obs_treinamento)
+          VALUES (${id}, ${destino}, ${obs || null})
+        `
+      }
     }
 
     await registrarMovimentacao({
       clienteId: id,
+      processoId: contexto.processoId,
       tipo: 'status',
       statusOrigem: origem,
       statusDestino: destino,
@@ -1016,7 +1459,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
   app.post('/implantacao/:clienteId/observacao', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Registra observação no histórico da implantação do cliente' } }, async (request, reply) => {
     const { clienteId } = request.params as { clienteId: string }
     const id = Number(clienteId)
-    const { observacao } = request.body as { observacao?: string }
+    const { observacao, processoId } = request.body as { observacao?: string; processoId?: number }
     const texto = String(observacao ?? '').trim()
     const usuarioId = Number((request.user as any)?.id || 0) || null
 
@@ -1024,40 +1467,41 @@ export async function pipelineRoutes(app: FastifyInstance) {
     if (!texto) return reply.status(400).send({ error: 'Informe a observação.' })
 
     await ensureImplantacaoBootstrap()
+    const contexto = await getProcessoContexto(id, processoId)
+    if (!contexto) return reply.status(404).send({ error: 'Processo não encontrado.' })
 
-    const statusRows = await prisma.$queryRaw<{ status: number | null }[]>`
-      SELECT COALESCE(STATUS_INSTAL, 0) AS status
-      FROM cliente
-      WHERE cod_cli = ${id}
-      LIMIT 1
+    await prisma.$executeRaw`
+      UPDATE implantacao_processos
+      SET observacao = ${texto}, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+      WHERE id = ${contexto.processoId}
     `
-    if (!statusRows.length) return reply.status(404).send({ error: 'Cliente não encontrado.' })
-    const statusAtual = normalizeStatus(Number(statusRows[0]?.status ?? 0))
-
-    const processo = await prisma.$queryRaw<{ id: number }[]>`
-      SELECT id
-      FROM processo_implantacao
-      WHERE id_cli = ${id}
-      ORDER BY id DESC
-      LIMIT 1
-    `
-    if (processo.length) {
-      await prisma.$executeRaw`
-        UPDATE processo_implantacao
-        SET status = ${statusAtual}, obs_treinamento = ${texto}
-        WHERE id = ${Number(processo[0].id)}
+    if (contexto.processoPrincipal) {
+      const processo = await prisma.$queryRaw<{ id: number }[]>`
+        SELECT id
+        FROM processo_implantacao
+        WHERE id_cli = ${id}
+        ORDER BY id DESC
+        LIMIT 1
       `
-    } else {
-      await prisma.$executeRaw`
-        INSERT INTO processo_implantacao (id_cli, status, obs_treinamento)
-        VALUES (${id}, ${statusAtual}, ${texto})
-      `
+      if (processo.length) {
+        await prisma.$executeRaw`
+          UPDATE processo_implantacao
+          SET status = ${contexto.statusAtual}, obs_treinamento = ${texto}
+          WHERE id = ${Number(processo[0].id)}
+        `
+      } else {
+        await prisma.$executeRaw`
+          INSERT INTO processo_implantacao (id_cli, status, obs_treinamento)
+          VALUES (${id}, ${contexto.statusAtual}, ${texto})
+        `
+      }
     }
 
     await registrarMovimentacao({
       clienteId: id,
+      processoId: contexto.processoId,
       tipo: 'observacao',
-      statusDestino: statusAtual,
+      statusDestino: contexto.statusAtual,
       observacao: texto,
       usuarioId,
     })
@@ -1067,25 +1511,34 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
   app.get('/implantacao/:clienteId/configuracao', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Configuração da implantação por cliente (etapa, responsável e checklists)' } }, async (request, reply) => {
     const { clienteId } = request.params as { clienteId: string }
+    const { processoId } = request.query as { processoId?: string }
     const id = Number(clienteId)
     if (!Number.isFinite(id) || id <= 0) return reply.status(400).send({ error: 'Cliente inválido.' })
 
+    const processoSelecionado = processoId ? Number(processoId) : null
     const [clientes, etapas, checklists, responsaveis, checklistRows] = await Promise.all([
       carregarClientesImplantacao(),
       getEtapasConfiguradas(),
       getChecklistsImplantacaoAtivos(),
       carregarResponsaveisAtivos(),
       prisma.$queryRaw<ChecklistClienteRow[]>`
-        SELECT cliente_id, checklist_id
+        SELECT cliente_id, processo_id, checklist_id
         FROM implantacao_checklist_cliente
         WHERE cliente_id = ${id}
       `,
     ])
 
-    const cliente = clientes.find((c) => c.clienteId === id)
+    const cliente = clientes.find((c) => c.clienteId === id && (processoSelecionado ? Number(c.processoId) === processoSelecionado : Boolean((c as any).processoPrincipal)))
     if (!cliente) return reply.status(404).send({ error: 'Cliente não encontrado.' })
+    const contexto = await getProcessoContexto(id, processoSelecionado ?? Number(cliente.processoId || 0))
+    if (!contexto) return reply.status(404).send({ error: 'Processo não encontrado.' })
 
-    const checklistIdsSelecionados = checklistRows.map((row) => Number(row.checklist_id))
+    const checklistIdsSelecionados = checklistRows
+      .filter((row) => {
+        const rowProcessoId = row.processo_id === null ? null : Number(row.processo_id)
+        return rowProcessoId === contexto.processoId || (contexto.processoPrincipal && rowProcessoId === null)
+      })
+      .map((row) => Number(row.checklist_id))
 
     return {
       cliente,
@@ -1106,11 +1559,12 @@ export async function pipelineRoutes(app: FastifyInstance) {
   app.put('/implantacao/:clienteId/configuracao', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Atualiza configuração da implantação por cliente' } }, async (request, reply) => {
     const { clienteId } = request.params as { clienteId: string }
     const id = Number(clienteId)
-    const { statusInstal, responsavelId, checklistIds, observacao } = request.body as {
+    const { statusInstal, responsavelId, checklistIds, observacao, processoId } = request.body as {
       statusInstal?: number
       responsavelId?: number | null
       checklistIds?: number[]
       observacao?: string
+      processoId?: number
     }
     const usuarioId = Number((request.user as any)?.id || 0) || null
 
@@ -1118,7 +1572,9 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     await ensureImplantacaoBootstrap()
     const clientes = await carregarClientesImplantacao()
-    const cliente = clientes.find((c) => c.clienteId === id)
+    const contexto = await getProcessoContexto(id, processoId)
+    if (!contexto) return reply.status(404).send({ error: 'Processo não encontrado.' })
+    const cliente = clientes.find((c) => c.clienteId === id && Number(c.processoId || 0) === contexto.processoId)
     if (!cliente) return reply.status(404).send({ error: 'Cliente não encontrado.' })
 
     const obs = String(observacao ?? '').trim() || null
@@ -1138,22 +1594,30 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const idsChecklist = Array.from(new Set((checklistIds || []).map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)))
 
     if (novoStatus !== undefined && novoStatus !== cliente.statusInstal) {
-      await prisma.$executeRaw`UPDATE cliente SET STATUS_INSTAL = ${novoStatus} WHERE cod_cli = ${id}`
-      const processo = await prisma.$queryRaw<{ id: number }[]>`SELECT id FROM processo_implantacao WHERE id_cli = ${id} ORDER BY id DESC LIMIT 1`
-      if (processo.length) {
-        await prisma.$executeRaw`
-          UPDATE processo_implantacao
-          SET status = ${novoStatus}, obs_treinamento = ${obs}
-          WHERE id = ${Number(processo[0].id)}
-        `
-      } else {
-        await prisma.$executeRaw`
-          INSERT INTO processo_implantacao (id_cli, status, obs_treinamento)
-          VALUES (${id}, ${novoStatus}, ${obs})
-        `
+      await prisma.$executeRaw`
+        UPDATE implantacao_processos
+        SET status_atual = ${novoStatus}, observacao = ${obs}, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+        WHERE id = ${contexto.processoId}
+      `
+      if (contexto.processoPrincipal) {
+        await prisma.$executeRaw`UPDATE cliente SET STATUS_INSTAL = ${novoStatus} WHERE cod_cli = ${id}`
+        const processo = await prisma.$queryRaw<{ id: number }[]>`SELECT id FROM processo_implantacao WHERE id_cli = ${id} ORDER BY id DESC LIMIT 1`
+        if (processo.length) {
+          await prisma.$executeRaw`
+            UPDATE processo_implantacao
+            SET status = ${novoStatus}, obs_treinamento = ${obs}
+            WHERE id = ${Number(processo[0].id)}
+          `
+        } else {
+          await prisma.$executeRaw`
+            INSERT INTO processo_implantacao (id_cli, status, obs_treinamento)
+            VALUES (${id}, ${novoStatus}, ${obs})
+          `
+        }
       }
       await registrarMovimentacao({
         clienteId: id,
+        processoId: contexto.processoId,
         tipo: 'status',
         statusOrigem: cliente.statusInstal,
         statusDestino: novoStatus,
@@ -1165,8 +1629,8 @@ export async function pipelineRoutes(app: FastifyInstance) {
     if (novoResponsavelId !== undefined) {
       const responsavelAtual = cliente.responsavelId ?? null
       await prisma.$executeRaw`
-        INSERT INTO implantacao_responsavel (cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
-        VALUES (${id}, ${novoResponsavelId}, NOW(), ${usuarioId}, ${obs})
+        INSERT INTO implantacao_responsavel_processo (processo_id, cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
+        VALUES (${contexto.processoId}, ${id}, ${novoResponsavelId}, NOW(), ${usuarioId}, ${obs})
         ON DUPLICATE KEY UPDATE
           responsavel_id = VALUES(responsavel_id),
           atualizado_em = NOW(),
@@ -1176,6 +1640,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       if (responsavelAtual !== novoResponsavelId) {
         await registrarMovimentacao({
           clienteId: id,
+          processoId: contexto.processoId,
           tipo: 'responsavel',
           responsavelId: novoResponsavelId,
           observacao: obs,
@@ -1186,19 +1651,20 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     if (checklistIds !== undefined) {
       const existentes = await prisma.$queryRaw<ChecklistClienteRow[]>`
-        SELECT cliente_id, checklist_id
+        SELECT cliente_id, processo_id, checklist_id
         FROM implantacao_checklist_cliente
         WHERE cliente_id = ${id}
+          AND processo_id = ${contexto.processoId}
       `
       const atuaisSet = new Set(existentes.map((row) => Number(row.checklist_id)))
       const novosSet = new Set(idsChecklist)
 
-      await prisma.$executeRaw`DELETE FROM implantacao_checklist_cliente WHERE cliente_id = ${id}`
+      await prisma.$executeRaw`DELETE FROM implantacao_checklist_cliente WHERE cliente_id = ${id} AND processo_id = ${contexto.processoId}`
 
       for (const checklistId of idsChecklist) {
         await prisma.$executeRaw`
-          INSERT INTO implantacao_checklist_cliente (cliente_id, checklist_id, criado_em, criado_por)
-          VALUES (${id}, ${checklistId}, NOW(), ${usuarioId})
+          INSERT INTO implantacao_checklist_cliente (cliente_id, processo_id, checklist_id, criado_em, criado_por)
+          VALUES (${id}, ${contexto.processoId}, ${checklistId}, NOW(), ${usuarioId})
         `
       }
 
@@ -1206,10 +1672,11 @@ export async function pipelineRoutes(app: FastifyInstance) {
         if (!atuaisSet.has(checklistId)) {
           await registrarMovimentacao({
             clienteId: id,
+            processoId: contexto.processoId,
             tipo: 'checklist',
             checklistId,
             marcado: true,
-            observacao: 'Checklist vinculado ao cliente',
+            observacao: 'Checklist vinculado ao processo',
             usuarioId,
           })
         }
@@ -1218,10 +1685,11 @@ export async function pipelineRoutes(app: FastifyInstance) {
         if (!novosSet.has(checklistId)) {
           await registrarMovimentacao({
             clienteId: id,
+            processoId: contexto.processoId,
             tipo: 'checklist',
             checklistId,
             marcado: false,
-            observacao: 'Checklist desvinculado do cliente',
+            observacao: 'Checklist desvinculado do processo',
             usuarioId,
           })
         }
@@ -1229,6 +1697,73 @@ export async function pipelineRoutes(app: FastifyInstance) {
     }
 
     return { ok: true }
+  })
+
+  app.post('/implantacao/processos', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Cria um novo processo de implantação para cliente existente' } }, async (request, reply) => {
+    const { clienteId, tipo, titulo, servicoNome, statusInstal, responsavelId, observacao } = request.body as {
+      clienteId: number
+      tipo: 'novo_cliente' | 'novo_servico'
+      titulo: string
+      servicoNome?: string
+      statusInstal?: number
+      responsavelId?: number | null
+      observacao?: string
+    }
+    const idCliente = Number(clienteId)
+    const usuarioId = Number((request.user as any)?.id || 0) || null
+    const statusNovo = normalizeStatus(Number(statusInstal ?? 1))
+    const tituloNormalizado = String(titulo ?? '').trim()
+    const tipoNormalizado = tipo === 'novo_servico' ? 'novo_servico' : 'novo_cliente'
+
+    if (!Number.isFinite(idCliente) || idCliente <= 0) return reply.status(400).send({ error: 'Cliente inválido.' })
+    if (!tituloNormalizado) return reply.status(400).send({ error: 'Informe o nome do processo.' })
+
+    await ensureImplantacaoBootstrap()
+    const processoCriado = await prisma.$queryRaw<Array<{ id: number }>>`
+      SELECT id FROM implantacao_processos WHERE cliente_id = ${idCliente} ORDER BY id DESC LIMIT 1
+    `
+    await prisma.$executeRaw`
+      INSERT INTO implantacao_processos
+        (cliente_id, tipo, titulo, servico_nome, status_atual, observacao, processo_principal, criado_em, atualizado_em, criado_por, atualizado_por)
+      VALUES
+        (${idCliente}, ${tipoNormalizado}, ${tituloNormalizado}, ${String(servicoNome ?? '').trim() || null}, ${statusNovo}, ${String(observacao ?? '').trim() || null}, 0, NOW(), NOW(), ${usuarioId}, ${usuarioId})
+    `
+    const novoProcesso = await prisma.$queryRaw<Array<{ id: number }>>`
+      SELECT id FROM implantacao_processos WHERE cliente_id = ${idCliente} ORDER BY id DESC LIMIT 1
+    `
+    const novoProcessoId = Number(novoProcesso[0]?.id || processoCriado[0]?.id || 0)
+    if (novoProcessoId > 0 && responsavelId !== undefined) {
+      const novoResponsavelId = responsavelId === null ? null : Number(responsavelId)
+      await prisma.$executeRaw`
+        INSERT INTO implantacao_responsavel_processo (processo_id, cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
+        VALUES (${novoProcessoId}, ${idCliente}, ${novoResponsavelId}, NOW(), ${usuarioId}, ${String(observacao ?? '').trim() || null})
+        ON DUPLICATE KEY UPDATE
+          responsavel_id = VALUES(responsavel_id),
+          atualizado_em = NOW(),
+          atualizado_por = VALUES(atualizado_por),
+          observacao = VALUES(observacao)
+      `
+      if (novoResponsavelId !== null) {
+        await registrarMovimentacao({
+          clienteId: idCliente,
+          processoId: novoProcessoId,
+          tipo: 'responsavel',
+          responsavelId: novoResponsavelId,
+          observacao: String(observacao ?? '').trim() || null,
+          usuarioId,
+        })
+      }
+    }
+    await registrarMovimentacao({
+      clienteId: idCliente,
+      processoId: novoProcessoId,
+      tipo: 'status',
+      statusOrigem: null,
+      statusDestino: statusNovo,
+      observacao: String(observacao ?? '').trim() || null,
+      usuarioId,
+    })
+    return reply.status(201).send({ ok: true, processoId: novoProcessoId })
   })
 
   app.get('/resumo/etapas', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Resumo legado por etapa' } }, async () => {
