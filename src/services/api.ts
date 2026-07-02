@@ -467,6 +467,9 @@ export const api = {
     clienteId: number,
     data: { statusInstal?: number; responsavelId?: number | null; checklistIds?: number[]; observacao?: string; processoId?: number }
   ) => fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/configuracao`, { method: 'PUT', body: JSON.stringify(data) }),
+  getImplantacaoResponsaveis: () => fetchApi<Array<{ id: number; nome: string }>>('/pipeline/implantacao/responsaveis'),
+  desativarProcessoImplantacao: (clienteId: number, processoId: number) =>
+    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/processos/${processoId}/desativar`, { method: 'PATCH' }),
   updateImplantacaoStatus: (clienteId: number, status: number, observacao?: string, processoId?: number) =>
     fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/status`, { method: 'PATCH', body: JSON.stringify({ status, observacao, processoId }) }),
   updateImplantacaoResponsavel: (clienteId: number, responsavelId: number | null, observacao?: string, processoId?: number) =>
@@ -481,7 +484,7 @@ export const api = {
   }) => fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/transicao`, { method: 'PATCH', body: JSON.stringify(data) }),
   addImplantacaoObservacao: (clienteId: number, observacao: string, processoId?: number) =>
     fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/observacao`, { method: 'POST', body: JSON.stringify({ observacao, processoId }) }),
-  criarProcessoImplantacao: (data: { clienteId: number; tipo: 'novo_cliente' | 'novo_servico'; titulo: string; servicoId?: number | null; statusInstal?: number; responsavelId?: number | null; observacao?: string }) =>
+  criarProcessoImplantacao: (data: { clienteId: number; tipo: 'novo_cliente' | 'novo_servico'; titulo: string; servicoId?: number | null; statusInstal?: number; responsavelId?: number | null; observacao?: string; checklistIds?: number[] }) =>
     fetchApi<{ ok: boolean; processoId: number }>('/pipeline/implantacao/processos', { method: 'POST', body: JSON.stringify(data) }),
 
   // ─── CRM ───────────────────────────────────────────────────

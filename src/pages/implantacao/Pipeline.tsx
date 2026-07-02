@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   GripVertical, LayoutList, Loader2, RefreshCcw, Search,
-  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen
+  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen, Ban
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
@@ -11,7 +11,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import type {
-  ImplantacaoChecklistOpcao, ImplantacaoCliente, ImplantacaoEtapa, ImplantacaoPainel, ServicoCadastro
+  ImplantacaoChecklistOpcao, ImplantacaoCliente, ImplantacaoEtapa, ImplantacaoPainel, ServicoCadastro, ChecklistCadastro
 } from '../../types'
 
 type ViewMode = 'lista' | 'kanban'
@@ -287,7 +287,10 @@ export function Pipeline() {
   const [createStatus, setCreateStatus] = useState<number>(1)
   const [createResponsavel, setCreateResponsavel] = useState<string>('none')
   const [createObs, setCreateObs] = useState('')
+  const [createChecklistIds, setCreateChecklistIds] = useState<number[]>([])
   const [servicos, setServicos] = useState<ServicoCadastro[]>([])
+  const [createResponsaveis, setCreateResponsaveis] = useState<Array<{ id: number; nome: string }>>([])
+  const [createChecklists, setCreateChecklists] = useState<ChecklistCadastro[]>([])
 
   const etapaMap = useMemo(() => {
     const map = new Map<number, ImplantacaoEtapa>()
@@ -409,8 +412,23 @@ export function Pipeline() {
     setCreateStatus(1)
     setCreateResponsavel('none')
     setCreateObs('')
+    setCreateChecklistIds([])
     setCreateOpen(true)
     void api.getServicos({ ativo: '1' }).then(setServicos).catch(() => setServicos([]))
+    void api.getImplantacaoResponsaveis().then(setCreateResponsaveis).catch(() => setCreateResponsaveis([]))
+    void api.getChecklists({ ativo: '1' }).then(setCreateChecklists).catch(() => setCreateChecklists([]))
+  }
+
+  function selecionarServicoCriacao(servicoId: string) {
+    setCreateServicoId(servicoId)
+    const servico = servicos.find((s) => String(s.id) === servicoId)
+    setCreateChecklistIds(servico?.checklistIds ?? [])
+  }
+
+  function alternarChecklistCriacao(checklistId: number) {
+    setCreateChecklistIds((prev) =>
+      prev.includes(checklistId) ? prev.filter((id) => id !== checklistId) : [...prev, checklistId]
+    )
   }
 
   async function salvarNovoProcesso() {
@@ -429,11 +447,27 @@ export function Pipeline() {
         statusInstal: createStatus,
         responsavelId: createResponsavel === 'none' ? null : Number(createResponsavel),
         observacao: createObs.trim() || undefined,
+        checklistIds: createTipo === 'novo_servico' ? createChecklistIds : undefined,
       })
       setCreateOpen(false)
       await carregarPainel()
     } finally {
       setCreateSaving(false)
+    }
+  }
+
+  async function desativarProcesso(cliente: ImplantacaoCliente) {
+    if (!cliente.processoId) return
+    if (!confirm(`Desativar o processo "${cliente.processoTitulo || getTipoProcessoLabel(cliente)}"? Ele deixará de aparecer no pipeline.`)) return
+    setEditSaving(true)
+    try {
+      await api.desativarProcessoImplantacao(cliente.clienteId, cliente.processoId)
+      setEditOpen(false)
+      await carregarPainel()
+    } catch (err: any) {
+      alert(err?.message || 'Erro ao desativar processo.')
+    } finally {
+      setEditSaving(false)
     }
   }
 
@@ -1038,7 +1072,7 @@ export function Pipeline() {
               <label className="block text-sm font-medium text-slate-700 mb-1">Serviço</label>
               <select
                 value={createServicoId}
-                onChange={(e) => setCreateServicoId(e.target.value)}
+                onChange={(e) => selecionarServicoCriacao(e.target.value)}
                 className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
               >
                 <option value="">Selecione um serviço...</option>
@@ -1051,6 +1085,51 @@ export function Pipeline() {
               ) : null}
             </div>
           ) : null}
+          {createTipo === 'novo_servico' && createServicoId ? (
+            (() => {
+              const servicoSelecionado = servicos.find((s) => String(s.id) === createServicoId)
+              const checklistsDoServico = createChecklists.filter((c) => (servicoSelecionado?.checklistIds ?? []).includes(c.id))
+              if (checklistsDoServico.length === 0) return null
+              if (checklistsDoServico.length === 1) {
+                return (
+                  <p className="text-xs text-slate-500">
+                    Checklist vinculado automaticamente: <strong>{checklistsDoServico[0].nome}</strong>
+                  </p>
+                )
+              }
+              return (
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Checklist(s) vinculado(s) ao serviço</label>
+                  <div className="rounded-lg border border-slate-200 p-2.5 space-y-1.5">
+                    {checklistsDoServico.map((checklist) => (
+                      <label key={checklist.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={createChecklistIds.includes(checklist.id)}
+                          onChange={() => alternarChecklistCriacao(checklist.id)}
+                          className="accent-blue-600"
+                        />
+                        {checklist.nome}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )
+            })()
+          ) : null}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Responsável</label>
+            <select
+              value={createResponsavel}
+              onChange={(e) => setCreateResponsavel(e.target.value)}
+              className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
+            >
+              <option value="none">Sem responsável</option>
+              {createResponsaveis.map((responsavel) => (
+                <option key={responsavel.id} value={String(responsavel.id)}>{responsavel.nome}</option>
+              ))}
+            </select>
+          </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Observação</label>
             <textarea
@@ -1224,9 +1303,20 @@ export function Pipeline() {
               />
             </div>
 
-            <div className="flex justify-end gap-2">
-              <Button variant="secondary" onClick={() => setEditOpen(false)} disabled={editSaving}>Cancelar</Button>
-              <Button onClick={() => void salvarEdicaoCliente()} loading={editSaving}>Salvar Implantação</Button>
+            <div className="flex justify-between gap-2">
+              <Button
+                variant="ghost"
+                icon={<Ban className="w-3.5 h-3.5" />}
+                onClick={() => editCliente && void desativarProcesso(editCliente)}
+                disabled={editSaving}
+                className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
+              >
+                Desativar processo
+              </Button>
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={() => setEditOpen(false)} disabled={editSaving}>Cancelar</Button>
+                <Button onClick={() => void salvarEdicaoCliente()} loading={editSaving}>Salvar Implantação</Button>
+              </div>
             </div>
           </div>
         )}

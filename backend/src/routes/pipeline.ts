@@ -309,6 +309,7 @@ async function getProcessoContexto(clienteId: number, processoId?: number | null
       FROM implantacao_processos
       WHERE id = ${Number(processoId)}
         AND cliente_id = ${clienteId}
+        AND COALESCE(ativo, 1) = 1
       LIMIT 1
     `
     : await prisma.$queryRaw<ProcessoContextoRow[]>`
@@ -325,6 +326,7 @@ async function getProcessoContexto(clienteId: number, processoId?: number | null
       FROM implantacao_processos
       WHERE cliente_id = ${clienteId}
         AND processo_principal = 1
+        AND COALESCE(ativo, 1) = 1
       ORDER BY id ASC
       LIMIT 1
     `
@@ -373,13 +375,15 @@ async function ensureImplantacaoBootstrap() {
           status_atual       INT NOT NULL DEFAULT 1,
           observacao         VARCHAR(500) NULL,
           processo_principal TINYINT(1) NOT NULL DEFAULT 0,
+          ativo              TINYINT(1) NOT NULL DEFAULT 1,
           criado_em          DATETIME NOT NULL DEFAULT NOW(),
           atualizado_em      DATETIME NOT NULL DEFAULT NOW(),
           criado_por         INT NULL,
           atualizado_por     INT NULL,
           INDEX idx_impl_proc_cliente (cliente_id),
           INDEX idx_impl_proc_status (status_atual),
-          INDEX idx_impl_proc_tipo (tipo)
+          INDEX idx_impl_proc_tipo (tipo),
+          INDEX idx_impl_proc_ativo (ativo)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `)
 
@@ -468,6 +472,7 @@ async function ensureImplantacaoBootstrap() {
       await ensureColumnExists('implantacao_responsavel', 'processo_id', 'processo_id INT NULL AFTER cliente_id')
       await ensureColumnExists('implantacao_movimentacoes', 'processo_id', 'processo_id INT NULL AFTER cliente_id')
       await ensureColumnExists('implantacao_processos', 'servico_id', 'servico_id INT NULL AFTER servico_nome')
+      await ensureColumnExists('implantacao_processos', 'ativo', 'ativo TINYINT(1) NOT NULL DEFAULT 1 AFTER processo_principal')
 
       await prisma.$executeRawUnsafe(`
         INSERT INTO implantacao_processos
@@ -820,6 +825,7 @@ async function carregarClientesImplantacao() {
       AND C.cod_cli NOT IN (0, 1, 6, 7, 8)
       AND C.cod_cli < 10000000
       AND C.cod_cla <> 30
+      AND COALESCE(P.ativo, 1) = 1
     ORDER BY C.cod_cli DESC, P.processo_principal DESC, P.id DESC
   `
 
@@ -1206,6 +1212,10 @@ export async function pipelineRoutes(app: FastifyInstance) {
         }
         : {}),
     }
+  })
+
+  app.get('/implantacao/responsaveis', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Lista de responsáveis ativos para vincular a um processo' } }, async () => {
+    return carregarResponsaveisAtivos()
   })
 
   app.get('/implantacao/:clienteId/checklist', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Checklist aplicável ao cliente na etapa atual + camada executiva' } }, async (request, reply) => {
@@ -1787,7 +1797,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
   })
 
   app.post('/implantacao/processos', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Cria um novo processo de implantação para cliente existente' } }, async (request, reply) => {
-    const { clienteId, tipo, titulo, servicoId, statusInstal, responsavelId, observacao } = request.body as {
+    const { clienteId, tipo, titulo, servicoId, statusInstal, responsavelId, observacao, checklistIds } = request.body as {
       clienteId: number
       tipo: 'novo_cliente' | 'novo_servico'
       titulo: string
@@ -1795,6 +1805,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       statusInstal?: number
       responsavelId?: number | null
       observacao?: string
+      checklistIds?: number[]
     }
     const idCliente = Number(clienteId)
     const usuarioId = Number((request.user as any)?.id || 0) || null
@@ -1859,6 +1870,25 @@ export async function pipelineRoutes(app: FastifyInstance) {
         })
       }
     }
+    if (novoProcessoId > 0) {
+      const idsChecklist = Array.from(new Set((checklistIds ?? []).map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)))
+      for (const checklistId of idsChecklist) {
+        await prisma.$executeRaw`
+          INSERT INTO implantacao_checklist_cliente (cliente_id, processo_id, checklist_id, criado_em, criado_por)
+          VALUES (${idCliente}, ${novoProcessoId}, ${checklistId}, NOW(), ${usuarioId})
+        `
+        await registrarMovimentacao({
+          clienteId: idCliente,
+          processoId: novoProcessoId,
+          tipo: 'checklist',
+          checklistId,
+          marcado: true,
+          observacao: 'Checklist vinculado ao processo na criação',
+          usuarioId,
+        })
+      }
+    }
+
     await registrarMovimentacao({
       clienteId: idCliente,
       processoId: novoProcessoId,
@@ -1870,6 +1900,39 @@ export async function pipelineRoutes(app: FastifyInstance) {
     })
     invalidarPainelCache()
     return reply.status(201).send({ ok: true, processoId: novoProcessoId })
+  })
+
+  app.patch('/implantacao/:clienteId/processos/:processoId/desativar', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Desativa um processo de implantação (não exclui, apenas deixa de aparecer no pipeline)' } }, async (request, reply) => {
+    const { clienteId, processoId } = request.params as { clienteId: string; processoId: string }
+    const id = Number(clienteId)
+    const idProcesso = Number(processoId)
+    const usuarioId = Number((request.user as any)?.id || 0) || null
+    if (!Number.isFinite(id) || id <= 0 || !Number.isFinite(idProcesso) || idProcesso <= 0) {
+      return reply.status(400).send({ error: 'Parâmetros inválidos.' })
+    }
+
+    await ensureImplantacaoBootstrap()
+    const rows = await prisma.$queryRaw<Array<{ id: number }>>`
+      SELECT id FROM implantacao_processos WHERE id = ${idProcesso} AND cliente_id = ${id} AND COALESCE(ativo, 1) = 1 LIMIT 1
+    `
+    if (!rows.length) return reply.status(404).send({ error: 'Processo não encontrado ou já está inativo.' })
+
+    await prisma.$executeRaw`
+      UPDATE implantacao_processos
+      SET ativo = 0, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+      WHERE id = ${idProcesso}
+    `
+
+    await registrarMovimentacao({
+      clienteId: id,
+      processoId: idProcesso,
+      tipo: 'observacao',
+      observacao: 'Processo desativado',
+      usuarioId,
+    })
+
+    invalidarPainelCache()
+    return { ok: true }
   })
 
   app.get('/resumo/etapas', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Resumo legado por etapa' } }, async () => {
