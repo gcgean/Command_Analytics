@@ -161,11 +161,12 @@ function normalizarDataFiltro(value?: string | null) {
 }
 
 function clienteCorrespondeDataCadastro(cliente: ImplantacaoCliente, dataInicial?: string, dataFinal?: string) {
-  const dataCliente = String(cliente.dataCadastro || '').slice(0, 10)
-  if (!dataCliente) return false
-
   const inicio = normalizarDataFiltro(dataInicial)
   const fim = normalizarDataFiltro(dataFinal)
+  if (!inicio && !fim) return true
+
+  const dataCliente = String(cliente.dataCadastro || '').slice(0, 10)
+  if (!dataCliente) return false
 
   if (inicio && dataCliente < inicio) return false
   if (fim && dataCliente > fim) return false
