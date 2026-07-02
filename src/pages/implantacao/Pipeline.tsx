@@ -11,7 +11,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import type {
-  ImplantacaoChecklistOpcao, ImplantacaoCliente, ImplantacaoEtapa, ImplantacaoPainel, ServicoCadastro, ChecklistCadastro
+  ImplantacaoChecklistOpcao, ImplantacaoCliente, ImplantacaoEtapa, ImplantacaoPainel, ServicoCadastro, ChecklistCadastro, Cliente
 } from '../../types'
 
 type ViewMode = 'lista' | 'kanban'
@@ -283,6 +283,8 @@ export function Pipeline() {
   const [createClienteId, setCreateClienteId] = useState('')
   const [createClienteBusca, setCreateClienteBusca] = useState('')
   const [createClienteDropdownAberto, setCreateClienteDropdownAberto] = useState(false)
+  const [createClienteResultados, setCreateClienteResultados] = useState<Cliente[]>([])
+  const [createClienteBuscando, setCreateClienteBuscando] = useState(false)
   const [createTipo, setCreateTipo] = useState<'novo_cliente' | 'novo_servico'>('novo_servico')
   const [createTitulo, setCreateTitulo] = useState('')
   const [createServicoId, setCreateServicoId] = useState('')
@@ -354,24 +356,19 @@ export function Pipeline() {
     return map
   }, [painel?.etapas, clientesFiltrados])
 
-  const clientesDisponiveis = painel?.clientesDisponiveis || []
-
-  const clientesDisponiveisFiltrados = useMemo(() => {
-    const termo = normalizarBusca(createClienteBusca)
-    if (!termo) return clientesDisponiveis.slice(0, 30)
-    const termoNumerico = normalizarDigitos(createClienteBusca)
-    return clientesDisponiveis
-      .filter((cliente) => {
-        const campos = [cliente.clienteNome, cliente.nomeFantasia, cliente.cnpj]
-        return campos.some((campo) => {
-          const campoNormalizado = normalizarBusca(campo)
-          if (campoNormalizado.includes(termo)) return true
-          const campoNumerico = normalizarDigitos(campo)
-          return termoNumerico.length > 0 && campoNumerico.includes(termoNumerico)
-        })
-      })
-      .slice(0, 30)
-  }, [clientesDisponiveis, createClienteBusca])
+  // Busca de cliente no modal "Novo processo" consulta o cadastro de clientes (não só quem já está na implantação).
+  useEffect(() => {
+    if (!createOpen || !createClienteDropdownAberto) return
+    const termo = createClienteBusca.trim()
+    setCreateClienteBuscando(true)
+    const id = window.setTimeout(() => {
+      api.getClientesPaged({ page: 1, limit: 20, search: termo || undefined, ativo: 'S' })
+        .then((resp) => setCreateClienteResultados(resp.data))
+        .catch(() => setCreateClienteResultados([]))
+        .finally(() => setCreateClienteBuscando(false))
+    }, 250)
+    return () => window.clearTimeout(id)
+  }, [createClienteBusca, createOpen, createClienteDropdownAberto])
 
   async function carregarPainel() {
     setLoading(true)
@@ -424,9 +421,9 @@ export function Pipeline() {
   }
 
   function abrirCriacaoProcesso() {
-    const primeiroCliente = clientesDisponiveis[0] || null
-    setCreateClienteId(primeiroCliente ? String(primeiroCliente.clienteId) : '')
-    setCreateClienteBusca(primeiroCliente ? (primeiroCliente.nomeFantasia || primeiroCliente.clienteNome) : '')
+    setCreateClienteId('')
+    setCreateClienteBusca('')
+    setCreateClienteResultados([])
     setCreateClienteDropdownAberto(false)
     setCreateTipo('novo_servico')
     setCreateTitulo('')
@@ -441,9 +438,9 @@ export function Pipeline() {
     void api.getChecklists({ ativo: '1' }).then(setCreateChecklists).catch(() => setCreateChecklists([]))
   }
 
-  function selecionarClienteCriacao(cliente: { clienteId: number; clienteNome: string; nomeFantasia?: string | null }) {
-    setCreateClienteId(String(cliente.clienteId))
-    setCreateClienteBusca(cliente.nomeFantasia || cliente.clienteNome)
+  function selecionarClienteCriacao(cliente: Cliente) {
+    setCreateClienteId(String(cliente.id))
+    setCreateClienteBusca(cliente.nome || cliente.nomeRazao || '')
     setCreateClienteDropdownAberto(false)
   }
 
@@ -1065,20 +1062,24 @@ export function Pipeline() {
             />
             {createClienteDropdownAberto ? (
               <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                {clientesDisponiveisFiltrados.length === 0 ? (
+                {createClienteBuscando ? (
+                  <div className="px-3 py-2 text-xs text-slate-500 flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando...
+                  </div>
+                ) : createClienteResultados.length === 0 ? (
                   <div className="px-3 py-2 text-xs text-slate-500">Nenhum cliente encontrado.</div>
                 ) : (
-                  clientesDisponiveisFiltrados.map((cliente) => (
+                  createClienteResultados.map((cliente) => (
                     <button
-                      key={cliente.clienteId}
+                      key={cliente.id}
                       type="button"
                       className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => selecionarClienteCriacao(cliente)}
                     >
-                      <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{cliente.nomeFantasia || cliente.clienteNome}</span>
+                      <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{cliente.nome || cliente.nomeRazao}</span>
                       <span className="text-xs text-slate-500">
-                        {cliente.nomeFantasia && cliente.clienteNome && cliente.nomeFantasia !== cliente.clienteNome ? cliente.clienteNome : 'Sem razão social'} — {cliente.cnpj || 'Sem CNPJ'}
+                        {cliente.nome && cliente.nomeRazao && cliente.nome !== cliente.nomeRazao ? cliente.nomeRazao : 'Sem razão social'} — {cliente.cnpj || 'Sem CNPJ'}
                       </span>
                     </button>
                   ))
