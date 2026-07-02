@@ -869,6 +869,24 @@ async function carregarClientesImplantacao() {
   })
 }
 
+// ── Cache curto do painel de implantação ──────────────────────
+// carregarClientesImplantacao() faz múltiplos JOINs pesados (subqueries correlacionadas por cliente).
+// Como o painel é consultado repetidamente em pouco tempo (filtros, paginação, telas de detalhe),
+// mantemos o resultado em memória por alguns segundos e invalidamos nas rotas que alteram os dados.
+const PAINEL_CACHE_TTL_MS = 20_000
+let painelCache: { dados: Awaited<ReturnType<typeof carregarClientesImplantacao>>; expiraEm: number } | null = null
+
+async function carregarClientesImplantacaoCache() {
+  if (painelCache && painelCache.expiraEm > Date.now()) return painelCache.dados
+  const dados = await carregarClientesImplantacao()
+  painelCache = { dados, expiraEm: Date.now() + PAINEL_CACHE_TTL_MS }
+  return dados
+}
+
+function invalidarPainelCache() {
+  painelCache = null
+}
+
 function resolverChecklistsDoCliente(
   checklists: Array<{ id: number; nome: string; descricao: string; ordem: number; itens: string[] }>,
   checklistIdsCliente?: Set<number>,
@@ -949,7 +967,7 @@ async function carregarResponsaveisAtivos() {
 
 export async function pipelineRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Pipeline'] } }, async () => {
-    const clientes = await carregarClientesImplantacao()
+    const clientes = await carregarClientesImplantacaoCache()
     return clientes.map((c) => ({
       id: c.clienteId,
       clienteId: c.clienteId,
@@ -961,18 +979,28 @@ export async function pipelineRoutes(app: FastifyInstance) {
   })
 
   app.get('/implantacao/painel', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Painel operacional completo da implantação' } }, async (request) => {
-    const { search, status, dataCadastroInicial, dataCadastroFinal } = request.query as {
+    const { search, status, dataCadastroInicial, dataCadastroFinal, page, pageSize } = request.query as {
       search?: string
       status?: string
       dataCadastroInicial?: string
       dataCadastroFinal?: string
+      page?: string
+      pageSize?: string
     }
     const dataInicial = normalizeDateFilter(dataCadastroInicial)
     const dataFinal = normalizeDateFilter(dataCadastroFinal)
+    // Paginação (usada pela view Lista, com scroll infinito). Quando ausente, retorna a lista completa (view Kanban).
+    const paginaSolicitada = Number(page)
+    const tamanhoPaginaSolicitado = Number(pageSize)
+    const paginado = Number.isFinite(paginaSolicitada) && paginaSolicitada >= 1
+    const paginaAtual = paginado ? Math.floor(paginaSolicitada) : null
+    const tamanhoPagina = paginado
+      ? Math.min(200, Math.max(1, Number.isFinite(tamanhoPaginaSolicitado) ? Math.floor(tamanhoPaginaSolicitado) : 30))
+      : null
     const [etapas, checklists, clientes, servicosChecklistMap] = await Promise.all([
       getEtapasConfiguradas(),
       getChecklistsImplantacaoAtivos(),
-      carregarClientesImplantacao(),
+      carregarClientesImplantacaoCache(),
       getServicosChecklistMap(),
     ])
 
@@ -997,9 +1025,16 @@ export async function pipelineRoutes(app: FastifyInstance) {
       return true
     })
 
+    // Com paginação (view Lista), só processamos progresso de checklist/marcações para a página pedida —
+    // isso evita cláusulas IN() gigantes e recálculo de progresso para clientes que nem serão exibidos.
+    const totalFiltrado = filtered.length
+    const filteredPagina = paginado && paginaAtual !== null && tamanhoPagina !== null
+      ? filtered.slice((paginaAtual - 1) * tamanhoPagina, (paginaAtual - 1) * tamanhoPagina + tamanhoPagina)
+      : filtered
+
     const checklistIds = checklists.map((c) => c.id)
-    const clienteIds = Array.from(new Set(filtered.map((c) => c.clienteId)))
-    const processoIds = Array.from(new Set(filtered.map((c) => Number(c.processoId || 0)).filter((id) => id > 0)))
+    const clienteIds = Array.from(new Set(filteredPagina.map((c) => c.clienteId)))
+    const processoIds = Array.from(new Set(filteredPagina.map((c) => Number(c.processoId || 0)).filter((id) => id > 0)))
     const checklistClienteRows = clienteIds.length
       ? await prisma.$queryRawUnsafe<ChecklistClienteRow[]>(
         `SELECT cliente_id, processo_id, checklist_id
@@ -1068,7 +1103,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       }
     })
 
-    const clientesComProgresso = filtered.map((cliente) => {
+    const clientesComProgresso = filteredPagina.map((cliente) => {
       const processoId = Number(cliente.processoId || 0)
       const keyProcesso = getProcessoKey(cliente.clienteId, processoId)
       const keyLegado = getProcessoKey(cliente.clienteId, 0)
@@ -1127,13 +1162,24 @@ export async function pipelineRoutes(app: FastifyInstance) {
     clientesDistintos.forEach((c) => contagem.set(c.statusInstal, (contagem.get(c.statusInstal) || 0) + 1))
     const etapasComCount = etapas.map((e) => ({ ...e, quantidade: contagem.get(e.status) || 0 }))
 
+    // "Atrasados" é calculado sobre o conjunto filtrado (não só a página atual), sem depender das marcações
+    // de checklist — usa a mesma regra de SLA por etapa, só que a partir da data de início da etapa/cadastro
+    // (sem o refinamento de `stageStartMap`, que exige consultar movimentações; diferença irrelevante para um contador).
+    const atrasados = filtered.reduce((acc, cliente) => {
+      if (!(cliente as any).processoPrincipal) return acc
+      const slaDias = Number(etapas.find((e) => e.status === cliente.statusInstal)?.slaDias ?? 0)
+      if (slaDias <= 0) return acc
+      const dias = diffDays(cliente.dataInicioStatusAtual ?? cliente.dataCadastro ?? null)
+      return dias > slaDias ? acc + 1 : acc
+    }, 0)
+
     const kpis = {
       totalClientes: clientesDistintos.length,
       emProcesso: clientesDistintos.filter((c) => ![7, 10].includes(c.statusInstal)).length,
       concluidos: clientesDistintos.filter((c) => c.statusInstal === 7).length,
       desistencias: clientesDistintos.filter((c) => c.statusInstal === 10).length,
       aguardandoInicio: clientesDistintos.filter((c) => c.statusInstal === 1).length,
-      atrasados: clientesComProgresso.filter((c) => c.emAtraso && (c as any).processoPrincipal).length,
+      atrasados,
     }
 
     return {
@@ -1149,6 +1195,16 @@ export async function pipelineRoutes(app: FastifyInstance) {
           cnpj: base?.cnpj || null,
         }
       }),
+      ...(paginado && paginaAtual !== null && tamanhoPagina !== null
+        ? {
+          paginacao: {
+            page: paginaAtual,
+            pageSize: tamanhoPagina,
+            total: totalFiltrado,
+            hasMore: paginaAtual * tamanhoPagina < totalFiltrado,
+          },
+        }
+        : {}),
     }
   })
 
@@ -1158,7 +1214,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const id = Number(clienteId)
     if (!Number.isFinite(id) || id <= 0) return reply.status(400).send({ error: 'Cliente inválido.' })
 
-    const clientes = await carregarClientesImplantacao()
+    const clientes = await carregarClientesImplantacaoCache()
     const processoSelecionado = processoId ? Number(processoId) : null
     const cliente = clientes.find((c) => c.clienteId === id && (processoSelecionado ? Number(c.processoId) === processoSelecionado : Boolean((c as any).processoPrincipal)))
     if (!cliente) return reply.status(404).send({ error: 'Cliente não encontrado.' })
@@ -1305,6 +1361,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       usuarioId,
     })
 
+    invalidarPainelCache()
     return { ok: true }
   })
 
@@ -1343,6 +1400,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       usuarioId,
     })
 
+    invalidarPainelCache()
     return { ok: true }
   })
 
@@ -1391,6 +1449,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       usuarioId,
     })
 
+    invalidarPainelCache()
     return { ok: true }
   })
 
@@ -1479,6 +1538,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       usuarioId,
     })
 
+    invalidarPainelCache()
     return { ok: true }
   })
 
@@ -1532,6 +1592,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       usuarioId,
     })
 
+    invalidarPainelCache()
     return { ok: true }
   })
 
@@ -1543,7 +1604,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     const processoSelecionado = processoId ? Number(processoId) : null
     const [clientes, etapas, checklists, responsaveis, checklistRows] = await Promise.all([
-      carregarClientesImplantacao(),
+      carregarClientesImplantacaoCache(),
       getEtapasConfiguradas(),
       getChecklistsImplantacaoAtivos(),
       carregarResponsaveisAtivos(),
@@ -1721,6 +1782,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       }
     }
 
+    invalidarPainelCache()
     return { ok: true }
   })
 
@@ -1806,12 +1868,13 @@ export async function pipelineRoutes(app: FastifyInstance) {
       observacao: String(observacao ?? '').trim() || null,
       usuarioId,
     })
+    invalidarPainelCache()
     return reply.status(201).send({ ok: true, processoId: novoProcessoId })
   })
 
   app.get('/resumo/etapas', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Resumo legado por etapa' } }, async () => {
     const painel = await getEtapasConfiguradas()
-    const clientes = await carregarClientesImplantacao()
+    const clientes = await carregarClientesImplantacaoCache()
     const contagem = new Map<number, number>()
     painel.forEach((e) => contagem.set(e.status, 0))
     clientes.forEach((c) => contagem.set(c.statusInstal, (contagem.get(c.statusInstal) || 0) + 1))
@@ -1873,6 +1936,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
   app.delete('/:id', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Excluir item legado de pipeline' } }, async (request, reply) => {
     const { id } = request.params as { id: string }
     await prisma.pipelineItem.delete({ where: { id: Number(id) } })
+    invalidarPainelCache()
     return reply.status(204).send()
   })
 
@@ -1903,6 +1967,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       observacao: observacoes ?? null,
       usuarioId,
     })
+    invalidarPainelCache()
     return { ok: true }
   })
 }

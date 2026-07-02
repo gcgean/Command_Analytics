@@ -443,12 +443,14 @@ export const api = {
   getPipeline: () => fetchApi<PipelineItem[]>('/pipeline'),
   updatePipelineEtapa: (id: number, etapa: number, observacoes?: string) =>
     fetchApi<PipelineItem>(`/pipeline/${id}/etapa`, { method: 'PATCH', body: JSON.stringify({ etapa, observacoes }) }),
-  getImplantacaoPainel: (params?: { search?: string; status?: string; dataCadastroInicial?: string; dataCadastroFinal?: string }) => {
+  getImplantacaoPainel: (params?: { search?: string; status?: string; dataCadastroInicial?: string; dataCadastroFinal?: string; page?: number; pageSize?: number }) => {
     const searchParams = new URLSearchParams()
     if (params?.search) searchParams.set('search', params.search)
     if (params?.status) searchParams.set('status', params.status)
     if (params?.dataCadastroInicial) searchParams.set('dataCadastroInicial', params.dataCadastroInicial)
     if (params?.dataCadastroFinal) searchParams.set('dataCadastroFinal', params.dataCadastroFinal)
+    if (params?.page) searchParams.set('page', String(params.page))
+    if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize))
     const qs = searchParams.toString() ? `?${searchParams.toString()}` : ''
     return fetchApi<ImplantacaoPainel>(`/pipeline/implantacao/painel${qs}`)
   },

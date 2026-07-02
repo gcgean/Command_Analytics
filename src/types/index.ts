@@ -518,6 +518,12 @@ export interface ImplantacaoPainel {
     nomeFantasia?: string | null
     cnpj?: string | null
   }>
+  paginacao?: {
+    page: number
+    pageSize: number
+    total: number
+    hasMore: boolean
+  }
 }
 
 export interface ImplantacaoChecklistDetalhe {

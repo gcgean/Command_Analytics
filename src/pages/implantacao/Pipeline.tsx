@@ -247,6 +247,10 @@ export function Pipeline() {
   const [updating, setUpdating] = useState(false)
   const [painel, setPainel] = useState<ImplantacaoPainel | null>(null)
 
+  const LISTA_PAGE_SIZE = 40
+  const [listaVisibleCount, setListaVisibleCount] = useState(LISTA_PAGE_SIZE)
+  const listaSentinelRef = useRef<HTMLDivElement | null>(null)
+
   const [draggingClienteId, setDraggingClienteId] = useState<number | null>(null)
   const [draggingFromStatus, setDraggingFromStatus] = useState<number | null>(null)
 
@@ -310,6 +314,30 @@ export function Pipeline() {
     ),
     [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal],
   )
+
+  const clientesVisiveis = useMemo(
+    () => clientesFiltrados.slice(0, listaVisibleCount),
+    [clientesFiltrados, listaVisibleCount],
+  )
+
+  // Reseta a janela de renderização sempre que os filtros mudarem, para não ficar preso numa página antiga.
+  useEffect(() => {
+    setListaVisibleCount(LISTA_PAGE_SIZE)
+  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, viewMode])
+
+  // Scroll infinito da view Lista: cresce a janela de itens renderizados ao aproximar do fim.
+  useEffect(() => {
+    if (viewMode !== 'lista') return
+    const sentinel = listaSentinelRef.current
+    if (!sentinel) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        setListaVisibleCount((prev) => Math.min(prev + LISTA_PAGE_SIZE, clientesFiltrados.length))
+      }
+    }, { rootMargin: '200px' })
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [viewMode, clientesFiltrados.length])
 
   const clientesPorEtapa = useMemo(() => {
     const map = new Map<number, ImplantacaoCliente[]>()
@@ -679,7 +707,7 @@ export function Pipeline() {
             {loading ? <Loader2 className="w-4 h-4 animate-spin text-slate-500" /> : null}
           </div>
           <div className="md:hidden p-2.5 space-y-2">
-            {clientesFiltrados.map((cliente, index) => (
+            {clientesVisiveis.map((cliente, index) => (
               <div key={getClienteRenderKey(cliente, index)} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-900">
                 <p className="text-[11px] font-medium text-blue-600">{getTipoProcessoLabel(cliente)}</p>
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{getNomeDestaque(cliente)}</p>
@@ -727,7 +755,7 @@ export function Pipeline() {
                 </tr>
               </thead>
               <tbody>
-                {clientesFiltrados.map((cliente, index) => (
+                {clientesVisiveis.map((cliente, index) => (
                   <tr key={getClienteRenderKey(cliente, index)} className="border-t border-slate-200 dark:border-slate-700">
                     <td className="px-4 py-3">
                       <p className="font-semibold text-slate-800 dark:text-slate-100">{cliente.processoTitulo || getTipoProcessoLabel(cliente)}</p>
@@ -804,6 +832,11 @@ export function Pipeline() {
               </tbody>
             </table>
           </div>
+          {listaVisibleCount < clientesFiltrados.length ? (
+            <div ref={listaSentinelRef} className="p-4 flex items-center justify-center text-xs text-slate-500 gap-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Carregando mais processos...
+            </div>
+          ) : null}
         </Card>
       ) : (
         <Card padding="none">
