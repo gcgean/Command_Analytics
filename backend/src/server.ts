@@ -33,6 +33,7 @@ import { auditoriaRoutes } from './routes/auditoria'
 import { telegramRoutes } from './routes/telegram'
 import { etapasRoutes } from './routes/etapas'
 import { checklistsRoutes } from './routes/checklists'
+import { servicosRoutes } from './routes/servicos'
 import { procedimentosRoutes } from './routes/procedimentos'
 import { anexosRoutes } from './routes/anexos'
 import { notificacoesRoutes } from './routes/notificacoes'
@@ -153,6 +154,7 @@ app.register(async (api) => {
   api.register(telegramRoutes,     { prefix: '/telegram' })
   api.register(etapasRoutes,       { prefix: '/etapas' })
   api.register(checklistsRoutes,   { prefix: '/checklists' })
+  api.register(servicosRoutes,     { prefix: '/servicos' })
   api.register(procedimentosRoutes,{ prefix: '/procedimentos' })
   api.register(anexosRoutes,       { prefix: '/anexos' })
   api.register(notificacoesRoutes, { prefix: '/notificacoes' })

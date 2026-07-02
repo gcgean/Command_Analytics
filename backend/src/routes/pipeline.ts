@@ -3,6 +3,7 @@ import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { initEtapas } from '../utils/etapas'
 import { initChecklists } from '../utils/checklists'
+import { initServicos } from '../utils/servicos'
 
 type EtapaBase = {
   status: number
@@ -55,6 +56,7 @@ type ProcessoImplantacaoRow = {
   tipo: string
   titulo: string | null
   servicoNome: string | null
+  servicoId: number | null
   statusAtual: number | null
   observacao: string | null
   processoPrincipal: number | boolean
@@ -132,6 +134,7 @@ type ProcessoContextoRow = {
   tipo: string
   titulo: string | null
   servicoNome: string | null
+  servicoId: number | null
   statusAtual: number | null
   observacao: string | null
   processoPrincipal: number | boolean
@@ -299,6 +302,7 @@ async function getProcessoContexto(clienteId: number, processoId?: number | null
         tipo,
         titulo,
         servico_nome AS servicoNome,
+        servico_id AS servicoId,
         status_atual AS statusAtual,
         observacao,
         processo_principal AS processoPrincipal
@@ -314,6 +318,7 @@ async function getProcessoContexto(clienteId: number, processoId?: number | null
         tipo,
         titulo,
         servico_nome AS servicoNome,
+        servico_id AS servicoId,
         status_atual AS statusAtual,
         observacao,
         processo_principal AS processoPrincipal
@@ -332,10 +337,23 @@ async function getProcessoContexto(clienteId: number, processoId?: number | null
     tipo: row.tipo || 'novo_cliente',
     titulo: row.titulo || 'Implantação inicial',
     servicoNome: row.servicoNome || null,
+    servicoId: row.servicoId === null || row.servicoId === undefined ? null : Number(row.servicoId),
     statusAtual: normalizeStatus(Number(row.statusAtual ?? 1)),
     observacao: row.observacao || null,
     processoPrincipal: Number(row.processoPrincipal) === 1,
   }
+}
+
+async function getServicosChecklistMap(): Promise<Map<number, number[]>> {
+  await ensureImplantacaoBootstrap()
+  const rows = await prisma.$queryRaw<Array<{ id: number; checklist_ids: string | null }>>`
+    SELECT id, checklist_ids FROM cadastro_servicos WHERE ativo = 1
+  `
+  const map = new Map<number, number[]>()
+  rows.forEach((row) => {
+    map.set(Number(row.id), parseJsonArray(row.checklist_ids).map(Number).filter((n) => Number.isFinite(n) && n > 0))
+  })
+  return map
 }
 
 async function ensureImplantacaoBootstrap() {
@@ -343,6 +361,7 @@ async function ensureImplantacaoBootstrap() {
     bootstrapPromise = (async () => {
       await initEtapas()
       await initChecklists()
+      await initServicos()
 
       await prisma.$executeRawUnsafe(`
         CREATE TABLE IF NOT EXISTS implantacao_processos (
@@ -448,6 +467,7 @@ async function ensureImplantacaoBootstrap() {
       await ensureColumnExists('implantacao_checklist_cliente', 'processo_id', 'processo_id INT NULL AFTER cliente_id')
       await ensureColumnExists('implantacao_responsavel', 'processo_id', 'processo_id INT NULL AFTER cliente_id')
       await ensureColumnExists('implantacao_movimentacoes', 'processo_id', 'processo_id INT NULL AFTER cliente_id')
+      await ensureColumnExists('implantacao_processos', 'servico_id', 'servico_id INT NULL AFTER servico_nome')
 
       await prisma.$executeRawUnsafe(`
         INSERT INTO implantacao_processos
@@ -765,6 +785,7 @@ async function carregarClientesImplantacao() {
       P.tipo,
       P.titulo,
       P.servico_nome AS servicoNome,
+      P.servico_id AS servicoId,
       CASE
         WHEN P.processo_principal = 1 THEN COALESCE(NULLIF(C.STATUS_INSTAL, 0), 1)
         ELSE COALESCE(NULLIF(P.status_atual, 0), 1)
@@ -822,6 +843,7 @@ async function carregarClientesImplantacao() {
       processoTipo: (processo.tipo === 'novo_servico' ? 'novo_servico' : 'novo_cliente') as 'novo_cliente' | 'novo_servico',
       processoTitulo: processo.titulo || 'Implantação inicial',
       servicoNome: processo.servicoNome || null,
+      servicoId: processo.servicoId === null || processo.servicoId === undefined ? null : Number(processo.servicoId),
       processoPrincipal: Number(processo.processoPrincipal) === 1,
       clienteId: Number(processo.clienteId),
       clienteNome: nomeCompleto || fantasia || `Cliente #${processo.clienteId}`,
@@ -858,11 +880,18 @@ function filtrarChecklistsPorStatus(
 function resolverChecklistsDoCliente(
   checklists: Array<{ id: number; nome: string; descricao: string; ordem: number; itens: string[]; etapas: string[] }>,
   statusInstal: number,
-  checklistIdsCliente?: Set<number>
+  checklistIdsCliente?: Set<number>,
+  checklistIdsServico?: number[] | null
 ) {
   if (checklistIdsCliente && checklistIdsCliente.size > 0) {
     return checklists.filter((c) => checklistIdsCliente.has(c.id))
   }
+  // Serviço vinculado ao processo define o checklist aplicável (substitui a antiga filtragem por etapa).
+  if (checklistIdsServico && checklistIdsServico.length > 0) {
+    const servicoSet = new Set(checklistIdsServico)
+    return checklists.filter((c) => servicoSet.has(c.id))
+  }
+  // Compatibilidade: processos legados sem serviço vinculado continuam usando a etapa atual.
   return filtrarChecklistsPorStatus(checklists, statusInstal)
 }
 
@@ -950,10 +979,11 @@ export async function pipelineRoutes(app: FastifyInstance) {
     }
     const dataInicial = normalizeDateFilter(dataCadastroInicial)
     const dataFinal = normalizeDateFilter(dataCadastroFinal)
-    const [etapas, checklists, clientes] = await Promise.all([
+    const [etapas, checklists, clientes, servicosChecklistMap] = await Promise.all([
       getEtapasConfiguradas(),
       getChecklistsImplantacaoAtivos(),
       carregarClientesImplantacao(),
+      getServicosChecklistMap(),
     ])
 
     const filtered = clientes.filter((cliente) => {
@@ -1055,7 +1085,8 @@ export async function pipelineRoutes(app: FastifyInstance) {
       const checklistsDaEtapa = resolverChecklistsDoCliente(
         checklists,
         cliente.statusInstal,
-        checklistsClienteMap.get(keyProcesso) || (((cliente as any).processoPrincipal && checklistsClienteMap.get(keyLegado)) ? checklistsClienteMap.get(keyLegado) : undefined)
+        checklistsClienteMap.get(keyProcesso) || (((cliente as any).processoPrincipal && checklistsClienteMap.get(keyLegado)) ? checklistsClienteMap.get(keyLegado) : undefined),
+        (cliente as any).servicoId ? servicosChecklistMap.get((cliente as any).servicoId) : null
       )
       let totalItens = 0
       let itensMarcados = 0
@@ -1145,11 +1176,12 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const contexto = await getProcessoContexto(id, processoSelecionado ?? Number(cliente.processoId || 0))
     if (!contexto) return reply.status(404).send({ error: 'Processo não encontrado.' })
 
-    const [etapas, checklists, timeline, responsaveis] = await Promise.all([
+    const [etapas, checklists, timeline, responsaveis, servicosChecklistMap] = await Promise.all([
       getEtapasConfiguradas(),
       getChecklistsImplantacaoAtivos(),
       carregarTimelineCliente(id, contexto.processoId),
       carregarResponsaveisAtivos(),
+      getServicosChecklistMap(),
     ])
 
     const statusSelecionado = Number(status)
@@ -1167,7 +1199,12 @@ export async function pipelineRoutes(app: FastifyInstance) {
         )
     `
     const checklistIdsCliente = new Set(checklistClienteRows.map((r) => Number(r.checklist_id)))
-    const checklistsDaEtapa = resolverChecklistsDoCliente(checklists, etapaStatus, checklistIdsCliente)
+    const checklistsDaEtapa = resolverChecklistsDoCliente(
+      checklists,
+      etapaStatus,
+      checklistIdsCliente,
+      contexto.servicoId ? servicosChecklistMap.get(contexto.servicoId) : null
+    )
 
     const marcacoes = checklistsDaEtapa.length
       ? await prisma.$queryRawUnsafe<MarcacaoRow[]>(
@@ -1701,11 +1738,11 @@ export async function pipelineRoutes(app: FastifyInstance) {
   })
 
   app.post('/implantacao/processos', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Cria um novo processo de implantação para cliente existente' } }, async (request, reply) => {
-    const { clienteId, tipo, titulo, servicoNome, statusInstal, responsavelId, observacao } = request.body as {
+    const { clienteId, tipo, titulo, servicoId, statusInstal, responsavelId, observacao } = request.body as {
       clienteId: number
       tipo: 'novo_cliente' | 'novo_servico'
       titulo: string
-      servicoNome?: string
+      servicoId?: number | null
       statusInstal?: number
       responsavelId?: number | null
       observacao?: string
@@ -1720,14 +1757,32 @@ export async function pipelineRoutes(app: FastifyInstance) {
     if (!tituloNormalizado) return reply.status(400).send({ error: 'Informe o nome do processo.' })
 
     await ensureImplantacaoBootstrap()
+
+    let servicoIdNormalizado: number | null = null
+    let servicoNomeResolvido: string | null = null
+    if (tipoNormalizado === 'novo_servico' && servicoId) {
+      const idServico = Number(servicoId)
+      if (Number.isFinite(idServico) && idServico > 0) {
+        const servicoRows = await prisma.$queryRaw<Array<{ id: number; nome: string }>>`
+          SELECT id, nome FROM cadastro_servicos WHERE id = ${idServico} AND ativo = 1 LIMIT 1
+        `
+        if (!servicoRows.length) return reply.status(400).send({ error: 'Serviço selecionado é inválido ou está inativo.' })
+        servicoIdNormalizado = Number(servicoRows[0].id)
+        servicoNomeResolvido = servicoRows[0].nome
+      }
+    }
+    if (tipoNormalizado === 'novo_servico' && !servicoIdNormalizado) {
+      return reply.status(400).send({ error: 'Selecione um serviço cadastrado.' })
+    }
+
     const processoCriado = await prisma.$queryRaw<Array<{ id: number }>>`
       SELECT id FROM implantacao_processos WHERE cliente_id = ${idCliente} ORDER BY id DESC LIMIT 1
     `
     await prisma.$executeRaw`
       INSERT INTO implantacao_processos
-        (cliente_id, tipo, titulo, servico_nome, status_atual, observacao, processo_principal, criado_em, atualizado_em, criado_por, atualizado_por)
+        (cliente_id, tipo, titulo, servico_nome, servico_id, status_atual, observacao, processo_principal, criado_em, atualizado_em, criado_por, atualizado_por)
       VALUES
-        (${idCliente}, ${tipoNormalizado}, ${tituloNormalizado}, ${String(servicoNome ?? '').trim() || null}, ${statusNovo}, ${String(observacao ?? '').trim() || null}, 0, NOW(), NOW(), ${usuarioId}, ${usuarioId})
+        (${idCliente}, ${tipoNormalizado}, ${tituloNormalizado}, ${servicoNomeResolvido}, ${servicoIdNormalizado}, ${statusNovo}, ${String(observacao ?? '').trim() || null}, 0, NOW(), NOW(), ${usuarioId}, ${usuarioId})
     `
     const novoProcesso = await prisma.$queryRaw<Array<{ id: number }>>`
       SELECT id FROM implantacao_processos WHERE cliente_id = ${idCliente} ORDER BY id DESC LIMIT 1

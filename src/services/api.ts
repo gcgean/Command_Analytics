@@ -2,7 +2,7 @@ import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, Comissao, Tarefa, Video, Meta,
   AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, EtapaCadastro,
-  ChecklistCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, Usuario,
+  ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
   DashboardMensalidadesAbc, DashboardMensalidadesAgrupamento, DashboardMensalidadesConcentracao,
@@ -479,7 +479,7 @@ export const api = {
   }) => fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/transicao`, { method: 'PATCH', body: JSON.stringify(data) }),
   addImplantacaoObservacao: (clienteId: number, observacao: string, processoId?: number) =>
     fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/observacao`, { method: 'POST', body: JSON.stringify({ observacao, processoId }) }),
-  criarProcessoImplantacao: (data: { clienteId: number; tipo: 'novo_cliente' | 'novo_servico'; titulo: string; servicoNome?: string; statusInstal?: number; responsavelId?: number | null; observacao?: string }) =>
+  criarProcessoImplantacao: (data: { clienteId: number; tipo: 'novo_cliente' | 'novo_servico'; titulo: string; servicoId?: number | null; statusInstal?: number; responsavelId?: number | null; observacao?: string }) =>
     fetchApi<{ ok: boolean; processoId: number }>('/pipeline/implantacao/processos', { method: 'POST', body: JSON.stringify(data) }),
 
   // ─── CRM ───────────────────────────────────────────────────
@@ -658,6 +658,18 @@ export const api = {
     fetchApi(`/checklists/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleChecklist: (id: number) => fetchApi<{ ok: boolean; ativo: boolean }>(`/checklists/${id}/toggle`, { method: 'PATCH' }),
   deleteChecklist: (id: number) => fetchApi(`/checklists/${id}`, { method: 'DELETE' }),
+
+  // ─── Cadastro de Serviços ─────────────────────────────────
+  getServicos: (params?: { ativo?: '0' | '1' }) => {
+    const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
+    return fetchApi<ServicoCadastro[]>(`/servicos${qs}`)
+  },
+  createServico: (data: { nome: string; descricao?: string; checklistIds?: number[]; ordem?: number; ativo?: boolean }) =>
+    fetchApi<{ id: number }>('/servicos', { method: 'POST', body: JSON.stringify(data) }),
+  updateServico: (id: number, data: { nome: string; descricao?: string; checklistIds?: number[]; ordem?: number; ativo?: boolean }) =>
+    fetchApi(`/servicos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleServico: (id: number) => fetchApi<{ ok: boolean; ativo: boolean }>(`/servicos/${id}/toggle`, { method: 'PATCH' }),
+  deleteServico: (id: number) => fetchApi(`/servicos/${id}`, { method: 'DELETE' }),
 
   // ─── Cadastro de Procedimentos ───────────────────────────
   getProcedimentos: (params?: { ativo?: '0' | '1' }) => {

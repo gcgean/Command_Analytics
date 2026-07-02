@@ -472,6 +472,7 @@ export interface ImplantacaoCliente {
   processoTitulo?: string | null
   processoPrincipal?: boolean
   servicoNome?: string | null
+  servicoId?: number | null
   clienteId: number
   clienteNome: string
   nomeFantasia?: string | null
@@ -875,6 +876,20 @@ export interface ChecklistCadastro {
   itens: string[]
   etapas?: string[]
   telas: string[]
+  ativo: boolean
+  ordem: number
+  criadoEm?: string | null
+  atualizadoEm?: string | null
+}
+
+// ============================================================
+// CADASTRO DE SERVIÇOS
+// ============================================================
+export interface ServicoCadastro {
+  id: number
+  nome: string
+  descricao: string
+  checklistIds: number[]
   ativo: boolean
   ordem: number
   criadoEm?: string | null

@@ -11,7 +11,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import type {
-  ImplantacaoChecklistOpcao, ImplantacaoCliente, ImplantacaoEtapa, ImplantacaoPainel
+  ImplantacaoChecklistOpcao, ImplantacaoCliente, ImplantacaoEtapa, ImplantacaoPainel, ServicoCadastro
 } from '../../types'
 
 type ViewMode = 'lista' | 'kanban'
@@ -279,10 +279,11 @@ export function Pipeline() {
   const [createClienteId, setCreateClienteId] = useState('')
   const [createTipo, setCreateTipo] = useState<'novo_cliente' | 'novo_servico'>('novo_servico')
   const [createTitulo, setCreateTitulo] = useState('')
-  const [createServicoNome, setCreateServicoNome] = useState('')
+  const [createServicoId, setCreateServicoId] = useState('')
   const [createStatus, setCreateStatus] = useState<number>(1)
   const [createResponsavel, setCreateResponsavel] = useState<string>('none')
   const [createObs, setCreateObs] = useState('')
+  const [servicos, setServicos] = useState<ServicoCadastro[]>([])
 
   const etapaMap = useMemo(() => {
     const map = new Map<number, ImplantacaoEtapa>()
@@ -376,22 +377,27 @@ export function Pipeline() {
     setCreateClienteId(clientesDisponiveis[0]?.clienteId ? String(clientesDisponiveis[0].clienteId) : '')
     setCreateTipo('novo_servico')
     setCreateTitulo('')
-    setCreateServicoNome('')
+    setCreateServicoId('')
     setCreateStatus(1)
     setCreateResponsavel('none')
     setCreateObs('')
     setCreateOpen(true)
+    void api.getServicos({ ativo: '1' }).then(setServicos).catch(() => setServicos([]))
   }
 
   async function salvarNovoProcesso() {
     if (!createClienteId) return
+    if (createTipo === 'novo_servico' && !createServicoId) {
+      alert('Selecione um serviço cadastrado.')
+      return
+    }
     setCreateSaving(true)
     try {
       await api.criarProcessoImplantacao({
         clienteId: Number(createClienteId),
         tipo: createTipo,
         titulo: createTitulo.trim() || (createTipo === 'novo_servico' ? 'Novo serviço implantado' : 'Novo processo'),
-        servicoNome: createServicoNome.trim() || undefined,
+        servicoId: createTipo === 'novo_servico' ? Number(createServicoId) : null,
         statusInstal: createStatus,
         responsavelId: createResponsavel === 'none' ? null : Number(createResponsavel),
         observacao: createObs.trim() || undefined,
@@ -997,11 +1003,19 @@ export function Pipeline() {
           {createTipo === 'novo_servico' ? (
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Serviço</label>
-              <Input
-                value={createServicoNome}
-                onChange={(e) => setCreateServicoNome(e.target.value)}
-                placeholder="Ex.: Módulo Fiscal"
-              />
+              <select
+                value={createServicoId}
+                onChange={(e) => setCreateServicoId(e.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
+              >
+                <option value="">Selecione um serviço...</option>
+                {servicos.map((servico) => (
+                  <option key={servico.id} value={String(servico.id)}>{servico.nome}</option>
+                ))}
+              </select>
+              {servicos.length === 0 ? (
+                <p className="text-xs text-slate-500 mt-1">Nenhum serviço cadastrado. Acesse "Cadastro de Serviços" para criar.</p>
+              ) : null}
             </div>
           ) : null}
           <div>

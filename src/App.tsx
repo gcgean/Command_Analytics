@@ -84,6 +84,7 @@ import { Configuracoes } from './pages/configuracoes/Configuracoes'
 import { Usuarios } from './pages/configuracoes/Usuarios'
 import { CadastroEtapas } from './pages/configuracoes/CadastroEtapas'
 import { CadastroChecklists } from './pages/configuracoes/CadastroChecklists'
+import { CadastroServicos } from './pages/configuracoes/CadastroServicos'
 import { CadastroProcedimentos } from './pages/configuracoes/CadastroProcedimentos'
 
 // Perfil
@@ -233,6 +234,7 @@ export default function App() {
         <Route path="cadastro-etapas" element={<PermissionRoute recurso="cadastro-etapas"><CadastroEtapas /></PermissionRoute>} />
         <Route path="cadastro-procedimentos" element={<PermissionRoute recurso="cadastro-procedimentos"><CadastroProcedimentos /></PermissionRoute>} />
         <Route path="cadastro-checklists" element={<PermissionRoute recurso={['cadastro-checklists', 'cadastro-checklists-editar']}><CadastroChecklists /></PermissionRoute>} />
+        <Route path="cadastro-servicos" element={<PermissionRoute recurso={['cadastro-servicos', 'cadastro-servicos-editar']}><CadastroServicos /></PermissionRoute>} />
         <Route path="usuarios" element={<PermissionRoute recurso="usuarios"><Usuarios /></PermissionRoute>} />
         <Route path="grupos-acesso" element={<PermissionRoute recurso="grupos-acesso"><GruposAcesso /></PermissionRoute>} />
         <Route path="perfil" element={<Perfil />} />
