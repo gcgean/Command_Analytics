@@ -471,7 +471,15 @@ async function carregarClientesImplantacao() {
       C.Dt_em_migracao AS dtStatus15,
       C.Dt_em_conf_migracao AS dtStatus16
     FROM cliente C
-    LEFT JOIN processo_implantacao PI ON PI.id_cli = C.cod_cli
+    LEFT JOIN (
+      SELECT PI1.id_cli, PI1.obs_treinamento
+      FROM processo_implantacao PI1
+      INNER JOIN (
+        SELECT id_cli, MAX(id) AS max_id
+        FROM processo_implantacao
+        GROUP BY id_cli
+      ) PI2 ON PI2.id_cli = PI1.id_cli AND PI2.max_id = PI1.id
+    ) PI ON PI.id_cli = C.cod_cli
     LEFT JOIN implantacao_responsavel IR ON IR.cliente_id = C.cod_cli
     LEFT JOIN usuario UR ON UR.COD_USU = IR.responsavel_id
     WHERE C.ATIVO = 'S'

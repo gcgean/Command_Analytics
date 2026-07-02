@@ -67,9 +67,14 @@ function normalizarBusca(value?: string | null) {
     .trim()
 }
 
+function normalizarDigitos(value?: string | null) {
+  return String(value || '').replace(/\D/g, '')
+}
+
 function clienteCorrespondeBusca(cliente: ImplantacaoCliente, search: string) {
   const termo = normalizarBusca(search)
   if (!termo) return true
+  const termoNumerico = normalizarDigitos(search)
 
   const campos = [
     cliente.nomeFantasia,
@@ -79,7 +84,13 @@ function clienteCorrespondeBusca(cliente: ImplantacaoCliente, search: string) {
     cliente.uf,
   ]
 
-  return campos.some((campo) => normalizarBusca(campo).includes(termo))
+  return campos.some((campo) => {
+    const campoNormalizado = normalizarBusca(campo)
+    if (campoNormalizado.includes(termo)) return true
+
+    const campoNumerico = normalizarDigitos(campo)
+    return termoNumerico.length > 0 && campoNumerico.includes(termoNumerico)
+  })
 }
 
 function getDiasDesde(value?: string | null): number | null {
@@ -122,6 +133,10 @@ function getNomeSecundario(cliente: ImplantacaoCliente) {
   if (!fantasia) return ''
   if (!razao || fantasia.toLowerCase() === razao.toLowerCase()) return ''
   return razao
+}
+
+function getClienteRenderKey(cliente: ImplantacaoCliente, index: number) {
+  return `${cliente.clienteId}-${cliente.statusInstal}-${cliente.responsavelId ?? 'none'}-${index}`
 }
 
 function getDiasNaEtapa(cliente: ImplantacaoCliente) {
@@ -229,12 +244,22 @@ export function Pipeline() {
     return map
   }, [painel?.etapas])
 
+  const clientesBase = useMemo(() => {
+    const unicos = new Map<number, ImplantacaoCliente>()
+    ;(painel?.clientes || []).forEach((cliente) => {
+      if (!unicos.has(cliente.clienteId)) {
+        unicos.set(cliente.clienteId, cliente)
+      }
+    })
+    return Array.from(unicos.values())
+  }, [painel?.clientes])
+
   const clientesFiltrados = useMemo(
-    () => (painel?.clientes || []).filter((cliente) =>
+    () => clientesBase.filter((cliente) =>
       clienteCorrespondeBusca(cliente, search) &&
       clienteCorrespondeTempoUltimaVenda(cliente, ultimaVendaFiltro)
     ),
-    [painel?.clientes, search, ultimaVendaFiltro],
+    [clientesBase, search, ultimaVendaFiltro],
   )
 
   const clientesPorEtapa = useMemo(() => {
@@ -538,8 +563,8 @@ export function Pipeline() {
             {loading ? <Loader2 className="w-4 h-4 animate-spin text-slate-500" /> : null}
           </div>
           <div className="md:hidden p-2.5 space-y-2">
-            {clientesFiltrados.map((cliente) => (
-              <div key={cliente.clienteId} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-900">
+            {clientesFiltrados.map((cliente, index) => (
+              <div key={getClienteRenderKey(cliente, index)} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-900">
                 <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{getNomeDestaque(cliente)}</p>
                 {(getNomeSecundario(cliente) || cliente.cnpj) && (
                   <p className="text-[11px] text-slate-500 mt-0.5">
@@ -584,8 +609,8 @@ export function Pipeline() {
                 </tr>
               </thead>
               <tbody>
-                {clientesFiltrados.map((cliente) => (
-                  <tr key={cliente.clienteId} className="border-t border-slate-200 dark:border-slate-700">
+                {clientesFiltrados.map((cliente, index) => (
+                  <tr key={getClienteRenderKey(cliente, index)} className="border-t border-slate-200 dark:border-slate-700">
                     <td className="px-4 py-3">
                       <p className="font-semibold text-slate-800 dark:text-slate-100">{getNomeDestaque(cliente)}</p>
                       {(getNomeSecundario(cliente) || cliente.cnpj) && (
@@ -696,13 +721,13 @@ export function Pipeline() {
                       <p className="text-[11px] sm:text-xs text-slate-500 mt-1">{clientesDaEtapa.length} clientes</p>
                     </div>
                     <div className="p-1.5 sm:p-2 space-y-2 min-h-[180px] sm:min-h-[220px]">
-                      {clientesDaEtapa.map((cliente) => {
+                      {clientesDaEtapa.map((cliente, index) => {
                         const correspondeBusca = clienteCorrespondeBusca(cliente, search)
                         const badgeUrgencia = getBadgeUrgencia(cliente)
 
                         return (
                           <div
-                            key={cliente.clienteId}
+                            key={getClienteRenderKey(cliente, index)}
                             draggable
                             onDragStart={() => onDragStart(cliente)}
                             className={clsx(
