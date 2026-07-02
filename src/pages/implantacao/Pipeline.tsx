@@ -281,6 +281,8 @@ export function Pipeline() {
   const [createOpen, setCreateOpen] = useState(false)
   const [createSaving, setCreateSaving] = useState(false)
   const [createClienteId, setCreateClienteId] = useState('')
+  const [createClienteBusca, setCreateClienteBusca] = useState('')
+  const [createClienteDropdownAberto, setCreateClienteDropdownAberto] = useState(false)
   const [createTipo, setCreateTipo] = useState<'novo_cliente' | 'novo_servico'>('novo_servico')
   const [createTitulo, setCreateTitulo] = useState('')
   const [createServicoId, setCreateServicoId] = useState('')
@@ -354,6 +356,23 @@ export function Pipeline() {
 
   const clientesDisponiveis = painel?.clientesDisponiveis || []
 
+  const clientesDisponiveisFiltrados = useMemo(() => {
+    const termo = normalizarBusca(createClienteBusca)
+    if (!termo) return clientesDisponiveis.slice(0, 30)
+    const termoNumerico = normalizarDigitos(createClienteBusca)
+    return clientesDisponiveis
+      .filter((cliente) => {
+        const campos = [cliente.clienteNome, cliente.nomeFantasia, cliente.cnpj]
+        return campos.some((campo) => {
+          const campoNormalizado = normalizarBusca(campo)
+          if (campoNormalizado.includes(termo)) return true
+          const campoNumerico = normalizarDigitos(campo)
+          return termoNumerico.length > 0 && campoNumerico.includes(termoNumerico)
+        })
+      })
+      .slice(0, 30)
+  }, [clientesDisponiveis, createClienteBusca])
+
   async function carregarPainel() {
     setLoading(true)
     try {
@@ -405,7 +424,10 @@ export function Pipeline() {
   }
 
   function abrirCriacaoProcesso() {
-    setCreateClienteId(clientesDisponiveis[0]?.clienteId ? String(clientesDisponiveis[0].clienteId) : '')
+    const primeiroCliente = clientesDisponiveis[0] || null
+    setCreateClienteId(primeiroCliente ? String(primeiroCliente.clienteId) : '')
+    setCreateClienteBusca(primeiroCliente ? (primeiroCliente.nomeFantasia || primeiroCliente.clienteNome) : '')
+    setCreateClienteDropdownAberto(false)
     setCreateTipo('novo_servico')
     setCreateTitulo('')
     setCreateServicoId('')
@@ -417,6 +439,12 @@ export function Pipeline() {
     void api.getServicos({ ativo: '1' }).then(setServicos).catch(() => setServicos([]))
     void api.getImplantacaoResponsaveis().then(setCreateResponsaveis).catch(() => setCreateResponsaveis([]))
     void api.getChecklists({ ativo: '1' }).then(setCreateChecklists).catch(() => setCreateChecklists([]))
+  }
+
+  function selecionarClienteCriacao(cliente: { clienteId: number; clienteNome: string; nomeFantasia?: string | null }) {
+    setCreateClienteId(String(cliente.clienteId))
+    setCreateClienteBusca(cliente.nomeFantasia || cliente.clienteNome)
+    setCreateClienteDropdownAberto(false)
   }
 
   function selecionarServicoCriacao(servicoId: string) {
@@ -432,7 +460,10 @@ export function Pipeline() {
   }
 
   async function salvarNovoProcesso() {
-    if (!createClienteId) return
+    if (!createClienteId) {
+      alert('Selecione um cliente na lista.')
+      return
+    }
     if (createTipo === 'novo_servico' && !createServicoId) {
       alert('Selecione um serviço cadastrado.')
       return
@@ -1019,20 +1050,41 @@ export function Pipeline() {
         size="lg"
       >
         <div className="space-y-4">
-          <div>
+          <div className="relative">
             <label className="block text-sm font-medium text-slate-700 mb-1">Cliente</label>
-            <select
-              value={createClienteId}
-              onChange={(e) => setCreateClienteId(e.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
-            >
-              <option value="">Selecione</option>
-              {clientesDisponiveis.map((cliente) => (
-                <option key={cliente.clienteId} value={String(cliente.clienteId)}>
-                  {cliente.nomeFantasia || cliente.clienteNome}
-                </option>
-              ))}
-            </select>
+            <Input
+              icon={<Search className="w-3.5 h-3.5" />}
+              value={createClienteBusca}
+              onFocus={() => setCreateClienteDropdownAberto(true)}
+              onChange={(e) => {
+                setCreateClienteBusca(e.target.value)
+                setCreateClienteId('')
+                setCreateClienteDropdownAberto(true)
+              }}
+              placeholder="Buscar por nome, fantasia ou CNPJ..."
+            />
+            {createClienteDropdownAberto ? (
+              <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                {clientesDisponiveisFiltrados.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-slate-500">Nenhum cliente encontrado.</div>
+                ) : (
+                  clientesDisponiveisFiltrados.map((cliente) => (
+                    <button
+                      key={cliente.clienteId}
+                      type="button"
+                      className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => selecionarClienteCriacao(cliente)}
+                    >
+                      <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{cliente.nomeFantasia || cliente.clienteNome}</span>
+                      <span className="text-xs text-slate-500">
+                        {cliente.nomeFantasia && cliente.clienteNome && cliente.nomeFantasia !== cliente.clienteNome ? cliente.clienteNome : 'Sem razão social'} — {cliente.cnpj || 'Sem CNPJ'}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : null}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
