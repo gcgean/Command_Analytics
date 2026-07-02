@@ -254,6 +254,19 @@ function getProcessoKey(clienteId: number, processoId: number | null | undefined
   return `${Number(clienteId)}:${Number(processoId ?? 0)}`
 }
 
+async function ensureColumnExists(table: string, column: string, ddl: string) {
+  const rows = await prisma.$queryRaw<Array<{ COLUMN_NAME: string }>>`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ${table}
+      AND COLUMN_NAME = ${column}
+  `
+  if (rows.length === 0) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE ${table} ADD COLUMN ${ddl}`)
+  }
+}
+
 function getDataInicioEtapaByStatus(row: ClienteImplantacaoRow, status: number): Date | null {
   switch (normalizeStatus(status)) {
     case 1: return row.dtStatus1
@@ -431,25 +444,10 @@ async function ensureImplantacaoBootstrap() {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
       `)
 
-      await prisma.$executeRawUnsafe(`
-        ALTER TABLE implantacao_checklist_marcacoes
-        ADD COLUMN IF NOT EXISTS processo_id INT NULL AFTER cliente_id
-      `)
-
-      await prisma.$executeRawUnsafe(`
-        ALTER TABLE implantacao_checklist_cliente
-        ADD COLUMN IF NOT EXISTS processo_id INT NULL AFTER cliente_id
-      `)
-
-      await prisma.$executeRawUnsafe(`
-        ALTER TABLE implantacao_responsavel
-        ADD COLUMN IF NOT EXISTS processo_id INT NULL AFTER cliente_id
-      `)
-
-      await prisma.$executeRawUnsafe(`
-        ALTER TABLE implantacao_movimentacoes
-        ADD COLUMN IF NOT EXISTS processo_id INT NULL AFTER cliente_id
-      `)
+      await ensureColumnExists('implantacao_checklist_marcacoes', 'processo_id', 'processo_id INT NULL AFTER cliente_id')
+      await ensureColumnExists('implantacao_checklist_cliente', 'processo_id', 'processo_id INT NULL AFTER cliente_id')
+      await ensureColumnExists('implantacao_responsavel', 'processo_id', 'processo_id INT NULL AFTER cliente_id')
+      await ensureColumnExists('implantacao_movimentacoes', 'processo_id', 'processo_id INT NULL AFTER cliente_id')
 
       await prisma.$executeRawUnsafe(`
         INSERT INTO implantacao_processos
