@@ -5,7 +5,7 @@ import clsx from 'clsx'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
-import type { ImplantacaoPainel } from '../../types'
+import type { ImplantacaoCliente, ImplantacaoPainel } from '../../types'
 
 type PeriodoFiltro = 'hoje' | 'semana' | 'mes' | 'tudo'
 
@@ -163,7 +163,13 @@ export function DashboardImplantacao() {
   }, [navigate])
 
   const resumo = useMemo(() => {
-    const clientesBase = painel?.clientes || []
+    const clientesUnicos = new Map<number, ImplantacaoCliente>()
+    ;(painel?.clientes || []).forEach((cliente) => {
+      if (!clientesUnicos.has(cliente.clienteId) || cliente.processoPrincipal) {
+        clientesUnicos.set(cliente.clienteId, cliente)
+      }
+    })
+    const clientesBase = Array.from(clientesUnicos.values())
     const etapas = painel?.etapas || []
     const clientes = clientesBase.filter((cliente) => pertenceAoPeriodo(cliente.dataCadastro, periodo))
 

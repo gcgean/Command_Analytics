@@ -470,6 +470,7 @@ export interface ImplantacaoCliente {
   processoId?: number
   processoTipo?: 'novo_cliente' | 'novo_servico'
   processoTitulo?: string | null
+  processoPrincipal?: boolean
   servicoNome?: string | null
   clienteId: number
   clienteNome: string

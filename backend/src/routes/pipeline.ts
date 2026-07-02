@@ -982,11 +982,6 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const checklistIds = checklists.map((c) => c.id)
     const clienteIds = Array.from(new Set(filtered.map((c) => c.clienteId)))
     const processoIds = Array.from(new Set(filtered.map((c) => Number(c.processoId || 0)).filter((id) => id > 0)))
-    const processosPrincipais = new Set(
-      filtered
-        .filter((c) => Boolean((c as any).processoPrincipal))
-        .map((c) => getProcessoKey(c.clienteId, Number(c.processoId || 0)))
-    )
     const checklistClienteRows = clienteIds.length
       ? await prisma.$queryRawUnsafe<ChecklistClienteRow[]>(
         `SELECT cliente_id, processo_id, checklist_id
@@ -1101,18 +1096,26 @@ export async function pipelineRoutes(app: FastifyInstance) {
       }
     })
 
+    const clientesUnicos = new Map<number, typeof clientes[number]>()
+    clientes.forEach((c) => {
+      if (!clientesUnicos.has(c.clienteId) || (c as any).processoPrincipal) {
+        clientesUnicos.set(c.clienteId, c)
+      }
+    })
+    const clientesDistintos = Array.from(clientesUnicos.values())
+
     const contagem = new Map<number, number>()
     etapas.forEach((e) => contagem.set(e.status, 0))
-    clientes.forEach((c) => contagem.set(c.statusInstal, (contagem.get(c.statusInstal) || 0) + 1))
+    clientesDistintos.forEach((c) => contagem.set(c.statusInstal, (contagem.get(c.statusInstal) || 0) + 1))
     const etapasComCount = etapas.map((e) => ({ ...e, quantidade: contagem.get(e.status) || 0 }))
 
     const kpis = {
-      totalClientes: clientes.length,
-      emProcesso: clientes.filter((c) => ![7, 10].includes(c.statusInstal)).length,
-      concluidos: clientes.filter((c) => c.statusInstal === 7).length,
-      desistencias: clientes.filter((c) => c.statusInstal === 10).length,
-      aguardandoInicio: clientes.filter((c) => c.statusInstal === 1).length,
-      atrasados: clientesComProgresso.filter((c) => c.emAtraso).length,
+      totalClientes: clientesDistintos.length,
+      emProcesso: clientesDistintos.filter((c) => ![7, 10].includes(c.statusInstal)).length,
+      concluidos: clientesDistintos.filter((c) => c.statusInstal === 7).length,
+      desistencias: clientesDistintos.filter((c) => c.statusInstal === 10).length,
+      aguardandoInicio: clientesDistintos.filter((c) => c.statusInstal === 1).length,
+      atrasados: clientesComProgresso.filter((c) => c.emAtraso && (c as any).processoPrincipal).length,
     }
 
     return {
