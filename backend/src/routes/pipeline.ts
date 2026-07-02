@@ -869,30 +869,20 @@ async function carregarClientesImplantacao() {
   })
 }
 
-function filtrarChecklistsPorStatus(
-  checklists: Array<{ id: number; nome: string; descricao: string; ordem: number; itens: string[]; etapas: string[] }>,
-  statusInstal: number
-) {
-  const key = String(statusInstal)
-  return checklists.filter((c) => c.etapas.length === 0 || c.etapas.includes(key))
-}
-
 function resolverChecklistsDoCliente(
-  checklists: Array<{ id: number; nome: string; descricao: string; ordem: number; itens: string[]; etapas: string[] }>,
-  statusInstal: number,
+  checklists: Array<{ id: number; nome: string; descricao: string; ordem: number; itens: string[] }>,
   checklistIdsCliente?: Set<number>,
   checklistIdsServico?: number[] | null
 ) {
   if (checklistIdsCliente && checklistIdsCliente.size > 0) {
     return checklists.filter((c) => checklistIdsCliente.has(c.id))
   }
-  // Serviço vinculado ao processo define o checklist aplicável (substitui a antiga filtragem por etapa).
+  // O checklist do pipeline vem exclusivamente do serviço vinculado ao processo (não há mais vínculo por etapa).
   if (checklistIdsServico && checklistIdsServico.length > 0) {
     const servicoSet = new Set(checklistIdsServico)
     return checklists.filter((c) => servicoSet.has(c.id))
   }
-  // Compatibilidade: processos legados sem serviço vinculado continuam usando a etapa atual.
-  return filtrarChecklistsPorStatus(checklists, statusInstal)
+  return []
 }
 
 async function carregarTimelineCliente(clienteId: number, processoId?: number | null) {
@@ -1084,7 +1074,6 @@ export async function pipelineRoutes(app: FastifyInstance) {
       const keyLegado = getProcessoKey(cliente.clienteId, 0)
       const checklistsDaEtapa = resolverChecklistsDoCliente(
         checklists,
-        cliente.statusInstal,
         checklistsClienteMap.get(keyProcesso) || (((cliente as any).processoPrincipal && checklistsClienteMap.get(keyLegado)) ? checklistsClienteMap.get(keyLegado) : undefined),
         (cliente as any).servicoId ? servicosChecklistMap.get((cliente as any).servicoId) : null
       )
@@ -1201,7 +1190,6 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const checklistIdsCliente = new Set(checklistClienteRows.map((r) => Number(r.checklist_id)))
     const checklistsDaEtapa = resolverChecklistsDoCliente(
       checklists,
-      etapaStatus,
       checklistIdsCliente,
       contexto.servicoId ? servicosChecklistMap.get(contexto.servicoId) : null
     )
@@ -1587,7 +1575,6 @@ export async function pipelineRoutes(app: FastifyInstance) {
         nome: c.nome,
         descricao: c.descricao,
         ordem: c.ordem,
-        etapas: c.etapas,
         itensQuantidade: c.itens.length,
       })),
       checklistIdsSelecionados,

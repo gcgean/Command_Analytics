@@ -9,7 +9,6 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import type { ChecklistCadastro } from '../../types'
 
 type TelaOption = { id: string; label: string }
-type EtapaOption = { id: string; label: string }
 
 const DEFAULT_TELAS: TelaOption[] = [
   { id: 'atendimentos', label: 'Atendimentos' },
@@ -34,7 +33,6 @@ export function CadastroChecklists() {
 
   const [checklists, setChecklists] = useState<ChecklistCadastro[]>([])
   const [telas, setTelas] = useState<TelaOption[]>(DEFAULT_TELAS)
-  const [etapas, setEtapas] = useState<EtapaOption[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
@@ -44,7 +42,6 @@ export function CadastroChecklists() {
     descricao: '',
     ordem: '0',
     telas: [] as string[],
-    etapas: [] as string[],
     itens: [] as string[],
     ativo: true,
   })
@@ -58,18 +55,12 @@ export function CadastroChecklists() {
   async function loadData() {
     setLoading(true)
     try {
-      const [checklistsResp, telasResp, etapasResp] = await Promise.all([
+      const [checklistsResp, telasResp] = await Promise.all([
         api.getChecklists(),
         api.getChecklistsTelas().catch(() => DEFAULT_TELAS),
-        api.getEtapas({ tela: 'implantacao', ativo: '1' }).catch(() => []),
       ])
       setChecklists(checklistsResp)
       setTelas(Array.isArray(telasResp) && telasResp.length ? telasResp : DEFAULT_TELAS)
-      setEtapas(
-        Array.isArray(etapasResp)
-          ? etapasResp.map((e: any) => ({ id: String(e.ordem ?? e.id), label: e.nome || `Etapa ${e.ordem ?? e.id}` }))
-          : []
-      )
     } catch {
       setChecklists([])
     } finally {
@@ -91,7 +82,6 @@ export function CadastroChecklists() {
       descricao: '',
       ordem: '0',
       telas: [],
-      etapas: [],
       itens: [],
       ativo: true,
     })
@@ -103,15 +93,6 @@ export function CadastroChecklists() {
       telas: prev.telas.includes(telaId)
         ? prev.telas.filter((t) => t !== telaId)
         : [...prev.telas, telaId],
-    }))
-  }
-
-  function toggleEtapa(etapaId: string) {
-    setForm((prev) => ({
-      ...prev,
-      etapas: prev.etapas.includes(etapaId)
-        ? prev.etapas.filter((e) => e !== etapaId)
-        : [...prev.etapas, etapaId],
     }))
   }
 
@@ -152,7 +133,6 @@ export function CadastroChecklists() {
         descricao: form.descricao.trim(),
         ordem: Number(form.ordem || 0),
         telas: form.telas,
-        etapas: form.etapas,
         itens: form.itens,
         ativo: form.ativo,
       }
@@ -179,7 +159,6 @@ export function CadastroChecklists() {
       descricao: checklist.descricao ?? '',
       ordem: String(checklist.ordem ?? 0),
       telas: checklist.telas ?? [],
-      etapas: checklist.etapas ?? [],
       itens: checklist.itens ?? [],
       ativo: checklist.ativo,
     })
@@ -303,41 +282,6 @@ export function CadastroChecklists() {
               </button>
             ))}
           </div>
-        </div>
-
-        <div className="mt-4">
-          <p className="text-sm font-medium text-slate-600 dark:text-slate-300 mb-2">Etapas vinculadas (implantação)</p>
-          {etapas.length === 0 ? (
-            <p className="text-xs text-slate-500">Sem etapas de implantação ativas no momento.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {etapas.map((etapa) => (
-                <button
-                  key={etapa.id}
-                  type="button"
-                  onClick={() => canEdit && toggleEtapa(etapa.id)}
-                  disabled={!canEdit}
-                  className={clsx(
-                    'flex items-center gap-2 px-3 py-2 rounded-lg border text-sm transition-colors',
-                    form.etapas.includes(etapa.id)
-                      ? 'bg-emerald-600/15 border-emerald-500 text-emerald-600 dark:text-emerald-400'
-                      : 'bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300',
-                    !canEdit && 'opacity-60 cursor-not-allowed'
-                  )}
-                >
-                  <span
-                    className={clsx(
-                      'w-4 h-4 rounded border flex items-center justify-center',
-                      form.etapas.includes(etapa.id) ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-slate-400'
-                    )}
-                  >
-                    {form.etapas.includes(etapa.id) ? <Check className="w-2.5 h-2.5" /> : null}
-                  </span>
-                  {etapa.label}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
 
         <div className="mt-4">

@@ -1167,7 +1167,7 @@ export function Pipeline() {
                         <span className="text-slate-700 dark:text-slate-200">
                           <span className="font-medium">{checklist.nome}</span>
                           <span className="block text-xs text-slate-500">
-                            {checklist.itensQuantidade} itens • Etapas: {checklist.etapas.length ? checklist.etapas.join(', ') : 'todas'}
+                            {checklist.itensQuantidade} itens
                           </span>
                         </span>
                       </label>
@@ -1176,7 +1176,7 @@ export function Pipeline() {
                 )}
               </div>
               <p className="text-xs text-slate-500 mt-2">
-                Se nenhum checklist for selecionado, o sistema usa automaticamente o checklist padrão da etapa.
+                Se nenhum checklist for selecionado, o sistema usa automaticamente o(s) checklist(s) vinculado(s) ao serviço do processo.
               </p>
             </div>
 

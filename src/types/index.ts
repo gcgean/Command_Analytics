@@ -562,7 +562,6 @@ export interface ImplantacaoChecklistOpcao {
   nome: string
   descricao?: string
   ordem: number
-  etapas: string[]
   itensQuantidade: number
 }
 
