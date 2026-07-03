@@ -242,7 +242,7 @@ export function Pipeline() {
   const [ultimaVendaFiltro, setUltimaVendaFiltro] = useState<UltimaVendaFiltro>('all')
   const [dataCadastroInicial, setDataCadastroInicial] = useState('')
   const [dataCadastroFinal, setDataCadastroFinal] = useState('')
-  const [viewMode, setViewMode] = useState<ViewMode>('lista')
+  const [viewMode, setViewMode] = useState<ViewMode>('kanban')
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [painel, setPainel] = useState<ImplantacaoPainel | null>(null)
