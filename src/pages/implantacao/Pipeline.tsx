@@ -1421,9 +1421,10 @@ export function Pipeline() {
                   timelineOrdenada.map((evento: any) => {
                     const origem = historyData?.etapas?.find((e: ImplantacaoEtapa) => e.status === evento.statusOrigem)
                     const destino = historyData?.etapas?.find((e: ImplantacaoEtapa) => e.status === evento.statusDestino)
+                    const processoCriado = evento.tipo === 'status' && (evento.statusOrigem === null || evento.statusOrigem === undefined)
                     const tipoLabel =
                       evento.tipo === 'status'
-                        ? 'Mudança de etapa'
+                        ? (processoCriado ? 'Processo criado' : 'Mudança de etapa')
                         : evento.tipo === 'checklist'
                           ? 'Checklist'
                           : evento.tipo === 'responsavel'
@@ -1437,14 +1438,22 @@ export function Pipeline() {
                         </div>
                         {evento.tipo === 'status' ? (
                           <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                            {origem ? `${origem.status}. ${origem.nome}` : `Etapa ${evento.statusOrigem ?? '—'}`}
-                            {' '}→{' '}
-                            {destino ? `${destino.status}. ${destino.nome}` : `Etapa ${evento.statusDestino ?? '—'}`}
+                            {processoCriado
+                              ? `Etapa inicial: ${destino ? `${destino.status}. ${destino.nome}` : `Etapa ${evento.statusDestino ?? '—'}`}`
+                              : (
+                                <>
+                                  {origem ? `${origem.status}. ${origem.nome}` : `Etapa ${evento.statusOrigem ?? '—'}`}
+                                  {' '}→{' '}
+                                  {destino ? `${destino.status}. ${destino.nome}` : `Etapa ${evento.statusDestino ?? '—'}`}
+                                </>
+                              )}
                           </p>
                         ) : null}
                         {evento.tipo === 'checklist' ? (
                           <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
-                            Checklist #{evento.checklistId ?? '—'} • Item {evento.itemIndice ?? '—'} • {evento.marcado ? 'Marcado' : 'Desmarcado'}
+                            {evento.itemIndice === null || evento.itemIndice === undefined
+                              ? `Checklist #${evento.checklistId ?? '—'} • ${evento.marcado ? 'Vinculado' : 'Desvinculado'}`
+                              : `Checklist #${evento.checklistId ?? '—'} • Item ${evento.itemIndice} • ${evento.marcado ? 'Marcado' : 'Desmarcado'}`}
                           </p>
                         ) : null}
                         {evento.tipo === 'responsavel' ? (

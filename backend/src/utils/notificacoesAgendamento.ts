@@ -12,7 +12,7 @@ export interface NotificacaoPlataformaItem {
   id: number
   titulo: string
   mensagem: string
-  tipo: 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio'
+  tipo: 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio' | 'implantacao_processo'
   lida: boolean
   criadoEm: string
   agendaOrigem?: 'agenda' | 'programado' | null
@@ -38,7 +38,7 @@ export interface StatusProcessamentoNotificacaoAgendamento {
 }
 
 type CanalNotificacao = 'plataforma' | 'telegram'
-type TipoNotificacao = 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio'
+type TipoNotificacao = 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio' | 'implantacao_processo'
 
 const JANELA_ALERTA_INICIO_MINUTOS = 5
 
@@ -166,7 +166,7 @@ async function existeNotificacao(chaveEvento: string, canal: CanalNotificacao, u
   return Number(rows[0]?.total ?? 0) > 0
 }
 
-async function registrarNotificacao(params: {
+export async function registrarNotificacao(params: {
   usuarioId: number
   canal: CanalNotificacao
   tipo: TipoNotificacao

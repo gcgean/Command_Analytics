@@ -390,7 +390,7 @@ export interface NotificacaoPlataforma {
   id: number
   titulo: string
   mensagem: string
-  tipo: 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio'
+  tipo: 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio' | 'implantacao_processo'
   lida: boolean
   criadoEm: string
   agendaOrigem?: 'agenda' | 'programado' | null

@@ -385,7 +385,7 @@ export function DetalheCliente() {
     return (
       <div className="text-center py-20 text-slate-500">
         <p>{loadError}</p>
-        <Button className="mt-4" variant="secondary" onClick={() => navigate('/clientes')}>Voltar</Button>
+        <Button className="mt-4" variant="secondary" onClick={() => navigate(-1)}>Voltar</Button>
       </div>
     )
   }
@@ -394,7 +394,7 @@ export function DetalheCliente() {
     return (
       <div className="text-center py-20 text-slate-500">
         <p>Cliente não encontrado.</p>
-        <Button className="mt-4" variant="secondary" onClick={() => navigate('/clientes')}>Voltar</Button>
+        <Button className="mt-4" variant="secondary" onClick={() => navigate(-1)}>Voltar</Button>
       </div>
     )
   }
@@ -420,7 +420,7 @@ export function DetalheCliente() {
   return (
     <div className="space-y-4 md:space-y-6 max-w-full min-w-0">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:gap-4">
-        <Button className="w-full justify-center md:w-auto md:justify-start" variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate('/clientes')}>
+        <Button className="w-full justify-center md:w-auto md:justify-start" variant="ghost" size="sm" icon={<ArrowLeft className="w-4 h-4" />} onClick={() => navigate(-1)}>
           Voltar
         </Button>
         <div className="min-w-0 flex-1">

@@ -1,9 +1,11 @@
 import type { FastifyInstance } from 'fastify'
+import { randomUUID } from 'crypto'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { initEtapas } from '../utils/etapas'
 import { initChecklists } from '../utils/checklists'
 import { initServicos } from '../utils/servicos'
+import { registrarNotificacao } from '../utils/notificacoesAgendamento'
 
 type EtapaBase = {
   status: number
@@ -672,6 +674,56 @@ async function registrarMovimentacao(args: {
         NOW()
       )
   `
+}
+
+async function getResponsavelAtualProcesso(clienteId: number, processoId: number, processoPrincipal: boolean): Promise<number | null> {
+  const rows = await prisma.$queryRaw<Array<{ responsavelId: number | null }>>`
+    SELECT COALESCE(IRP.responsavel_id, IR.responsavel_id) AS responsavelId
+    FROM (SELECT 1 AS dummy) X
+    LEFT JOIN implantacao_responsavel_processo IRP ON IRP.processo_id = ${processoId}
+    LEFT JOIN implantacao_responsavel IR ON ${processoPrincipal ? 1 : 0} = 1 AND IR.cliente_id = ${clienteId}
+    LIMIT 1
+  `
+  const id = rows[0]?.responsavelId
+  return id === null || id === undefined ? null : Number(id)
+}
+
+async function getClienteEProcessoResumo(clienteId: number, processoId: number): Promise<{ clienteNome: string; processoTitulo: string }> {
+  const rows = await prisma.$queryRaw<Array<{ clienteNome: string | null; processoTitulo: string | null }>>`
+    SELECT COALESCE(C.NOME_FANTASIA, C.NOME_CLI) AS clienteNome, P.titulo AS processoTitulo
+    FROM implantacao_processos P
+    INNER JOIN cliente C ON C.cod_cli = P.cliente_id
+    WHERE P.id = ${processoId}
+    LIMIT 1
+  `
+  return {
+    clienteNome: rows[0]?.clienteNome || `Cliente #${clienteId}`,
+    processoTitulo: rows[0]?.processoTitulo || 'Implantação',
+  }
+}
+
+// Notifica o responsável atual do processo sempre que algo muda nele (etapa, checklist, responsável, observação, etc.).
+// Não notifica quem fez a própria ação, para evitar autonotificação.
+async function notificarResponsavelProcesso(args: {
+  clienteId: number
+  processoId: number
+  processoPrincipal: boolean
+  usuarioId: number | null
+  titulo: string
+  mensagem: string
+}) {
+  const responsavelId = await getResponsavelAtualProcesso(args.clienteId, args.processoId, args.processoPrincipal)
+  if (!responsavelId) return
+  if (args.usuarioId && responsavelId === args.usuarioId) return
+
+  await registrarNotificacao({
+    usuarioId: responsavelId,
+    canal: 'plataforma',
+    tipo: 'implantacao_processo',
+    chaveEvento: `implantacao:${args.processoId}:${randomUUID()}`,
+    titulo: args.titulo,
+    mensagem: args.mensagem,
+  })
 }
 
 async function getEtapasConfiguradas() {
@@ -1371,6 +1423,16 @@ export async function pipelineRoutes(app: FastifyInstance) {
       usuarioId,
     })
 
+    const resumoStatus = await getClienteEProcessoResumo(id, contexto.processoId)
+    await notificarResponsavelProcesso({
+      clienteId: id,
+      processoId: contexto.processoId,
+      processoPrincipal: contexto.processoPrincipal,
+      usuarioId,
+      titulo: 'Etapa alterada',
+      mensagem: `O processo "${resumoStatus.processoTitulo}" do cliente ${resumoStatus.clienteNome} mudou de "${ETAPAS_PADRAO.find((e) => e.status === statusOrigem)?.nome ?? statusOrigem}" para "${ETAPAS_PADRAO.find((e) => e.status === novoStatus)?.nome ?? novoStatus}".`,
+    })
+
     invalidarPainelCache()
     return { ok: true }
   })
@@ -1409,6 +1471,18 @@ export async function pipelineRoutes(app: FastifyInstance) {
       observacao: String(observacao ?? '').trim() || null,
       usuarioId,
     })
+
+    if (novoResponsavelId) {
+      const resumoResp = await getClienteEProcessoResumo(id, contexto.processoId)
+      await notificarResponsavelProcesso({
+        clienteId: id,
+        processoId: contexto.processoId,
+        processoPrincipal: contexto.processoPrincipal,
+        usuarioId,
+        titulo: 'Você foi definido como responsável',
+        mensagem: `Você agora é responsável pelo processo "${resumoResp.processoTitulo}" do cliente ${resumoResp.clienteNome}.`,
+      })
+    }
 
     invalidarPainelCache()
     return { ok: true }
@@ -1457,6 +1531,16 @@ export async function pipelineRoutes(app: FastifyInstance) {
       marcado: !!marcado,
       observacao: String(observacao ?? '').trim() || null,
       usuarioId,
+    })
+
+    const resumoChecklist = await getClienteEProcessoResumo(id, contexto.processoId)
+    await notificarResponsavelProcesso({
+      clienteId: id,
+      processoId: contexto.processoId,
+      processoPrincipal: contexto.processoPrincipal,
+      usuarioId,
+      titulo: 'Checklist atualizado',
+      mensagem: `Um item do checklist foi ${marcado ? 'marcado' : 'desmarcado'} no processo "${resumoChecklist.processoTitulo}" do cliente ${resumoChecklist.clienteNome}.`,
     })
 
     invalidarPainelCache()
@@ -1548,6 +1632,18 @@ export async function pipelineRoutes(app: FastifyInstance) {
       usuarioId,
     })
 
+    const resumoTransicao = await getClienteEProcessoResumo(id, contexto.processoId)
+    const itensChecklistAtualizados = (checklist ?? []).length
+    await notificarResponsavelProcesso({
+      clienteId: id,
+      processoId: contexto.processoId,
+      processoPrincipal: contexto.processoPrincipal,
+      usuarioId,
+      titulo: 'Etapa alterada',
+      mensagem: `O processo "${resumoTransicao.processoTitulo}" do cliente ${resumoTransicao.clienteNome} mudou de "${ETAPAS_PADRAO.find((e) => e.status === origem)?.nome ?? origem}" para "${ETAPAS_PADRAO.find((e) => e.status === destino)?.nome ?? destino}"`
+        + (itensChecklistAtualizados > 0 ? ` (${itensChecklistAtualizados} item(ns) de checklist revisado(s)).` : '.'),
+    })
+
     invalidarPainelCache()
     return { ok: true }
   })
@@ -1600,6 +1696,16 @@ export async function pipelineRoutes(app: FastifyInstance) {
       statusDestino: contexto.statusAtual,
       observacao: texto,
       usuarioId,
+    })
+
+    const resumoObs = await getClienteEProcessoResumo(id, contexto.processoId)
+    await notificarResponsavelProcesso({
+      clienteId: id,
+      processoId: contexto.processoId,
+      processoPrincipal: contexto.processoPrincipal,
+      usuarioId,
+      titulo: 'Nova observação registrada',
+      mensagem: `Nova observação no processo "${resumoObs.processoTitulo}" do cliente ${resumoObs.clienteNome}: ${texto}`,
     })
 
     invalidarPainelCache()
@@ -1689,7 +1795,12 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     const idsChecklist = Array.from(new Set((checklistIds || []).map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)))
 
+    let statusMudou = false
+    let responsavelMudou = false
+    let checklistMudou = false
+
     if (novoStatus !== undefined && novoStatus !== cliente.statusInstal) {
+      statusMudou = true
       await prisma.$executeRaw`
         UPDATE implantacao_processos
         SET status_atual = ${novoStatus}, observacao = ${obs}, atualizado_em = NOW(), atualizado_por = ${usuarioId}
@@ -1734,6 +1845,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
           observacao = VALUES(observacao)
       `
       if (responsavelAtual !== novoResponsavelId) {
+        responsavelMudou = true
         await registrarMovimentacao({
           clienteId: id,
           processoId: contexto.processoId,
@@ -1766,6 +1878,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
       for (const checklistId of idsChecklist) {
         if (!atuaisSet.has(checklistId)) {
+          checklistMudou = true
           await registrarMovimentacao({
             clienteId: id,
             processoId: contexto.processoId,
@@ -1779,6 +1892,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       }
       for (const checklistId of atuaisSet) {
         if (!novosSet.has(checklistId)) {
+          checklistMudou = true
           await registrarMovimentacao({
             clienteId: id,
             processoId: contexto.processoId,
@@ -1790,6 +1904,44 @@ export async function pipelineRoutes(app: FastifyInstance) {
           })
         }
       }
+    }
+
+    // Se nada mudou (etapa/responsável/checklist) mas o usuário digitou uma observação,
+    // ela era descartada silenciosamente. Registra como evento avulso, igual ao endpoint dedicado de observação.
+    if (obs && !statusMudou && !responsavelMudou && !checklistMudou) {
+      await prisma.$executeRaw`
+        UPDATE implantacao_processos
+        SET observacao = ${obs}, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+        WHERE id = ${contexto.processoId}
+      `
+      await registrarMovimentacao({
+        clienteId: id,
+        processoId: contexto.processoId,
+        tipo: 'observacao',
+        statusDestino: contexto.statusAtual,
+        observacao: obs,
+        usuarioId,
+      })
+    }
+
+    if (statusMudou || responsavelMudou || checklistMudou || obs) {
+      const resumoConfig = await getClienteEProcessoResumo(id, contexto.processoId)
+      const partes: string[] = []
+      if (statusMudou && novoStatus !== undefined) {
+        partes.push(`etapa alterada para "${ETAPAS_PADRAO.find((e) => e.status === novoStatus)?.nome ?? novoStatus}"`)
+      }
+      if (responsavelMudou) partes.push('responsável atualizado')
+      if (checklistMudou) partes.push('checklist(s) do processo atualizado(s)')
+      if (obs) partes.push(`observação: ${obs}`)
+
+      await notificarResponsavelProcesso({
+        clienteId: id,
+        processoId: contexto.processoId,
+        processoPrincipal: contexto.processoPrincipal,
+        usuarioId,
+        titulo: 'Processo atualizado',
+        mensagem: `O processo "${resumoConfig.processoTitulo}" do cliente ${resumoConfig.clienteNome} foi atualizado: ${partes.join('; ')}.`,
+      })
     }
 
     invalidarPainelCache()
@@ -1898,6 +2050,18 @@ export async function pipelineRoutes(app: FastifyInstance) {
       observacao: String(observacao ?? '').trim() || null,
       usuarioId,
     })
+
+    if (novoProcessoId > 0 && responsavelId) {
+      await notificarResponsavelProcesso({
+        clienteId: idCliente,
+        processoId: novoProcessoId,
+        processoPrincipal: false,
+        usuarioId,
+        titulo: 'Novo processo atribuído a você',
+        mensagem: `Você foi definido como responsável pelo novo processo "${tituloNormalizado}" do cliente ${(await getClienteEProcessoResumo(idCliente, novoProcessoId)).clienteNome}.`,
+      })
+    }
+
     invalidarPainelCache()
     return reply.status(201).send({ ok: true, processoId: novoProcessoId })
   })
@@ -1912,10 +2076,11 @@ export async function pipelineRoutes(app: FastifyInstance) {
     }
 
     await ensureImplantacaoBootstrap()
-    const rows = await prisma.$queryRaw<Array<{ id: number }>>`
-      SELECT id FROM implantacao_processos WHERE id = ${idProcesso} AND cliente_id = ${id} AND COALESCE(ativo, 1) = 1 LIMIT 1
+    const rows = await prisma.$queryRaw<Array<{ id: number; processoPrincipal: number | boolean }>>`
+      SELECT id, processo_principal AS processoPrincipal FROM implantacao_processos WHERE id = ${idProcesso} AND cliente_id = ${id} AND COALESCE(ativo, 1) = 1 LIMIT 1
     `
     if (!rows.length) return reply.status(404).send({ error: 'Processo não encontrado ou já está inativo.' })
+    const eraProcessoPrincipal = Number(rows[0].processoPrincipal) === 1
 
     await prisma.$executeRaw`
       UPDATE implantacao_processos
@@ -1929,6 +2094,16 @@ export async function pipelineRoutes(app: FastifyInstance) {
       tipo: 'observacao',
       observacao: 'Processo desativado',
       usuarioId,
+    })
+
+    const resumoDesativar = await getClienteEProcessoResumo(id, idProcesso)
+    await notificarResponsavelProcesso({
+      clienteId: id,
+      processoId: idProcesso,
+      processoPrincipal: eraProcessoPrincipal,
+      usuarioId,
+      titulo: 'Processo desativado',
+      mensagem: `O processo "${resumoDesativar.processoTitulo}" do cliente ${resumoDesativar.clienteNome} foi desativado e não aparece mais no pipeline.`,
     })
 
     invalidarPainelCache()
