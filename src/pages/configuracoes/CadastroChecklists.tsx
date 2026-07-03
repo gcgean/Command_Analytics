@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Edit3, ListChecks, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Edit3, ListChecks, Plus, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -109,6 +109,16 @@ export function CadastroChecklists() {
 
   function removeItem(index: number) {
     setForm((prev) => ({ ...prev, itens: prev.itens.filter((_, i) => i !== index) }))
+  }
+
+  function moveItem(index: number, direction: -1 | 1) {
+    setForm((prev) => {
+      const alvo = index + direction
+      if (alvo < 0 || alvo >= prev.itens.length) return prev
+      const itens = [...prev.itens]
+      ;[itens[index], itens[alvo]] = [itens[alvo], itens[index]]
+      return { ...prev, itens }
+    })
   }
 
   async function saveChecklist() {
@@ -314,13 +324,31 @@ export function CadastroChecklists() {
                 >
                   <p className="text-sm text-slate-700 dark:text-slate-200">{item}</p>
                   {canEdit ? (
-                    <button
-                      onClick={() => removeItem(index)}
-                      className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10"
-                      title="Remover item"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        onClick={() => moveItem(index, -1)}
+                        disabled={index === 0}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-500"
+                        title="Mover para cima"
+                      >
+                        <ArrowUp className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => moveItem(index, 1)}
+                        disabled={index === form.itens.length - 1}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-500"
+                        title="Mover para baixo"
+                      >
+                        <ArrowDown className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => removeItem(index)}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-red-500/10"
+                        title="Remover item"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               ))

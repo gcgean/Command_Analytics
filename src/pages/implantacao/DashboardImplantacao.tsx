@@ -179,9 +179,22 @@ export function DashboardImplantacao() {
       .sort((a, b) => b.tempoMedio - a.tempoMedio)
       .slice(0, 6)
 
-    // Split por tipo (ativos).
+    // Split por tipo (ativos): "Novo cliente" fica como uma barra só, mas cada serviço
+    // implantado em cliente existente aparece com o próprio nome, não agrupado num bucket genérico.
     const tipoNovoCliente = ativos.filter((p) => p.processoTipo !== 'novo_servico').length
-    const tipoNovoServico = ativos.filter((p) => p.processoTipo === 'novo_servico').length
+    const servicosMap = new Map<string, number>()
+    ativos
+      .filter((p) => p.processoTipo === 'novo_servico')
+      .forEach((p) => {
+        const nome = String(p.servicoNome || p.processoTitulo || 'Serviço sem nome').trim() || 'Serviço sem nome'
+        servicosMap.set(nome, (servicosMap.get(nome) || 0) + 1)
+      })
+    const distribuicaoPorTipo = [
+      { label: 'Novo cliente', quantidade: tipoNovoCliente, cor: 'bg-blue-500' },
+      ...Array.from(servicosMap.entries())
+        .map(([label, quantidade]) => ({ label, quantidade, cor: 'bg-violet-500' }))
+        .sort((a, b) => b.quantidade - a.quantidade),
+    ].filter((item) => item.quantidade > 0)
 
     // Carga por responsável (ativos).
     const respMap = new Map<string, { nome: string; total: number; atrasados: number; semDefinir: boolean }>()
@@ -254,8 +267,7 @@ export function DashboardImplantacao() {
       distribuicaoEtapas,
       gargalos,
       maisLentas,
-      tipoNovoCliente,
-      tipoNovoServico,
+      distribuicaoPorTipo,
       cargaPorResponsavel,
       atencao,
       insights,
@@ -266,7 +278,7 @@ export function DashboardImplantacao() {
   const maxDist = Math.max(1, ...dados.distribuicaoEtapas.map((e) => e.quantidade))
   const maxCarga = Math.max(1, ...dados.cargaPorResponsavel.map((i) => i.total))
   const maxLenta = Math.max(1, ...dados.maisLentas.map((e) => e.tempoMedio))
-  const totalTipo = Math.max(1, dados.tipoNovoCliente + dados.tipoNovoServico)
+  const totalTipo = Math.max(1, dados.distribuicaoPorTipo.reduce((acc, item) => acc + item.quantidade, 0))
 
   const pctAtrasados = dados.ativos ? Math.round((dados.atrasados / dados.ativos) * 100) : 0
   const pctSemResp = dados.ativos ? Math.round((dados.semResponsavel / dados.ativos) * 100) : 0
@@ -452,24 +464,18 @@ export function DashboardImplantacao() {
         <Card>
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2"><Boxes className="w-4 h-4 text-blue-500" /> Processos ativos por tipo</p>
           <div className="space-y-4">
-            <div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-700 dark:text-slate-300">Novo cliente</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{dados.tipoNovoCliente} <span className="text-xs text-slate-400">({Math.round((dados.tipoNovoCliente / totalTipo) * 100)}%)</span></span>
+            {dados.distribuicaoPorTipo.map((item) => (
+              <div key={item.label}>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-slate-700 dark:text-slate-300 truncate">{item.label}</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-100 flex-shrink-0 ml-2">{item.quantidade} <span className="text-xs text-slate-400">({Math.round((item.quantidade / totalTipo) * 100)}%)</span></span>
+                </div>
+                <div className="mt-1.5 h-2.5 rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                  <div className={clsx('h-full rounded', item.cor)} style={{ width: `${Math.round((item.quantidade / totalTipo) * 100)}%` }} />
+                </div>
               </div>
-              <div className="mt-1.5 h-2.5 rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full rounded bg-blue-500" style={{ width: `${Math.round((dados.tipoNovoCliente / totalTipo) * 100)}%` }} />
-              </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-slate-700 dark:text-slate-300">Serviço (cliente existente)</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-100">{dados.tipoNovoServico} <span className="text-xs text-slate-400">({Math.round((dados.tipoNovoServico / totalTipo) * 100)}%)</span></span>
-              </div>
-              <div className="mt-1.5 h-2.5 rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                <div className="h-full rounded bg-violet-500" style={{ width: `${Math.round((dados.tipoNovoServico / totalTipo) * 100)}%` }} />
-              </div>
-            </div>
+            ))}
+            {dados.distribuicaoPorTipo.length === 0 ? <p className="text-sm text-slate-500">Sem processos ativos.</p> : null}
           </div>
 
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mt-5 mb-3 flex items-center gap-2"><Timer className="w-4 h-4 text-amber-500" /> Etapas mais lentas</p>
