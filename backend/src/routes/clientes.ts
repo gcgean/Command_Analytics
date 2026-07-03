@@ -275,6 +275,20 @@ export async function clientesRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Clientes'], summary: 'Listar clientes' } }, async (request) => {
     const { ativo, bloqueado, curvaABC, search, idSegmento, idRegime, idPlano, contadorId, codCla, page, limit } = request.query as Record<string, string>
 
+    // Permite buscar CNPJ/CPF digitando só os números, sem pontuação (ex.: "42396737"),
+    // já que o campo cnpj guarda o documento formatado ("42.396.737/0001-15").
+    const documentoDigitos = String(search ?? '').replace(/\D/g, '')
+    let idsPorDocumento: number[] = []
+    if (documentoDigitos.length >= 4) {
+      const rows = await prisma.$queryRaw<Array<{ cod_cli: number }>>`
+        SELECT cod_cli
+        FROM cliente
+        WHERE REPLACE(REPLACE(REPLACE(REPLACE(CNPJ_CLI, '.', ''), '-', ''), '/', ''), ' ', '') LIKE ${'%' + documentoDigitos + '%'}
+        LIMIT 200
+      `
+      idsPorDocumento = rows.map((r) => Number(r.cod_cli))
+    }
+
     const where: any = {
       ...(ativo !== undefined && { ativo }),
       ...(bloqueado !== undefined && { bloqueado }),
@@ -285,6 +299,7 @@ export async function clientesRoutes(app: FastifyInstance) {
           { nomeRazao: { contains: search } },
           { cnpj: { contains: search } },
           { cidade: { contains: search } },
+          ...(idsPorDocumento.length ? [{ id: { in: idsPorDocumento } }] : []),
         ],
       }),
       ...(idSegmento && { idSegmento: Number(idSegmento) }),

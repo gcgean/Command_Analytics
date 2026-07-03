@@ -100,6 +100,7 @@ type EtapaConfigRow = {
   ordem: number
   telas: string | null
   ativo: number | boolean
+  status_ref: number | null
 }
 
 type StatusMovRow = {
@@ -605,17 +606,51 @@ async function ensureImplantacaoBootstrap() {
         `)
       }
 
-      const etapasExistentes = await prisma.$queryRaw<EtapaConfigRow[]>`
-        SELECT nome, cor, ordem, telas, ativo FROM cadastro_etapas
-      `
-      const temEtapaImplantacao = etapasExistentes.some((e) => parseJsonArray(e.telas).includes('implantacao') && Number(e.ativo) === 1)
-      if (!temEtapaImplantacao) {
-        for (const etapa of ETAPAS_PADRAO) {
-          await prisma.$executeRaw`
-            INSERT INTO cadastro_etapas (nome, cor, telas, ativo, ordem, criado_em, atualizado_em)
-            VALUES (${etapa.nome}, ${etapa.cor}, ${JSON.stringify(['implantacao'])}, 1, ${etapa.status}, NOW(), NOW())
-          `
-        }
+      await ensureColumnExists('cadastro_etapas', 'status_ref', 'status_ref INT NULL AFTER ordem')
+
+      // A partir daqui, `cadastro_etapas` é a fonte da verdade de quais etapas de implantação
+      // existem, seus nomes, cores e ORDEM de exibição. `status_ref` é o único vínculo com a
+      // identidade fixa (ETAPAS_PADRAO) usada para SLA/descrição e para as colunas legadas do
+      // cliente. Este bloco só faz backfill de linhas sem status_ref (compatibilidade com
+      // registros antigos) e insere etapas novas que ainda não têm linha correspondente —
+      // nunca sobrescreve ordem/nome/cor de uma linha que já foi sincronizada uma vez, para não
+      // desfazer reordenações feitas manualmente no Cadastro de Etapas.
+      const etapasImplantacaoExistentes = (
+        await prisma.$queryRaw<EtapaConfigRow[]>`
+          SELECT nome, cor, ordem, telas, ativo, status_ref FROM cadastro_etapas
+        `
+      ).filter((e) => parseJsonArray(e.telas).includes('implantacao'))
+
+      // status_ref já vinculados: linhas antigas (backfill por nome) + linhas que já tinham o vínculo.
+      const statusVinculados = new Set(
+        etapasImplantacaoExistentes.map((e) => e.status_ref).filter((v): v is number => v !== null && v !== undefined)
+      )
+
+      // Reativa por padrão etapas conhecidas ao vinculá-las pela primeira vez: linhas antigas
+      // ficaram inativas por testes manuais no cadastro (ex.: "Aguardando Instalação" com
+      // clientes reais nela), e ocultar uma identidade de status em uso esconderia clientes
+      // reais do Kanban. Depois deste backfill único, o campo `ativo` volta a ser 100% do admin.
+      const semStatusRef = etapasImplantacaoExistentes.filter((e) => e.status_ref === null || e.status_ref === undefined)
+      for (const row of semStatusRef) {
+        const match = ETAPAS_PADRAO.find((e) => e.nome.toLowerCase().trim() === String(row.nome).toLowerCase().trim())
+        if (!match || statusVinculados.has(match.status)) continue
+        const ordemAlvo = (ETAPAS_PADRAO.findIndex((e) => e.status === match.status) + 1) * 10
+        await prisma.$executeRaw`
+          UPDATE cadastro_etapas
+          SET status_ref = ${match.status}, ordem = ${ordemAlvo}, ativo = 1
+          WHERE nome = ${row.nome}
+            AND telas = ${JSON.stringify(['implantacao'])}
+        `
+        statusVinculados.add(match.status)
+      }
+
+      for (const [index, etapa] of ETAPAS_PADRAO.entries()) {
+        if (statusVinculados.has(etapa.status)) continue
+        await prisma.$executeRaw`
+          INSERT INTO cadastro_etapas (nome, cor, telas, ativo, ordem, status_ref, criado_em, atualizado_em)
+          VALUES (${etapa.nome}, ${etapa.cor}, ${JSON.stringify(['implantacao'])}, 1, ${(index + 1) * 10}, ${etapa.status}, NOW(), NOW())
+        `
+        statusVinculados.add(etapa.status)
       }
 
       const checklistsExistentes = await prisma.$queryRaw<ChecklistRow[]>`
@@ -736,30 +771,34 @@ async function notificarResponsavelProcesso(args: {
   })
 }
 
+// Fonte da verdade da lista/ordem de etapas exibidas no pipeline: a tabela `cadastro_etapas`
+// (tela = implantacao), na ordem definida pela coluna `ordem`. `ETAPAS_PADRAO` só fornece a
+// descrição/SLA/identidade (`status`) de cada etapa conhecida — não controla mais quais etapas
+// aparecem nem em que ordem.
 async function getEtapasConfiguradas() {
   await ensureImplantacaoBootstrap()
   const rows = await prisma.$queryRaw<EtapaConfigRow[]>`
-    SELECT nome, cor, ordem, telas, ativo
+    SELECT nome, cor, ordem, telas, ativo, status_ref
     FROM cadastro_etapas
     WHERE ativo = 1
-    ORDER BY ordem ASC
+    ORDER BY ordem ASC, nome ASC
   `
-  const mapByOrdem = new Map<number, { nome: string; cor: string }>()
-  rows
-    .filter((r) => parseJsonArray(r.telas).includes('implantacao'))
-    .forEach((r) => mapByOrdem.set(Number(r.ordem), { nome: r.nome, cor: r.cor || '#3b82f6' }))
+  const metaPorStatus = new Map(ETAPAS_PADRAO.map((e) => [e.status, e]))
 
-  return ETAPAS_PADRAO.map((base, index) => {
-    const override = mapByOrdem.get(base.status)
-    return {
-      status: base.status,
-      ordem: index + 1, // número sequencial de exibição (1..N), independente da identidade `status`
-      nome: override?.nome || base.nome,
-      descricao: base.descricao,
-      cor: override?.cor || base.cor,
-      slaDias: base.slaDias,
-    }
-  })
+  return rows
+    .filter((r) => parseJsonArray(r.telas).includes('implantacao') && r.status_ref !== null && r.status_ref !== undefined)
+    .map((r) => {
+      const status = Number(r.status_ref)
+      const meta = metaPorStatus.get(status)
+      return {
+        status,
+        ordem: Number(r.ordem),
+        nome: r.nome,
+        descricao: meta?.descricao ?? '',
+        cor: r.cor || meta?.cor || '#3b82f6',
+        slaDias: meta?.slaDias ?? 0,
+      }
+    })
 }
 
 async function getChecklistsImplantacaoAtivos() {
