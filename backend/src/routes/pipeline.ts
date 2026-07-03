@@ -142,24 +142,34 @@ type ProcessoContextoRow = {
   processoPrincipal: number | boolean
 }
 
+// A ORDEM deste array define a ordem de exibição (colunas do Kanban, dropdowns e dashboard).
+// O campo `status` é uma IDENTIDADE FIXA amarrada a colunas legadas no banco (DT_em_instalacao, etc.)
+// e ao STATUS_INSTAL dos clientes — NÃO renumere o significado de um status existente.
+// Novas etapas recebem status novos (17+). O número sequencial exibido vem de `ordem` (posição+1).
 const ETAPAS_PADRAO: EtapaBase[] = [
+  { status: 17, nome: 'Levantamento / Kickoff', descricao: 'Reunião inicial de levantamento de requisitos e alinhamento', cor: '#8b5cf6', slaDias: 3 },
+  { status: 8, nome: 'Teste Demonstração', descricao: 'Cliente em período de validação/trial', cor: '#334155', slaDias: 10 },
   { status: 1, nome: 'Aguardando Instalação', descricao: 'Cliente aguardando início da implantação', cor: '#3b82f6', slaDias: 2 },
-  { status: 2, nome: 'Em Instalação', descricao: 'Processo técnico de instalação em execução', cor: '#2563eb', slaDias: 5 },
-  { status: 3, nome: 'Agendar Treinamento', descricao: 'Aguardando agendamento com o cliente', cor: '#4f46e5', slaDias: 3 },
-  { status: 4, nome: 'Reagendar Treinamento', descricao: 'Treinamento precisa de nova data', cor: '#7c3aed', slaDias: 4 },
-  { status: 5, nome: 'Treinamento Concluído', descricao: 'Treinamentos iniciais finalizados', cor: '#16a34a', slaDias: 2 },
-  { status: 6, nome: 'Retorno CS', descricao: 'Acompanhamento do sucesso do cliente', cor: '#0ea5e9', slaDias: 7 },
-  { status: 7, nome: 'Concluído', descricao: 'Implantação finalizada', cor: '#10b981', slaDias: 0 },
-  { status: 8, nome: 'Teste Demonstração', descricao: 'Cliente em período de validação', cor: '#334155', slaDias: 10 },
-  { status: 9, nome: 'Pós-venda', descricao: 'Atuação comercial após implantação', cor: '#65a30d', slaDias: 14 },
-  { status: 10, nome: 'Desistência', descricao: 'Processo encerrado por desistência', cor: '#dc2626', slaDias: 0 },
   { status: 11, nome: 'Aguardando Cliente para Instalação', descricao: 'Dependência de retorno/aprovação do cliente', cor: '#0ea5e9', slaDias: 5 },
+  { status: 2, nome: 'Em Instalação', descricao: 'Processo técnico de instalação em execução', cor: '#2563eb', slaDias: 5 },
+  { status: 18, nome: 'Parametrização / Config. Fiscal', descricao: 'Configuração de regras do negócio (regime, NFC-e/NF-e/TEF)', cor: '#0891b2', slaDias: 4 },
   { status: 12, nome: 'Aguardando Migração', descricao: 'Preparação para migração de dados', cor: '#64748b', slaDias: 5 },
-  { status: 13, nome: 'Primeiro Treinamento', descricao: 'Primeiro ciclo de treinamento em andamento', cor: '#14b8a6', slaDias: 3 },
-  { status: 14, nome: 'Segundo Treinamento', descricao: 'Segundo ciclo de treinamento em andamento', cor: '#22c55e', slaDias: 3 },
   { status: 15, nome: 'Em Migração', descricao: 'Migração de dados em execução', cor: '#1d4ed8', slaDias: 7 },
   { status: 16, nome: 'Em Conferência de Migração', descricao: 'Validação da migração com o cliente', cor: '#1f2937', slaDias: 4 },
+  { status: 3, nome: 'Agendar Treinamento', descricao: 'Aguardando agendamento com o cliente', cor: '#4f46e5', slaDias: 3 },
+  { status: 4, nome: 'Reagendar Treinamento', descricao: 'Treinamento precisa de nova data', cor: '#7c3aed', slaDias: 4 },
+  { status: 13, nome: 'Primeiro Treinamento', descricao: 'Primeiro ciclo de treinamento em andamento', cor: '#14b8a6', slaDias: 3 },
+  { status: 14, nome: 'Segundo Treinamento', descricao: 'Segundo ciclo de treinamento em andamento', cor: '#22c55e', slaDias: 3 },
+  { status: 5, nome: 'Treinamento Concluído', descricao: 'Treinamentos iniciais finalizados', cor: '#16a34a', slaDias: 2 },
+  { status: 19, nome: 'Go-live / Homologação', descricao: 'Cliente em produção real, emitindo/operando de verdade', cor: '#059669', slaDias: 5 },
+  { status: 6, nome: 'Retorno CS', descricao: 'Acompanhamento do sucesso do cliente', cor: '#0ea5e9', slaDias: 7 },
+  { status: 9, nome: 'Pós-venda', descricao: 'Atuação comercial após implantação', cor: '#65a30d', slaDias: 14 },
+  { status: 7, nome: 'Concluído', descricao: 'Implantação finalizada', cor: '#10b981', slaDias: 0 },
+  { status: 10, nome: 'Desistência', descricao: 'Processo encerrado por desistência', cor: '#dc2626', slaDias: 0 },
 ]
+
+// Conjunto de status válidos (identidades), usado nas validações dos endpoints.
+const STATUS_VALIDOS = new Set(ETAPAS_PADRAO.map((e) => e.status))
 
 type ChecklistSeed = {
   nome: string
@@ -739,10 +749,11 @@ async function getEtapasConfiguradas() {
     .filter((r) => parseJsonArray(r.telas).includes('implantacao'))
     .forEach((r) => mapByOrdem.set(Number(r.ordem), { nome: r.nome, cor: r.cor || '#3b82f6' }))
 
-  return ETAPAS_PADRAO.map((base) => {
+  return ETAPAS_PADRAO.map((base, index) => {
     const override = mapByOrdem.get(base.status)
     return {
       status: base.status,
+      ordem: index + 1, // número sequencial de exibição (1..N), independente da identidade `status`
       nome: override?.nome || base.nome,
       descricao: base.descricao,
       cor: override?.cor || base.cor,
@@ -1293,7 +1304,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     ])
 
     const statusSelecionado = Number(status)
-    const etapaStatus = Number.isFinite(statusSelecionado) && statusSelecionado >= 1 && statusSelecionado <= 16
+    const etapaStatus = STATUS_VALIDOS.has(statusSelecionado)
       ? statusSelecionado
       : cliente.statusInstal
     const etapaAtual = etapas.find((e) => e.status === etapaStatus) || etapas[0]
@@ -1382,8 +1393,8 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const usuarioId = Number((request.user as any)?.id || 0) || null
 
     if (!Number.isFinite(id) || id <= 0) return reply.status(400).send({ error: 'Cliente inválido.' })
-    if (!Number.isFinite(novoStatus) || novoStatus < 1 || novoStatus > 16) {
-      return reply.status(400).send({ error: 'Status inválido. Informe um valor entre 1 e 16.' })
+    if (!STATUS_VALIDOS.has(novoStatus)) {
+      return reply.status(400).send({ error: 'Status inválido.' })
     }
 
     await ensureImplantacaoBootstrap()
@@ -1561,7 +1572,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const usuarioId = Number((request.user as any)?.id || 0) || null
 
     if (!Number.isFinite(id) || id <= 0) return reply.status(400).send({ error: 'Cliente inválido.' })
-    if (!Number.isFinite(destino) || destino < 1 || destino > 16) {
+    if (!STATUS_VALIDOS.has(destino)) {
       return reply.status(400).send({ error: 'Etapa de destino inválida.' })
     }
 
@@ -1783,7 +1794,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const obs = String(observacao ?? '').trim() || null
 
     const novoStatus = statusInstal === undefined ? undefined : Number(statusInstal)
-    if (novoStatus !== undefined && (!Number.isFinite(novoStatus) || novoStatus < 1 || novoStatus > 16)) {
+    if (novoStatus !== undefined && !STATUS_VALIDOS.has(novoStatus)) {
       return reply.status(400).send({ error: 'Etapa inválida.' })
     }
 

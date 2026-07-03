@@ -285,7 +285,6 @@ export function Pipeline() {
   const [createClienteDropdownAberto, setCreateClienteDropdownAberto] = useState(false)
   const [createClienteResultados, setCreateClienteResultados] = useState<Cliente[]>([])
   const [createClienteBuscando, setCreateClienteBuscando] = useState(false)
-  const [createTipo, setCreateTipo] = useState<'novo_cliente' | 'novo_servico'>('novo_servico')
   const [createTitulo, setCreateTitulo] = useState('')
   const [createServicoId, setCreateServicoId] = useState('')
   const [createStatus, setCreateStatus] = useState<number>(1)
@@ -425,7 +424,6 @@ export function Pipeline() {
     setCreateClienteBusca('')
     setCreateClienteResultados([])
     setCreateClienteDropdownAberto(false)
-    setCreateTipo('novo_servico')
     setCreateTitulo('')
     setCreateServicoId('')
     setCreateStatus(1)
@@ -448,6 +446,7 @@ export function Pipeline() {
     setCreateServicoId(servicoId)
     const servico = servicos.find((s) => String(s.id) === servicoId)
     setCreateChecklistIds(servico?.checklistIds ?? [])
+    if (servico) setCreateTitulo(servico.nome)
   }
 
   function alternarChecklistCriacao(checklistId: number) {
@@ -461,21 +460,22 @@ export function Pipeline() {
       alert('Selecione um cliente na lista.')
       return
     }
-    if (createTipo === 'novo_servico' && !createServicoId) {
+    if (!createServicoId) {
       alert('Selecione um serviço cadastrado.')
       return
     }
+    const servicoSelecionado = servicos.find((s) => String(s.id) === createServicoId)
     setCreateSaving(true)
     try {
       await api.criarProcessoImplantacao({
         clienteId: Number(createClienteId),
-        tipo: createTipo,
-        titulo: createTitulo.trim() || (createTipo === 'novo_servico' ? 'Novo serviço implantado' : 'Novo processo'),
-        servicoId: createTipo === 'novo_servico' ? Number(createServicoId) : null,
+        tipo: 'novo_servico',
+        titulo: createTitulo.trim() || servicoSelecionado?.nome || 'Novo serviço implantado',
+        servicoId: Number(createServicoId),
         statusInstal: createStatus,
         responsavelId: createResponsavel === 'none' ? null : Number(createResponsavel),
         observacao: createObs.trim() || undefined,
-        checklistIds: createTipo === 'novo_servico' ? createChecklistIds : undefined,
+        checklistIds: createChecklistIds,
       })
       setCreateOpen(false)
       await carregarPainel()
@@ -713,7 +713,7 @@ export function Pipeline() {
                 className="h-7 sm:h-8 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] sm:text-xs px-2.5"
               >
                 <option value="all">Todas as etapas</option>
-                {etapas.map((etapa) => (<option key={etapa.status} value={String(etapa.status)}>{etapa.status}. {etapa.nome}</option>))}
+                {etapas.map((etapa) => (<option key={etapa.status} value={String(etapa.status)}>{etapa.ordem ?? etapa.status}. {etapa.nome}</option>))}
               </select>
             </div>
           </div>
@@ -931,7 +931,7 @@ export function Pipeline() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 leading-tight whitespace-normal break-words">
-                          {etapa.status}. {etapa.nome}
+                          {etapa.ordem ?? etapa.status}. {etapa.nome}
                         </p>
                         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: etapa.cor }} />
                       </div>
@@ -1087,58 +1087,44 @@ export function Pipeline() {
               </div>
             ) : null}
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Tipo</label>
-              <select
-                value={createTipo}
-                onChange={(e) => setCreateTipo(e.target.value as 'novo_cliente' | 'novo_servico')}
-                className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
-              >
-                <option value="novo_servico">Serviço implantado</option>
-                <option value="novo_cliente">Novo cliente</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Etapa inicial</label>
-              <select
-                value={String(createStatus)}
-                onChange={(e) => setCreateStatus(Number(e.target.value))}
-                className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
-              >
-                {etapas.map((etapa) => (
-                  <option key={etapa.status} value={String(etapa.status)}>{etapa.status}. {etapa.nome}</option>
-                ))}
-              </select>
-            </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Etapa inicial</label>
+            <select
+              value={String(createStatus)}
+              onChange={(e) => setCreateStatus(Number(e.target.value))}
+              className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
+            >
+              {etapas.map((etapa) => (
+                <option key={etapa.status} value={String(etapa.status)}>{etapa.ordem ?? etapa.status}. {etapa.nome}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Serviço</label>
+            <select
+              value={createServicoId}
+              onChange={(e) => selecionarServicoCriacao(e.target.value)}
+              className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
+            >
+              <option value="">Selecione um serviço...</option>
+              {servicos.map((servico) => (
+                <option key={servico.id} value={String(servico.id)}>{servico.nome}</option>
+              ))}
+            </select>
+            {servicos.length === 0 ? (
+              <p className="text-xs text-slate-500 mt-1">Nenhum serviço cadastrado. Acesse "Cadastro de Serviços" para criar.</p>
+            ) : null}
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Nome do processo</label>
             <Input
               value={createTitulo}
               onChange={(e) => setCreateTitulo(e.target.value)}
-              placeholder={createTipo === 'novo_servico' ? 'Ex.: Implantação do Financeiro' : 'Ex.: Implantação inicial'}
+              placeholder="Ex.: Implantação do Financeiro"
             />
+            <p className="text-xs text-slate-500 mt-1">Se deixar em branco, usa o nome do serviço selecionado.</p>
           </div>
-          {createTipo === 'novo_servico' ? (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Serviço</label>
-              <select
-                value={createServicoId}
-                onChange={(e) => selecionarServicoCriacao(e.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
-              >
-                <option value="">Selecione um serviço...</option>
-                {servicos.map((servico) => (
-                  <option key={servico.id} value={String(servico.id)}>{servico.nome}</option>
-                ))}
-              </select>
-              {servicos.length === 0 ? (
-                <p className="text-xs text-slate-500 mt-1">Nenhum serviço cadastrado. Acesse "Cadastro de Serviços" para criar.</p>
-              ) : null}
-            </div>
-          ) : null}
-          {createTipo === 'novo_servico' && createServicoId ? (
+          {createServicoId ? (
             (() => {
               const servicoSelecionado = servicos.find((s) => String(s.id) === createServicoId)
               const checklistsDoServico = createChecklists.filter((c) => (servicoSelecionado?.checklistIds ?? []).includes(c.id))
@@ -1293,7 +1279,7 @@ export function Pipeline() {
                 >
                   {editEtapasDisponiveis.map((etapa) => (
                     <option key={etapa.status} value={String(etapa.status)}>
-                      {etapa.status}. {etapa.nome}
+                      {etapa.ordem ?? etapa.status}. {etapa.nome}
                     </option>
                   ))}
                 </select>
@@ -1401,7 +1387,7 @@ export function Pipeline() {
                         className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-white"
                         style={{ backgroundColor: etapa.cor }}
                       >
-                        {etapa.status}. {etapa.nome}
+                        {etapa.ordem ?? etapa.status}. {etapa.nome}
                       </span>
                       {index < etapasHistorico.length - 1 ? <MoveRight className="w-3.5 h-3.5 text-slate-400" /> : null}
                     </div>
@@ -1439,12 +1425,12 @@ export function Pipeline() {
                         {evento.tipo === 'status' ? (
                           <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
                             {processoCriado
-                              ? `Etapa inicial: ${destino ? `${destino.status}. ${destino.nome}` : `Etapa ${evento.statusDestino ?? '—'}`}`
+                              ? `Etapa inicial: ${destino ? `${destino.ordem ?? destino.status}. ${destino.nome}` : `Etapa ${evento.statusDestino ?? '—'}`}`
                               : (
                                 <>
-                                  {origem ? `${origem.status}. ${origem.nome}` : `Etapa ${evento.statusOrigem ?? '—'}`}
+                                  {origem ? `${origem.ordem ?? origem.status}. ${origem.nome}` : `Etapa ${evento.statusOrigem ?? '—'}`}
                                   {' '}→{' '}
-                                  {destino ? `${destino.status}. ${destino.nome}` : `Etapa ${evento.statusDestino ?? '—'}`}
+                                  {destino ? `${destino.ordem ?? destino.status}. ${destino.nome}` : `Etapa ${evento.statusDestino ?? '—'}`}
                                 </>
                               )}
                           </p>

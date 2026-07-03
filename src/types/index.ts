@@ -459,6 +459,7 @@ export interface PipelineItem {
 
 export interface ImplantacaoEtapa {
   status: number
+  ordem?: number
   nome: string
   descricao: string
   cor: string

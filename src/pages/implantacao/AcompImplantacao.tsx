@@ -105,8 +105,9 @@ export function AcompImplantacao() {
     return painel.clientes.find((c) => c.clienteId === clienteIdSelecionado) || null
   }, [painel, clienteIdSelecionado])
 
+  // Ordena pela ordem de exibição (campo `ordem`), não pelo número de status (que é identidade fixa, fora de sequência).
   const etapasOrdenadas = useMemo(() => {
-    return [...(detalhe?.etapas || [])].sort((a, b) => a.status - b.status)
+    return [...(detalhe?.etapas || [])].sort((a, b) => (a.ordem ?? a.status) - (b.ordem ?? b.status))
   }, [detalhe?.etapas])
 
   const etapaAtualIndex = useMemo(() => {
@@ -114,10 +115,11 @@ export function AcompImplantacao() {
     return etapasOrdenadas.findIndex((etapa) => etapa.status === detalhe.cliente.statusInstal)
   }, [detalhe?.cliente, etapasOrdenadas])
 
+  // A próxima etapa é a seguinte na ordem de exibição (não a de maior número de status).
   const proximaEtapa = useMemo(() => {
-    if (!detalhe?.cliente) return null
-    return etapasOrdenadas.find((etapa) => etapa.status > detalhe.cliente.statusInstal) || null
-  }, [detalhe?.cliente, etapasOrdenadas])
+    if (!detalhe?.cliente || etapaAtualIndex < 0) return null
+    return etapasOrdenadas[etapaAtualIndex + 1] || null
+  }, [detalhe?.cliente, etapasOrdenadas, etapaAtualIndex])
 
   const timelineOrdenada = useMemo(() => {
     return [...(detalhe?.timeline || [])].sort((a, b) => new Date(b.dataHora).getTime() - new Date(a.dataHora).getTime())
@@ -307,7 +309,7 @@ export function AcompImplantacao() {
     try {
       await api.transicaoImplantacao(detalhe.cliente.clienteId, {
         statusDestino: proximaEtapa.status,
-        observacao: `Avanço pelo acompanhamento para ${proximaEtapa.status}. ${proximaEtapa.nome}`,
+        observacao: `Avanço pelo acompanhamento para ${proximaEtapa.ordem ?? proximaEtapa.status}. ${proximaEtapa.nome}`,
       })
       setConfirmarAvancoAberto(false)
       await carregarDetalhe(detalhe.cliente.clienteId)
@@ -466,7 +468,7 @@ export function AcompImplantacao() {
                   {getNomeSecundario(clienteAtual) || 'Sem razão social'} • {clienteAtual.cnpj || 'Sem CNPJ'}
                 </p>
                 <p className="text-[11px] sm:text-xs text-slate-500 mt-1">
-                  Responsável: {detalhe.cliente.responsavelNome || 'Não definido'} • Etapa atual: {detalhe.etapaAtual.status}. {detalhe.etapaAtual.nome}
+                  Responsável: {detalhe.cliente.responsavelNome || 'Não definido'} • Etapa atual: {detalhe.etapaAtual.ordem ?? detalhe.etapaAtual.status}. {detalhe.etapaAtual.nome}
                 </p>
               </div>
               <div className="flex items-center justify-start lg:justify-end gap-2 flex-wrap">
@@ -518,7 +520,7 @@ export function AcompImplantacao() {
                           'text-xs sm:text-sm font-medium',
                           atual ? 'text-blue-600 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300'
                         )}>
-                          {etapa.status}. {etapa.nome}
+                          {etapa.ordem ?? etapa.status}. {etapa.nome}
                           {atual ? <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">Etapa atual</span> : null}
                         </p>
                         <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">{etapa.descricao}</p>
@@ -548,7 +550,7 @@ export function AcompImplantacao() {
                   >
                     {etapasOrdenadas.map((etapa) => (
                       <option key={etapa.status} value={String(etapa.status)}>
-                        {etapa.status}. {etapa.nome}
+                        {etapa.ordem ?? etapa.status}. {etapa.nome}
                       </option>
                     ))}
                   </select>

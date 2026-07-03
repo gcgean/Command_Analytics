@@ -164,7 +164,7 @@ export function DashboardImplantacao() {
         const tempoMedio = lista.length
           ? Math.round(lista.reduce((acc, p) => acc + (p.diasNaEtapa || 0), 0) / lista.length)
           : 0
-        return { status: etapa.status, nome: etapa.nome, cor: etapa.cor, quantidade: lista.length, atrasados: atrasadosEtapa, tempoMedio }
+        return { status: etapa.status, ordem: etapa.ordem ?? etapa.status, nome: etapa.nome, cor: etapa.cor, quantidade: lista.length, atrasados: atrasadosEtapa, tempoMedio }
       })
 
     // Gargalos = etapas em andamento com mais processos parados/acumulados.
@@ -434,7 +434,7 @@ export function DashboardImplantacao() {
             {dados.distribuicaoEtapas.map((etapa) => (
               <div key={etapa.status}>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-700 dark:text-slate-300 truncate">{etapa.status}. {etapa.nome}</span>
+                  <span className="text-slate-700 dark:text-slate-300 truncate">{etapa.ordem}. {etapa.nome}</span>
                   <span className="flex items-center gap-2 flex-shrink-0">
                     {etapa.atrasados > 0 ? <span className="text-rose-600 dark:text-rose-300 font-medium">{etapa.atrasados} atras.</span> : null}
                     <span className="font-semibold text-slate-800 dark:text-slate-100">{etapa.quantidade}</span>
@@ -520,7 +520,7 @@ export function DashboardImplantacao() {
           {dados.gargalos.map((etapa) => (
             <div key={etapa.status}>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-700 dark:text-slate-300">{etapa.status}. {etapa.nome}</span>
+                <span className="text-slate-700 dark:text-slate-300">{etapa.ordem}. {etapa.nome}</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-100">{etapa.quantidade}{etapa.atrasados > 0 ? <span className="text-rose-600 dark:text-rose-300 ml-1 font-normal">({etapa.atrasados} atras.)</span> : null}</span>
               </div>
               <div className="mt-1 h-2 rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
