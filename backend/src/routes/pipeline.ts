@@ -266,6 +266,12 @@ function normalizeDateFilter(value: string | null | undefined): string {
   return /^\d{4}-\d{2}-\d{2}$/.test(data) ? data : ''
 }
 
+// IMPORTANTE: este arquivo grava DATETIME com UTC_TIMESTAMP(), nunca com NOW().
+// O servidor MySQL roda em horário de Brasília e NOW() reflete essa hora local, mas o Prisma
+// sempre lê colunas DATETIME como se os dígitos armazenados já fossem UTC — resultado: qualquer
+// timestamp gravado com NOW() aparecia ~3h no passado ao ser exibido no front. UTC_TIMESTAMP()
+// grava o instante já no formato que o Prisma espera, eliminando o deslocamento.
+
 function getProcessoKey(clienteId: number, processoId: number | null | undefined) {
   return `${Number(clienteId)}:${Number(processoId ?? 0)}`
 }
@@ -280,6 +286,19 @@ async function ensureColumnExists(table: string, column: string, ddl: string) {
   `
   if (rows.length === 0) {
     await prisma.$executeRawUnsafe(`ALTER TABLE ${table} ADD COLUMN ${ddl}`)
+  }
+}
+
+async function ensureIndexExists(table: string, indexName: string, ddl: string) {
+  const rows = await prisma.$queryRaw<Array<{ INDEX_NAME: string }>>`
+    SELECT INDEX_NAME
+    FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ${table}
+      AND INDEX_NAME = ${indexName}
+  `
+  if (rows.length === 0) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE ${table} ADD INDEX ${indexName} ${ddl}`)
   }
 }
 
@@ -487,6 +506,10 @@ async function ensureImplantacaoBootstrap() {
       await ensureColumnExists('implantacao_processos', 'servico_id', 'servico_id INT NULL AFTER servico_nome')
       await ensureColumnExists('implantacao_processos', 'ativo', 'ativo TINYINT(1) NOT NULL DEFAULT 1 AFTER processo_principal')
 
+      // Sem este índice, a subquery de "última venda" do painel faz table scan completo de
+      // dados_gerais_clientes para cada cliente (custava ~4,5s do carregamento do pipeline).
+      await ensureIndexExists('dados_gerais_clientes', 'idx_dgc_cod_cli_data_venda', '(COD_CLI, DATA_HORA_ULT_VENDA)')
+
       await prisma.$executeRawUnsafe(`
         INSERT INTO implantacao_processos
           (cliente_id, tipo, titulo, servico_nome, status_atual, observacao, processo_principal, criado_em, atualizado_em)
@@ -498,8 +521,8 @@ async function ensureImplantacaoBootstrap() {
           COALESCE(NULLIF(C.STATUS_INSTAL, 0), 1),
           PI.obs_treinamento,
           1,
-          NOW(),
-          NOW()
+          UTC_TIMESTAMP(),
+          UTC_TIMESTAMP()
         FROM cliente C
         LEFT JOIN (
           SELECT PI1.id_cli, PI1.obs_treinamento
@@ -648,7 +671,7 @@ async function ensureImplantacaoBootstrap() {
         if (statusVinculados.has(etapa.status)) continue
         await prisma.$executeRaw`
           INSERT INTO cadastro_etapas (nome, cor, telas, ativo, ordem, status_ref, criado_em, atualizado_em)
-          VALUES (${etapa.nome}, ${etapa.cor}, ${JSON.stringify(['implantacao'])}, 1, ${(index + 1) * 10}, ${etapa.status}, NOW(), NOW())
+          VALUES (${etapa.nome}, ${etapa.cor}, ${JSON.stringify(['implantacao'])}, 1, ${(index + 1) * 10}, ${etapa.status}, UTC_TIMESTAMP(), UTC_TIMESTAMP())
         `
         statusVinculados.add(etapa.status)
       }
@@ -674,8 +697,8 @@ async function ensureImplantacaoBootstrap() {
             ${JSON.stringify(['implantacao'])},
             1,
             ${checklist.ordem},
-            NOW(),
-            NOW()
+            UTC_TIMESTAMP(),
+            UTC_TIMESTAMP()
           )
         `
       }
@@ -716,7 +739,7 @@ async function registrarMovimentacao(args: {
         ${args.responsavelId ?? null},
         ${args.observacao ?? null},
         ${args.usuarioId ?? null},
-        NOW()
+        UTC_TIMESTAMP()
       )
   `
 }
@@ -1444,7 +1467,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const obs = String(observacao ?? '').trim()
     await prisma.$executeRaw`
       UPDATE implantacao_processos
-      SET status_atual = ${novoStatus}, observacao = ${obs || null}, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+      SET status_atual = ${novoStatus}, observacao = ${obs || null}, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
       WHERE id = ${contexto.processoId}
     `
     if (contexto.processoPrincipal) {
@@ -1506,10 +1529,10 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     await prisma.$executeRaw`
       INSERT INTO implantacao_responsavel_processo (processo_id, cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
-      VALUES (${contexto.processoId}, ${id}, ${novoResponsavelId}, NOW(), ${usuarioId}, ${String(observacao ?? '').trim() || null})
+      VALUES (${contexto.processoId}, ${id}, ${novoResponsavelId}, UTC_TIMESTAMP(), ${usuarioId}, ${String(observacao ?? '').trim() || null})
       ON DUPLICATE KEY UPDATE
         responsavel_id = VALUES(responsavel_id),
-        atualizado_em = NOW(),
+        atualizado_em = UTC_TIMESTAMP(),
         atualizado_por = VALUES(atualizado_por),
         observacao = VALUES(observacao)
     `
@@ -1653,7 +1676,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const obs = String(observacao ?? '').trim()
     await prisma.$executeRaw`
       UPDATE implantacao_processos
-      SET status_atual = ${destino}, observacao = ${obs || null}, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+      SET status_atual = ${destino}, observacao = ${obs || null}, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
       WHERE id = ${contexto.processoId}
     `
     if (contexto.processoPrincipal) {
@@ -1715,7 +1738,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     await prisma.$executeRaw`
       UPDATE implantacao_processos
-      SET observacao = ${texto}, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+      SET observacao = ${texto}, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
       WHERE id = ${contexto.processoId}
     `
     if (contexto.processoPrincipal) {
@@ -1854,7 +1877,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       statusMudou = true
       await prisma.$executeRaw`
         UPDATE implantacao_processos
-        SET status_atual = ${novoStatus}, observacao = ${obs}, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+        SET status_atual = ${novoStatus}, observacao = ${obs}, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
         WHERE id = ${contexto.processoId}
       `
       if (contexto.processoPrincipal) {
@@ -1888,10 +1911,10 @@ export async function pipelineRoutes(app: FastifyInstance) {
       const responsavelAtual = cliente.responsavelId ?? null
       await prisma.$executeRaw`
         INSERT INTO implantacao_responsavel_processo (processo_id, cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
-        VALUES (${contexto.processoId}, ${id}, ${novoResponsavelId}, NOW(), ${usuarioId}, ${obs})
+        VALUES (${contexto.processoId}, ${id}, ${novoResponsavelId}, UTC_TIMESTAMP(), ${usuarioId}, ${obs})
         ON DUPLICATE KEY UPDATE
           responsavel_id = VALUES(responsavel_id),
-          atualizado_em = NOW(),
+          atualizado_em = UTC_TIMESTAMP(),
           atualizado_por = VALUES(atualizado_por),
           observacao = VALUES(observacao)
       `
@@ -1923,7 +1946,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       for (const checklistId of idsChecklist) {
         await prisma.$executeRaw`
           INSERT INTO implantacao_checklist_cliente (cliente_id, processo_id, checklist_id, criado_em, criado_por)
-          VALUES (${id}, ${contexto.processoId}, ${checklistId}, NOW(), ${usuarioId})
+          VALUES (${id}, ${contexto.processoId}, ${checklistId}, UTC_TIMESTAMP(), ${usuarioId})
         `
       }
 
@@ -1962,7 +1985,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     if (obs && !statusMudou && !responsavelMudou && !checklistMudou) {
       await prisma.$executeRaw`
         UPDATE implantacao_processos
-        SET observacao = ${obs}, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+        SET observacao = ${obs}, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
         WHERE id = ${contexto.processoId}
       `
       await registrarMovimentacao({
@@ -2045,7 +2068,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       INSERT INTO implantacao_processos
         (cliente_id, tipo, titulo, servico_nome, servico_id, status_atual, observacao, processo_principal, criado_em, atualizado_em, criado_por, atualizado_por)
       VALUES
-        (${idCliente}, ${tipoNormalizado}, ${tituloNormalizado}, ${servicoNomeResolvido}, ${servicoIdNormalizado}, ${statusNovo}, ${String(observacao ?? '').trim() || null}, 0, NOW(), NOW(), ${usuarioId}, ${usuarioId})
+        (${idCliente}, ${tipoNormalizado}, ${tituloNormalizado}, ${servicoNomeResolvido}, ${servicoIdNormalizado}, ${statusNovo}, ${String(observacao ?? '').trim() || null}, 0, UTC_TIMESTAMP(), UTC_TIMESTAMP(), ${usuarioId}, ${usuarioId})
     `
     const novoProcesso = await prisma.$queryRaw<Array<{ id: number }>>`
       SELECT id FROM implantacao_processos WHERE cliente_id = ${idCliente} ORDER BY id DESC LIMIT 1
@@ -2055,10 +2078,10 @@ export async function pipelineRoutes(app: FastifyInstance) {
       const novoResponsavelId = responsavelId === null ? null : Number(responsavelId)
       await prisma.$executeRaw`
         INSERT INTO implantacao_responsavel_processo (processo_id, cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
-        VALUES (${novoProcessoId}, ${idCliente}, ${novoResponsavelId}, NOW(), ${usuarioId}, ${String(observacao ?? '').trim() || null})
+        VALUES (${novoProcessoId}, ${idCliente}, ${novoResponsavelId}, UTC_TIMESTAMP(), ${usuarioId}, ${String(observacao ?? '').trim() || null})
         ON DUPLICATE KEY UPDATE
           responsavel_id = VALUES(responsavel_id),
-          atualizado_em = NOW(),
+          atualizado_em = UTC_TIMESTAMP(),
           atualizado_por = VALUES(atualizado_por),
           observacao = VALUES(observacao)
       `
@@ -2078,7 +2101,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       for (const checklistId of idsChecklist) {
         await prisma.$executeRaw`
           INSERT INTO implantacao_checklist_cliente (cliente_id, processo_id, checklist_id, criado_em, criado_por)
-          VALUES (${idCliente}, ${novoProcessoId}, ${checklistId}, NOW(), ${usuarioId})
+          VALUES (${idCliente}, ${novoProcessoId}, ${checklistId}, UTC_TIMESTAMP(), ${usuarioId})
         `
         await registrarMovimentacao({
           clienteId: idCliente,
@@ -2135,7 +2158,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     await prisma.$executeRaw`
       UPDATE implantacao_processos
-      SET ativo = 0, atualizado_em = NOW(), atualizado_por = ${usuarioId}
+      SET ativo = 0, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
       WHERE id = ${idProcesso}
     `
 

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  CheckCircle2, Circle, ChevronRight, Loader2, MessageSquare, RefreshCcw, Search
+  ArrowLeft, CheckCircle2, Circle, ChevronRight, Loader2, MessageSquare, RefreshCcw, Search
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
@@ -85,6 +85,8 @@ export function AcompImplantacao() {
   const [confirmarAvancoAberto, setConfirmarAvancoAberto] = useState(false)
 
   const clienteIdSelecionado = Number(searchParams.get('cliente') || 0) || 0
+  const processoIdSelecionado = Number(searchParams.get('processo') || 0) || 0
+  const voltarPara = searchParams.get('voltar') || '/implantacao'
 
   const clientesFiltrados = useMemo(() => {
     const term = normalizarBusca(filtroCliente)
@@ -100,10 +102,16 @@ export function AcompImplantacao() {
     }).slice(0, 12)
   }, [filtroCliente, painel?.clientes])
 
+  // Um cliente pode ter mais de um processo de implantação; quando a URL não especifica
+  // qual (`processo`), cai no primeiro encontrado (normalmente o principal).
   const clienteAtual = useMemo(() => {
     if (!painel) return null
-    return painel.clientes.find((c) => c.clienteId === clienteIdSelecionado) || null
-  }, [painel, clienteIdSelecionado])
+    const doMesmoCliente = painel.clientes.filter((c) => c.clienteId === clienteIdSelecionado)
+    if (processoIdSelecionado) {
+      return doMesmoCliente.find((c) => Number(c.processoId || 0) === processoIdSelecionado) || doMesmoCliente[0] || null
+    }
+    return doMesmoCliente[0] || null
+  }, [painel, clienteIdSelecionado, processoIdSelecionado])
 
   // Ordena pela ordem de exibição (campo `ordem`), não pelo número de status (que é identidade fixa, fora de sequência).
   const etapasOrdenadas = useMemo(() => {
@@ -214,7 +222,7 @@ export function AcompImplantacao() {
     }
   }
 
-  async function carregarDetalhe(clienteId: number) {
+  async function carregarDetalhe(clienteId: number, processoId?: number) {
     if (!clienteId) {
       setDetalhe(null)
       setLoadingDetalhe(false)
@@ -222,11 +230,12 @@ export function AcompImplantacao() {
     }
     setLoadingDetalhe(true)
     try {
-      const data = await api.getImplantacaoChecklist(clienteId)
+      const data = await api.getImplantacaoChecklist(clienteId, undefined, processoId || undefined)
       setDetalhe(data)
       setStatusDestino(Number(data?.cliente?.statusInstal || 0))
     } catch (err: any) {
       toast.error(err?.message || 'Falha ao carregar acompanhamento do cliente.')
+      setDetalhe(null)
     } finally {
       setLoadingDetalhe(false)
     }
@@ -237,8 +246,8 @@ export function AcompImplantacao() {
   }, [])
 
   useEffect(() => {
-    void carregarDetalhe(clienteIdSelecionado)
-  }, [clienteIdSelecionado])
+    void carregarDetalhe(clienteIdSelecionado, processoIdSelecionado || clienteAtual?.processoId)
+  }, [clienteIdSelecionado, processoIdSelecionado, clienteAtual?.processoId])
 
   useEffect(() => {
     if (clienteAtual) {
@@ -259,7 +268,7 @@ export function AcompImplantacao() {
 
       if (key === 'p') {
         event.preventDefault()
-        navigate('/implantacao')
+        navigate(voltarPara)
       }
 
       if (key === 'd') {
@@ -270,7 +279,7 @@ export function AcompImplantacao() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [navigate])
+  }, [navigate, voltarPara])
 
   function selecionarCliente(cliente: ImplantacaoCliente) {
     setFiltroCliente(getNomeDestaque(cliente))
@@ -278,6 +287,11 @@ export function AcompImplantacao() {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       next.set('cliente', String(cliente.clienteId))
+      if (cliente.processoId) {
+        next.set('processo', String(cliente.processoId))
+      } else {
+        next.delete('processo')
+      }
       return next
     })
   }
@@ -292,8 +306,9 @@ export function AcompImplantacao() {
         itemIndex,
         marcado,
         observacao: String(obsItemMap[key] || '').trim() || undefined,
+        processoId: detalhe.cliente.processoId,
       })
-      await carregarDetalhe(detalhe.cliente.clienteId)
+      await carregarDetalhe(detalhe.cliente.clienteId, detalhe.cliente.processoId)
       await carregarPainel()
       toast.success('Checklist atualizado.')
     } catch (err: any) {
@@ -310,9 +325,10 @@ export function AcompImplantacao() {
       await api.transicaoImplantacao(detalhe.cliente.clienteId, {
         statusDestino: proximaEtapa.status,
         observacao: `Avanço pelo acompanhamento para ${proximaEtapa.ordem ?? proximaEtapa.status}. ${proximaEtapa.nome}`,
+        processoId: detalhe.cliente.processoId,
       })
       setConfirmarAvancoAberto(false)
-      await carregarDetalhe(detalhe.cliente.clienteId)
+      await carregarDetalhe(detalhe.cliente.clienteId, detalhe.cliente.processoId)
       await carregarPainel()
       toast.success(`Cliente movido para ${proximaEtapa.nome}.`)
     } catch (err: any) {
@@ -339,9 +355,10 @@ export function AcompImplantacao() {
       await api.transicaoImplantacao(detalhe.cliente.clienteId, {
         statusDestino,
         observacao: `Mudança manual no acompanhamento: ${atual} -> ${statusDestino}. Motivo: ${motivo}`,
+        processoId: detalhe.cliente.processoId,
       })
       setMotivoAlteracao('')
-      await carregarDetalhe(detalhe.cliente.clienteId)
+      await carregarDetalhe(detalhe.cliente.clienteId, detalhe.cliente.processoId)
       await carregarPainel()
       toast.success('Etapa alterada com sucesso.')
     } catch (err: any) {
@@ -357,9 +374,9 @@ export function AcompImplantacao() {
     if (!texto) return
     setSalvando(true)
     try {
-      await api.addImplantacaoObservacao(detalhe.cliente.clienteId, texto)
+      await api.addImplantacaoObservacao(detalhe.cliente.clienteId, texto, detalhe.cliente.processoId)
       setObsNova('')
-      await carregarDetalhe(detalhe.cliente.clienteId)
+      await carregarDetalhe(detalhe.cliente.clienteId, detalhe.cliente.processoId)
       toast.success('Observação adicionada.')
     } catch (err: any) {
       toast.error(err?.message || 'Não foi possível salvar a observação.')
@@ -372,6 +389,13 @@ export function AcompImplantacao() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
         <div>
+          <button
+            type="button"
+            onClick={() => navigate(voltarPara)}
+            className="inline-flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 mb-1"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" /> Voltar para o Pipeline
+          </button>
           <p className="text-xs text-slate-500 dark:text-slate-400">Implantação &gt; Acompanhamento</p>
           <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">Acompanhamento de Implantação</h1>
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400 mt-1">
@@ -391,7 +415,7 @@ export function AcompImplantacao() {
             icon={<RefreshCcw className="w-4 h-4" />}
             onClick={() => {
               void carregarPainel()
-              if (clienteIdSelecionado) void carregarDetalhe(clienteIdSelecionado)
+              if (clienteIdSelecionado) void carregarDetalhe(clienteIdSelecionado, processoIdSelecionado || clienteAtual?.processoId)
             }}
             loading={loadingPainel || loadingDetalhe}
             className="w-full sm:w-auto justify-center"
@@ -422,7 +446,7 @@ export function AcompImplantacao() {
               ) : (
                 clientesFiltrados.map((cliente) => (
                   <button
-                    key={cliente.clienteId}
+                    key={cliente.processoId ?? cliente.clienteId}
                     type="button"
                     className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
                     onMouseDown={(e) => e.preventDefault()}
@@ -432,6 +456,9 @@ export function AcompImplantacao() {
                     <span className="text-xs text-slate-500">
                       {getNomeSecundario(cliente) || 'Sem razão social'} — {cliente.cnpj || 'Sem CNPJ'}
                     </span>
+                    {cliente.processoTitulo ? (
+                      <span className="text-[11px] text-blue-600">{cliente.processoTitulo}</span>
+                    ) : null}
                   </button>
                 ))
               )}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   GripVertical, LayoutList, Loader2, RefreshCcw, Search,
   SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen, Ban
@@ -237,12 +237,15 @@ function colorWithAlpha(color: string, alpha: number) {
 export function Pipeline() {
   const navigate = useNavigate()
   const buscaRef = useRef<HTMLInputElement | null>(null)
-  const [search, setSearch] = useState('')
-  const [status, setStatus] = useState('all')
-  const [ultimaVendaFiltro, setUltimaVendaFiltro] = useState<UltimaVendaFiltro>('all')
-  const [dataCadastroInicial, setDataCadastroInicial] = useState('')
-  const [dataCadastroFinal, setDataCadastroFinal] = useState('')
-  const [viewMode, setViewMode] = useState<ViewMode>('kanban')
+  // Filtros e visualização ficam sincronizados com a URL para que "Voltar" a partir do
+  // Acompanhamento restaure o pipeline exatamente como o usuário deixou (busca, etapa, período, view).
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [search, setSearch] = useState(() => searchParams.get('search') || '')
+  const [status, setStatus] = useState(() => searchParams.get('status') || 'all')
+  const [ultimaVendaFiltro, setUltimaVendaFiltro] = useState<UltimaVendaFiltro>(() => (searchParams.get('ultimaVenda') as UltimaVendaFiltro) || 'all')
+  const [dataCadastroInicial, setDataCadastroInicial] = useState(() => searchParams.get('dataInicial') || '')
+  const [dataCadastroFinal, setDataCadastroFinal] = useState(() => searchParams.get('dataFinal') || '')
+  const [viewMode, setViewMode] = useState<ViewMode>(() => (searchParams.get('view') as ViewMode) || 'kanban')
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
   const [painel, setPainel] = useState<ImplantacaoPainel | null>(null)
@@ -389,6 +392,19 @@ export function Pipeline() {
     }, 250)
     return () => window.clearTimeout(id)
   }, [status, dataCadastroInicial, dataCadastroFinal])
+
+  // Reflete os filtros/visão atuais na URL (sem criar histórico de navegação) para poder
+  // reconstruir o "Voltar" do Acompanhamento exatamente com este estado.
+  useEffect(() => {
+    const next = new URLSearchParams()
+    if (search) next.set('search', search)
+    if (status !== 'all') next.set('status', status)
+    if (ultimaVendaFiltro !== 'all') next.set('ultimaVenda', ultimaVendaFiltro)
+    if (dataCadastroInicial) next.set('dataInicial', dataCadastroInicial)
+    if (dataCadastroFinal) next.set('dataFinal', dataCadastroFinal)
+    if (viewMode !== 'kanban') next.set('view', viewMode)
+    setSearchParams(next, { replace: true })
+  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, viewMode, setSearchParams])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1009,7 +1025,9 @@ export function Pipeline() {
                                     onMouseDown={(e) => e.stopPropagation()}
                                     onClick={(e) => {
                                       e.stopPropagation()
-                                      navigate(`/implantacao/acompanhamento?cliente=${cliente.clienteId}`)
+                                      const voltar = encodeURIComponent(`/implantacao?${searchParams.toString()}`)
+                                      const processoQs = cliente.processoId ? `&processo=${cliente.processoId}` : ''
+                                      navigate(`/implantacao/acompanhamento?cliente=${cliente.clienteId}${processoQs}&voltar=${voltar}`)
                                     }}
                                   >
                                     Abrir acompanhamento
