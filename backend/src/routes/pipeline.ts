@@ -903,6 +903,7 @@ async function carregarClientesImplantacao() {
       servicoNome: processo.servicoNome || null,
       servicoId: processo.servicoId === null || processo.servicoId === undefined ? null : Number(processo.servicoId),
       processoPrincipal: Number(processo.processoPrincipal) === 1,
+      processoCriadoEm: processo.criadoEm ? processo.criadoEm.toISOString() : null,
       clienteId: Number(processo.clienteId),
       clienteNome: nomeCompleto || fantasia || `Cliente #${processo.clienteId}`,
       nomeFantasia: fantasia || null,
