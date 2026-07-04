@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   GripVertical, LayoutList, Loader2, RefreshCcw, Search,
   SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen, Ban
@@ -236,6 +236,7 @@ function colorWithAlpha(color: string, alpha: number) {
 
 export function Pipeline() {
   const navigate = useNavigate()
+  const location = useLocation()
   const buscaRef = useRef<HTMLInputElement | null>(null)
   // Filtros e visualização ficam sincronizados com a URL para que "Voltar" a partir do
   // Acompanhamento restaure o pipeline exatamente como o usuário deixou (busca, etapa, período, view).
@@ -435,22 +436,46 @@ export function Pipeline() {
     await carregarPainel()
   }
 
-  function abrirCriacaoProcesso() {
-    setCreateClienteId('')
-    setCreateClienteBusca('')
+  function abrirCriacaoProcesso(prefill?: { clienteId: number; clienteNome?: string; titulo?: string; observacao?: string }) {
+    setCreateClienteId(prefill?.clienteId ? String(prefill.clienteId) : '')
+    setCreateClienteBusca(prefill?.clienteNome || '')
     setCreateClienteResultados([])
     setCreateClienteDropdownAberto(false)
-    setCreateTitulo('')
+    setCreateTitulo(prefill?.titulo || '')
     setCreateServicoId('')
     setCreateStatus(1)
     setCreateResponsavel('none')
-    setCreateObs('')
+    setCreateObs(prefill?.observacao || '')
     setCreateChecklistIds([])
     setCreateOpen(true)
-    void api.getServicos({ ativo: '1' }).then(setServicos).catch(() => setServicos([]))
+    void api.getServicos({ ativo: '1' }).then((lista) => {
+      setServicos(lista)
+      // Se o nome do procedimento do agendamento bater com um serviço cadastrado, já pré-seleciona.
+      const nomeAlvo = prefill?.titulo?.trim().toLowerCase()
+      if (nomeAlvo) {
+        const match = lista.find((s) => s.nome.trim().toLowerCase() === nomeAlvo)
+        if (match) {
+          setCreateServicoId(String(match.id))
+          setCreateChecklistIds(match.checklistIds ?? [])
+        }
+      }
+    }).catch(() => setServicos([]))
     void api.getImplantacaoResponsaveis().then(setCreateResponsaveis).catch(() => setCreateResponsaveis([]))
     void api.getChecklists({ ativo: '1' }).then(setCreateChecklists).catch(() => setCreateChecklists([]))
   }
+
+  // Chegando de um agendamento (Agenda / Agendamento Programado) com "criar processo de
+  // implantação" pré-preenchido: abre o modal já com cliente, título e observação prontos.
+  useEffect(() => {
+    const prefill = (location.state as any)?.criarProcessoPrefill as
+      | { clienteId: number; clienteNome?: string; titulo?: string; observacao?: string }
+      | undefined
+    if (prefill?.clienteId) {
+      abrirCriacaoProcesso(prefill)
+      navigate(location.pathname + location.search, { replace: true, state: null })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function selecionarClienteCriacao(cliente: Cliente) {
     setCreateClienteId(String(cliente.id))
@@ -682,7 +707,7 @@ export function Pipeline() {
         <div className="flex items-center gap-2">
           <Button
             variant="primary"
-            onClick={abrirCriacaoProcesso}
+            onClick={() => abrirCriacaoProcesso()}
             className="w-full sm:w-auto justify-center"
           >
             Novo processo

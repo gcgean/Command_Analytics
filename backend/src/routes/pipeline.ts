@@ -537,8 +537,7 @@ async function ensureImplantacaoBootstrap() {
           ON P.cliente_id = C.cod_cli
          AND P.processo_principal = 1
         WHERE P.id IS NULL
-          AND C.ATIVO = 'S'
-          AND C.cod_cli NOT IN (0, 1, 6, 7, 8)
+          AND C.ATIVO = 'S'
           AND C.cod_cli < 10000000
           AND C.cod_cla <> 30
       `)
@@ -901,8 +900,7 @@ async function carregarClientesImplantacao() {
     ) PI ON PI.id_cli = C.cod_cli
     LEFT JOIN implantacao_responsavel IR ON IR.cliente_id = C.cod_cli
     LEFT JOIN usuario UR ON UR.COD_USU = IR.responsavel_id
-    WHERE C.ATIVO = 'S'
-      AND C.cod_cli NOT IN (0, 1, 6, 7, 8)
+    WHERE C.ATIVO = 'S'
       AND C.cod_cli < 10000000
       AND C.cod_cla <> 30
     ORDER BY C.cod_cli DESC
@@ -946,8 +944,7 @@ async function carregarClientesImplantacao() {
       ON P.processo_principal = 1
      AND IR.cliente_id = P.cliente_id
     LEFT JOIN usuario UR ON UR.COD_USU = COALESCE(IRP.responsavel_id, IR.responsavel_id)
-    WHERE C.ATIVO = 'S'
-      AND C.cod_cli NOT IN (0, 1, 6, 7, 8)
+    WHERE C.ATIVO = 'S'
       AND C.cod_cli < 10000000
       AND C.cod_cla <> 30
       AND COALESCE(P.ativo, 1) = 1

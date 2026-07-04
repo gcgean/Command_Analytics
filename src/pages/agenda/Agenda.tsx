@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Plus, Clock, User, Search, Calendar, Pencil, CheckSquare, Trash2, History, Eye } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Plus, Clock, User, Search, Calendar, Pencil, CheckSquare, Trash2, History, Eye, Workflow } from 'lucide-react'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -187,6 +187,7 @@ export function Agenda() {
     horarioFim: '10:00',
     observacoes: '',
   })
+  const [formClienteNome, setFormClienteNome] = useState('')
   const [newFiles, setNewFiles] = useState<File[]>([])
 
   // Edit appointment modal
@@ -277,6 +278,19 @@ export function Agenda() {
       .finally(() => setLoading(false))
   }
 
+  function abrirCriacaoProcessoImplantacao() {
+    if (!form.clienteId) return
+    navigate('/implantacao', {
+      state: {
+        criarProcessoPrefill: {
+          clienteId: Number(form.clienteId),
+          clienteNome: formClienteNome,
+          observacao: form.observacoes || '',
+        },
+      },
+    })
+  }
+
   function handleDayClick(dateKey: string) {
     const brDate = toBRDate(dateKey)
     const newFilters = { ...filters, dataInicio: brDate, dataFim: brDate }
@@ -307,6 +321,7 @@ export function Agenda() {
 
       setShowModal(false)
       setForm({ clienteId: '', tecnicoId: '', tipo: 'Instalação', data: toBRDate(todayStr()), horario: '09:00', dataFim: toBRDate(todayStr()), horarioFim: '10:00', observacoes: '' })
+      setFormClienteNome('')
       setNewFiles([])
       buscar()
       loadMonthData()
@@ -758,7 +773,10 @@ export function Agenda() {
           <ClienteSearch
             label="Cliente"
             value={form.clienteId}
-            onChange={id => setForm(f => ({ ...f, clienteId: id }))}
+            onChange={(id, cliente) => {
+              setForm(f => ({ ...f, clienteId: id }))
+              setFormClienteNome(cliente ? (cliente.nome || cliente.nomeRazao || '') : '')
+            }}
           />
           <Select
             label="Técnico"
@@ -812,6 +830,18 @@ export function Agenda() {
             maxLength={5000}
             rows={4}
           />
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={abrirCriacaoProcessoImplantacao}
+              disabled={!form.clienteId}
+              title={form.clienteId ? 'Abre o Pipeline de Implantação com o cliente e a observação já preenchidos' : 'Selecione um cliente para poder criar um processo de implantação'}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-blue-500 hover:bg-blue-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-600"
+            >
+              <Workflow className="w-4 h-4" />
+              Criar processo de implantação
+            </button>
+          </div>
           <AnexosDraft files={newFiles} onChange={setNewFiles} />
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setShowModal(false)}>Cancelar</Button>

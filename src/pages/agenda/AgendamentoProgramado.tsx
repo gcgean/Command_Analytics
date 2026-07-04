@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, Trash2, Ban, Pencil, CheckSquare, Eye } from 'lucide-react'
+import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, Trash2, Ban, Pencil, CheckSquare, Eye, Workflow } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 import { Card } from '../../components/ui/Card'
@@ -310,6 +310,7 @@ export function AgendamentoProgramado() {
   const [bookTecnico, setBookTecnico] = useState<{ tecnicoId: number; tecnicoNome: string; data: string } | null>(null)
   const [selectedSlots, setSelectedSlots] = useState<string[]>([])
   const [bookForm, setBookForm] = useState({ clienteId: '', procedimentoId: '', tipo: 'Outros', descricao: '', duracao: '60' })
+  const [bookClienteNome, setBookClienteNome] = useState('')
   const [bookFiles, setBookFiles] = useState<File[]>([])
   const [submitting, setSubmitting] = useState(false)
   const [bookError, setBookError] = useState('')
@@ -483,6 +484,22 @@ export function AgendamentoProgramado() {
     return procedimentosMap.get(id) ?? null
   }
 
+  function abrirCriacaoProcessoImplantacao() {
+    if (!bookForm.clienteId) return
+    const procedimentoIdEfetivo = bookForm.procedimentoId || selectedProcedimento
+    const procedimento = procedimentoIdEfetivo ? findProcedimentoById(procedimentoIdEfetivo) : null
+    navigate('/implantacao', {
+      state: {
+        criarProcessoPrefill: {
+          clienteId: Number(bookForm.clienteId),
+          clienteNome: bookClienteNome,
+          titulo: procedimento?.nome || '',
+          observacao: bookForm.descricao || '',
+        },
+      },
+    })
+  }
+
   function onChangeProcedimentoBook(procedimentoId: string) {
     const procedimento = findProcedimentoById(procedimentoId)
     setBookForm((prev) => ({
@@ -629,6 +646,7 @@ export function AgendamentoProgramado() {
       descricao: '',
       duracao: String(procedimentoSelecionado?.duracaoMin ?? 60),
     })
+    setBookClienteNome('')
     setBookError('')
     setShowBookModal(true)
   }
@@ -646,6 +664,7 @@ export function AgendamentoProgramado() {
         descricao: '',
         duracao: String(procedimentoSelecionado?.duracaoMin ?? 60),
       })
+      setBookClienteNome('')
       setBookError('')
       return
     }
@@ -730,6 +749,7 @@ export function AgendamentoProgramado() {
       setBookTecnico(null)
       setBookFiles([])
       setBookForm({ clienteId: '', procedimentoId: '', tipo: 'Outros', descricao: '', duracao: '60' })
+      setBookClienteNome('')
       fetchSlots()
       fetchAgendamentos()
       setActiveTab('lista')
@@ -1510,7 +1530,10 @@ export function AgendamentoProgramado() {
             <ClienteSearch
               label="Cliente *"
               value={bookForm.clienteId}
-              onChange={id => setBookForm(f => ({ ...f, clienteId: id }))}
+              onChange={(id, cliente) => {
+                setBookForm(f => ({ ...f, clienteId: id }))
+                setBookClienteNome(cliente ? (cliente.nome || cliente.nomeRazao || '') : '')
+              }}
               required
             />
             {bookForm.clienteId && (
@@ -1554,6 +1577,19 @@ export function AgendamentoProgramado() {
           <p className="text-right text-xs text-slate-500">
             {bookForm.descricao.length}/{MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO}
           </p>
+
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={abrirCriacaoProcessoImplantacao}
+              disabled={!bookForm.clienteId}
+              title={bookForm.clienteId ? 'Abre o Pipeline de Implantação com o cliente, procedimento e descrição já preenchidos' : 'Selecione um cliente para poder criar um processo de implantação'}
+              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-blue-500 hover:bg-blue-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-600"
+            >
+              <Workflow className="w-4 h-4" />
+              Criar processo de implantação
+            </button>
+          </div>
 
           <AnexosDraft files={bookFiles} onChange={setBookFiles} />
 
