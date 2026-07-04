@@ -1,5 +1,5 @@
 import { useState, useEffect, Fragment } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronRight, Plus, Clock, User, Search, Calendar, Pencil, CheckSquare, Trash2, History, Eye, Workflow } from 'lucide-react'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import { Card } from '../../components/ui/Card'
@@ -147,6 +147,7 @@ function fromBRDate(br: string) {
 }
 export function Agenda() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [currentMonth, setCurrentMonth] = useState(() => {
     const t = new Date()
     return new Date(t.getFullYear(), t.getMonth(), 1)
@@ -236,6 +237,21 @@ export function Agenda() {
   // Initial search for today
   useEffect(() => {
     buscar()
+  }, [])
+
+  // Chegando do Pipeline de Implantação com "agendar" pré-preenchido: abre o modal de novo
+  // agendamento já com cliente e observação prontos.
+  useEffect(() => {
+    const prefill = (location.state as any)?.criarAgendamentoPrefill as
+      | { clienteId: number; clienteNome?: string; observacao?: string }
+      | undefined
+    if (prefill?.clienteId) {
+      setForm(f => ({ ...f, clienteId: String(prefill.clienteId), observacoes: prefill.observacao || '' }))
+      setFormClienteNome(prefill.clienteNome || '')
+      setShowModal(true)
+      navigate(location.pathname + location.search, { replace: true, state: null })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function loadMonthData() {

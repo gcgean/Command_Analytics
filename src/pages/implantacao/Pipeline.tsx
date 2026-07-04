@@ -1068,6 +1068,25 @@ export function Pipeline() {
                                   >
                                     Abrir prontuário
                                   </button>
+                                  <button
+                                    type="button"
+                                    className="text-[11px] text-blue-600 hover:text-blue-700"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      navigate('/agenda', {
+                                        state: {
+                                          criarAgendamentoPrefill: {
+                                            clienteId: cliente.clienteId,
+                                            clienteNome: getNomeDestaque(cliente),
+                                            observacao: cliente.observacoes || '',
+                                          },
+                                        },
+                                      })
+                                    }}
+                                  >
+                                    Agendar
+                                  </button>
                                 </div>
                               </div>
                             </div>
