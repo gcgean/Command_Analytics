@@ -6,6 +6,7 @@ import { initEtapas } from '../utils/etapas'
 import { initChecklists } from '../utils/checklists'
 import { initServicos } from '../utils/servicos'
 import { registrarNotificacao } from '../utils/notificacoesAgendamento'
+import { TelegramService } from '../services/telegram'
 
 type EtapaBase = {
   status: number
@@ -537,7 +538,7 @@ async function ensureImplantacaoBootstrap() {
           ON P.cliente_id = C.cod_cli
          AND P.processo_principal = 1
         WHERE P.id IS NULL
-          AND C.ATIVO = 'S'
+          AND C.ATIVO = 'S'
           AND C.cod_cli < 10000000
           AND C.cod_cla <> 30
       `)
@@ -769,9 +770,29 @@ async function getClienteEProcessoResumo(clienteId: number, processoId: number):
   }
 }
 
-// Notifica o responsável atual do processo sempre que algo muda nele (etapa, checklist, responsável, observação, etc.).
-// Não notifica quem fez a própria ação, para evitar autonotificação.
-async function notificarResponsavelProcesso(args: {
+async function getCriadorProcesso(processoId: number): Promise<number | null> {
+  const rows = await prisma.$queryRaw<Array<{ criadoPor: number | null }>>`
+    SELECT criado_por AS criadoPor FROM implantacao_processos WHERE id = ${processoId} LIMIT 1
+  `
+  const id = rows[0]?.criadoPor
+  return id === null || id === undefined ? null : Number(id)
+}
+
+async function getIdsTelegram(usuarioIds: number[]): Promise<Map<number, string | null>> {
+  const map = new Map<number, string | null>()
+  if (!usuarioIds.length) return map
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: number; idTelegram: string | null }>>(
+    `SELECT COD_USU AS id, ID_TELEGRAM AS idTelegram FROM usuario WHERE COD_USU IN (${usuarioIds.map(() => '?').join(',')})`,
+    ...usuarioIds,
+  )
+  rows.forEach((r) => map.set(Number(r.id), r.idTelegram || null))
+  return map
+}
+
+// Notifica o CRIADOR e o RESPONSÁVEL atual do processo sempre que algo muda nele
+// (etapa, checklist, responsável, observação, criação/vínculo). Envia em dois canais:
+// plataforma (sino) e Telegram (best-effort). Não notifica quem fez a própria ação.
+async function notificarProcesso(args: {
   clienteId: number
   processoId: number
   processoPrincipal: boolean
@@ -779,18 +800,43 @@ async function notificarResponsavelProcesso(args: {
   titulo: string
   mensagem: string
 }) {
-  const responsavelId = await getResponsavelAtualProcesso(args.clienteId, args.processoId, args.processoPrincipal)
-  if (!responsavelId) return
-  if (args.usuarioId && responsavelId === args.usuarioId) return
+  const [responsavelId, criadorId] = await Promise.all([
+    getResponsavelAtualProcesso(args.clienteId, args.processoId, args.processoPrincipal),
+    getCriadorProcesso(args.processoId),
+  ])
 
-  await registrarNotificacao({
-    usuarioId: responsavelId,
-    canal: 'plataforma',
-    tipo: 'implantacao_processo',
-    chaveEvento: `implantacao:${args.processoId}:${randomUUID()}`,
-    titulo: args.titulo,
-    mensagem: args.mensagem,
-  })
+  const destinatarios = new Set<number>()
+  if (responsavelId) destinatarios.add(responsavelId)
+  if (criadorId) destinatarios.add(criadorId)
+  if (args.usuarioId) destinatarios.delete(args.usuarioId) // não notifica quem fez a ação
+  if (destinatarios.size === 0) return
+
+  // Canal plataforma (sino) — cada destinatário recebe uma notificação.
+  for (const uid of destinatarios) {
+    await registrarNotificacao({
+      usuarioId: uid,
+      canal: 'plataforma',
+      tipo: 'implantacao_processo',
+      chaveEvento: `implantacao:${args.processoId}:${uid}:${randomUUID()}`,
+      titulo: args.titulo,
+      mensagem: args.mensagem,
+    })
+  }
+
+  // Canal Telegram — best-effort: falhas aqui nunca quebram a operação principal.
+  try {
+    const telegramConfig = await prisma.configuracaoTelegram.findFirst({ where: { ativo: true } })
+    if (telegramConfig) {
+      const idsTelegram = await getIdsTelegram(Array.from(destinatarios))
+      const envios = Array.from(destinatarios)
+        .map((uid) => idsTelegram.get(uid))
+        .filter((destino): destino is string => Boolean(destino))
+        .map((destino) => TelegramService.enviar({ userId: destino, mensagem: `📋 ${args.titulo}\n\n${args.mensagem}` }))
+      await Promise.allSettled(envios)
+    }
+  } catch (err) {
+    console.error('[Pipeline] Falha ao enviar notificação Telegram do processo:', err)
+  }
 }
 
 // Fonte da verdade da lista/ordem de etapas exibidas no pipeline: a tabela `cadastro_etapas`
@@ -900,7 +946,7 @@ async function carregarClientesImplantacao() {
     ) PI ON PI.id_cli = C.cod_cli
     LEFT JOIN implantacao_responsavel IR ON IR.cliente_id = C.cod_cli
     LEFT JOIN usuario UR ON UR.COD_USU = IR.responsavel_id
-    WHERE C.ATIVO = 'S'
+    WHERE C.ATIVO = 'S'
       AND C.cod_cli < 10000000
       AND C.cod_cla <> 30
     ORDER BY C.cod_cli DESC
@@ -944,7 +990,7 @@ async function carregarClientesImplantacao() {
       ON P.processo_principal = 1
      AND IR.cliente_id = P.cliente_id
     LEFT JOIN usuario UR ON UR.COD_USU = COALESCE(IRP.responsavel_id, IR.responsavel_id)
-    WHERE C.ATIVO = 'S'
+    WHERE C.ATIVO = 'S'
       AND C.cod_cli < 10000000
       AND C.cod_cla <> 30
       AND COALESCE(P.ativo, 1) = 1
@@ -1495,7 +1541,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     })
 
     const resumoStatus = await getClienteEProcessoResumo(id, contexto.processoId)
-    await notificarResponsavelProcesso({
+    await notificarProcesso({
       clienteId: id,
       processoId: contexto.processoId,
       processoPrincipal: contexto.processoPrincipal,
@@ -1545,7 +1591,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     if (novoResponsavelId) {
       const resumoResp = await getClienteEProcessoResumo(id, contexto.processoId)
-      await notificarResponsavelProcesso({
+      await notificarProcesso({
         clienteId: id,
         processoId: contexto.processoId,
         processoPrincipal: contexto.processoPrincipal,
@@ -1605,7 +1651,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     })
 
     const resumoChecklist = await getClienteEProcessoResumo(id, contexto.processoId)
-    await notificarResponsavelProcesso({
+    await notificarProcesso({
       clienteId: id,
       processoId: contexto.processoId,
       processoPrincipal: contexto.processoPrincipal,
@@ -1705,7 +1751,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     const resumoTransicao = await getClienteEProcessoResumo(id, contexto.processoId)
     const itensChecklistAtualizados = (checklist ?? []).length
-    await notificarResponsavelProcesso({
+    await notificarProcesso({
       clienteId: id,
       processoId: contexto.processoId,
       processoPrincipal: contexto.processoPrincipal,
@@ -1770,7 +1816,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     })
 
     const resumoObs = await getClienteEProcessoResumo(id, contexto.processoId)
-    await notificarResponsavelProcesso({
+    await notificarProcesso({
       clienteId: id,
       processoId: contexto.processoId,
       processoPrincipal: contexto.processoPrincipal,
@@ -2005,7 +2051,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       if (checklistMudou) partes.push('checklist(s) do processo atualizado(s)')
       if (obs) partes.push(`observação: ${obs}`)
 
-      await notificarResponsavelProcesso({
+      await notificarProcesso({
         clienteId: id,
         processoId: contexto.processoId,
         processoPrincipal: contexto.processoPrincipal,
@@ -2122,14 +2168,17 @@ export async function pipelineRoutes(app: FastifyInstance) {
       usuarioId,
     })
 
-    if (novoProcessoId > 0 && responsavelId) {
-      await notificarResponsavelProcesso({
+    if (novoProcessoId > 0) {
+      // Na criação, notifica criador E responsável (usuarioId: null = não pula ninguém),
+      // cobrindo "quando lançar um novo processo ou ele for vinculado ao processo".
+      const resumoCriacao = await getClienteEProcessoResumo(idCliente, novoProcessoId)
+      await notificarProcesso({
         clienteId: idCliente,
         processoId: novoProcessoId,
         processoPrincipal: false,
-        usuarioId,
-        titulo: 'Novo processo atribuído a você',
-        mensagem: `Você foi definido como responsável pelo novo processo "${tituloNormalizado}" do cliente ${(await getClienteEProcessoResumo(idCliente, novoProcessoId)).clienteNome}.`,
+        usuarioId: null,
+        titulo: 'Novo processo de implantação criado',
+        mensagem: `Novo processo "${tituloNormalizado}" criado para o cliente ${resumoCriacao.clienteNome}.`,
       })
     }
 
@@ -2168,7 +2217,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     })
 
     const resumoDesativar = await getClienteEProcessoResumo(id, idProcesso)
-    await notificarResponsavelProcesso({
+    await notificarProcesso({
       clienteId: id,
       processoId: idProcesso,
       processoPrincipal: eraProcessoPrincipal,
