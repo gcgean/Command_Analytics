@@ -1110,7 +1110,7 @@ export function Pipeline() {
       >
         <div className="space-y-4">
           <div className="relative">
-            <label className="block text-sm font-medium text-slate-700 mb-1">Cliente</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Cliente</label>
             <Input
               icon={<Search className="w-3.5 h-3.5" />}
               value={createClienteBusca}
@@ -1150,11 +1150,11 @@ export function Pipeline() {
             ) : null}
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Etapa inicial</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Etapa inicial</label>
             <select
               value={String(createStatus)}
               onChange={(e) => setCreateStatus(Number(e.target.value))}
-              className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
+              className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-200 px-3"
             >
               {etapas.map((etapa) => (
                 <option key={etapa.status} value={String(etapa.status)}>{etapa.ordem ?? etapa.status}. {etapa.nome}</option>
@@ -1162,11 +1162,11 @@ export function Pipeline() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Serviço</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Serviço</label>
             <select
               value={createServicoId}
               onChange={(e) => selecionarServicoCriacao(e.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
+              className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-200 px-3"
             >
               <option value="">Selecione um serviço...</option>
               {servicos.map((servico) => (
@@ -1178,7 +1178,7 @@ export function Pipeline() {
             ) : null}
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Nome do processo</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do processo</label>
             <Input
               value={createTitulo}
               onChange={(e) => setCreateTitulo(e.target.value)}
@@ -1200,10 +1200,10 @@ export function Pipeline() {
               }
               return (
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Checklist(s) vinculado(s) ao serviço</label>
-                  <div className="rounded-lg border border-slate-200 p-2.5 space-y-1.5">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Checklist(s) vinculado(s) ao serviço</label>
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5 space-y-1.5">
                     {checklistsDoServico.map((checklist) => (
-                      <label key={checklist.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                      <label key={checklist.id} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
                         <input
                           type="checkbox"
                           checked={createChecklistIds.includes(checklist.id)}
@@ -1219,11 +1219,11 @@ export function Pipeline() {
             })()
           ) : null}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Responsável</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Responsável</label>
             <select
               value={createResponsavel}
               onChange={(e) => setCreateResponsavel(e.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-300 bg-white text-sm px-3"
+              className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-200 px-3"
             >
               <option value="none">Sem responsável</option>
               {createResponsaveis.map((responsavel) => (
@@ -1232,11 +1232,11 @@ export function Pipeline() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Observação</label>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Observação</label>
             <textarea
               value={createObs}
               onChange={(e) => setCreateObs(e.target.value)}
-              className="min-h-[96px] w-full rounded-lg border border-slate-300 bg-white text-sm px-3 py-2"
+              className="min-h-[96px] w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-200 px-3 py-2"
             />
           </div>
           <div className="flex justify-end gap-2">
