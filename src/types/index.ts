@@ -495,6 +495,8 @@ export interface ImplantacaoCliente {
   responsavelId?: number | null
   responsavelNome?: string | null
   responsavelAtualizadoEm?: string | null
+  criadoPor?: number | null
+  criadorNome?: string | null
   totalItensChecklist: number
   itensChecklistMarcados: number
   progressoChecklist: number

@@ -174,6 +174,15 @@ function clienteCorrespondeDataCadastro(cliente: ImplantacaoCliente, dataInicial
   return true
 }
 
+// Um único campo de filtro cobre responsável OU quem lançou o processo: escolhendo uma
+// pessoa, casa se ela for responsável OU criadora do processo (qualquer um dos dois papéis).
+function clienteCorrespondePessoa(cliente: ImplantacaoCliente, pessoaFiltro: string) {
+  if (pessoaFiltro === 'all') return true
+  const id = Number(pessoaFiltro)
+  if (!Number.isFinite(id)) return true
+  return cliente.responsavelId === id || cliente.criadoPor === id
+}
+
 function getDiasNaEtapa(cliente: ImplantacaoCliente) {
   if (typeof cliente.diasNaEtapa === 'number' && Number.isFinite(cliente.diasNaEtapa)) {
     return Math.max(0, cliente.diasNaEtapa)
@@ -206,12 +215,25 @@ function StageBadge({ etapa }: { etapa: ImplantacaoEtapa | undefined }) {
   if (!etapa) return <span className="text-xs text-slate-500">Sem etapa</span>
   return (
     <span
-      className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium text-white"
-      style={{ backgroundColor: etapa.cor }}
+      className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium"
+      style={{ backgroundColor: etapa.cor, color: getContrastTextColor(etapa.cor) }}
     >
       {etapa.nome}
     </span>
   )
+}
+
+// Cores de etapa são livres (escolhidas no Cadastro de Etapas), então texto branco fixo
+// fica ilegível em cores claras como amarelo. Escolhe preto ou branco pelo contraste real.
+function getContrastTextColor(color: string): string {
+  const hex = String(color || '').replace('#', '').trim()
+  if (!/^([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(hex)) return '#ffffff'
+  const full = hex.length === 3 ? hex.split('').map((c) => c + c).join('') : hex
+  const r = parseInt(full.slice(0, 2), 16)
+  const g = parseInt(full.slice(2, 4), 16)
+  const b = parseInt(full.slice(4, 6), 16)
+  const luminancia = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+  return luminancia > 0.6 ? '#1e293b' : '#ffffff'
 }
 
 function colorWithAlpha(color: string, alpha: number) {
@@ -247,6 +269,7 @@ export function Pipeline() {
   const [ultimaVendaFiltro, setUltimaVendaFiltro] = useState<UltimaVendaFiltro>(() => (searchParams.get('ultimaVenda') as UltimaVendaFiltro) || 'all')
   const [dataCadastroInicial, setDataCadastroInicial] = useState(() => searchParams.get('dataInicial') || '')
   const [dataCadastroFinal, setDataCadastroFinal] = useState(() => searchParams.get('dataFinal') || '')
+  const [pessoaFiltro, setPessoaFiltro] = useState(() => searchParams.get('pessoa') || 'all')
   const [viewMode, setViewMode] = useState<ViewMode>(() => (searchParams.get('view') as ViewMode) || 'kanban')
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
@@ -317,13 +340,27 @@ export function Pipeline() {
     return Array.from(unicos.values())
   }, [painel?.clientes])
 
+  // Lista de pessoas para o filtro combinado (responsável ou quem lançou o processo),
+  // construída a partir dos próprios processos carregados — sem precisar de outro endpoint.
+  const pessoasDisponiveis = useMemo(() => {
+    const mapa = new Map<number, string>()
+    clientesBase.forEach((cliente) => {
+      if (cliente.responsavelId && cliente.responsavelNome) mapa.set(cliente.responsavelId, cliente.responsavelNome)
+      if (cliente.criadoPor && cliente.criadorNome) mapa.set(cliente.criadoPor, cliente.criadorNome)
+    })
+    return Array.from(mapa.entries())
+      .map(([id, nome]) => ({ id, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [clientesBase])
+
   const clientesFiltrados = useMemo(
     () => clientesBase.filter((cliente) =>
       clienteCorrespondeBusca(cliente, search) &&
       clienteCorrespondeTempoUltimaVenda(cliente, ultimaVendaFiltro) &&
-      clienteCorrespondeDataCadastro(cliente, dataCadastroInicial, dataCadastroFinal)
+      clienteCorrespondeDataCadastro(cliente, dataCadastroInicial, dataCadastroFinal) &&
+      clienteCorrespondePessoa(cliente, pessoaFiltro)
     ),
-    [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal],
+    [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro],
   )
 
   const clientesVisiveis = useMemo(
@@ -404,9 +441,10 @@ export function Pipeline() {
     if (ultimaVendaFiltro !== 'all') next.set('ultimaVenda', ultimaVendaFiltro)
     if (dataCadastroInicial) next.set('dataInicial', dataCadastroInicial)
     if (dataCadastroFinal) next.set('dataFinal', dataCadastroFinal)
+    if (pessoaFiltro !== 'all') next.set('pessoa', pessoaFiltro)
     if (viewMode !== 'kanban') next.set('view', viewMode)
     setSearchParams(next, { replace: true })
-  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, viewMode, setSearchParams])
+  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, viewMode, setSearchParams])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -773,6 +811,19 @@ export function Pipeline() {
               <option value="181-365">181 a 365 dias</option>
               <option value="mais-365">Acima de 1 ano</option>
               <option value="sem-venda">Sem última venda</option>
+            </select>
+          </div>
+          <div className="md:col-span-3">
+            <select
+              value={pessoaFiltro}
+              onChange={(e) => setPessoaFiltro(e.target.value)}
+              className="h-7 sm:h-8 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] sm:text-xs px-2.5"
+              title="Filtrar por responsável ou por quem lançou o processo"
+            >
+              <option value="all">Responsável ou lançado por: todos</option>
+              {pessoasDisponiveis.map((pessoa) => (
+                <option key={pessoa.id} value={String(pessoa.id)}>{pessoa.nome}</option>
+              ))}
             </select>
           </div>
           <div className="md:col-span-2">
@@ -1439,8 +1490,8 @@ export function Pipeline() {
                   etapasHistorico.map((etapa, index) => (
                     <div key={`${etapa.status}-${index}`} className="flex items-center gap-2">
                       <span
-                        className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium text-white"
-                        style={{ backgroundColor: etapa.cor }}
+                        className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium"
+                        style={{ backgroundColor: etapa.cor, color: getContrastTextColor(etapa.cor) }}
                       >
                         {etapa.ordem ?? etapa.status}. {etapa.nome}
                       </span>

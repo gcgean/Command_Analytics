@@ -68,6 +68,8 @@ type ProcessoImplantacaoRow = {
   responsavelId: number | null
   responsavelNome: string | null
   responsavelAtualizadoEm: Date | null
+  criadoPor: number | null
+  criadorNome: string | null
 }
 
 type ChecklistRow = {
@@ -1006,7 +1008,9 @@ async function carregarClientesImplantacao() {
       P.atualizado_em AS atualizadoEm,
       COALESCE(IRP.responsavel_id, IR.responsavel_id) AS responsavelId,
       COALESCE(UR.NOME_USUARIO_COMPLETO, UR.NOME_USU) AS responsavelNome,
-      COALESCE(IRP.atualizado_em, IR.atualizado_em) AS responsavelAtualizadoEm
+      COALESCE(IRP.atualizado_em, IR.atualizado_em) AS responsavelAtualizadoEm,
+      P.criado_por AS criadoPor,
+      COALESCE(UC.NOME_USUARIO_COMPLETO, UC.NOME_USU) AS criadorNome
     FROM implantacao_processos P
     INNER JOIN cliente C ON C.cod_cli = P.cliente_id
     LEFT JOIN (
@@ -1023,6 +1027,7 @@ async function carregarClientesImplantacao() {
       ON P.processo_principal = 1
      AND IR.cliente_id = P.cliente_id
     LEFT JOIN usuario UR ON UR.COD_USU = COALESCE(IRP.responsavel_id, IR.responsavel_id)
+    LEFT JOIN usuario UC ON UC.COD_USU = P.criado_por
     WHERE C.ATIVO = 'S'
       AND C.cod_cli < 10000000
       AND C.cod_cla <> 30
@@ -1073,6 +1078,8 @@ async function carregarClientesImplantacao() {
       responsavelId: processo.responsavelId ? Number(processo.responsavelId) : null,
       responsavelNome: processo.responsavelNome || null,
       responsavelAtualizadoEm: processo.responsavelAtualizadoEm ? processo.responsavelAtualizadoEm.toISOString() : null,
+      criadoPor: processo.criadoPor ? Number(processo.criadoPor) : null,
+      criadorNome: processo.criadorNome || null,
     }
   })
 }
