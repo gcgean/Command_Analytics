@@ -7,6 +7,7 @@ import { initChecklists } from '../utils/checklists'
 import { initServicos } from '../utils/servicos'
 import { registrarNotificacao } from '../utils/notificacoesAgendamento'
 import { TelegramService } from '../services/telegram'
+import { getUserPermissions } from './grupos'
 
 type EtapaBase = {
   status: number
@@ -2106,7 +2107,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
   })
 
   app.post('/implantacao/processos', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Cria um novo processo de implantação para cliente existente' } }, async (request, reply) => {
-    const { clienteId, tipo, titulo, servicoId, statusInstal, responsavelId, observacao, checklistIds } = request.body as {
+    const { clienteId, tipo, titulo, servicoId, statusInstal, responsavelId, observacao, checklistIds, criadoPorId } = request.body as {
       clienteId: number
       tipo: 'novo_cliente' | 'novo_servico'
       titulo: string
@@ -2115,6 +2116,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       responsavelId?: number | null
       observacao?: string
       checklistIds?: number[]
+      criadoPorId?: number | null
     }
     const idCliente = Number(clienteId)
     const usuarioId = Number((request.user as any)?.id || 0) || null
@@ -2124,6 +2126,19 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     if (!Number.isFinite(idCliente) || idCliente <= 0) return reply.status(400).send({ error: 'Cliente inválido.' })
     if (!tituloNormalizado) return reply.status(400).send({ error: 'Informe o nome do processo.' })
+
+    // Permite lançar o processo "em nome de" outro usuário (ex.: supervisor que cria a pedido
+    // de alguém, sem ter sido quem gerou a demanda) — só quem tem acesso a Usuários pode fazer
+    // isso; senão o campo é ignorado e o criador registrado continua sendo quem está logado.
+    let criadoPorFinal = usuarioId
+    if (criadoPorId !== undefined && criadoPorId !== null && usuarioId) {
+      const idAlvo = Number(criadoPorId)
+      if (Number.isFinite(idAlvo) && idAlvo > 0) {
+        const permissoesUsuario = await getUserPermissions(usuarioId)
+        const podeLancarComoOutro = permissoesUsuario.includes('*') || permissoesUsuario.includes('usuarios')
+        if (podeLancarComoOutro) criadoPorFinal = idAlvo
+      }
+    }
 
     await ensureImplantacaoBootstrap()
 
@@ -2151,7 +2166,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       INSERT INTO implantacao_processos
         (cliente_id, tipo, titulo, servico_nome, servico_id, status_atual, observacao, processo_principal, criado_em, atualizado_em, criado_por, atualizado_por)
       VALUES
-        (${idCliente}, ${tipoNormalizado}, ${tituloNormalizado}, ${servicoNomeResolvido}, ${servicoIdNormalizado}, ${statusNovo}, ${String(observacao ?? '').trim() || null}, 0, UTC_TIMESTAMP(), UTC_TIMESTAMP(), ${usuarioId}, ${usuarioId})
+        (${idCliente}, ${tipoNormalizado}, ${tituloNormalizado}, ${servicoNomeResolvido}, ${servicoIdNormalizado}, ${statusNovo}, ${String(observacao ?? '').trim() || null}, 0, UTC_TIMESTAMP(), UTC_TIMESTAMP(), ${criadoPorFinal}, ${usuarioId})
     `
     const novoProcesso = await prisma.$queryRaw<Array<{ id: number }>>`
       SELECT id FROM implantacao_processos WHERE cliente_id = ${idCliente} ORDER BY id DESC LIMIT 1

@@ -484,7 +484,7 @@ export const api = {
   }) => fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/transicao`, { method: 'PATCH', body: JSON.stringify(data) }),
   addImplantacaoObservacao: (clienteId: number, observacao: string, processoId?: number) =>
     fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/observacao`, { method: 'POST', body: JSON.stringify({ observacao, processoId }) }),
-  criarProcessoImplantacao: (data: { clienteId: number; tipo: 'novo_cliente' | 'novo_servico'; titulo: string; servicoId?: number | null; statusInstal?: number; responsavelId?: number | null; observacao?: string; checklistIds?: number[] }) =>
+  criarProcessoImplantacao: (data: { clienteId: number; tipo: 'novo_cliente' | 'novo_servico'; titulo: string; servicoId?: number | null; statusInstal?: number; responsavelId?: number | null; observacao?: string; checklistIds?: number[]; criadoPorId?: number | null }) =>
     fetchApi<{ ok: boolean; processoId: number }>('/pipeline/implantacao/processos', { method: 'POST', body: JSON.stringify(data) }),
 
   // ─── CRM ───────────────────────────────────────────────────

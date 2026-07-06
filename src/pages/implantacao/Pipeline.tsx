@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import type {
   ImplantacaoChecklistOpcao, ImplantacaoCliente, ImplantacaoEtapa, ImplantacaoPainel, ServicoCadastro, ChecklistCadastro, Cliente
 } from '../../types'
@@ -261,6 +262,8 @@ function colorWithAlpha(color: string, alpha: number) {
 export function Pipeline() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { can } = usePermissions()
+  const podeLancarComoOutroUsuario = can('usuarios')
   const buscaRef = useRef<HTMLInputElement | null>(null)
   // Filtros e visualização ficam sincronizados com a URL para que "Voltar" a partir do
   // Acompanhamento restaure o pipeline exatamente como o usuário deixou (busca, etapa, período, view).
@@ -318,6 +321,7 @@ export function Pipeline() {
   const [createServicoId, setCreateServicoId] = useState('')
   const [createStatus, setCreateStatus] = useState<number>(1)
   const [createResponsavel, setCreateResponsavel] = useState<string>('none')
+  const [createCriadoPorId, setCreateCriadoPorId] = useState<string>('eu')
   const [createObs, setCreateObs] = useState('')
   const [createChecklistIds, setCreateChecklistIds] = useState<number[]>([])
   const [servicos, setServicos] = useState<ServicoCadastro[]>([])
@@ -485,6 +489,7 @@ export function Pipeline() {
     setCreateServicoId('')
     setCreateStatus(1)
     setCreateResponsavel('none')
+    setCreateCriadoPorId('eu')
     setCreateObs(prefill?.observacao || '')
     setCreateChecklistIds([])
     setCreateOpen(true)
@@ -557,6 +562,7 @@ export function Pipeline() {
         responsavelId: createResponsavel === 'none' ? null : Number(createResponsavel),
         observacao: createObs.trim() || undefined,
         checklistIds: createChecklistIds,
+        criadoPorId: podeLancarComoOutroUsuario && createCriadoPorId !== 'eu' ? Number(createCriadoPorId) : undefined,
       })
       setCreateOpen(false)
       await carregarPainel()
@@ -1277,6 +1283,21 @@ export function Pipeline() {
               searchPlaceholder="Digite para buscar o responsável..."
             />
           </div>
+          {podeLancarComoOutroUsuario ? (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Lançar em nome de</label>
+              <SearchableSelect
+                value={createCriadoPorId}
+                onChange={(v) => setCreateCriadoPorId(v)}
+                options={[{ value: 'eu', label: 'Eu mesmo' }, ...createResponsaveis.map((r) => ({ value: String(r.id), label: r.nome }))]}
+                placeholder="Eu mesmo"
+                searchPlaceholder="Digite para buscar o usuário..."
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Registra esse usuário como quem lançou o processo — útil quando você está criando a pedido de outra pessoa. Você não receberá as notificações do processo.
+              </p>
+            </div>
+          ) : null}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Observação</label>
             <textarea
