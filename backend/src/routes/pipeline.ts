@@ -170,8 +170,22 @@ const ETAPAS_PADRAO: EtapaBase[] = [
   { status: 10, nome: 'Desistência', descricao: 'Processo encerrado por desistência', cor: '#dc2626', slaDias: 0 },
 ]
 
-// Conjunto de status válidos (identidades), usado nas validações dos endpoints.
+// Conjunto de status válidos (identidades) do catálogo fixo — usado como fallback e para
+// backfill. As validações dos endpoints usam getStatusValidos(), que também inclui as
+// identidades sintéticas de etapas novas criadas via Cadastro de Etapas.
 const STATUS_VALIDOS = new Set(ETAPAS_PADRAO.map((e) => e.status))
+
+async function getStatusValidos(): Promise<Set<number>> {
+  await ensureImplantacaoBootstrap()
+  const rows = await prisma.$queryRaw<Array<{ status_ref: number | null; telas: string | null }>>`
+    SELECT status_ref, telas FROM cadastro_etapas WHERE status_ref IS NOT NULL
+  `
+  const validos = new Set(STATUS_VALIDOS)
+  rows
+    .filter((r) => parseJsonArray(r.telas).includes('implantacao'))
+    .forEach((r) => validos.add(Number(r.status_ref)))
+  return validos
+}
 
 type ChecklistSeed = {
   nome: string
@@ -674,6 +688,25 @@ async function ensureImplantacaoBootstrap() {
           VALUES (${etapa.nome}, ${etapa.cor}, ${JSON.stringify(['implantacao'])}, 1, ${(index + 1) * 10}, ${etapa.status}, UTC_TIMESTAMP(), UTC_TIMESTAMP())
         `
         statusVinculados.add(etapa.status)
+      }
+
+      // Etapas totalmente novas, criadas direto no Cadastro de Etapas sem corresponder a
+      // nenhuma identidade conhecida (ex.: "Aguardando Contador"), ganham uma identidade
+      // sintética (100+) para poderem ser usadas de verdade no pipeline sem exigir alteração
+      // de código a cada etapa nova. Não têm coluna de data legada (DT_*) por status.
+      let proximoStatusSintetico = Math.max(100, ...Array.from(statusVinculados)) + 1
+      for (const row of semStatusRef) {
+        const jaTemStatusRef = ETAPAS_PADRAO.some((e) => e.nome.toLowerCase().trim() === String(row.nome).toLowerCase().trim())
+        if (jaTemStatusRef) continue // já recebeu status_ref no backfill por nome acima
+        const novoStatus = proximoStatusSintetico++
+        await prisma.$executeRaw`
+          UPDATE cadastro_etapas
+          SET status_ref = ${novoStatus}
+          WHERE nome = ${row.nome}
+            AND telas = ${JSON.stringify(['implantacao'])}
+            AND status_ref IS NULL
+        `
+        statusVinculados.add(novoStatus)
       }
 
       const checklistsExistentes = await prisma.$queryRaw<ChecklistRow[]>`
@@ -1409,7 +1442,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     ])
 
     const statusSelecionado = Number(status)
-    const etapaStatus = STATUS_VALIDOS.has(statusSelecionado)
+    const etapaStatus = etapas.some((e) => e.status === statusSelecionado)
       ? statusSelecionado
       : cliente.statusInstal
     const etapaAtual = etapas.find((e) => e.status === etapaStatus) || etapas[0]
@@ -1498,7 +1531,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const usuarioId = Number((request.user as any)?.id || 0) || null
 
     if (!Number.isFinite(id) || id <= 0) return reply.status(400).send({ error: 'Cliente inválido.' })
-    if (!STATUS_VALIDOS.has(novoStatus)) {
+    if (!(await getStatusValidos()).has(novoStatus)) {
       return reply.status(400).send({ error: 'Status inválido.' })
     }
 
@@ -1677,7 +1710,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const usuarioId = Number((request.user as any)?.id || 0) || null
 
     if (!Number.isFinite(id) || id <= 0) return reply.status(400).send({ error: 'Cliente inválido.' })
-    if (!STATUS_VALIDOS.has(destino)) {
+    if (!(await getStatusValidos()).has(destino)) {
       return reply.status(400).send({ error: 'Etapa de destino inválida.' })
     }
 
@@ -1899,7 +1932,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const obs = String(observacao ?? '').trim() || null
 
     const novoStatus = statusInstal === undefined ? undefined : Number(statusInstal)
-    if (novoStatus !== undefined && !STATUS_VALIDOS.has(novoStatus)) {
+    if (novoStatus !== undefined && !(await getStatusValidos()).has(novoStatus)) {
       return reply.status(400).send({ error: 'Etapa inválida.' })
     }
 
