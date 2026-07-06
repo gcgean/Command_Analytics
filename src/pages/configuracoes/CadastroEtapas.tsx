@@ -150,6 +150,23 @@ export function CadastroEtapas() {
     }
   }
 
+  // Troca rápida de cor direto na listagem, sem precisar abrir o formulário de edição.
+  async function alterarCorEtapa(etapa: EtapaCadastro, novaCor: string) {
+    setEtapas((prev) => prev.map((e) => (e.id === etapa.id ? { ...e, cor: novaCor } : e)))
+    try {
+      await api.updateEtapa(etapa.id, {
+        nome: etapa.nome,
+        cor: novaCor,
+        telas: etapa.telas,
+        ordem: etapa.ordem,
+        ativo: etapa.ativo,
+      })
+    } catch (err: any) {
+      alert(err?.message || 'Erro ao alterar cor da etapa.')
+      await loadData()
+    }
+  }
+
   // Reordenação por arrastar: durante o drag reordena a lista localmente (feedback imediato)
   // e ao soltar persiste a nova ordem no banco.
   function handleDragStart(index: number) {
@@ -336,7 +353,13 @@ export function CadastroEtapas() {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <GripVertical className="w-4 h-4 text-slate-400 cursor-grab flex-shrink-0" />
-                      <span className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: e.cor }} />
+                      <input
+                        type="color"
+                        value={e.cor}
+                        onChange={(ev) => alterarCorEtapa(e, ev.target.value)}
+                        title="Alterar cor da etapa"
+                        className="w-4 h-4 rounded-full border border-white/20 p-0 cursor-pointer appearance-none overflow-hidden [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:border-none [&::-webkit-color-swatch]:rounded-full"
+                      />
                       <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{e.nome}</p>
                       <span className={clsx(
                         'text-[11px] px-2 py-0.5 rounded-full',
