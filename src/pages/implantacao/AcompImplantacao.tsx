@@ -582,7 +582,7 @@ export function AcompImplantacao() {
                     ))}
                   </select>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-500 mb-1">Motivo da alteração (obrigatório)</label>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">Motivo da alteração (obrigatório, mínimo 20 caracteres)</label>
                     <textarea
                       value={motivoAlteracao}
                       onChange={(e) => setMotivoAlteracao(e.target.value)}
@@ -590,6 +590,14 @@ export function AcompImplantacao() {
                       placeholder="Ex: Cliente solicitou retroceder etapa por problema técnico..."
                       className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs sm:text-sm px-3 py-2 resize-none"
                     />
+                    <p className={clsx(
+                      'text-[11px] mt-1 text-right',
+                      motivoAlteracao.trim().length < 20 ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+                    )}>
+                      {motivoAlteracao.trim().length < 20
+                        ? `Faltam ${20 - motivoAlteracao.trim().length} caracteres para poder salvar`
+                        : 'Motivo suficiente para salvar'}
+                    </p>
                   </div>
                   <Button
                     onClick={() => void alterarEtapaManual()}

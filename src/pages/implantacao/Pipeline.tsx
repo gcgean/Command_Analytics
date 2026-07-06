@@ -178,6 +178,7 @@ function clienteCorrespondeDataCadastro(cliente: ImplantacaoCliente, dataInicial
 // pessoa, casa se ela for responsável OU criadora do processo (qualquer um dos dois papéis).
 function clienteCorrespondePessoa(cliente: ImplantacaoCliente, pessoaFiltro: string) {
   if (pessoaFiltro === 'all') return true
+  if (pessoaFiltro === 'sem-responsavel') return !cliente.responsavelId
   const id = Number(pessoaFiltro)
   if (!Number.isFinite(id)) return true
   return cliente.responsavelId === id || cliente.criadoPor === id
@@ -821,6 +822,7 @@ export function Pipeline() {
               title="Filtrar por responsável ou por quem lançou o processo"
             >
               <option value="all">Responsável ou lançado por: todos</option>
+              <option value="sem-responsavel">Sem responsável</option>
               {pessoasDisponiveis.map((pessoa) => (
                 <option key={pessoa.id} value={String(pessoa.id)}>{pessoa.nome}</option>
               ))}
