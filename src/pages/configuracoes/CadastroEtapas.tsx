@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Edit3, GripVertical, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Edit3, GripVertical, Plus, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -183,6 +183,25 @@ export function CadastroEtapas() {
     }
   }
 
+  // Reordenação pelas setinhas: mesma persistência do drag-and-drop, só que movendo
+  // um item por vez (mais previsível que arrastar, especialmente em telas menores).
+  async function moverEtapa(index: number, direcao: -1 | 1) {
+    const alvo = index + direcao
+    if (alvo < 0 || alvo >= etapas.length) return
+    const next = [...etapas]
+    ;[next[index], next[alvo]] = [next[alvo], next[index]]
+    setEtapas(next)
+    setReordenando(true)
+    try {
+      await api.reorderEtapas(next.map((e) => e.id))
+    } catch (err: any) {
+      alert(err?.message || 'Erro ao reordenar etapas.')
+      await loadData()
+    } finally {
+      setReordenando(false)
+    }
+  }
+
   if (!canAccess) {
     return (
       <Card>
@@ -290,7 +309,7 @@ export function CadastroEtapas() {
             Etapas Cadastradas ({etapas.length})
           </h2>
           <span className="text-xs text-slate-500 flex items-center gap-1">
-            <GripVertical className="w-3.5 h-3.5" /> Arraste para reordenar
+            <GripVertical className="w-3.5 h-3.5" /> Arraste ou use as setas para reordenar
             {reordenando ? <span className="ml-1 text-blue-500">salvando...</span> : null}
           </span>
         </div>
@@ -336,6 +355,22 @@ export function CadastroEtapas() {
                     </div>
                   </div>
                   <div className="flex items-center gap-1 flex-shrink-0">
+                    <button
+                      onClick={() => moverEtapa(index, -1)}
+                      disabled={index === 0 || reordenando}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-500"
+                      title="Mover para cima"
+                    >
+                      <ArrowUp className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => moverEtapa(index, 1)}
+                      disabled={index === etapas.length - 1 || reordenando}
+                      className="p-1.5 rounded-lg text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-slate-500"
+                      title="Mover para baixo"
+                    >
+                      <ArrowDown className="w-4 h-4" />
+                    </button>
                     <button
                       onClick={() => toggleAtivo(e.id)}
                       className="p-1.5 rounded-lg text-slate-500 hover:text-amber-400 hover:bg-amber-500/10"

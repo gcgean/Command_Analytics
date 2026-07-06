@@ -10,6 +10,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import type {
   ImplantacaoChecklistOpcao, ImplantacaoCliente, ImplantacaoEtapa, ImplantacaoPainel, ServicoCadastro, ChecklistCadastro, Cliente
 } from '../../types'
@@ -1151,28 +1152,23 @@ export function Pipeline() {
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Etapa inicial</label>
-            <select
+            <SearchableSelect
               value={String(createStatus)}
-              onChange={(e) => setCreateStatus(Number(e.target.value))}
-              className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-200 px-3"
-            >
-              {etapas.map((etapa) => (
-                <option key={etapa.status} value={String(etapa.status)}>{etapa.ordem ?? etapa.status}. {etapa.nome}</option>
-              ))}
-            </select>
+              onChange={(v) => setCreateStatus(Number(v))}
+              options={etapas.map((etapa) => ({ value: String(etapa.status), label: `${etapa.ordem ?? etapa.status}. ${etapa.nome}` }))}
+              placeholder="Selecione a etapa..."
+              searchPlaceholder="Digite para buscar a etapa..."
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Serviço</label>
-            <select
+            <SearchableSelect
               value={createServicoId}
-              onChange={(e) => selecionarServicoCriacao(e.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-200 px-3"
-            >
-              <option value="">Selecione um serviço...</option>
-              {servicos.map((servico) => (
-                <option key={servico.id} value={String(servico.id)}>{servico.nome}</option>
-              ))}
-            </select>
+              onChange={(v) => selecionarServicoCriacao(v)}
+              options={servicos.map((servico) => ({ value: String(servico.id), label: servico.nome }))}
+              placeholder="Selecione um serviço..."
+              searchPlaceholder="Digite para buscar o serviço..."
+            />
             {servicos.length === 0 ? (
               <p className="text-xs text-slate-500 mt-1">Nenhum serviço cadastrado. Acesse "Cadastro de Serviços" para criar.</p>
             ) : null}
@@ -1220,16 +1216,13 @@ export function Pipeline() {
           ) : null}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Responsável</label>
-            <select
+            <SearchableSelect
               value={createResponsavel}
-              onChange={(e) => setCreateResponsavel(e.target.value)}
-              className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm text-slate-800 dark:text-slate-200 px-3"
-            >
-              <option value="none">Sem responsável</option>
-              {createResponsaveis.map((responsavel) => (
-                <option key={responsavel.id} value={String(responsavel.id)}>{responsavel.nome}</option>
-              ))}
-            </select>
+              onChange={(v) => setCreateResponsavel(v)}
+              options={[{ value: 'none', label: 'Sem responsável' }, ...createResponsaveis.map((r) => ({ value: String(r.id), label: r.nome }))]}
+              placeholder="Sem responsável"
+              searchPlaceholder="Digite para buscar o responsável..."
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Observação</label>
