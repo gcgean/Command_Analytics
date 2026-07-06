@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Edit3, Plus, Trash2 } from 'lucide-react'
+import { Check, Edit3, GripVertical, Plus, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -34,6 +34,8 @@ export function CadastroEtapas() {
   const [telas, setTelas] = useState<TelaOption[]>(DEFAULT_TELAS)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [reordenando, setReordenando] = useState(false)
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [editId, setEditId] = useState<number | null>(null)
   const [form, setForm] = useState({
     nome: '',
@@ -148,6 +150,39 @@ export function CadastroEtapas() {
     }
   }
 
+  // Reordenação por arrastar: durante o drag reordena a lista localmente (feedback imediato)
+  // e ao soltar persiste a nova ordem no banco.
+  function handleDragStart(index: number) {
+    setDragIndex(index)
+  }
+
+  function handleDragOver(event: React.DragEvent, overIndex: number) {
+    event.preventDefault()
+    if (dragIndex === null || dragIndex === overIndex) return
+    setEtapas((prev) => {
+      const next = [...prev]
+      const [movida] = next.splice(dragIndex, 1)
+      next.splice(overIndex, 0, movida)
+      return next
+    })
+    setDragIndex(overIndex)
+  }
+
+  async function handleDrop() {
+    const ordemAtual = [...etapas]
+    setDragIndex(null)
+    setReordenando(true)
+    try {
+      await api.reorderEtapas(ordemAtual.map((e) => e.id))
+      await loadData()
+    } catch (err: any) {
+      alert(err?.message || 'Erro ao reordenar etapas.')
+      await loadData()
+    } finally {
+      setReordenando(false)
+    }
+  }
+
   if (!canAccess) {
     return (
       <Card>
@@ -250,23 +285,38 @@ export function CadastroEtapas() {
       </Card>
 
       <Card>
-        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-3">
-          Etapas Cadastradas ({etapas.length})
-        </h2>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+            Etapas Cadastradas ({etapas.length})
+          </h2>
+          <span className="text-xs text-slate-500 flex items-center gap-1">
+            <GripVertical className="w-3.5 h-3.5" /> Arraste para reordenar
+            {reordenando ? <span className="ml-1 text-blue-500">salvando...</span> : null}
+          </span>
+        </div>
         {loading ? (
           <p className="text-sm text-slate-500">Carregando...</p>
         ) : etapas.length === 0 ? (
           <p className="text-sm text-slate-500">Nenhuma etapa cadastrada.</p>
         ) : (
           <div className="space-y-2">
-            {etapas.map((e) => (
+            {etapas.map((e, index) => (
               <div
                 key={e.id}
-                className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
+                draggable
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={(ev) => handleDragOver(ev, index)}
+                onDrop={handleDrop}
+                onDragEnd={() => setDragIndex(null)}
+                className={clsx(
+                  'p-3 rounded-lg border bg-white dark:bg-slate-900 transition-shadow',
+                  dragIndex === index ? 'border-blue-400 shadow-lg opacity-70' : 'border-slate-200 dark:border-slate-700',
+                )}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
+                      <GripVertical className="w-4 h-4 text-slate-400 cursor-grab flex-shrink-0" />
                       <span className="w-3 h-3 rounded-full border border-white/20" style={{ backgroundColor: e.cor }} />
                       <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{e.nome}</p>
                       <span className={clsx(

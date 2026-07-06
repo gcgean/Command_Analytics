@@ -650,6 +650,7 @@ export const api = {
     fetchApi(`/etapas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleEtapa: (id: number) => fetchApi<{ ok: boolean; ativo: boolean }>(`/etapas/${id}/toggle`, { method: 'PATCH' }),
   deleteEtapa: (id: number) => fetchApi(`/etapas/${id}`, { method: 'DELETE' }),
+  reorderEtapas: (ids: number[]) => fetchApi<{ ok: boolean }>('/etapas/reorder', { method: 'PATCH', body: JSON.stringify({ ids }) }),
 
   // ─── Cadastro de Checklists ───────────────────────────────
   getChecklists: (params?: { tela?: string; ativo?: '0' | '1' }) => {

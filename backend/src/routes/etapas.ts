@@ -106,6 +106,19 @@ export async function etapasRoutes(app: FastifyInstance) {
     ]
   })
 
+  app.patch('/reorder', { preHandler: authMiddleware, schema: { tags: ['Etapas'], summary: 'Reordenar etapas (arrastar e soltar)' } }, async (request, reply) => {
+    const { ids } = request.body as { ids?: number[] }
+    const lista = (ids ?? []).map(Number).filter((n) => Number.isFinite(n) && n > 0)
+    if (!lista.length) return reply.status(400).send({ error: 'Lista de etapas vazia.' })
+
+    await withEtapasTable(async () => {
+      for (let i = 0; i < lista.length; i++) {
+        await prisma.$executeRaw`UPDATE cadastro_etapas SET ordem = ${i + 1}, atualizado_em = NOW() WHERE id = ${lista[i]}`
+      }
+    })
+    return { ok: true }
+  })
+
   app.post('/', { preHandler: authMiddleware, schema: { tags: ['Etapas'], summary: 'Criar etapa' } }, async (request, reply) => {
     const { nome, cor, telas, ordem, ativo } = request.body as {
       nome: string
