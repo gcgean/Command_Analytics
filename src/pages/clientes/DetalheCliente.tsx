@@ -259,11 +259,15 @@ export function DetalheCliente() {
 
   const tabParam = searchParams.get('tab')
 
+  // Só sincroniza a aba a partir da URL quando o parâmetro `tab` muda de verdade (ex.: veio de
+  // um link "Abrir prontuário"). Se rodar a cada clique do usuário (que só muda `activeTab`,
+  // nunca a URL), ele força de volta pra aba do link e trava a navegação entre abas.
   useEffect(() => {
     if (!tabParam) return
     const tabIndex = tabs.findIndex((tab) => tab.key === tabParam)
-    if (tabIndex >= 0 && tabIndex !== activeTab) setActiveTab(tabIndex)
-  }, [activeTab, tabParam, tabs])
+    if (tabIndex >= 0) setActiveTab(tabIndex)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabParam])
 
   useEffect(() => {
     if (activeTab >= tabs.length) setActiveTab(0)
