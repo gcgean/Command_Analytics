@@ -1150,7 +1150,23 @@ export function Pipeline() {
                                   <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 leading-tight whitespace-normal break-words">
                                     {getNomeDestaque(cliente)}
                                   </p>
-                                  <div className="flex items-center gap-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    icon={<Pencil className="w-3.5 h-3.5" />}
+                                    className="h-6 px-2 text-[11px] leading-none flex-shrink-0"
+                                    onMouseDown={(e) => e.stopPropagation()}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      void abrirEdicaoCliente(cliente)
+                                    }}
+                                    title="Editar implantação do cliente"
+                                  >
+                                    Editar
+                                  </Button>
+                                </div>
+                                {(badgeTotal || badgeUrgencia) && (
+                                  <div className="flex flex-wrap items-center gap-1 mt-1">
                                     {badgeTotal && (
                                       <span
                                         className={clsx('inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold', badgeTotal.className)}
@@ -1167,22 +1183,8 @@ export function Pipeline() {
                                         {badgeUrgencia.label}
                                       </span>
                                     )}
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      icon={<Pencil className="w-3.5 h-3.5" />}
-                                      className="h-6 px-2 text-[11px] leading-none"
-                                      onMouseDown={(e) => e.stopPropagation()}
-                                      onClick={(e) => {
-                                        e.stopPropagation()
-                                        void abrirEdicaoCliente(cliente)
-                                      }}
-                                      title="Editar implantação do cliente"
-                                    >
-                                      Editar
-                                    </Button>
                                   </div>
-                                </div>
+                                )}
                                 {getNomeSecundario(cliente) && (
                                   <p className="text-[11px] sm:text-xs text-slate-500 leading-tight whitespace-normal break-words mt-0.5">
                                     {getNomeSecundario(cliente)}
