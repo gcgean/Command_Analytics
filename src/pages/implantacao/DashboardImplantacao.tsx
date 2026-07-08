@@ -164,7 +164,7 @@ export function DashboardImplantacao() {
         const tempoMedio = lista.length
           ? Math.round(lista.reduce((acc, p) => acc + (p.diasNaEtapa || 0), 0) / lista.length)
           : 0
-        return { status: etapa.status, ordem: etapa.ordem ?? etapa.status, nome: etapa.nome, cor: etapa.cor, quantidade: lista.length, atrasados: atrasadosEtapa, tempoMedio }
+        return { status: etapa.status, ordem: etapa.ordem ?? etapa.status, nome: etapa.nome, cor: etapa.cor, quantidade: lista.length, atrasados: atrasadosEtapa, tempoMedio, slaDias: Number(etapa.slaDias || 0) }
       })
 
     // Gargalos = etapas em andamento com mais processos parados/acumulados.
@@ -446,7 +446,10 @@ export function DashboardImplantacao() {
             {dados.distribuicaoEtapas.map((etapa) => (
               <div key={etapa.status}>
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-700 dark:text-slate-300 truncate">{etapa.ordem}. {etapa.nome}</span>
+                  <span className="text-slate-700 dark:text-slate-300 truncate">
+                    {etapa.ordem}. {etapa.nome}
+                    {etapa.slaDias > 0 ? <span className="text-slate-400"> (máx. {etapa.slaDias}d)</span> : null}
+                  </span>
                   <span className="flex items-center gap-2 flex-shrink-0">
                     {etapa.atrasados > 0 ? <span className="text-rose-600 dark:text-rose-300 font-medium">{etapa.atrasados} atras.</span> : null}
                     <span className="font-semibold text-slate-800 dark:text-slate-100">{etapa.quantidade}</span>
@@ -480,17 +483,22 @@ export function DashboardImplantacao() {
 
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mt-5 mb-3 flex items-center gap-2"><Timer className="w-4 h-4 text-amber-500" /> Etapas mais lentas</p>
           <div className="space-y-2">
-            {dados.maisLentas.map((etapa) => (
-              <div key={etapa.status}>
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-700 dark:text-slate-300 truncate">{etapa.nome}</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-100">{etapa.tempoMedio} dias</span>
+            {dados.maisLentas.map((etapa) => {
+              const estourouPrazo = etapa.slaDias > 0 && etapa.tempoMedio > etapa.slaDias
+              return (
+                <div key={etapa.status}>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-700 dark:text-slate-300 truncate">{etapa.nome}</span>
+                    <span className={clsx('font-semibold', estourouPrazo ? 'text-rose-600 dark:text-rose-300' : 'text-slate-800 dark:text-slate-100')}>
+                      {etapa.tempoMedio} dias{etapa.slaDias > 0 ? <span className="text-slate-400 font-normal"> / máx. {etapa.slaDias}d</span> : null}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-2 rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                    <div className={clsx('h-full rounded', estourouPrazo ? 'bg-rose-500' : 'bg-amber-500')} style={{ width: `${Math.round((etapa.tempoMedio / maxLenta) * 100)}%` }} />
+                  </div>
                 </div>
-                <div className="mt-1 h-2 rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                  <div className="h-full rounded bg-amber-500" style={{ width: `${Math.round((etapa.tempoMedio / maxLenta) * 100)}%` }} />
-                </div>
-              </div>
-            ))}
+              )
+            })}
             {dados.maisLentas.length === 0 ? <p className="text-sm text-slate-500">Sem dados.</p> : null}
           </div>
         </Card>
