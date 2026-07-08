@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   GripVertical, LayoutList, Loader2, RefreshCcw, Search,
-  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen, Ban
+  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen, Ban, X
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
@@ -318,7 +318,10 @@ export function Pipeline() {
   const [createClienteResultados, setCreateClienteResultados] = useState<Cliente[]>([])
   const [createClienteBuscando, setCreateClienteBuscando] = useState(false)
   const [createTitulo, setCreateTitulo] = useState('')
-  const [createServicoId, setCreateServicoId] = useState('')
+  // Múltiplos serviços só fazem sentido no lançamento de um processo novo (não na edição de
+  // um já existente): ao salvar, cada serviço selecionado vira um processo próprio, todos com
+  // o mesmo cliente/etapa/responsável/observação — só o serviço (e o nome) muda entre eles.
+  const [createServicosIds, setCreateServicosIds] = useState<number[]>([])
   const [createStatus, setCreateStatus] = useState<number>(1)
   const [createResponsavel, setCreateResponsavel] = useState<string>('none')
   const [createCriadoPorId, setCreateCriadoPorId] = useState<string>('eu')
@@ -486,7 +489,7 @@ export function Pipeline() {
     setCreateClienteResultados([])
     setCreateClienteDropdownAberto(false)
     setCreateTitulo(prefill?.titulo || '')
-    setCreateServicoId('')
+    setCreateServicosIds([])
     setCreateStatus(1)
     setCreateResponsavel('none')
     setCreateCriadoPorId('eu')
@@ -500,7 +503,7 @@ export function Pipeline() {
       if (nomeAlvo) {
         const match = lista.find((s) => s.nome.trim().toLowerCase() === nomeAlvo)
         if (match) {
-          setCreateServicoId(String(match.id))
+          setCreateServicosIds([match.id])
           setCreateChecklistIds(match.checklistIds ?? [])
         }
       }
@@ -528,11 +531,34 @@ export function Pipeline() {
     setCreateClienteDropdownAberto(false)
   }
 
-  function selecionarServicoCriacao(servicoId: string) {
-    setCreateServicoId(servicoId)
-    const servico = servicos.find((s) => String(s.id) === servicoId)
-    setCreateChecklistIds(servico?.checklistIds ?? [])
-    if (servico) setCreateTitulo(servico.nome)
+  function adicionarServicoCriacao(servicoId: string) {
+    const id = Number(servicoId)
+    if (!Number.isFinite(id) || createServicosIds.includes(id)) return
+    const proximosIds = [...createServicosIds, id]
+    setCreateServicosIds(proximosIds)
+    if (proximosIds.length === 1) {
+      // Com um único serviço, mantém o comportamento de sempre: título e checklist automáticos.
+      const servico = servicos.find((s) => s.id === id)
+      setCreateChecklistIds(servico?.checklistIds ?? [])
+      if (servico) setCreateTitulo(servico.nome)
+    } else {
+      // A partir do segundo serviço, cada processo vai usar o próprio nome/checklist do seu
+      // serviço — o título manual e a seleção de checklist deixam de fazer sentido aqui.
+      setCreateTitulo('')
+      setCreateChecklistIds([])
+    }
+  }
+
+  function removerServicoCriacao(servicoId: number) {
+    const proximosIds = createServicosIds.filter((id) => id !== servicoId)
+    setCreateServicosIds(proximosIds)
+    if (proximosIds.length === 1) {
+      const servico = servicos.find((s) => s.id === proximosIds[0])
+      setCreateChecklistIds(servico?.checklistIds ?? [])
+      if (servico) setCreateTitulo(servico.nome)
+    } else {
+      setCreateChecklistIds([])
+    }
   }
 
   function alternarChecklistCriacao(checklistId: number) {
@@ -546,24 +572,47 @@ export function Pipeline() {
       alert('Selecione um cliente na lista.')
       return
     }
-    if (!createServicoId) {
-      alert('Selecione um serviço cadastrado.')
+    if (createServicosIds.length === 0) {
+      alert('Selecione ao menos um serviço cadastrado.')
       return
     }
-    const servicoSelecionado = servicos.find((s) => String(s.id) === createServicoId)
+    const criadoPorId = podeLancarComoOutroUsuario && createCriadoPorId !== 'eu' ? Number(createCriadoPorId) : undefined
+    const responsavelId = createResponsavel === 'none' ? null : Number(createResponsavel)
+    const observacao = createObs.trim() || undefined
     setCreateSaving(true)
     try {
-      await api.criarProcessoImplantacao({
-        clienteId: Number(createClienteId),
-        tipo: 'novo_servico',
-        titulo: createTitulo.trim() || servicoSelecionado?.nome || 'Novo serviço implantado',
-        servicoId: Number(createServicoId),
-        statusInstal: createStatus,
-        responsavelId: createResponsavel === 'none' ? null : Number(createResponsavel),
-        observacao: createObs.trim() || undefined,
-        checklistIds: createChecklistIds,
-        criadoPorId: podeLancarComoOutroUsuario && createCriadoPorId !== 'eu' ? Number(createCriadoPorId) : undefined,
-      })
+      if (createServicosIds.length === 1) {
+        // Um único serviço: mantém exatamente o comportamento de sempre (título manual, checklist escolhido à mão).
+        const servicoSelecionado = servicos.find((s) => s.id === createServicosIds[0])
+        await api.criarProcessoImplantacao({
+          clienteId: Number(createClienteId),
+          tipo: 'novo_servico',
+          titulo: createTitulo.trim() || servicoSelecionado?.nome || 'Novo serviço implantado',
+          servicoId: createServicosIds[0],
+          statusInstal: createStatus,
+          responsavelId,
+          observacao,
+          checklistIds: createChecklistIds,
+          criadoPorId,
+        })
+      } else {
+        // Vários serviços: um processo por serviço, todos com o mesmo cliente/etapa/responsável/
+        // observação — só o serviço (e o título, que vira o nome do próprio serviço) muda.
+        for (const servicoId of createServicosIds) {
+          const servico = servicos.find((s) => s.id === servicoId)
+          await api.criarProcessoImplantacao({
+            clienteId: Number(createClienteId),
+            tipo: 'novo_servico',
+            titulo: servico?.nome || 'Novo serviço implantado',
+            servicoId,
+            statusInstal: createStatus,
+            responsavelId,
+            observacao,
+            checklistIds: servico?.checklistIds ?? [],
+            criadoPorId,
+          })
+        }
+      }
       setCreateOpen(false)
       await carregarPainel()
     } finally {
@@ -1222,28 +1271,54 @@ export function Pipeline() {
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Serviço</label>
             <SearchableSelect
-              value={createServicoId}
-              onChange={(v) => selecionarServicoCriacao(v)}
-              options={servicos.map((servico) => ({ value: String(servico.id), label: servico.nome }))}
+              value=""
+              onChange={(v) => adicionarServicoCriacao(v)}
+              options={servicos.filter((s) => !createServicosIds.includes(s.id)).map((servico) => ({ value: String(servico.id), label: servico.nome }))}
               placeholder="Selecione um serviço..."
               searchPlaceholder="Digite para buscar o serviço..."
             />
             {servicos.length === 0 ? (
               <p className="text-xs text-slate-500 mt-1">Nenhum serviço cadastrado. Acesse "Cadastro de Serviços" para criar.</p>
+            ) : (
+              <p className="text-xs text-slate-500 mt-1">
+                Selecione quantos precisar: ao salvar, cada serviço vira um processo separado (mesmo cliente, etapa e responsável).
+              </p>
+            )}
+            {createServicosIds.length > 0 ? (
+              <div className="mt-2 space-y-1.5">
+                {createServicosIds.map((id) => {
+                  const servico = servicos.find((s) => s.id === id)
+                  return (
+                    <div key={id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5">
+                      <span className="text-sm text-slate-700 dark:text-slate-200 truncate">{servico?.nome || `Serviço #${id}`}</span>
+                      <button
+                        type="button"
+                        onClick={() => removerServicoCriacao(id)}
+                        className="text-slate-400 hover:text-red-500 flex-shrink-0"
+                        title="Remover serviço"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
             ) : null}
           </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do processo</label>
-            <Input
-              value={createTitulo}
-              onChange={(e) => setCreateTitulo(e.target.value)}
-              placeholder="Ex.: Implantação do Financeiro"
-            />
-            <p className="text-xs text-slate-500 mt-1">Se deixar em branco, usa o nome do serviço selecionado.</p>
-          </div>
-          {createServicoId ? (
+          {createServicosIds.length <= 1 ? (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Nome do processo</label>
+              <Input
+                value={createTitulo}
+                onChange={(e) => setCreateTitulo(e.target.value)}
+                placeholder="Ex.: Implantação do Financeiro"
+              />
+              <p className="text-xs text-slate-500 mt-1">Se deixar em branco, usa o nome do serviço selecionado.</p>
+            </div>
+          ) : null}
+          {createServicosIds.length === 1 ? (
             (() => {
-              const servicoSelecionado = servicos.find((s) => String(s.id) === createServicoId)
+              const servicoSelecionado = servicos.find((s) => s.id === createServicosIds[0])
               const checklistsDoServico = createChecklists.filter((c) => (servicoSelecionado?.checklistIds ?? []).includes(c.id))
               if (checklistsDoServico.length === 0) return null
               if (checklistsDoServico.length === 1) {
@@ -1272,6 +1347,11 @@ export function Pipeline() {
                 </div>
               )
             })()
+          ) : null}
+          {createServicosIds.length > 1 ? (
+            <p className="text-xs text-slate-500">
+              Com mais de um serviço, os checklists de cada um são vinculados automaticamente aos respectivos processos.
+            </p>
           ) : null}
           <div>
             <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Responsável</label>
