@@ -871,6 +871,7 @@ export interface EtapaCadastro {
   telas: string[]
   ativo: boolean
   ordem: number
+  slaDias?: number | null
   criadoEm?: string | null
   atualizadoEm?: string | null
 }

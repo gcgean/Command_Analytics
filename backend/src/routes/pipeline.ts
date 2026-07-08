@@ -105,6 +105,7 @@ type EtapaConfigRow = {
   telas: string | null
   ativo: number | boolean
   status_ref: number | null
+  sla_dias: number | null
 }
 
 type StatusMovRow = {
@@ -523,6 +524,7 @@ async function ensureImplantacaoBootstrap() {
       await ensureColumnExists('implantacao_movimentacoes', 'processo_id', 'processo_id INT NULL AFTER cliente_id')
       await ensureColumnExists('implantacao_processos', 'servico_id', 'servico_id INT NULL AFTER servico_nome')
       await ensureColumnExists('implantacao_processos', 'ativo', 'ativo TINYINT(1) NOT NULL DEFAULT 1 AFTER processo_principal')
+      await ensureColumnExists('cadastro_etapas', 'sla_dias', 'sla_dias INT NULL AFTER cor')
 
       // Sem este índice, a subquery de "última venda" do painel faz table scan completo de
       // dados_gerais_clientes para cada cliente (custava ~4,5s do carregamento do pipeline).
@@ -882,7 +884,7 @@ async function notificarProcesso(args: {
 async function getEtapasConfiguradas() {
   await ensureImplantacaoBootstrap()
   const rows = await prisma.$queryRaw<EtapaConfigRow[]>`
-    SELECT nome, cor, ordem, telas, ativo, status_ref
+    SELECT nome, cor, ordem, telas, ativo, status_ref, sla_dias
     FROM cadastro_etapas
     WHERE ativo = 1
     ORDER BY ordem ASC, nome ASC
@@ -894,13 +896,16 @@ async function getEtapasConfiguradas() {
     .map((r) => {
       const status = Number(r.status_ref)
       const meta = metaPorStatus.get(status)
+      // O prazo (dias na etapa) é configurável no Cadastro de Etapas; se não foi definido,
+      // cai no padrão do catálogo antigo (quando existir) e por último em 0 (sem SLA).
+      const slaConfigurado = r.sla_dias === null || r.sla_dias === undefined ? null : Number(r.sla_dias)
       return {
         status,
         ordem: Number(r.ordem),
         nome: r.nome,
         descricao: meta?.descricao ?? '',
         cor: r.cor || meta?.cor || '#3b82f6',
-        slaDias: meta?.slaDias ?? 0,
+        slaDias: slaConfigurado ?? meta?.slaDias ?? 0,
       }
     })
 }

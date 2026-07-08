@@ -644,9 +644,9 @@ export const api = {
     return fetchApi<EtapaCadastro[]>(`/etapas${qs}`)
   },
   getEtapasTelas: () => fetchApi<Array<{ id: string; label: string }>>('/etapas/telas'),
-  createEtapa: (data: { nome: string; cor: string; telas: string[]; ordem?: number; ativo?: boolean }) =>
+  createEtapa: (data: { nome: string; cor: string; telas: string[]; ordem?: number; ativo?: boolean; slaDias?: number | null }) =>
     fetchApi<{ id: number }>('/etapas', { method: 'POST', body: JSON.stringify(data) }),
-  updateEtapa: (id: number, data: { nome: string; cor: string; telas: string[]; ordem?: number; ativo?: boolean }) =>
+  updateEtapa: (id: number, data: { nome: string; cor: string; telas: string[]; ordem?: number; ativo?: boolean; slaDias?: number | null }) =>
     fetchApi(`/etapas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleEtapa: (id: number) => fetchApi<{ ok: boolean; ativo: boolean }>(`/etapas/${id}/toggle`, { method: 'PATCH' }),
   deleteEtapa: (id: number) => fetchApi(`/etapas/${id}`, { method: 'DELETE' }),

@@ -41,6 +41,7 @@ export function CadastroEtapas() {
     nome: '',
     cor: '#3b82f6',
     ordem: '0',
+    slaDias: '',
     telas: [] as string[],
     ativo: true,
   })
@@ -75,7 +76,7 @@ export function CadastroEtapas() {
 
   function resetForm() {
     setEditId(null)
-    setForm({ nome: '', cor: '#3b82f6', ordem: '0', telas: [], ativo: true })
+    setForm({ nome: '', cor: '#3b82f6', ordem: '0', slaDias: '', telas: [], ativo: true })
   }
 
   function toggleTela(telaId: string) {
@@ -104,6 +105,7 @@ export function CadastroEtapas() {
         ordem: Number(form.ordem || 0),
         telas: form.telas,
         ativo: form.ativo,
+        slaDias: form.slaDias.trim() === '' ? null : Math.max(0, Number(form.slaDias) || 0),
       }
       if (editId) {
         await api.updateEtapa(editId, payload)
@@ -125,6 +127,7 @@ export function CadastroEtapas() {
       nome: etapa.nome,
       cor: etapa.cor || '#3b82f6',
       ordem: String(etapa.ordem ?? 0),
+      slaDias: etapa.slaDias === null || etapa.slaDias === undefined ? '' : String(etapa.slaDias),
       telas: etapa.telas ?? [],
       ativo: etapa.ativo,
     })
@@ -239,7 +242,7 @@ export function CadastroEtapas() {
       </div>
 
       <Card>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
           <Input
             label="Nome da etapa"
             placeholder="Ex: Em Validação"
@@ -267,6 +270,14 @@ export function CadastroEtapas() {
             type="number"
             value={form.ordem}
             onChange={(e) => setForm((f) => ({ ...f, ordem: e.target.value }))}
+          />
+          <Input
+            label="Dias máximo na etapa"
+            type="number"
+            min={0}
+            placeholder="Sem limite"
+            value={form.slaDias}
+            onChange={(e) => setForm((f) => ({ ...f, slaDias: e.target.value }))}
           />
         </div>
 
@@ -368,7 +379,9 @@ export function CadastroEtapas() {
                         {e.ativo ? 'Ativa' : 'Inativa'}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-500 mt-1">Ordem: {e.ordem}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Ordem: {e.ordem} • Dias máximo na etapa: {e.slaDias === null || e.slaDias === undefined ? 'sem limite' : `${e.slaDias} dia(s)`}
+                    </p>
                     <div className="flex gap-1 flex-wrap mt-2">
                       {e.telas.map((tela) => (
                         <span key={`${e.id}-${tela}`} className="text-xs px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-500">

@@ -10,11 +10,28 @@ type EtapaRow = {
   telas: string | null
   ativo: number | boolean
   ordem: number
+  sla_dias: number | null
   criado_em?: Date
   atualizado_em?: Date
 }
 
 let etapasInitPromise: Promise<void> | null = null
+let slaColumnEnsured = false
+
+async function ensureSlaColumn(): Promise<void> {
+  if (slaColumnEnsured) return
+  const rows = await prisma.$queryRaw<Array<{ COLUMN_NAME: string }>>`
+    SELECT COLUMN_NAME
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'cadastro_etapas'
+      AND COLUMN_NAME = 'sla_dias'
+  `
+  if (rows.length === 0) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE cadastro_etapas ADD COLUMN sla_dias INT NULL AFTER cor`)
+  }
+  slaColumnEnsured = true
+}
 
 function getErrorMessage(err: unknown): string {
   const e = err as any
@@ -28,7 +45,7 @@ function isMissingEtapasTableError(err: unknown): boolean {
 
 async function ensureEtapasTable(): Promise<void> {
   if (!etapasInitPromise) {
-    etapasInitPromise = initEtapas().catch((err) => {
+    etapasInitPromise = initEtapas().then(ensureSlaColumn).catch((err) => {
       etapasInitPromise = null
       throw err
     })
@@ -68,7 +85,7 @@ export async function etapasRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Etapas'], summary: 'Listar etapas cadastradas' } }, async (request) => {
     const { tela, ativo } = request.query as { tela?: string; ativo?: string }
     const rows = await withEtapasTable(async () => prisma.$queryRaw<EtapaRow[]>`
-        SELECT id, nome, cor, telas, ativo, ordem, criado_em, atualizado_em
+        SELECT id, nome, cor, telas, ativo, ordem, sla_dias, criado_em, atualizado_em
         FROM cadastro_etapas
         ORDER BY ordem ASC, nome ASC
       `)
@@ -81,6 +98,7 @@ export async function etapasRoutes(app: FastifyInstance) {
         telas: parseTelas(r.telas),
         ativo: Number(r.ativo) === 1,
         ordem: Number(r.ordem),
+        slaDias: r.sla_dias === null || r.sla_dias === undefined ? null : Number(r.sla_dias),
         criadoEm: r.criado_em ?? null,
         atualizadoEm: r.atualizado_em ?? null,
       }))
@@ -120,21 +138,23 @@ export async function etapasRoutes(app: FastifyInstance) {
   })
 
   app.post('/', { preHandler: authMiddleware, schema: { tags: ['Etapas'], summary: 'Criar etapa' } }, async (request, reply) => {
-    const { nome, cor, telas, ordem, ativo } = request.body as {
+    const { nome, cor, telas, ordem, ativo, slaDias } = request.body as {
       nome: string
       cor?: string
       telas?: string[]
       ordem?: number
       ativo?: boolean
+      slaDias?: number | null
     }
 
     const nomeTrim = String(nome ?? '').trim()
     if (!nomeTrim) return reply.status(400).send({ error: 'Nome da etapa é obrigatório.' })
 
+    const slaNormalizado = slaDias === undefined || slaDias === null ? null : Math.max(0, Number(slaDias) || 0)
     const telasJson = JSON.stringify((telas ?? []).map(String))
     await withEtapasTable(async () => prisma.$executeRaw`
-        INSERT INTO cadastro_etapas (nome, cor, telas, ordem, ativo, criado_em, atualizado_em)
-        VALUES (${nomeTrim}, ${normalizeColor(cor)}, ${telasJson}, ${Number(ordem ?? 0)}, ${ativo === false ? 0 : 1}, NOW(), NOW())
+        INSERT INTO cadastro_etapas (nome, cor, telas, ordem, ativo, sla_dias, criado_em, atualizado_em)
+        VALUES (${nomeTrim}, ${normalizeColor(cor)}, ${telasJson}, ${Number(ordem ?? 0)}, ${ativo === false ? 0 : 1}, ${slaNormalizado}, NOW(), NOW())
       `)
 
     const inserted = await withEtapasTable(async () => prisma.$queryRaw<{ id: number }[]>`SELECT id FROM cadastro_etapas ORDER BY id DESC LIMIT 1`)
@@ -146,16 +166,18 @@ export async function etapasRoutes(app: FastifyInstance) {
     const etapaId = Number(id)
     if (!Number.isFinite(etapaId) || etapaId <= 0) return reply.status(400).send({ error: 'ID inválido.' })
 
-    const { nome, cor, telas, ordem, ativo } = request.body as {
+    const { nome, cor, telas, ordem, ativo, slaDias } = request.body as {
       nome: string
       cor?: string
       telas?: string[]
       ordem?: number
       ativo?: boolean
+      slaDias?: number | null
     }
     const nomeTrim = String(nome ?? '').trim()
     if (!nomeTrim) return reply.status(400).send({ error: 'Nome da etapa é obrigatório.' })
 
+    const slaNormalizado = slaDias === undefined || slaDias === null ? null : Math.max(0, Number(slaDias) || 0)
     const telasJson = JSON.stringify((telas ?? []).map(String))
     await withEtapasTable(async () => prisma.$executeRaw`
         UPDATE cadastro_etapas
@@ -164,6 +186,7 @@ export async function etapasRoutes(app: FastifyInstance) {
             telas = ${telasJson},
             ordem = ${Number(ordem ?? 0)},
             ativo = ${ativo === false ? 0 : 1},
+            sla_dias = ${slaNormalizado},
             atualizado_em = NOW()
         WHERE id = ${etapaId}
       `)

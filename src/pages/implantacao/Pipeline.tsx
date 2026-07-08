@@ -196,21 +196,55 @@ function getDiasNaEtapa(cliente: ImplantacaoCliente) {
   return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000))
 }
 
-function getBadgeUrgencia(cliente: ImplantacaoCliente) {
+// Indicador de "dias nesta etapa": some, o dado zera sempre que o processo entra numa etapa
+// nova (dataInicioStatusAtual/diasNaEtapa vêm do backend por status atual). Quando a etapa tem
+// um prazo máximo configurado (Cadastro de Etapas), a cor reflete esse prazo; sem prazo
+// configurado, só avisa acima de um limiar padrão (comportamento anterior).
+function getBadgeUrgencia(cliente: ImplantacaoCliente, slaDiasEtapa?: number) {
   const dias = getDiasNaEtapa(cliente)
-  if (dias > 7) {
-    return {
-      label: `🔴 ${dias} dias`,
-      className: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300',
+  const sla = slaDiasEtapa && slaDiasEtapa > 0 ? slaDiasEtapa : null
+
+  if (sla) {
+    if (dias > sla) {
+      return { label: `🔴 ${dias}/${sla}d`, className: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300' }
     }
+    if (dias >= Math.ceil(sla * 0.7)) {
+      return { label: `⚠ ${dias}/${sla}d`, className: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' }
+    }
+    return { label: `${dias}/${sla}d`, className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' }
+  }
+
+  if (dias > 7) {
+    return { label: `🔴 ${dias} dias`, className: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300' }
   }
   if (dias > 3) {
-    return {
-      label: `⚠ ${dias} dias`,
-      className: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300',
-    }
+    return { label: `⚠ ${dias} dias`, className: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' }
   }
   return null
+}
+
+// Indicador de "dias desde a criação do processo": não zera nunca (mede o processo inteiro,
+// não a etapa atual). Sempre visível, vira alerta acima de 30 dias — sinaliza processos
+// "rodando sem solução" que passam despercebidos etapa a etapa.
+const LIMITE_DIAS_PROCESSO_TOTAL = 30
+
+function getDiasTotalProcesso(cliente: ImplantacaoCliente) {
+  if (!cliente.processoCriadoEm) return null
+  const date = new Date(cliente.processoCriadoEm)
+  if (Number.isNaN(date.getTime())) return null
+  return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000))
+}
+
+function getBadgeTotalProcesso(cliente: ImplantacaoCliente) {
+  const dias = getDiasTotalProcesso(cliente)
+  if (dias === null) return null
+  const alerta = dias > LIMITE_DIAS_PROCESSO_TOTAL
+  return {
+    label: `Total: ${dias}d`,
+    className: alerta
+      ? 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
+      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300',
+  }
 }
 
 function StageBadge({ etapa }: { etapa: ImplantacaoEtapa | undefined }) {
@@ -1085,12 +1119,16 @@ export function Pipeline() {
                         </p>
                         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: etapa.cor }} />
                       </div>
-                      <p className="text-[11px] sm:text-xs text-slate-500 mt-1">{clientesDaEtapa.length} processos</p>
+                      <p className="text-[11px] sm:text-xs text-slate-500 mt-1">
+                        {clientesDaEtapa.length} processos
+                        {etapa.slaDias ? ` • máx. ${etapa.slaDias} dia(s) na etapa` : ''}
+                      </p>
                     </div>
                     <div className="p-1.5 sm:p-2 space-y-2 min-h-[180px] sm:min-h-[220px]">
                       {clientesDaEtapa.map((cliente, index) => {
                         const correspondeBusca = clienteCorrespondeBusca(cliente, search)
-                        const badgeUrgencia = getBadgeUrgencia(cliente)
+                        const badgeUrgencia = getBadgeUrgencia(cliente, etapaMap.get(cliente.statusInstal)?.slaDias)
+                        const badgeTotal = getBadgeTotalProcesso(cliente)
 
                         return (
                           <div
@@ -1113,8 +1151,19 @@ export function Pipeline() {
                                     {getNomeDestaque(cliente)}
                                   </p>
                                   <div className="flex items-center gap-1">
+                                    {badgeTotal && (
+                                      <span
+                                        className={clsx('inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold', badgeTotal.className)}
+                                        title="Dias desde a criação do processo (não zera por etapa)"
+                                      >
+                                        {badgeTotal.label}
+                                      </span>
+                                    )}
                                     {badgeUrgencia && (
-                                      <span className={clsx('inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold', badgeUrgencia.className)}>
+                                      <span
+                                        className={clsx('inline-flex whitespace-nowrap rounded-full px-2 py-1 text-[10px] font-semibold', badgeUrgencia.className)}
+                                        title="Dias na etapa atual (zera ao mudar de etapa)"
+                                      >
                                         {badgeUrgencia.label}
                                       </span>
                                     )}
