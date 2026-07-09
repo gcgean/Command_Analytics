@@ -75,7 +75,10 @@ const ALLOWED_MIME = new Set([
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   'application/msword',
   'application/vnd.ms-excel',
+  'application/x-pkcs12',
+  'application/x-pkcs7-certificates',
 ])
+const ALLOWED_CERT_EXT = new Set(['.pfx', '.p12'])
 
 export async function anexosRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Agenda'], summary: 'Listar anexos' } }, async (request) => {
@@ -131,12 +134,15 @@ export async function anexosRoutes(app: FastifyInstance) {
         }
 
         const mimeType = String((filePart as any).mimetype || '')
-        if (!ALLOWED_MIME.has(mimeType)) {
+        const originalNameRaw = String((filePart as any).filename || 'arquivo')
+        const extRaw = path.extname(originalNameRaw).toLowerCase()
+        const isCertFile = ALLOWED_CERT_EXT.has(extRaw)
+        if (!ALLOWED_MIME.has(mimeType) && !isCertFile) {
           await drain(filePart.file)
           continue
         }
 
-        const originalName = sanitizeFilename(String((filePart as any).filename || 'arquivo'))
+        const originalName = sanitizeFilename(originalNameRaw)
         const ext = path.extname(originalName).slice(0, 10)
         const storedName = `${randomUUID()}${ext}`
         const fullPath = path.join(uploadsDir, storedName)
