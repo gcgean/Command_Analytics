@@ -803,11 +803,31 @@ export function Pipeline() {
   }, [clientesPorEtapa, etapasKanban])
   const timelineOrdenada = useMemo(() => {
     if (!historyData?.timeline) return []
-    return [...historyData.timeline].sort((a: any, b: any) => {
+    const ordenada = [...historyData.timeline].sort((a: any, b: any) => {
       const da = new Date(a.dataHora).getTime()
       const db = new Date(b.dataHora).getTime()
       return da - db
     })
+
+    // Processos criados antes de o sistema registrar "quem lançou" (ex.: implantações
+    // antigas, geradas automaticamente para todo cliente já existente) não têm o evento real
+    // de criação no histórico. Nesses casos, monta um evento equivalente a partir da data de
+    // criação do processo, para a timeline nunca ficar vazia/sem explicação.
+    const jaTemCriacao = ordenada.some((e: any) => e.tipo === 'status' && (e.statusOrigem === null || e.statusOrigem === undefined))
+    const dataCriacaoProcesso = historyData?.cliente?.processoCriadoEm
+    if (!jaTemCriacao && dataCriacaoProcesso) {
+      const eventoSintetico = {
+        id: 'criacao-sintetica',
+        tipo: 'status',
+        statusOrigem: null,
+        statusDestino: historyData?.cliente?.statusInstal ?? null,
+        observacao: 'Processo importado do cadastro existente (implantação anterior ao registro de criação).',
+        dataHora: dataCriacaoProcesso,
+        usuarioNome: historyData?.cliente?.criadorNome || null,
+      }
+      return [eventoSintetico, ...ordenada]
+    }
+    return ordenada
   }, [historyData])
   const etapasHistorico = useMemo(() => {
     if (!historyData) return []
