@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, Trash2, Ban, Pencil, CheckSquare, Eye, Workflow } from 'lucide-react'
+import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, Trash2, Ban, Pencil, CheckSquare, Eye } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 import { Card } from '../../components/ui/Card'
@@ -484,21 +484,23 @@ export function AgendamentoProgramado() {
     return procedimentosMap.get(id) ?? null
   }
 
-  function abrirCriacaoProcessoImplantacao() {
-    if (!bookForm.clienteId) return
-    const procedimentoIdEfetivo = bookForm.procedimentoId || selectedProcedimento
-    const procedimento = procedimentoIdEfetivo ? findProcedimentoById(procedimentoIdEfetivo) : null
+  // Após salvar um agendamento de Instalação ou Treinamento, pergunta se o usuário quer criar
+  // o processo de implantação já com cliente, procedimento e descrição prontos (substitui o
+  // antigo botão "Criar processo de implantação").
+  function abrirCriacaoProcessoImplantacao(clienteId: string, clienteNome: string, titulo: string, observacao: string) {
     navigate('/implantacao', {
       state: {
         criarProcessoPrefill: {
-          clienteId: Number(bookForm.clienteId),
-          clienteNome: bookClienteNome,
-          titulo: procedimento?.nome || '',
-          observacao: bookForm.descricao || '',
+          clienteId: Number(clienteId),
+          clienteNome,
+          titulo,
+          observacao: observacao || '',
         },
       },
     })
   }
+
+  const TIPOS_SUGEREM_PROCESSO = ['Instalação', 'Treinamento']
 
   function onChangeProcedimentoBook(procedimentoId: string) {
     const procedimento = findProcedimentoById(procedimentoId)
@@ -745,6 +747,11 @@ export function AgendamentoProgramado() {
       }
 
       setShowBookModal(false)
+      const clienteIdSalvo = bookForm.clienteId
+      const clienteNomeSalvo = bookClienteNome
+      const tipoSalvo = bookForm.tipo || 'Outros'
+      const descricaoSalva = descricaoNormalizada
+      const tituloSalvo = procedimento.nome
       setSelectedSlots([])
       setBookTecnico(null)
       setBookFiles([])
@@ -753,6 +760,15 @@ export function AgendamentoProgramado() {
       fetchSlots()
       fetchAgendamentos()
       setActiveTab('lista')
+
+      if (clienteIdSalvo && TIPOS_SUGEREM_PROCESSO.includes(tipoSalvo)) {
+        const desejaCriarProcesso = window.confirm(
+          `Deseja criar um processo de implantação para este agendamento de ${tipoSalvo.toLowerCase()}?`
+        )
+        if (desejaCriarProcesso) {
+          abrirCriacaoProcessoImplantacao(clienteIdSalvo, clienteNomeSalvo, tituloSalvo, descricaoSalva)
+        }
+      }
     } catch (e: any) {
       setBookError(e.message || 'Erro ao salvar agendamento.')
     } finally {
@@ -1577,19 +1593,6 @@ export function AgendamentoProgramado() {
           <p className="text-right text-xs text-slate-500">
             {bookForm.descricao.length}/{MAX_DESCRICAO_AGENDAMENTO_PROGRAMADO}
           </p>
-
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={abrirCriacaoProcessoImplantacao}
-              disabled={!bookForm.clienteId}
-              title={bookForm.clienteId ? 'Abre o Pipeline de Implantação com o cliente, procedimento e descrição já preenchidos' : 'Selecione um cliente para poder criar um processo de implantação'}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:text-blue-500 hover:bg-blue-500/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-slate-600"
-            >
-              <Workflow className="w-4 h-4" />
-              Criar processo de implantação
-            </button>
-          </div>
 
           <AnexosDraft files={bookFiles} onChange={setBookFiles} />
 
