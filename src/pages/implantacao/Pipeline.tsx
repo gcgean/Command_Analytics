@@ -229,8 +229,13 @@ function getBadgeUrgencia(cliente: ImplantacaoCliente, slaDiasEtapa?: number) {
 const LIMITE_DIAS_PROCESSO_TOTAL = 30
 
 function getDiasTotalProcesso(cliente: ImplantacaoCliente) {
-  if (!cliente.processoCriadoEm) return null
-  const date = new Date(cliente.processoCriadoEm)
+  // Processos "principais" vieram do cadastro legado (migrados automaticamente para o novo
+  // modelo de processos); processoCriadoEm neles é só a data em que essa migração rodou, não
+  // tem relação com quando o cliente de fato entrou em implantação — usa a data de cadastro
+  // do cliente nesse caso. Processos lançados manualmente (novo_servico) usam a própria data de criação.
+  const dataBase = cliente.processoPrincipal ? (cliente.dataCadastro || cliente.processoCriadoEm) : cliente.processoCriadoEm
+  if (!dataBase) return null
+  const date = new Date(dataBase)
   if (Number.isNaN(date.getTime())) return null
   return Math.max(0, Math.floor((Date.now() - date.getTime()) / 86400000))
 }
@@ -811,17 +816,22 @@ export function Pipeline() {
 
     // Processos criados antes de o sistema registrar "quem lançou" (ex.: implantações
     // antigas, geradas automaticamente para todo cliente já existente) não têm o evento real
-    // de criação no histórico. Nesses casos, monta um evento equivalente a partir da data de
-    // criação do processo, para a timeline nunca ficar vazia/sem explicação.
+    // de criação no histórico. Nesses casos, monta um evento equivalente para a timeline nunca
+    // ficar vazia/sem explicação. Em processos "principais" (migrados do cadastro legado), usa
+    // a data de cadastro do cliente — processoCriadoEm ali é só a data em que a migração rodou.
     const jaTemCriacao = ordenada.some((e: any) => e.tipo === 'status' && (e.statusOrigem === null || e.statusOrigem === undefined))
-    const dataCriacaoProcesso = historyData?.cliente?.processoCriadoEm
+    const dataCriacaoProcesso = historyData?.cliente?.processoPrincipal
+      ? (historyData?.cliente?.dataCadastro || historyData?.cliente?.processoCriadoEm)
+      : historyData?.cliente?.processoCriadoEm
     if (!jaTemCriacao && dataCriacaoProcesso) {
       const eventoSintetico = {
         id: 'criacao-sintetica',
         tipo: 'status',
         statusOrigem: null,
         statusDestino: historyData?.cliente?.statusInstal ?? null,
-        observacao: 'Processo importado do cadastro existente (implantação anterior ao registro de criação).',
+        observacao: historyData?.cliente?.processoPrincipal
+          ? 'Data de cadastro do cliente (implantação anterior ao registro de criação do processo).'
+          : 'Processo importado do cadastro existente (implantação anterior ao registro de criação).',
         dataHora: dataCriacaoProcesso,
         usuarioNome: historyData?.cliente?.criadorNome || null,
       }
