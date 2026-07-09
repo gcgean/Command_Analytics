@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   GripVertical, LayoutList, Loader2, RefreshCcw, Search,
-  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen, Ban, X
+  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen, Ban, X, AlertTriangle
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
@@ -308,6 +308,7 @@ export function Pipeline() {
   const [dataCadastroInicial, setDataCadastroInicial] = useState(() => searchParams.get('dataInicial') || '')
   const [dataCadastroFinal, setDataCadastroFinal] = useState(() => searchParams.get('dataFinal') || '')
   const [pessoaFiltro, setPessoaFiltro] = useState(() => searchParams.get('pessoa') || 'all')
+  const [somenteAtrasados, setSomenteAtrasados] = useState(() => searchParams.get('atrasados') === '1')
   const [viewMode, setViewMode] = useState<ViewMode>(() => (searchParams.get('view') as ViewMode) || 'kanban')
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
@@ -400,9 +401,10 @@ export function Pipeline() {
       clienteCorrespondeBusca(cliente, search) &&
       clienteCorrespondeTempoUltimaVenda(cliente, ultimaVendaFiltro) &&
       clienteCorrespondeDataCadastro(cliente, dataCadastroInicial, dataCadastroFinal) &&
-      clienteCorrespondePessoa(cliente, pessoaFiltro)
+      clienteCorrespondePessoa(cliente, pessoaFiltro) &&
+      (!somenteAtrasados || cliente.emAtraso)
     ),
-    [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro],
+    [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, somenteAtrasados],
   )
 
   const clientesVisiveis = useMemo(
@@ -484,9 +486,10 @@ export function Pipeline() {
     if (dataCadastroInicial) next.set('dataInicial', dataCadastroInicial)
     if (dataCadastroFinal) next.set('dataFinal', dataCadastroFinal)
     if (pessoaFiltro !== 'all') next.set('pessoa', pessoaFiltro)
+    if (somenteAtrasados) next.set('atrasados', '1')
     if (viewMode !== 'kanban') next.set('view', viewMode)
     setSearchParams(next, { replace: true })
-  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, viewMode, setSearchParams])
+  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, somenteAtrasados, viewMode, setSearchParams])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -902,6 +905,21 @@ export function Pipeline() {
               <option value="mais-365">Acima de 1 ano</option>
               <option value="sem-venda">Sem última venda</option>
             </select>
+          </div>
+          <div className="md:col-span-2">
+            <button
+              type="button"
+              onClick={() => setSomenteAtrasados((prev) => !prev)}
+              className={clsx(
+                'h-7 sm:h-8 w-full flex items-center justify-center gap-1.5 rounded-lg border text-[11px] sm:text-xs font-medium transition-colors',
+                somenteAtrasados
+                  ? 'border-rose-500 bg-rose-600 text-white'
+                  : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300',
+              )}
+              title="Mostrar só os processos que passaram do prazo (SLA) da etapa atual"
+            >
+              <AlertTriangle className="w-3.5 h-3.5" /> Só atrasados
+            </button>
           </div>
           <div className="md:col-span-3">
             <select
