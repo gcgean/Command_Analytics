@@ -344,6 +344,9 @@ export function Pipeline() {
   const [editResponsaveis, setEditResponsaveis] = useState<Array<{ id: number; nome: string }>>([])
   const [editEtapasDisponiveis, setEditEtapasDisponiveis] = useState<ImplantacaoEtapa[]>([])
   const [editObs, setEditObs] = useState('')
+  const [editItems, setEditItems] = useState<TransitionItem[]>([])
+  const [loadingEditChecklistItens, setLoadingEditChecklistItens] = useState(false)
+  const [salvandoEditItem, setSalvandoEditItem] = useState<string | null>(null)
 
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
@@ -682,6 +685,7 @@ export function Pipeline() {
     setEditLoading(true)
     setEditCliente(cliente)
     setEditObs('')
+    setEditItems([])
     try {
       const data = await api.getImplantacaoConfiguracao(cliente.clienteId, cliente.processoId)
       setEditEtapasDisponiveis(data.etapas)
@@ -692,6 +696,48 @@ export function Pipeline() {
       setEditChecklistIds(data.checklistIdsSelecionados || [])
     } finally {
       setEditLoading(false)
+    }
+    setLoadingEditChecklistItens(true)
+    try {
+      const checklistData = await api.getImplantacaoChecklist(cliente.clienteId, cliente.statusInstal, cliente.processoId)
+      const items: TransitionItem[] = []
+      checklistData.checklists.forEach((checklist) => {
+        checklist.itens.forEach((item) => {
+          items.push({
+            checklistId: checklist.id,
+            itemIndex: item.index,
+            texto: `${checklist.nome}: ${item.texto}`,
+            marcado: item.marcado,
+            observacao: '',
+          })
+        })
+      })
+      setEditItems(items)
+    } finally {
+      setLoadingEditChecklistItens(false)
+    }
+  }
+
+  async function alternarItemChecklistEdicao(idx: number, marcado: boolean) {
+    if (!editCliente) return
+    const item = editItems[idx]
+    if (!item) return
+    const key = `${item.checklistId}:${item.itemIndex}`
+    setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, marcado } : p))
+    setSalvandoEditItem(key)
+    try {
+      await api.marcarItemChecklistImplantacao(editCliente.clienteId, {
+        checklistId: item.checklistId,
+        itemIndex: item.itemIndex,
+        marcado,
+        observacao: item.observacao.trim() || undefined,
+        processoId: editCliente.processoId,
+      })
+      await carregarPainel()
+    } catch {
+      setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, marcado: !marcado } : p))
+    } finally {
+      setSalvandoEditItem(null)
     }
   }
 
@@ -1604,6 +1650,42 @@ export function Pipeline() {
                     <option key={responsavel.id} value={String(responsavel.id)}>{responsavel.nome}</option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Checklist da Etapa Atual</label>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {loadingEditChecklistItens ? (
+                  <div className="py-4 flex items-center justify-center"><Loader2 className="w-4 h-4 animate-spin text-slate-500" /></div>
+                ) : editItems.length === 0 ? (
+                  <p className="text-sm text-slate-500">Nenhum item de checklist para essa etapa.</p>
+                ) : (
+                  editItems.map((item, idx) => {
+                    const key = `${item.checklistId}:${item.itemIndex}`
+                    return (
+                      <div key={key} className="rounded-lg border border-slate-200 dark:border-slate-700 p-2.5">
+                        <label className="flex items-start gap-2 text-sm cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={item.marcado}
+                            disabled={salvandoEditItem === key}
+                            onChange={(e) => void alternarItemChecklistEdicao(idx, e.target.checked)}
+                            className="mt-1 accent-blue-600"
+                          />
+                          <span className={clsx('text-slate-700 dark:text-slate-200', item.marcado && 'line-through text-slate-500')}>{item.texto}</span>
+                        </label>
+                        <input
+                          value={item.observacao}
+                          onChange={(e) => setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, observacao: e.target.value } : p))}
+                          onBlur={() => item.marcado && void alternarItemChecklistEdicao(idx, true)}
+                          placeholder="Observação opcional para este item"
+                          className="mt-2 w-full h-9 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-xs"
+                        />
+                      </div>
+                    )
+                  })
+                )}
               </div>
             </div>
 
