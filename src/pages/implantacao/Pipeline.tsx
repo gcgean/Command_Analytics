@@ -1196,7 +1196,7 @@ export function Pipeline() {
                               <div className="min-w-0">
                                 <div className="flex items-start justify-between gap-2">
                                   <p className="text-xs sm:text-sm font-semibold text-slate-800 dark:text-slate-100 leading-tight whitespace-normal break-words">
-                                    {getNomeDestaque(cliente)}
+                                    {getNomeSecundario(cliente) || getNomeDestaque(cliente)}
                                   </p>
                                   <Button
                                     size="sm"
@@ -1235,7 +1235,7 @@ export function Pipeline() {
                                 )}
                                 {getNomeSecundario(cliente) && (
                                   <p className="text-[11px] sm:text-xs text-slate-500 leading-tight whitespace-normal break-words mt-0.5">
-                                    {getNomeSecundario(cliente)}
+                                    {getNomeDestaque(cliente)}
                                   </p>
                                 )}
                                 <p className="text-[11px] sm:text-xs text-blue-600 mt-0.5">{getTipoProcessoLabel(cliente)}</p>
