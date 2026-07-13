@@ -530,37 +530,10 @@ async function ensureImplantacaoBootstrap() {
       // dados_gerais_clientes para cada cliente (custava ~4,5s do carregamento do pipeline).
       await ensureIndexExists('dados_gerais_clientes', 'idx_dgc_cod_cli_data_venda', '(COD_CLI, DATA_HORA_ULT_VENDA)')
 
-      await prisma.$executeRawUnsafe(`
-        INSERT INTO implantacao_processos
-          (cliente_id, tipo, titulo, servico_nome, status_atual, observacao, processo_principal, criado_em, atualizado_em)
-        SELECT
-          C.cod_cli,
-          'novo_cliente',
-          'Implantação inicial',
-          NULL,
-          COALESCE(NULLIF(C.STATUS_INSTAL, 0), 1),
-          PI.obs_treinamento,
-          1,
-          UTC_TIMESTAMP(),
-          UTC_TIMESTAMP()
-        FROM cliente C
-        LEFT JOIN (
-          SELECT PI1.id_cli, PI1.obs_treinamento
-          FROM processo_implantacao PI1
-          INNER JOIN (
-            SELECT id_cli, MAX(id) AS max_id
-            FROM processo_implantacao
-            GROUP BY id_cli
-          ) PI2 ON PI2.id_cli = PI1.id_cli AND PI2.max_id = PI1.id
-        ) PI ON PI.id_cli = C.cod_cli
-        LEFT JOIN implantacao_processos P
-          ON P.cliente_id = C.cod_cli
-         AND P.processo_principal = 1
-        WHERE P.id IS NULL
-          AND C.ATIVO = 'S'
-          AND C.cod_cli < 10000000
-          AND C.cod_cla <> 30
-      `)
+      // Nota: este bootstrap NÃO cria mais processos automáticos para clientes sem
+      // processo em implantacao_processos. O backfill único de clientes legados (migração
+      // de STATUS_INSTAL) já rodou; a partir de agora só entra no Pipeline quem for
+      // lançado manualmente (botão "Novo processo").
 
       await prisma.$executeRawUnsafe(`
         UPDATE implantacao_checklist_marcacoes M
