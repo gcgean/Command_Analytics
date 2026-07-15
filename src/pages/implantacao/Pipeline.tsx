@@ -708,7 +708,7 @@ export function Pipeline() {
             itemIndex: item.index,
             texto: `${checklist.nome}: ${item.texto}`,
             marcado: item.marcado,
-            observacao: '',
+            observacao: item.observacao || '',
           })
         })
       })
@@ -801,7 +801,7 @@ export function Pipeline() {
             itemIndex: item.index,
             texto: `${checklist.nome}: ${item.texto}`,
             marcado: item.marcado,
-            observacao: '',
+            observacao: item.observacao || '',
           })
         })
       })
@@ -1678,7 +1678,7 @@ export function Pipeline() {
                         <input
                           value={item.observacao}
                           onChange={(e) => setEditItems((prev) => prev.map((p, i) => i === idx ? { ...p, observacao: e.target.value } : p))}
-                          onBlur={() => item.marcado && void alternarItemChecklistEdicao(idx, true)}
+                          onBlur={() => void alternarItemChecklistEdicao(idx, item.marcado)}
                           placeholder="Observação opcional para este item"
                           className="mt-2 w-full h-9 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 text-xs"
                         />

@@ -90,6 +90,7 @@ type MarcacaoRow = {
   checklist_id: number
   item_indice: number
   marcado: number | boolean
+  observacao: string | null
 }
 
 type ChecklistClienteRow = {
@@ -1450,7 +1451,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     const marcacoes = checklistsDaEtapa.length
       ? await prisma.$queryRawUnsafe<MarcacaoRow[]>(
-        `SELECT cliente_id, processo_id, checklist_id, item_indice, marcado
+        `SELECT cliente_id, processo_id, checklist_id, item_indice, marcado, observacao
          FROM implantacao_checklist_marcacoes
          WHERE cliente_id = ?
            AND (
@@ -1469,6 +1470,9 @@ export async function pipelineRoutes(app: FastifyInstance) {
         .filter((m) => Number(m.marcado) === 1)
         .map((m) => `${Number(m.checklist_id)}:${Number(m.item_indice)}`)
     )
+    const observacaoMap = new Map(
+      marcacoes.map((m) => [`${Number(m.checklist_id)}:${Number(m.item_indice)}`, m.observacao || ''])
+    )
 
     const data = checklistsDaEtapa.map((checklist) => ({
       id: checklist.id,
@@ -1478,6 +1482,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
         index,
         texto,
         marcado: marcadoSet.has(`${checklist.id}:${index}`),
+        observacao: observacaoMap.get(`${checklist.id}:${index}`) || '',
       })),
     }))
 

@@ -547,6 +547,7 @@ export interface ImplantacaoChecklistDetalhe {
       index: number
       texto: string
       marcado: boolean
+      observacao?: string
     }>
   }>
   responsaveis?: Array<{ id: number; nome: string }>
