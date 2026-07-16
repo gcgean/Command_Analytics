@@ -133,6 +133,24 @@ function getAgendaDateKey(a: AgendaItem): string {
   return String(a.data).substring(0, 10)
 }
 
+function getAgendaDateRange(a: AgendaItem): string[] {
+  const inicio = getAgendaDateKey(a)
+  if (!inicio) return []
+  const fimRaw = (a as any).dataFim ? String((a as any).dataFim).substring(0, 10) : ''
+  const fim = fimRaw && fimRaw !== 'null' && fimRaw !== 'undefined' && !fimRaw.startsWith('1970') && fimRaw > inicio
+    ? fimRaw
+    : inicio
+  if (fim === inicio) return [inicio]
+  const dias: string[] = []
+  const cursor = new Date(`${inicio}T00:00:00Z`)
+  const fimDate = new Date(`${fim}T00:00:00Z`)
+  while (cursor.getTime() <= fimDate.getTime()) {
+    dias.push(cursor.toISOString().substring(0, 10))
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+  }
+  return dias
+}
+
 // Helpers for dd/mm/yyyy
 function toBRDate(iso: string) {
   if (!iso) return ''
@@ -465,9 +483,9 @@ export function Agenda() {
     `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 
   const agendaByDate = agendaMes.reduce<Record<string, number>>((acc, a) => {
-    const key = getAgendaDateKey(a)
-    if (!key || key === 'null' || key === 'undefined') return acc
-    acc[key] = (acc[key] || 0) + 1
+    for (const key of getAgendaDateRange(a)) {
+      acc[key] = (acc[key] || 0) + 1
+    }
     return acc
   }, {})
 

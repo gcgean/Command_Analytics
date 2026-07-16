@@ -808,9 +808,10 @@ export async function agendaRoutes(app: FastifyInstance) {
     else if (statusNum !== null) condA.push(Prisma.sql`a.Status_agendamento = ${statusNum}`)
     if (tipo) condA.push(Prisma.sql`a.Tipo = ${tipo}`)
     if (data) {
-      condA.push(Prisma.sql`a.data_agendamento = ${new Date(data + 'T12:00:00Z')}`)
+      const diaAlvo = new Date(data + 'T12:00:00Z')
+      condA.push(Prisma.sql`a.data_agendamento <= ${diaAlvo} AND COALESCE(a.data_fin_agendamento, a.data_agendamento) >= ${diaAlvo}`)
     } else {
-      if (dataInicio) condA.push(Prisma.sql`a.data_agendamento >= ${new Date(dataInicio + 'T00:00:00Z')}`)
+      if (dataInicio) condA.push(Prisma.sql`COALESCE(a.data_fin_agendamento, a.data_agendamento) >= ${new Date(dataInicio + 'T00:00:00Z')}`)
       if (dataFim) condA.push(Prisma.sql`a.data_agendamento <= ${new Date(dataFim + 'T23:59:59Z')}`)
     }
     const whereA = condA.length > 0 ? Prisma.sql`WHERE ${Prisma.join(condA, ' AND ')}` : Prisma.empty
