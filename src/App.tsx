@@ -37,6 +37,7 @@ import { Pipeline } from './pages/implantacao/Pipeline'
 import { Orcamento } from './pages/implantacao/Orcamento'
 import { AcompImplantacao } from './pages/implantacao/AcompImplantacao'
 import { DashboardImplantacao } from './pages/implantacao/DashboardImplantacao'
+import { ProcessosEncerrados } from './pages/implantacao/ProcessosEncerrados'
 
 // CRM
 import { Negocios } from './pages/crm/Negocios'
@@ -212,6 +213,7 @@ export default function App() {
         <Route path="implantacao/dashboard" element={<PermissionRoute recurso="implantacao"><DashboardImplantacao /></PermissionRoute>} />
         <Route path="implantacao/orcamento" element={<PermissionRoute recurso="implantacao-orcamento"><Orcamento /></PermissionRoute>} />
         <Route path="implantacao/acompanhamento" element={<PermissionRoute recurso="implantacao-acompanhamento"><AcompImplantacao /></PermissionRoute>} />
+        <Route path="implantacao/encerrados" element={<PermissionRoute recurso="implantacao-concluidos"><ProcessosEncerrados /></PermissionRoute>} />
 
         <Route path="crm" element={<PermissionRoute recurso="crm"><Negocios /></PermissionRoute>} />
         <Route path="crm/leads" element={<PermissionRoute recurso="crm-leads"><PesquisaLeads /></PermissionRoute>} />

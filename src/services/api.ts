@@ -2,7 +2,7 @@ import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, Comissao, Tarefa, Video, Meta,
   AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, EtapaCadastro,
-  ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, Usuario,
+  ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
   DashboardMensalidadesAbc, DashboardMensalidadesAgrupamento, DashboardMensalidadesConcentracao,
@@ -486,6 +486,20 @@ export const api = {
     fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/observacao`, { method: 'POST', body: JSON.stringify({ observacao, processoId }) }),
   criarProcessoImplantacao: (data: { clienteId: number; tipo: 'novo_cliente' | 'novo_servico'; titulo: string; servicoId?: number | null; statusInstal?: number; responsavelId?: number | null; observacao?: string; checklistIds?: number[]; criadoPorId?: number | null }) =>
     fetchApi<{ ok: boolean; processoId: number }>('/pipeline/implantacao/processos', { method: 'POST', body: JSON.stringify(data) }),
+  getImplantacaoConcluidos: (params?: { search?: string; situacao?: string; responsavelId?: number; dataInicial?: string; dataFinal?: string; page?: number; pageSize?: number }) => {
+    const searchParams = new URLSearchParams()
+    if (params?.search) searchParams.set('search', params.search)
+    if (params?.situacao && params.situacao !== 'all') searchParams.set('situacao', params.situacao)
+    if (params?.responsavelId) searchParams.set('responsavelId', String(params.responsavelId))
+    if (params?.dataInicial) searchParams.set('dataInicial', params.dataInicial)
+    if (params?.dataFinal) searchParams.set('dataFinal', params.dataFinal)
+    if (params?.page) searchParams.set('page', String(params.page))
+    if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize))
+    const qs = searchParams.toString() ? `?${searchParams.toString()}` : ''
+    return fetchApi<ImplantacaoConcluidosResposta>(`/pipeline/implantacao/concluidos${qs}`)
+  },
+  reabrirProcessoImplantacao: (clienteId: number, processoId: number, data: { statusDestino: number; motivo: string }) =>
+    fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/processos/${processoId}/reabrir`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // ─── CRM ───────────────────────────────────────────────────
   getNegocios: () => fetchApi<Negocio[]>('/crm/negocios'),

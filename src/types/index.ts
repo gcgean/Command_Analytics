@@ -473,6 +473,7 @@ export interface ImplantacaoCliente {
   processoTitulo?: string | null
   processoPrincipal?: boolean
   processoCriadoEm?: string | null
+  processoAtualizadoEm?: string | null
   servicoNome?: string | null
   servicoId?: number | null
   clienteId: number
@@ -497,12 +498,28 @@ export interface ImplantacaoCliente {
   responsavelAtualizadoEm?: string | null
   criadoPor?: number | null
   criadorNome?: string | null
-  totalItensChecklist: number
-  itensChecklistMarcados: number
-  progressoChecklist: number
+  totalItensChecklist?: number
+  itensChecklistMarcados?: number
+  progressoChecklist?: number
   slaDiasEtapa?: number
   diasNaEtapa?: number
   emAtraso?: boolean
+}
+
+export interface ImplantacaoConcluidosResposta {
+  etapas: ImplantacaoEtapa[]
+  resumo: {
+    total: number
+    concluidos: number
+    desistencias: number
+  }
+  processos: ImplantacaoCliente[]
+  paginacao: {
+    page: number
+    pageSize: number
+    total: number
+    hasMore: boolean
+  }
 }
 
 export interface ImplantacaoPainel {

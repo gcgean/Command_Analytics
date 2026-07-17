@@ -16,6 +16,9 @@ const FIELD_LABELS: Record<string, string> = {
   prontuario:  'Prontuário',
   descricao:   'Descrição',
   duracao:     'Duração (min)',
+  statusAtual: 'Etapa (status)',
+  etapa:       'Etapa',
+  motivo:      'Motivo',
 }
 
 const STATUS_LABELS: Record<number, string> = {

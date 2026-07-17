@@ -7,7 +7,7 @@ import {
   Code2, Tag, Video, Target, Server,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
-  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards
+  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '../../store/authStore'
@@ -54,6 +54,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
           { label: 'Dashboard',      icon: <Activity className="w-4 h-4" />,     to: '/implantacao/dashboard',        recurso: 'implantacao' },
           { label: 'Pipeline',       icon: <GitBranch className="w-4 h-4" />,    to: '/implantacao',                  recurso: 'implantacao' },
           { label: 'Acompanhamento', icon: <ClipboardList className="w-4 h-4" />,to: '/implantacao/acompanhamento',   recurso: 'implantacao-acompanhamento' },
+          { label: 'Encerrados',     icon: <Archive className="w-4 h-4" />,      to: '/implantacao/encerrados',       recurso: 'implantacao-concluidos' },
           { label: 'Orçamento',      icon: <Receipt className="w-4 h-4" />,      to: '/implantacao/orcamento',        recurso: 'implantacao-orcamento' },
         ]
       },

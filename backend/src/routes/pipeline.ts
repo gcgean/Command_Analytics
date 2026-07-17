@@ -7,6 +7,7 @@ import { initChecklists } from '../utils/checklists'
 import { initServicos } from '../utils/servicos'
 import { registrarNotificacao } from '../utils/notificacoesAgendamento'
 import { TelegramService } from '../services/telegram'
+import { registrarAuditoria } from '../utils/auditoria'
 import { getUserPermissions } from './grupos'
 
 type EtapaBase = {
@@ -179,6 +180,12 @@ const ETAPAS_PADRAO: EtapaBase[] = [
 // backfill. As validações dos endpoints usam getStatusValidos(), que também inclui as
 // identidades sintéticas de etapas novas criadas via Cadastro de Etapas.
 const STATUS_VALIDOS = new Set(ETAPAS_PADRAO.map((e) => e.status))
+
+// Etapas que encerram o processo. O Kanban esconde o status 7, então esses processos só
+// são consultáveis pela tela de Encerrados.
+const STATUS_CONCLUIDO = 7
+const STATUS_DESISTENCIA = 10
+const STATUS_ENCERRAMENTO = new Set([STATUS_CONCLUIDO, STATUS_DESISTENCIA])
 
 async function getStatusValidos(): Promise<Set<number>> {
   await ensureImplantacaoBootstrap()
@@ -1038,6 +1045,7 @@ async function carregarClientesImplantacao() {
       servicoId: processo.servicoId === null || processo.servicoId === undefined ? null : Number(processo.servicoId),
       processoPrincipal: Number(processo.processoPrincipal) === 1,
       processoCriadoEm: processo.criadoEm ? processo.criadoEm.toISOString() : null,
+      processoAtualizadoEm: processo.atualizadoEm ? processo.atualizadoEm.toISOString() : null,
       clienteId: Number(processo.clienteId),
       clienteNome: nomeCompleto || fantasia || `Cliente #${processo.clienteId}`,
       nomeFantasia: fantasia || null,
@@ -1401,6 +1409,178 @@ export async function pipelineRoutes(app: FastifyInstance) {
         }
         : {}),
     }
+  })
+
+  app.get('/implantacao/concluidos', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Processos encerrados (concluídos/desistência) com filtro e paginação' } }, async (request) => {
+    const { search, situacao, responsavelId, dataInicial, dataFinal, page, pageSize } = request.query as {
+      search?: string
+      situacao?: string
+      responsavelId?: string
+      dataInicial?: string
+      dataFinal?: string
+      page?: string
+      pageSize?: string
+    }
+
+    const [etapas, clientes] = await Promise.all([
+      getEtapasConfiguradas(),
+      carregarClientesImplantacaoCache(),
+    ])
+
+    const inicio = normalizeDateFilter(dataInicial)
+    const fim = normalizeDateFilter(dataFinal)
+    const situacaoFiltro = String(situacao ?? 'all').trim()
+    const busca = String(search ?? '').trim().toLowerCase()
+    const responsavelFiltro = Number(responsavelId)
+
+    const encerrados = clientes.filter((cliente) => {
+      if (!STATUS_ENCERRAMENTO.has(Number(cliente.statusInstal))) return false
+
+      if (situacaoFiltro === 'concluido' && Number(cliente.statusInstal) !== STATUS_CONCLUIDO) return false
+      if (situacaoFiltro === 'desistencia' && Number(cliente.statusInstal) !== STATUS_DESISTENCIA) return false
+
+      if (busca) {
+        const haystack = `${cliente.clienteNome} ${cliente.nomeFantasia ?? ''} ${cliente.cnpj ?? ''} ${cliente.processoTitulo ?? ''}`.toLowerCase()
+        if (!haystack.includes(busca)) return false
+      }
+
+      if (Number.isFinite(responsavelFiltro) && responsavelFiltro > 0) {
+        if (Number(cliente.responsavelId ?? 0) !== responsavelFiltro) return false
+      }
+
+      // O encerramento é a última atualização do processo — é por ela que se filtra o período.
+      const encerradoEm = String(cliente.processoAtualizadoEm || cliente.processoCriadoEm || '').slice(0, 10)
+      if (inicio && (!encerradoEm || encerradoEm < inicio)) return false
+      if (fim && (!encerradoEm || encerradoEm > fim)) return false
+
+      return true
+    })
+
+    encerrados.sort((a, b) => {
+      const da = String(a.processoAtualizadoEm || a.processoCriadoEm || '')
+      const db = String(b.processoAtualizadoEm || b.processoCriadoEm || '')
+      return db.localeCompare(da)
+    })
+
+    const paginaSolicitada = Number(page)
+    const tamanhoSolicitado = Number(pageSize)
+    const paginado = Number.isFinite(paginaSolicitada) && paginaSolicitada >= 1
+    const paginaAtual = paginado ? Math.floor(paginaSolicitada) : 1
+    const tamanhoPagina = paginado
+      ? Math.min(200, Math.max(1, Number.isFinite(tamanhoSolicitado) ? Math.floor(tamanhoSolicitado) : 30))
+      : encerrados.length
+
+    const total = encerrados.length
+    const pagina = paginado
+      ? encerrados.slice((paginaAtual - 1) * tamanhoPagina, (paginaAtual - 1) * tamanhoPagina + tamanhoPagina)
+      : encerrados
+
+    return {
+      etapas,
+      resumo: {
+        total,
+        concluidos: encerrados.filter((c) => Number(c.statusInstal) === STATUS_CONCLUIDO).length,
+        desistencias: encerrados.filter((c) => Number(c.statusInstal) === STATUS_DESISTENCIA).length,
+      },
+      processos: pagina,
+      paginacao: {
+        page: paginaAtual,
+        pageSize: tamanhoPagina,
+        total,
+        hasMore: paginado ? paginaAtual * tamanhoPagina < total : false,
+      },
+    }
+  })
+
+  app.patch('/implantacao/:clienteId/processos/:processoId/reabrir', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Reabre um processo encerrado, movendo-o para outra etapa (auditado)' } }, async (request, reply) => {
+    const { clienteId, processoId } = request.params as { clienteId: string; processoId: string }
+    const { statusDestino, motivo } = request.body as { statusDestino?: number; motivo?: string }
+    const id = Number(clienteId)
+    const idProcesso = Number(processoId)
+    const destino = Number(statusDestino)
+    const usuarioId = Number((request.user as any)?.id || 0) || null
+
+    if (!Number.isFinite(id) || id <= 0) return reply.status(400).send({ error: 'Cliente inválido.' })
+    if (!Number.isFinite(idProcesso) || idProcesso <= 0) return reply.status(400).send({ error: 'Processo inválido.' })
+
+    const permissoes = usuarioId ? await getUserPermissions(usuarioId) : []
+    const podeReabrir = permissoes.includes('*') || permissoes.includes('implantacao-concluidos-reabrir')
+    if (!podeReabrir) {
+      return reply.status(403).send({ error: 'Você não tem permissão para reabrir processos encerrados.' })
+    }
+
+    const justificativa = String(motivo ?? '').trim()
+    if (justificativa.length < 5) {
+      return reply.status(400).send({ error: 'Informe o motivo da reabertura (mínimo de 5 caracteres).' })
+    }
+
+    if (!(await getStatusValidos()).has(destino)) {
+      return reply.status(400).send({ error: 'Etapa de destino inválida.' })
+    }
+
+    await ensureImplantacaoBootstrap()
+    const contexto = await getProcessoContexto(id, idProcesso)
+    if (!contexto) return reply.status(404).send({ error: 'Processo não encontrado.' })
+
+    const origem = contexto.statusAtual
+    if (!STATUS_ENCERRAMENTO.has(Number(origem))) {
+      return reply.status(400).send({ error: 'Este processo não está encerrado.' })
+    }
+    if (Number(destino) === Number(origem)) {
+      return reply.status(400).send({ error: 'Escolha uma etapa diferente da atual.' })
+    }
+
+    const etapasAtuais = await getEtapasConfiguradas()
+    const nomeEtapa = (status: number) =>
+      etapasAtuais.find((e) => e.status === status)?.nome
+      ?? ETAPAS_PADRAO.find((e) => e.status === status)?.nome
+      ?? `Etapa ${status}`
+
+    await prisma.$executeRaw`
+      UPDATE implantacao_processos
+      SET status_atual = ${destino}, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
+      WHERE id = ${idProcesso}
+    `
+    if (contexto.processoPrincipal) {
+      await prisma.$executeRaw`UPDATE cliente SET STATUS_INSTAL = ${destino} WHERE cod_cli = ${id}`
+      const legado = await prisma.$queryRaw<{ id: number }[]>`SELECT id FROM processo_implantacao WHERE id_cli = ${id} ORDER BY id DESC LIMIT 1`
+      if (legado.length) {
+        await prisma.$executeRaw`UPDATE processo_implantacao SET status = ${destino} WHERE id = ${Number(legado[0].id)}`
+      }
+    }
+
+    const observacaoEvento = `Processo reaberto: "${nomeEtapa(origem)}" → "${nomeEtapa(destino)}". Motivo: ${justificativa}`
+    await registrarMovimentacao({
+      clienteId: id,
+      processoId: idProcesso,
+      tipo: 'status',
+      statusOrigem: origem,
+      statusDestino: destino,
+      observacao: observacaoEvento,
+      usuarioId,
+    })
+
+    await registrarAuditoria({
+      tabela: 'implantacao_processos',
+      registroId: idProcesso,
+      acao: 'STATUS',
+      usuarioId,
+      dadosAntes: { statusAtual: origem, etapa: nomeEtapa(origem) },
+      dadosDepois: { statusAtual: destino, etapa: nomeEtapa(destino), motivo: justificativa },
+    })
+
+    const resumo = await getClienteEProcessoResumo(id, idProcesso)
+    await notificarProcesso({
+      clienteId: id,
+      processoId: idProcesso,
+      processoPrincipal: contexto.processoPrincipal,
+      usuarioId,
+      titulo: 'Processo reaberto',
+      mensagem: `O processo "${resumo.processoTitulo}" do cliente ${resumo.clienteNome} foi reaberto de "${nomeEtapa(origem)}" para "${nomeEtapa(destino)}". Motivo: ${justificativa}`,
+    })
+
+    invalidarPainelCache()
+    return { ok: true }
   })
 
   app.get('/implantacao/responsaveis', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Lista de responsáveis ativos para vincular a um processo' } }, async () => {

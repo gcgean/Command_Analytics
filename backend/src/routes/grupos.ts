@@ -18,6 +18,8 @@ export const SYSTEM_RESOURCES = [
   { id: 'implantacao',              label: 'Pipeline de Implantação',         grupo: 'CLIENTES' },
   { id: 'implantacao-orcamento',    label: 'Orçamento',                       grupo: 'CLIENTES' },
   { id: 'implantacao-acompanhamento', label: 'Acompanhamento Implantação',    grupo: 'CLIENTES' },
+  { id: 'implantacao-concluidos',   label: 'Implantação — Processos Encerrados', grupo: 'CLIENTES' },
+  { id: 'implantacao-concluidos-reabrir', label: 'Implantação — Reabrir Processo Encerrado', grupo: 'CLIENTES' },
   { id: 'crm',                      label: 'CRM — Negócios',                  grupo: 'CLIENTES' },
   { id: 'crm-leads',                label: 'CRM — Pesquisa de Leads',         grupo: 'CLIENTES' },
   { id: 'contadores',               label: 'Contadores',                      grupo: 'CLIENTES' },
