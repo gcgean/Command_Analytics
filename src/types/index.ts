@@ -506,6 +506,15 @@ export interface ImplantacaoCliente {
   emAtraso?: boolean
 }
 
+export interface DesempenhoEquipe {
+  periodo: { meses: number; inicio: string }
+  totalAtendimentos: number
+  rankingTecnicos: Array<{ tecnicoId: number | null; tecnicoNome: string; total: number }>
+  porSetor: Array<{ departamento: number | null; nome: string; total: number }>
+  evolucaoMensal: Array<{ mes: string; label: string; total: number }>
+  notasTreinamento: Array<{ tecnicoId: number; tecnicoNome: string; media: number; avaliacoes: number }>
+}
+
 export interface ImplantacaoConcluidosResposta {
   etapas: ImplantacaoEtapa[]
   resumo: {
@@ -599,6 +608,8 @@ export interface ImplantacaoConfiguracaoCliente {
   responsaveis: Array<{ id: number; nome: string }>
   checklists: ImplantacaoChecklistOpcao[]
   checklistIdsSelecionados: number[]
+  servicos?: Array<{ id: number; nome: string }>
+  servicoIdAtual?: number | null
 }
 
 // ============================================================

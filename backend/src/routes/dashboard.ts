@@ -602,4 +602,127 @@ export async function dashboardRoutes(app: FastifyInstance) {
       }))
     }
   )
+
+  // ── Desempenho da equipe (técnicos e setores) nos últimos N meses ──
+  app.get(
+    '/desempenho-equipe',
+    { preHandler: authMiddleware, schema: { tags: ['Dashboard'], summary: 'Desempenho de técnicos e setores por período' } },
+    async (request) => {
+      const { meses } = request.query as { meses?: string }
+      const nMeses = Math.min(36, Math.max(1, Number(meses) || 12))
+
+      // Corte no primeiro dia do mês, (nMeses-1) meses atrás, para termos exatamente nMeses baldes mensais.
+      const agora = new Date()
+      const corte = new Date(agora.getFullYear(), agora.getMonth() - (nMeses - 1), 1, 0, 0, 0)
+
+      const [rankingRows, setorRows, evolucaoRows, notasAgenda, notasProgramado] = await Promise.all([
+        // Volume de atendimentos por técnico
+        prisma.$queryRaw<Array<{ id: number | null; nome: string | null; total: bigint }>>`
+          SELECT a.cod_tecnico AS id, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS nome, COUNT(*) AS total
+          FROM atendimentos a
+          LEFT JOIN usuario u ON u.COD_USU = a.cod_tecnico
+          WHERE a.data_hora_lanc >= ${corte} AND a.cod_tecnico IS NOT NULL
+          GROUP BY a.cod_tecnico
+          ORDER BY total DESC
+        `,
+        // Volume por setor (departamento)
+        prisma.$queryRaw<Array<{ departamento: number | null; total: bigint }>>`
+          SELECT a.departamento AS departamento, COUNT(*) AS total
+          FROM atendimentos a
+          WHERE a.data_hora_lanc >= ${corte}
+          GROUP BY a.departamento
+          ORDER BY total DESC
+        `,
+        // Evolução mensal (total de atendimentos)
+        prisma.$queryRaw<Array<{ mes: string; total: bigint }>>`
+          SELECT DATE_FORMAT(a.data_hora_lanc, '%Y-%m') AS mes, COUNT(*) AS total
+          FROM atendimentos a
+          WHERE a.data_hora_lanc >= ${corte}
+          GROUP BY mes
+          ORDER BY mes
+        `,
+        // Notas de treinamento — agenda legada (Tipo Treinamento)
+        prisma.$queryRaw<Array<{ id: number | null; nome: string | null; nota: string | null }>>`
+          SELECT a.cod_colaborador AS id, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS nome, a.nota AS nota
+          FROM agenda a
+          LEFT JOIN usuario u ON u.COD_USU = a.cod_colaborador
+          WHERE a.data_agendamento >= ${corte}
+            AND UPPER(COALESCE(a.Tipo, '')) LIKE '%TREIN%'
+            AND a.nota IS NOT NULL AND TRIM(a.nota) <> ''
+            AND a.cod_colaborador IS NOT NULL
+        `,
+        // Notas de treinamento — agendamento programado
+        prisma.$queryRaw<Array<{ id: number | null; nome: string | null; nota: string | null }>>`
+          SELECT p.cod_tecnico AS id, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS nome, p.nota AS nota
+          FROM agendamento_programado p
+          LEFT JOIN usuario u ON u.COD_USU = p.cod_tecnico
+          WHERE p.data_agendamento >= ${corte}
+            AND p.descricao LIKE '%TIPO_AGENDA:Treinamento%'
+            AND p.nota IS NOT NULL AND TRIM(p.nota) <> ''
+            AND p.cod_tecnico IS NOT NULL
+        `,
+      ])
+
+      // Baldes mensais zero-preenchidos
+      const bucketKeys: string[] = []
+      for (let i = 0; i < nMeses; i++) {
+        const d = new Date(corte.getFullYear(), corte.getMonth() + i, 1)
+        bucketKeys.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+      }
+      const totalPorMes = new Map(evolucaoRows.map(r => [String(r.mes), Number(r.total)]))
+      const nomesMeses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez']
+      const evolucaoMensal = bucketKeys.map(k => {
+        const [ano, mes] = k.split('-')
+        return {
+          mes: k,
+          label: `${nomesMeses[Number(mes) - 1]}/${ano.slice(2)}`,
+          total: totalPorMes.get(k) ?? 0,
+        }
+      })
+
+      const rankingTecnicos = rankingRows.map(r => ({
+        tecnicoId: r.id ? Number(r.id) : null,
+        tecnicoNome: r.nome || `Técnico #${r.id ?? '—'}`,
+        total: Number(r.total),
+      }))
+
+      const porSetor = setorRows.map(r => ({
+        departamento: r.departamento === null ? null : Number(r.departamento),
+        nome: r.departamento === null
+          ? 'Sem setor'
+          : (DEPARTAMENTOS[Number(r.departamento)] ?? `Depto ${r.departamento}`),
+        total: Number(r.total),
+      }))
+
+      // Média de notas de treinamento por técnico (combina as duas fontes)
+      const notasMap = new Map<number, { nome: string; soma: number; qtd: number }>()
+      const acumular = (rows: Array<{ id: number | null; nome: string | null; nota: string | null }>) => {
+        for (const row of rows) {
+          if (!row.id) continue
+          const valor = Number(String(row.nota ?? '').replace(',', '.').trim())
+          if (!Number.isFinite(valor) || valor <= 0 || valor > 10) continue
+          const id = Number(row.id)
+          const atual = notasMap.get(id) ?? { nome: row.nome || `Técnico #${id}`, soma: 0, qtd: 0 }
+          atual.soma += valor
+          atual.qtd += 1
+          if (row.nome) atual.nome = row.nome
+          notasMap.set(id, atual)
+        }
+      }
+      acumular(notasAgenda)
+      acumular(notasProgramado)
+      const notasTreinamento = Array.from(notasMap.entries())
+        .map(([id, v]) => ({ tecnicoId: id, tecnicoNome: v.nome, media: v.soma / v.qtd, avaliacoes: v.qtd }))
+        .sort((a, b) => b.media - a.media || b.avaliacoes - a.avaliacoes)
+
+      return {
+        periodo: { meses: nMeses, inicio: `${corte.getFullYear()}-${String(corte.getMonth() + 1).padStart(2, '0')}-01` },
+        totalAtendimentos: rankingTecnicos.reduce((acc, t) => acc + t.total, 0),
+        rankingTecnicos,
+        porSetor,
+        evolucaoMensal,
+        notasTreinamento,
+      }
+    }
+  )
 }

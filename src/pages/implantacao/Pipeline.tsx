@@ -344,6 +344,10 @@ export function Pipeline() {
   const [editResponsaveis, setEditResponsaveis] = useState<Array<{ id: number; nome: string }>>([])
   const [editEtapasDisponiveis, setEditEtapasDisponiveis] = useState<ImplantacaoEtapa[]>([])
   const [editObs, setEditObs] = useState('')
+  const [editErro, setEditErro] = useState('')
+  const [editServicos, setEditServicos] = useState<Array<{ id: number; nome: string }>>([])
+  const [editServicoId, setEditServicoId] = useState<string>('')
+  const [editServicoInicial, setEditServicoInicial] = useState<string>('')
   const [editItems, setEditItems] = useState<TransitionItem[]>([])
   const [loadingEditChecklistItens, setLoadingEditChecklistItens] = useState(false)
   const [salvandoEditItem, setSalvandoEditItem] = useState<string | null>(null)
@@ -685,6 +689,7 @@ export function Pipeline() {
     setEditLoading(true)
     setEditCliente(cliente)
     setEditObs('')
+    setEditErro('')
     setEditItems([])
     try {
       const data = await api.getImplantacaoConfiguracao(cliente.clienteId, cliente.processoId)
@@ -694,6 +699,10 @@ export function Pipeline() {
       setEditEtapa(data.cliente.statusInstal)
       setEditResponsavel(data.cliente.responsavelId ? String(data.cliente.responsavelId) : 'none')
       setEditChecklistIds(data.checklistIdsSelecionados || [])
+      setEditServicos(data.servicos || [])
+      const servicoAtual = data.servicoIdAtual ? String(data.servicoIdAtual) : ''
+      setEditServicoId(servicoAtual)
+      setEditServicoInicial(servicoAtual)
     } finally {
       setEditLoading(false)
     }
@@ -743,7 +752,17 @@ export function Pipeline() {
 
   async function salvarEdicaoCliente() {
     if (!editCliente) return
+    const trocouServico = editServicoId && editServicoId !== editServicoInicial
+    if (trocouServico) {
+      const nomeNovo = editServicos.find((s) => String(s.id) === editServicoId)?.nome || 'o serviço selecionado'
+      const nomeAtual = editServicos.find((s) => String(s.id) === editServicoInicial)?.nome || 'o serviço atual'
+      const confirmar = window.confirm(
+        `Alterar o serviço deste processo de "${nomeAtual}" para "${nomeNovo}"?\n\nA mudança fica registrada no histórico e na auditoria do processo.`
+      )
+      if (!confirmar) return
+    }
     setEditSaving(true)
+    setEditErro('')
     try {
       await api.updateImplantacaoConfiguracao(editCliente.clienteId, {
         statusInstal: editEtapa,
@@ -751,9 +770,12 @@ export function Pipeline() {
         checklistIds: editChecklistIds,
         observacao: editObs.trim() || undefined,
         processoId: editCliente.processoId,
+        servicoId: editServicoId ? Number(editServicoId) : undefined,
       })
       setEditOpen(false)
       await carregarPainel()
+    } catch (err: any) {
+      setEditErro(err?.message || 'Não foi possível salvar as alterações.')
     } finally {
       setEditSaving(false)
     }
@@ -1653,6 +1675,31 @@ export function Pipeline() {
               </div>
             </div>
 
+            {editServicos.length > 0 && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Serviço do processo</label>
+                <select
+                  value={editServicoId}
+                  onChange={(e) => setEditServicoId(e.target.value)}
+                  className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-3"
+                >
+                  <option value="">{editServicoInicial ? 'Manter serviço atual' : 'Sem serviço definido'}</option>
+                  {editServicos.map((s) => (
+                    <option key={s.id} value={String(s.id)}>{s.nome}</option>
+                  ))}
+                </select>
+                {editServicoId && editServicoId !== editServicoInicial ? (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    O serviço será alterado ao salvar — a troca fica registrada no histórico e na auditoria.
+                  </p>
+                ) : (
+                  <p className="text-xs text-slate-500 mt-1">
+                    Troque aqui em vez de criar outro processo para o mesmo cliente.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Checklist da Etapa Atual</label>
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
@@ -1722,15 +1769,27 @@ export function Pipeline() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Observação da Alteração</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide">Observação da Alteração</label>
+                <span className={clsx('text-[11px]', editObs.length > 2000 ? 'text-red-500 font-semibold' : 'text-slate-400')}>
+                  {editObs.length}/2000
+                </span>
+              </div>
               <textarea
                 value={editObs}
                 onChange={(e) => setEditObs(e.target.value)}
+                maxLength={2000}
                 rows={3}
                 className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-3 py-2"
                 placeholder="Opcional"
               />
             </div>
+
+            {editErro && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300">
+                {editErro}
+              </div>
+            )}
 
             <div className="flex justify-between gap-2">
               <Button

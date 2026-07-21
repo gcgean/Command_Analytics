@@ -5,13 +5,13 @@ import {
 } from 'recharts'
 import {
   Headphones, AlertTriangle, TrendingUp, DollarSign,
-  Users, Clock, Shield, Calendar, ChevronRight
+  Users, Clock, Shield, Calendar, ChevronRight, Award, Building2, Trophy
 } from 'lucide-react'
 import { KPICard } from '../../components/ui/KPICard'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { api } from '../../services/api'
 import { useNavigate } from 'react-router-dom'
-import type { StatusAtendimento, Atendimento, AgendaItem, Cliente } from '../../types'
+import type { StatusAtendimento, Atendimento, AgendaItem, Cliente, DesempenhoEquipe } from '../../types'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import clsx from 'clsx'
@@ -68,6 +68,9 @@ export function Dashboard() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [agendaHoje, setAgendaHoje] = useState<AgendaItem[]>([])
   const [ultimosAtendimentos, setUltimosAtendimentos] = useState<Atendimento[]>([])
+  const [desempenho, setDesempenho] = useState<DesempenhoEquipe | null>(null)
+  const [desempenhoMeses, setDesempenhoMeses] = useState(12)
+  const [desempenhoLoading, setDesempenhoLoading] = useState(true)
 
   useEffect(() => {
     const hoje = format(new Date(), 'yyyy-MM-dd')
@@ -88,6 +91,14 @@ export function Dashboard() {
       setLoading(false)
     })
   }, [])
+
+  useEffect(() => {
+    setDesempenhoLoading(true)
+    api.getDesempenhoEquipe(desempenhoMeses)
+      .then((d) => setDesempenho(d))
+      .catch(() => setDesempenho(null))
+      .finally(() => setDesempenhoLoading(false))
+  }, [desempenhoMeses])
 
   // certificadoVencimento field no longer exists — use empty array
   const certVencendo: any[] = []
@@ -309,6 +320,156 @@ export function Dashboard() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Desempenho da Equipe */}
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Trophy className="w-5 h-5 text-amber-500" />
+            <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Desempenho da Equipe</h2>
+            <span className="text-xs text-slate-500">
+              {desempenho ? `${(desempenho.totalAtendimentos).toLocaleString('pt-BR')} atendimentos no período` : ''}
+            </span>
+          </div>
+          <div className="flex gap-1">
+            {[6, 12, 24].map(m => (
+              <button
+                key={m}
+                onClick={() => setDesempenhoMeses(m)}
+                className={clsx(
+                  'px-3 py-1.5 rounded-lg text-xs font-medium transition-colors',
+                  desempenhoMeses === m
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+                )}
+              >
+                {m} meses
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {desempenhoLoading ? (
+          <div className="card flex items-center justify-center py-12">
+            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : !desempenho ? (
+          <div className="card text-sm text-slate-500 text-center py-8">Não foi possível carregar o desempenho.</div>
+        ) : (
+          <>
+            {/* Evolução mensal */}
+            <div className="card transition-colors duration-300">
+              <div className="flex items-center gap-2 mb-4">
+                <TrendingUp className="w-4 h-4 text-blue-500" />
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Evolução mensal de atendimentos</h3>
+              </div>
+              <ResponsiveContainer width="100%" height={240}>
+                <LineChart data={desempenho.evolucaoMensal} margin={{ top: 0, right: 8, left: -10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#e2e8f0'} />
+                  <XAxis dataKey="label" tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11 }} />
+                  <YAxis tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11 }} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '8px', fontSize: '12px' }}
+                    labelStyle={{ color: isDarkMode ? '#f1f5f9' : '#0f172a' }}
+                    formatter={(v: number) => [v.toLocaleString('pt-BR'), 'Atendimentos']}
+                  />
+                  <Line type="monotone" dataKey="total" name="Atendimentos" stroke="#3b82f6" strokeWidth={2} dot={{ fill: '#3b82f6', r: 3 }} activeDot={{ r: 6 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {/* Ranking de técnicos */}
+              <div className="card transition-colors duration-300">
+                <div className="flex items-center gap-2 mb-4">
+                  <Award className="w-4 h-4 text-emerald-500" />
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Ranking de técnicos (volume)</h3>
+                </div>
+                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                  {desempenho.rankingTecnicos.length === 0 ? (
+                    <p className="text-sm text-slate-500 text-center py-4">Sem dados no período.</p>
+                  ) : (
+                    (() => {
+                      const maxTotal = desempenho.rankingTecnicos[0]?.total || 1
+                      return desempenho.rankingTecnicos.map((t, i) => (
+                        <div key={t.tecnicoId ?? `x${i}`} className="flex items-center gap-3">
+                          <span className={clsx(
+                            'flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-bold',
+                            i === 0 ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
+                              : i === 1 ? 'bg-slate-200 text-slate-700 dark:bg-slate-600 dark:text-slate-200'
+                              : i === 2 ? 'bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400'
+                              : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                          )}>{i + 1}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm text-slate-700 dark:text-slate-200 truncate">{t.tecnicoNome}</span>
+                              <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t.total.toLocaleString('pt-BR')}</span>
+                            </div>
+                            <div className="mt-1 h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                              <div className="h-full rounded-full bg-blue-500" style={{ width: `${Math.max(3, (t.total / maxTotal) * 100)}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    })()
+                  )}
+                </div>
+              </div>
+
+              {/* Volume por setor */}
+              <div className="card transition-colors duration-300">
+                <div className="flex items-center gap-2 mb-4">
+                  <Building2 className="w-4 h-4 text-purple-500" />
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Volume por setor</h3>
+                </div>
+                <ResponsiveContainer width="100%" height={320}>
+                  <BarChart data={desempenho.porSetor} layout="vertical" margin={{ top: 0, right: 16, left: 10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? '#334155' : '#e2e8f0'} horizontal={false} />
+                    <XAxis type="number" tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11 }} />
+                    <YAxis type="category" dataKey="nome" width={92} tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11 }} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '8px', fontSize: '12px' }}
+                      labelStyle={{ color: isDarkMode ? '#f1f5f9' : '#0f172a' }}
+                      formatter={(v: number) => [v.toLocaleString('pt-BR'), 'Atendimentos']}
+                    />
+                    <Bar dataKey="total" name="Atendimentos" fill="#8b5cf6" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Notas de treinamento */}
+            <div className="card transition-colors duration-300">
+              <div className="flex items-center gap-2 mb-4">
+                <Trophy className="w-4 h-4 text-amber-500" />
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Qualidade — nota média de treinamentos</h3>
+                <span className="text-xs text-slate-500">(por técnico, no período)</span>
+              </div>
+              {desempenho.notasTreinamento.length === 0 ? (
+                <p className="text-sm text-slate-500 text-center py-4">Nenhuma nota de treinamento lançada no período.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {desempenho.notasTreinamento.map((n, i) => (
+                    <div key={n.tecnicoId} className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 p-2.5">
+                      <span className="flex-shrink-0 w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 flex items-center justify-center text-[11px] font-bold">{i + 1}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-700 dark:text-slate-200 truncate">{n.tecnicoNome}</p>
+                        <p className="text-[11px] text-slate-500">{n.avaliacoes} {n.avaliacoes === 1 ? 'avaliação' : 'avaliações'}</p>
+                      </div>
+                      <span className={clsx(
+                        'flex-shrink-0 rounded-full px-2.5 py-1 text-xs font-bold',
+                        n.media >= 9 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
+                          : n.media >= 7 ? 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-400'
+                          : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'
+                      )}>{n.media.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

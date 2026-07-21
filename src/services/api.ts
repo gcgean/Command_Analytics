@@ -7,7 +7,8 @@ import type {
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
   DashboardMensalidadesAbc, DashboardMensalidadesAgrupamento, DashboardMensalidadesConcentracao,
   DashboardMensalidadesEstatisticas, DashboardMensalidadesFaixa, DashboardMensalidadesFiltros,
-  DashboardMensalidadesOpcoesFiltros, DashboardMensalidadesRanking, DashboardMensalidadesResumo
+  DashboardMensalidadesOpcoesFiltros, DashboardMensalidadesRanking, DashboardMensalidadesResumo,
+  DesempenhoEquipe
 } from '../types'
 
 // ============================================================
@@ -218,6 +219,7 @@ export const api = {
 
   // ─── Dashboard ─────────────────────────────────────────────
   getDashboardKPIs: () => fetchApi('/dashboard/kpis'),
+  getDesempenhoEquipe: (meses = 12) => fetchApi<DesempenhoEquipe>(`/dashboard/desempenho-equipe?meses=${meses}`),
   getDashboardMensalidadesResumo: (params?: DashboardMensalidadesFiltros) => {
     const qs = params ? '?' + new URLSearchParams(params as Record<string, string>).toString() : ''
     return fetchApi<DashboardMensalidadesResumo>(`/dashboard/mensalidades/resumo${qs}`)
@@ -465,7 +467,7 @@ export const api = {
     fetchApi<ImplantacaoConfiguracaoCliente>(`/pipeline/implantacao/${clienteId}/configuracao${processoId ? `?processoId=${processoId}` : ''}`),
   updateImplantacaoConfiguracao: (
     clienteId: number,
-    data: { statusInstal?: number; responsavelId?: number | null; checklistIds?: number[]; observacao?: string; processoId?: number }
+    data: { statusInstal?: number; responsavelId?: number | null; checklistIds?: number[]; observacao?: string; processoId?: number; servicoId?: number | null }
   ) => fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/configuracao`, { method: 'PUT', body: JSON.stringify(data) }),
   getImplantacaoResponsaveis: () => fetchApi<Array<{ id: number; nome: string }>>('/pipeline/implantacao/responsaveis'),
   desativarProcessoImplantacao: (clienteId: number, processoId: number) =>

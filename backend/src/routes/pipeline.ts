@@ -316,6 +316,24 @@ async function ensureColumnExists(table: string, column: string, ddl: string) {
   }
 }
 
+// Alarga uma coluna VARCHAR se ela estiver menor que o tamanho mínimo desejado — idempotente,
+// não perde dados. Usado para corrigir colunas 'observacao' que ficaram pequenas demais
+// (ex.: VARCHAR(500) rejeitando textos mais longos com erro 1406 em modo estrito).
+async function ensureColumnMinLength(table: string, column: string, minLength: number) {
+  const rows = await prisma.$queryRaw<Array<{ CHARACTER_MAXIMUM_LENGTH: number | null; IS_NULLABLE: string }>>`
+    SELECT CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = ${table}
+      AND COLUMN_NAME = ${column}
+  `
+  const atual = rows[0]?.CHARACTER_MAXIMUM_LENGTH ?? null
+  if (atual !== null && atual < minLength) {
+    const nullable = rows[0]?.IS_NULLABLE === 'YES' ? 'NULL' : 'NOT NULL'
+    await prisma.$executeRawUnsafe(`ALTER TABLE ${table} MODIFY COLUMN ${column} VARCHAR(${minLength}) ${nullable}`)
+  }
+}
+
 async function ensureIndexExists(table: string, indexName: string, ddl: string) {
   const rows = await prisma.$queryRaw<Array<{ INDEX_NAME: string }>>`
     SELECT INDEX_NAME
@@ -432,7 +450,7 @@ async function ensureImplantacaoBootstrap() {
           titulo             VARCHAR(160) NOT NULL,
           servico_nome       VARCHAR(160) NULL,
           status_atual       INT NOT NULL DEFAULT 1,
-          observacao         VARCHAR(500) NULL,
+          observacao         VARCHAR(2000) NULL,
           processo_principal TINYINT(1) NOT NULL DEFAULT 0,
           ativo              TINYINT(1) NOT NULL DEFAULT 1,
           criado_em          DATETIME NOT NULL DEFAULT NOW(),
@@ -456,7 +474,7 @@ async function ensureImplantacaoBootstrap() {
           marcado      TINYINT(1) NOT NULL DEFAULT 0,
           marcado_em   DATETIME NULL,
           marcado_por  INT NULL,
-          observacao   VARCHAR(500) NULL,
+          observacao   VARCHAR(2000) NULL,
           UNIQUE KEY uniq_cliente_item (cliente_id, checklist_id, item_indice),
           INDEX idx_implantacao_cliente (cliente_id),
           INDEX idx_implantacao_processo (processo_id),
@@ -486,7 +504,7 @@ async function ensureImplantacaoBootstrap() {
           responsavel_id INT NULL,
           atualizado_em  DATETIME NOT NULL DEFAULT NOW(),
           atualizado_por INT NULL,
-          observacao     VARCHAR(500) NULL,
+          observacao     VARCHAR(2000) NULL,
           INDEX idx_implantacao_responsavel_processo (processo_id),
           INDEX idx_implantacao_responsavel (responsavel_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -499,7 +517,7 @@ async function ensureImplantacaoBootstrap() {
           responsavel_id INT NULL,
           atualizado_em  DATETIME NOT NULL DEFAULT NOW(),
           atualizado_por INT NULL,
-          observacao     VARCHAR(500) NULL,
+          observacao     VARCHAR(2000) NULL,
           INDEX idx_implantacao_resp_proc_cliente (cliente_id),
           INDEX idx_implantacao_resp_proc_resp (responsavel_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -517,7 +535,7 @@ async function ensureImplantacaoBootstrap() {
           item_indice   INT NULL,
           marcado       TINYINT(1) NULL,
           responsavel_id INT NULL,
-          observacao    VARCHAR(500) NULL,
+          observacao    VARCHAR(2000) NULL,
           usuario_id    INT NULL,
           data_hora     DATETIME NOT NULL DEFAULT NOW(),
           INDEX idx_implantacao_mov_cliente_data (cliente_id, data_hora),
@@ -533,6 +551,15 @@ async function ensureImplantacaoBootstrap() {
       await ensureColumnExists('implantacao_processos', 'servico_id', 'servico_id INT NULL AFTER servico_nome')
       await ensureColumnExists('implantacao_processos', 'ativo', 'ativo TINYINT(1) NOT NULL DEFAULT 1 AFTER processo_principal')
       await ensureColumnExists('cadastro_etapas', 'sla_dias', 'sla_dias INT NULL AFTER cor')
+
+      // Alarga colunas 'observacao' que ainda estejam em VARCHAR(500) — textos de observação mais
+      // longos (comuns em "Observação da Alteração") estouravam esse limite e falhavam ao salvar
+      // com erro 1406 (Data too long), em modo estrito.
+      await ensureColumnMinLength('implantacao_processos', 'observacao', 2000)
+      await ensureColumnMinLength('implantacao_checklist_marcacoes', 'observacao', 2000)
+      await ensureColumnMinLength('implantacao_responsavel', 'observacao', 2000)
+      await ensureColumnMinLength('implantacao_responsavel_processo', 'observacao', 2000)
+      await ensureColumnMinLength('implantacao_movimentacoes', 'observacao', 2000)
 
       // Sem este índice, a subquery de "última venda" do painel faz table scan completo de
       // dados_gerais_clientes para cada cliente (custava ~4,5s do carregamento do pipeline).
@@ -2064,6 +2091,11 @@ export async function pipelineRoutes(app: FastifyInstance) {
       })
       .map((row) => Number(row.checklist_id))
 
+    // Serviços ativos para permitir a troca do serviço do processo já criado.
+    const servicos = await prisma.$queryRaw<Array<{ id: number; nome: string }>>`
+      SELECT id, nome FROM cadastro_servicos WHERE ativo = 1 ORDER BY nome ASC
+    `
+
     return {
       cliente,
       etapas,
@@ -2076,18 +2108,21 @@ export async function pipelineRoutes(app: FastifyInstance) {
         itensQuantidade: c.itens.length,
       })),
       checklistIdsSelecionados,
+      servicos: servicos.map((s) => ({ id: Number(s.id), nome: s.nome })),
+      servicoIdAtual: contexto.servicoId === null || contexto.servicoId === undefined ? null : Number(contexto.servicoId),
     }
   })
 
   app.put('/implantacao/:clienteId/configuracao', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Atualiza configuração da implantação por cliente' } }, async (request, reply) => {
     const { clienteId } = request.params as { clienteId: string }
     const id = Number(clienteId)
-    const { statusInstal, responsavelId, checklistIds, observacao, processoId } = request.body as {
+    const { statusInstal, responsavelId, checklistIds, observacao, processoId, servicoId } = request.body as {
       statusInstal?: number
       responsavelId?: number | null
       checklistIds?: number[]
       observacao?: string
       processoId?: number
+      servicoId?: number | null
     }
     const usuarioId = Number((request.user as any)?.id || 0) || null
 
@@ -2119,6 +2154,75 @@ export async function pipelineRoutes(app: FastifyInstance) {
     let statusMudou = false
     let responsavelMudou = false
     let checklistMudou = false
+    let servicoMudou = false
+
+    // Troca de serviço do processo já criado — evita que o usuário precise criar um
+    // processo novo (o que gerava duplicatas). Fica registrado no histórico e na auditoria.
+    if (servicoId !== undefined && servicoId !== null) {
+      const idServicoNovo = Number(servicoId)
+      if (!Number.isFinite(idServicoNovo) || idServicoNovo <= 0) {
+        return reply.status(400).send({ error: 'Serviço inválido.' })
+      }
+      const servicoAtualId = contexto.servicoId === null || contexto.servicoId === undefined
+        ? null
+        : Number(contexto.servicoId)
+
+      if (idServicoNovo !== servicoAtualId) {
+        const servicoRows = await prisma.$queryRaw<Array<{ id: number; nome: string }>>`
+          SELECT id, nome FROM cadastro_servicos WHERE id = ${idServicoNovo} AND ativo = 1 LIMIT 1
+        `
+        if (!servicoRows.length) {
+          return reply.status(400).send({ error: 'Serviço selecionado é inválido ou está inativo.' })
+        }
+        const nomeServicoNovo = servicoRows[0].nome
+
+        // Não deixa a troca gerar duplicata com outro processo ativo do mesmo serviço.
+        const conflito = await prisma.$queryRaw<Array<{ id: number }>>`
+          SELECT id FROM implantacao_processos
+          WHERE cliente_id = ${id}
+            AND servico_id = ${idServicoNovo}
+            AND id <> ${contexto.processoId}
+            AND COALESCE(ativo, 1) = 1
+          LIMIT 1
+        `
+        if (conflito.length) {
+          return reply.status(409).send({
+            error: `Este cliente já possui outro processo ativo do serviço "${nomeServicoNovo}". Encerre ou desative aquele processo antes de trocar este.`,
+          })
+        }
+
+        const nomeServicoAntigo = contexto.servicoNome || contexto.titulo || 'Sem serviço'
+        servicoMudou = true
+
+        await prisma.$executeRaw`
+          UPDATE implantacao_processos
+          SET servico_id = ${idServicoNovo},
+              servico_nome = ${nomeServicoNovo},
+              titulo = ${nomeServicoNovo},
+              tipo = 'novo_servico',
+              atualizado_em = UTC_TIMESTAMP(),
+              atualizado_por = ${usuarioId}
+          WHERE id = ${contexto.processoId}
+        `
+
+        await registrarMovimentacao({
+          clienteId: id,
+          processoId: contexto.processoId,
+          tipo: 'observacao',
+          observacao: `Serviço alterado de "${nomeServicoAntigo}" para "${nomeServicoNovo}".${obs ? ` ${obs}` : ''}`,
+          usuarioId,
+        })
+
+        await registrarAuditoria({
+          tabela: 'implantacao_processos',
+          registroId: contexto.processoId,
+          acao: 'ALTERACAO',
+          usuarioId,
+          dadosAntes: { servicoId: servicoAtualId, servico: nomeServicoAntigo },
+          dadosDepois: { servicoId: idServicoNovo, servico: nomeServicoNovo },
+        })
+      }
+    }
 
     if (novoStatus !== undefined && novoStatus !== cliente.statusInstal) {
       statusMudou = true
@@ -2229,7 +2333,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     // Se nada mudou (etapa/responsável/checklist) mas o usuário digitou uma observação,
     // ela era descartada silenciosamente. Registra como evento avulso, igual ao endpoint dedicado de observação.
-    if (obs && !statusMudou && !responsavelMudou && !checklistMudou) {
+    if (obs && !statusMudou && !responsavelMudou && !checklistMudou && !servicoMudou) {
       await prisma.$executeRaw`
         UPDATE implantacao_processos
         SET observacao = ${obs}, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
@@ -2245,9 +2349,10 @@ export async function pipelineRoutes(app: FastifyInstance) {
       })
     }
 
-    if (statusMudou || responsavelMudou || checklistMudou || obs) {
+    if (statusMudou || responsavelMudou || checklistMudou || servicoMudou || obs) {
       const resumoConfig = await getClienteEProcessoResumo(id, contexto.processoId)
       const partes: string[] = []
+      if (servicoMudou) partes.push('serviço do processo alterado')
       if (statusMudou && novoStatus !== undefined) {
         partes.push(`etapa alterada para "${ETAPAS_PADRAO.find((e) => e.status === novoStatus)?.nome ?? novoStatus}"`)
       }
@@ -2320,6 +2425,23 @@ export async function pipelineRoutes(app: FastifyInstance) {
     }
     if (tipoNormalizado === 'novo_servico' && !servicoIdNormalizado) {
       return reply.status(400).send({ error: 'Selecione um serviço cadastrado.' })
+    }
+
+    // Evita duplicata: se o cliente já tem um processo ATIVO do mesmo serviço, não cria outro.
+    // (Foi o que gerou processos repetidos por clique duplo / nova tentativa de "trocar" o serviço.)
+    if (servicoIdNormalizado) {
+      const jaExiste = await prisma.$queryRaw<Array<{ id: number; titulo: string | null }>>`
+        SELECT id, titulo FROM implantacao_processos
+        WHERE cliente_id = ${idCliente}
+          AND servico_id = ${servicoIdNormalizado}
+          AND COALESCE(ativo, 1) = 1
+        LIMIT 1
+      `
+      if (jaExiste.length) {
+        return reply.status(409).send({
+          error: `Este cliente já possui um processo ativo do serviço "${servicoNomeResolvido}". Use o processo existente (você pode alterar a etapa ou o serviço dele em Editar) em vez de criar outro.`,
+        })
+      }
     }
 
     const processoCriado = await prisma.$queryRaw<Array<{ id: number }>>`
