@@ -571,7 +571,7 @@ export async function clientesRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Cliente inválido.' })
     }
 
-    const { observacoes } = request.body as { observacoes?: string }
+    const { observacoes, baseObservacoes } = request.body as { observacoes?: string; baseObservacoes?: string }
     const conteudo = String(observacoes ?? '')
 
     try {
@@ -581,6 +581,21 @@ export async function clientesRoutes(app: FastifyInstance) {
       })
       if (!before) {
         return reply.status(404).send({ error: 'Cliente não encontrado.' })
+      }
+
+      // Controle de concorrência otimista: se o conteúdo atual no banco já não é mais
+      // o mesmo que o editor tinha carregado (baseObservacoes), significa que alguém
+      // salvou uma versão mais nova enquanto este usuário editava — recusa o save cego
+      // (que sobrescreveria silenciosamente a versão mais recente) e devolve o conteúdo
+      // atual para o front-end decidir o que fazer.
+      if (baseObservacoes !== undefined) {
+        const atualNoBanco = before.obsVenda ?? ''
+        if (atualNoBanco !== baseObservacoes) {
+          return reply.status(409).send({
+            error: 'Este prontuário foi alterado por outra pessoa enquanto você editava. Revise a versão mais recente antes de salvar por cima.',
+            atual: atualNoBanco,
+          })
+        }
       }
 
       const cliente = await prisma.cliente.update({

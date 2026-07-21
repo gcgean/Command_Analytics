@@ -517,8 +517,13 @@ export function DetalheCliente() {
         <ProntuarioEditor
           clienteId={cliente.id}
           initialValue={cliente.obsVenda ?? ''}
-          onSave={async (html) => {
-            const atualizado = await api.updateClienteProntuario(cliente.id, { observacoes: html })
+          onRefreshBeforeEdit={async () => {
+            const atual = await api.getClienteById(cliente.id)
+            setCliente((prev) => prev ? { ...prev, obsVenda: atual.obsVenda ?? '' } : prev)
+            return atual.obsVenda ?? ''
+          }}
+          onSave={async (html, baseObservacoes) => {
+            const atualizado = await api.updateClienteProntuario(cliente.id, { observacoes: html, baseObservacoes })
             setCliente((prev) => prev ? { ...prev, obsVenda: atualizado.obsVenda ?? html } : prev)
           }}
         />

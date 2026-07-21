@@ -19,10 +19,13 @@ import { Card } from '../ui/Card'
 import { Anexos } from '../ui/Anexos'
 import { AuditoriaTimeline } from '../ui/AuditoriaTimeline'
 
+type ConflitoProntuario = { atual: string }
+
 type ProntuarioEditorProps = {
   clienteId: number
   initialValue: string
-  onSave: (html: string) => Promise<void>
+  onSave: (html: string, baseObservacoes: string) => Promise<void>
+  onRefreshBeforeEdit?: () => Promise<string>
 }
 
 const fontOptions = [
@@ -71,16 +74,19 @@ export function ProntuarioEditor({
   clienteId,
   initialValue,
   onSave,
+  onRefreshBeforeEdit,
 }: ProntuarioEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null)
   const historyRef = useRef<string[]>([])
   const historyIndexRef = useRef(-1)
   const applyingHistoryRef = useRef(false)
+  const baselineRef = useRef(initialValue)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [draft, setDraft] = useState(() => normalizeEditorHtml(initialValue))
   const [showHistory, setShowHistory] = useState(false)
+  const [conflito, setConflito] = useState<ConflitoProntuario | null>(null)
 
   function getEditorHtml() {
     return editorRef.current?.innerHTML?.trim() || ''
@@ -130,13 +136,15 @@ export function ProntuarioEditor({
   }
 
   useEffect(() => {
+    if (editing) return
     const normalized = normalizeEditorHtml(initialValue)
+    baselineRef.current = initialValue
     setDraft(normalized)
     resetHistory(normalized)
     if (editorRef.current) {
       syncEditorFromHtml(normalized)
     }
-  }, [initialValue])
+  }, [initialValue, editing])
 
   useEffect(() => {
     if (!editorRef.current) return
@@ -207,12 +215,31 @@ export function ProntuarioEditor({
   }
 
   function handleCancel() {
-    const normalized = normalizeEditorHtml(initialValue)
+    const normalized = normalizeEditorHtml(baselineRef.current)
     setDraft(normalized)
     resetHistory(normalized)
     syncEditorFromHtml(normalized)
     setError(null)
+    setConflito(null)
     setEditing(false)
+  }
+
+  async function handleStartEditing() {
+    setError(null)
+    setConflito(null)
+    if (onRefreshBeforeEdit) {
+      try {
+        const fresh = await onRefreshBeforeEdit()
+        baselineRef.current = fresh
+        const normalized = normalizeEditorHtml(fresh)
+        setDraft(normalized)
+        resetHistory(normalized)
+      } catch {
+        // Se a atualização falhar, segue com o que já estava carregado — o controle de
+        // concorrência no salvar continua protegendo contra sobrescrita silenciosa.
+      }
+    }
+    setEditing(true)
   }
 
   async function handleSave() {
@@ -220,15 +247,38 @@ export function ProntuarioEditor({
     setSaving(true)
     setError(null)
     try {
-      await onSave(html)
+      await onSave(html, baselineRef.current)
+      baselineRef.current = html
       setDraft(html)
       resetHistory(html)
+      setConflito(null)
       setEditing(false)
     } catch (e: any) {
-      setError(e?.message || 'Não foi possível salvar o prontuário.')
+      if (e?.status === 409 && e?.details?.atual !== undefined) {
+        setConflito({ atual: String(e.details.atual ?? '') })
+      } else {
+        setError(e?.message || 'Não foi possível salvar o prontuário.')
+      }
     } finally {
       setSaving(false)
     }
+  }
+
+  function usarVersaoMaisRecente() {
+    if (!conflito) return
+    const normalized = normalizeEditorHtml(conflito.atual)
+    baselineRef.current = conflito.atual
+    setDraft(normalized)
+    resetHistory(normalized)
+    syncEditorFromHtml(normalized)
+    setConflito(null)
+  }
+
+  function sobrescreverMesmoAssim() {
+    if (!conflito) return
+    baselineRef.current = conflito.atual
+    setConflito(null)
+    void handleSave()
   }
 
   return (
@@ -248,7 +298,7 @@ export function ProntuarioEditor({
                   Histórico
                 </Button>
                 {!editing && (
-                  <Button className="w-full sm:w-auto" size="sm" variant="secondary" icon={<Pencil className="w-4 h-4" />} onClick={() => setEditing(true)}>
+                  <Button className="w-full sm:w-auto" size="sm" variant="secondary" icon={<Pencil className="w-4 h-4" />} onClick={() => void handleStartEditing()}>
                     Editar prontuário
                   </Button>
                 )}
@@ -379,6 +429,20 @@ export function ProntuarioEditor({
             </div>
             {error && (
               <div className="mt-3 text-sm text-red-500">{error}</div>
+            )}
+            {conflito && (
+              <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+                <p className="font-medium">Este prontuário foi alterado por outra pessoa enquanto você editava.</p>
+                <p className="mt-1 text-xs">Suas edições ainda estão no editor. Escolha como continuar:</p>
+                <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                  <Button size="sm" variant="secondary" onClick={usarVersaoMaisRecente}>
+                    Ver versão mais recente (descarta minhas edições)
+                  </Button>
+                  <Button size="sm" onClick={sobrescreverMesmoAssim} loading={saving}>
+                    Salvar minha versão mesmo assim
+                  </Button>
+                </div>
+              </div>
             )}
           </div>
         </Card>

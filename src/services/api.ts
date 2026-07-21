@@ -168,7 +168,10 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
       backendMessage && (!backendError || genericErrors.has(backendError))
         ? backendMessage
         : backendError || backendMessage || `HTTP ${res.status}`
-    throw new Error(message)
+    const erroApi = new Error(message) as Error & { status?: number; details?: any }
+    erroApi.status = res.status
+    erroApi.details = err
+    throw erroApi
   }
   if (res.status === 204) return undefined as T
   return res.json()
@@ -286,7 +289,7 @@ export const api = {
   getClienteById: (id: number, options?: RequestInit) => fetchApi<Cliente>(`/clientes/${id}`, options),
   createCliente: (data: Partial<Cliente>) => fetchApi<Cliente>('/clientes', { method: 'POST', body: JSON.stringify(data) }),
   updateCliente: (id: number, data: Partial<Cliente>) => fetchApi<Cliente>(`/clientes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  updateClienteProntuario: (id: number, data: { observacoes: string }) =>
+  updateClienteProntuario: (id: number, data: { observacoes: string; baseObservacoes?: string }) =>
     fetchApi<Cliente>(`/clientes/${id}/prontuario`, { method: 'PUT', body: JSON.stringify(data) }),
   getMonitorClientes: () => fetchApi('/clientes/monitor/resumo'),
 
