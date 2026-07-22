@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { registrarAuditoria } from '../utils/auditoria'
+import { ensureProntuarioGuard } from '../utils/prontuarioGuard'
 
 type LegacyContatoRow = {
   descricao?: string | null
@@ -575,6 +576,8 @@ export async function clientesRoutes(app: FastifyInstance) {
     const conteudo = String(observacoes ?? '')
 
     try {
+      await ensureProntuarioGuard()
+
       const before = await prisma.cliente.findUnique({
         where: { id: clienteId },
         select: { id: true, obsVenda: true },
@@ -598,9 +601,18 @@ export async function clientesRoutes(app: FastifyInstance) {
         }
       }
 
-      const cliente = await prisma.cliente.update({
+      // A gravação em OBS_VENDA é protegida por um trigger no banco (ver initProntuarioGuard):
+      // qualquer UPDATE nessa coluna que não venha marcado com @allow_obs_venda_write = 1 é
+      // revertido automaticamente. Isso bloqueia sobrescritas vindas do sistema legado (que
+      // historicamente trunca o campo em 200 caracteres) — só este endpoint define a marca,
+      // e sempre na mesma transação/conexão do UPDATE.
+      await prisma.$transaction([
+        prisma.$executeRaw`SET @allow_obs_venda_write = 1`,
+        prisma.$executeRaw`UPDATE cliente SET OBS_VENDA = ${conteudo} WHERE cod_cli = ${clienteId}`,
+      ])
+
+      const cliente = await prisma.cliente.findUniqueOrThrow({
         where: { id: clienteId },
-        data: { obsVenda: conteudo },
         include: {
           contador: {
             select: { id: true, nome: true, nomeComercial: true, email: true, telefone: true },

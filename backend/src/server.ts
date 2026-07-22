@@ -43,6 +43,7 @@ import { initChecklists } from './utils/checklists'
 import { initProcedimentos } from './utils/procedimentos'
 import { initAnexos } from './utils/anexos'
 import { initMetasCadastro } from './utils/metasCadastro'
+import { ensureProntuarioGuard } from './utils/prontuarioGuard'
 import { initNotificacoesAgendamento, startNotificacoesAgendamentoScheduler } from './utils/notificacoesAgendamento'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
@@ -188,6 +189,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initMetasCadastro()
     .then(() => console.log('✓ Tabelas de cadastro de metas verificadas'))
     .catch(e => console.warn('⚠ Metas cadastro init:', e.message))
+  ensureProntuarioGuard()
+    .then(() => console.log('✓ Proteção do prontuário do cliente verificada'))
+    .catch(e => console.warn('⚠ Proteção do prontuário init:', e.message))
   initNotificacoesAgendamento()
     .then(() => console.log('✓ Tabelas de notificações de agendamento verificadas'))
     .catch(e => console.warn('⚠ Notificações init:', e.message))
