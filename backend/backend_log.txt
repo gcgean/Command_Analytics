@@ -1,0 +1,17 @@
+{"level":30,"time":1785163515624,"pid":23528,"hostname":"PICHAUP-75NG49O","msg":"Server listening at http://0.0.0.0:3333"}
+
+🚀 Command Analytics API rodando em http://localhost:3333
+📖 Documentação Swagger: http://localhost:3333/docs
+💾 Banco de dados: SQLite (mysql://root:SDGdfa45342@analitcs.ciloscloud.com.br:3306/Suporte)
+🔐 Expiração do token JWT: 30d
+✓ Tabela de cadastro de etapas verificada
+✓ Tabela de auditoria verificada
+✓ Tabela de cadastro de checklists verificada
+✓ Tabela de anexos verificada
+✓ Tabelas de notificações de agendamento verificadas
+✓ Tabelas de cadastro de metas verificadas
+✓ Proteção do prontuário do cliente verificada
+✓ Tabela de cadastro de procedimentos verificada
+✓ Tabelas de maquininhas verificadas
+{"level":30,"time":1785163709311,"pid":23528,"hostname":"PICHAUP-75NG49O","reqId":"req-1","req":{"method":"GET","url":"/api/maquininhas/operadoras","hostname":"localhost:3333","remoteAddress":"127.0.0.1","remotePort":55534},"msg":"incoming request"}
+{"level":30,"time":1785163709346,"pid":23528,"hostname":"PICHAUP-75NG49O","reqId":"req-1","res":{"statusCode":200},"responseTime":33.5862999856472,"msg":"request completed"}
