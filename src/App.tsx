@@ -69,6 +69,7 @@ import { Campanhas } from './pages/campanhas/Campanhas'
 
 // Contadores
 import { Contadores } from './pages/contadores/Contadores'
+import { RelatorioMaquininhas } from './pages/clientes/RelatorioMaquininhas'
 
 // Versões
 import { Versoes } from './pages/versoes/Versoes'
@@ -227,6 +228,7 @@ export default function App() {
         <Route path="monitor" element={<PermissionRoute recurso="monitor"><MonitorAtendimentos /></PermissionRoute>} />
         <Route path="campanhas" element={<PermissionRoute recurso="campanhas"><Campanhas /></PermissionRoute>} />
         <Route path="contadores" element={<PermissionRoute recurso="contadores"><Contadores /></PermissionRoute>} />
+        <Route path="clientes/maquininhas" element={<PermissionRoute recurso="maquininhas-relatorio"><RelatorioMaquininhas /></PermissionRoute>} />
         <Route path="versoes" element={<PermissionRoute recurso="versoes"><Versoes /></PermissionRoute>} />
         <Route path="servidores" element={<PermissionRoute recurso="servidores"><Servidores /></PermissionRoute>} />
 

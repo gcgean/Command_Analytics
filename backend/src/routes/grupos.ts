@@ -23,6 +23,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'crm',                      label: 'CRM — Negócios',                  grupo: 'CLIENTES' },
   { id: 'crm-leads',                label: 'CRM — Pesquisa de Leads',         grupo: 'CLIENTES' },
   { id: 'contadores',               label: 'Contadores',                      grupo: 'CLIENTES' },
+  { id: 'maquininhas-relatorio',    label: 'Relatório de Maquininhas',        grupo: 'CLIENTES' },
   // FINANCEIRO
   { id: 'financeiro',               label: 'Análise Financeira',              grupo: 'FINANCEIRO' },
   { id: 'comissoes',                label: 'Comissões',                       grupo: 'FINANCEIRO' },

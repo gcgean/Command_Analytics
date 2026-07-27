@@ -20,6 +20,7 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { ProntuarioEditor } from '../../components/clientes/ProntuarioEditor'
+import { MaquininhasCliente } from '../../components/clientes/MaquininhasCliente'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { api } from '../../services/api'
 import type {
@@ -835,6 +836,10 @@ export function DetalheCliente() {
               {cliente.certificadoVencimento ? `Vencimento: ${formatSafeDate(cliente.certificadoVencimento)}` : 'Certificado não cadastrado.'}
             </p>
           </Card>
+
+          <div className="lg:col-span-2 xl:col-span-3">
+            <MaquininhasCliente clienteId={cliente.id} />
+          </div>
         </div>
       )}
 

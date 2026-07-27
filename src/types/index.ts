@@ -515,6 +515,46 @@ export interface DesempenhoEquipe {
   notasTreinamento: Array<{ tecnicoId: number; tecnicoNome: string; media: number; avaliacoes: number }>
 }
 
+// ============================================================
+// MAQUININHAS DE CARTÃO
+// ============================================================
+export type TipoMaquininha = 'TEF' | 'SMARTPOS'
+export type StatusMaquininha = 'NAO_INTEGRADO' | 'EM_IMPLANTACAO' | 'INTEGRADO'
+
+export interface Operadora {
+  id: number
+  nome: string
+}
+
+export interface ClienteMaquininha {
+  id: number
+  clienteId: number
+  operadoraId: number
+  operadoraNome: string
+  tipo: TipoMaquininha
+  quantidade: number
+  statusIntegracao: StatusMaquininha
+  observacao: string | null
+}
+
+export interface MaquininhasRelatorio {
+  totais: { clientes: number; registros: number; maquininhas: number; integradas: number }
+  porOperadora: Array<{ operadora: string; registros: number; maquininhas: number; integradas: number }>
+  porTipo: Array<{ tipo: string; registros: number; maquininhas: number }>
+  porStatus: Array<{ status: string; registros: number; maquininhas: number }>
+  detalhado: Array<{
+    id: number
+    clienteId: number
+    clienteNome: string
+    cnpj: string | null
+    operadoraNome: string
+    tipo: TipoMaquininha
+    quantidade: number
+    statusIntegracao: StatusMaquininha
+    observacao: string | null
+  }>
+}
+
 export interface ImplantacaoConcluidosResposta {
   etapas: ImplantacaoEtapa[]
   resumo: {

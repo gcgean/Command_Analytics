@@ -8,7 +8,7 @@ import type {
   DashboardMensalidadesAbc, DashboardMensalidadesAgrupamento, DashboardMensalidadesConcentracao,
   DashboardMensalidadesEstatisticas, DashboardMensalidadesFaixa, DashboardMensalidadesFiltros,
   DashboardMensalidadesOpcoesFiltros, DashboardMensalidadesRanking, DashboardMensalidadesResumo,
-  DesempenhoEquipe
+  DesempenhoEquipe, Operadora, ClienteMaquininha, MaquininhasRelatorio, TipoMaquininha, StatusMaquininha
 } from '../types'
 
 // ============================================================
@@ -382,6 +382,24 @@ export const api = {
   // ─── Auditoria ─────────────────────────────────────────────
   getAuditoria: (tabela: string, registroId: number) =>
     fetchApi<any[]>(`/auditoria?tabela=${tabela}&registroId=${registroId}`),
+
+  // ─── Maquininhas de cartão ──────────────────────────────────
+  getOperadoras: () => fetchApi<Operadora[]>('/maquininhas/operadoras'),
+  getMaquininhasCliente: (clienteId: number) =>
+    fetchApi<ClienteMaquininha[]>(`/maquininhas?clienteId=${clienteId}`),
+  createMaquininha: (data: { clienteId: number; operadoraId: number; tipo: TipoMaquininha; quantidade: number; statusIntegracao: StatusMaquininha; observacao?: string }) =>
+    fetchApi<{ ok: boolean; id: number }>('/maquininhas', { method: 'POST', body: JSON.stringify(data) }),
+  updateMaquininha: (id: number, data: Partial<{ operadoraId: number; tipo: TipoMaquininha; quantidade: number; statusIntegracao: StatusMaquininha; observacao: string }>) =>
+    fetchApi<{ ok: boolean }>(`/maquininhas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMaquininha: (id: number) => fetchApi<{ ok: boolean }>(`/maquininhas/${id}`, { method: 'DELETE' }),
+  getMaquininhasRelatorio: (params?: { operadoraId?: number; tipo?: TipoMaquininha; statusIntegracao?: StatusMaquininha }) => {
+    const qs = new URLSearchParams()
+    if (params?.operadoraId) qs.set('operadoraId', String(params.operadoraId))
+    if (params?.tipo) qs.set('tipo', params.tipo)
+    if (params?.statusIntegracao) qs.set('statusIntegracao', params.statusIntegracao)
+    const s = qs.toString()
+    return fetchApi<MaquininhasRelatorio>(`/maquininhas/relatorio${s ? `?${s}` : ''}`)
+  },
 
   // ─── Disponibilidade de Técnicos ───────────────────────────────
   getDisponibilidades: () => fetchApi<any[]>('/agenda/disponibilidade'),
