@@ -8,7 +8,8 @@ import type {
   DashboardMensalidadesAbc, DashboardMensalidadesAgrupamento, DashboardMensalidadesConcentracao,
   DashboardMensalidadesEstatisticas, DashboardMensalidadesFaixa, DashboardMensalidadesFiltros,
   DashboardMensalidadesOpcoesFiltros, DashboardMensalidadesRanking, DashboardMensalidadesResumo,
-  DesempenhoEquipe, Operadora, ClienteMaquininha, MaquininhasRelatorio, TipoMaquininha, StatusMaquininha
+  DesempenhoEquipe, Operadora, ClienteMaquininha, MaquininhasRelatorio, TipoMaquininha, StatusMaquininha,
+  ClientesSemMaquininhaResposta
 } from '../types'
 
 // ============================================================
@@ -399,6 +400,14 @@ export const api = {
     if (params?.statusIntegracao) qs.set('statusIntegracao', params.statusIntegracao)
     const s = qs.toString()
     return fetchApi<MaquininhasRelatorio>(`/maquininhas/relatorio${s ? `?${s}` : ''}`)
+  },
+  getClientesSemMaquininha: (params?: { search?: string; page?: number; pageSize?: number }) => {
+    const qs = new URLSearchParams()
+    if (params?.search) qs.set('search', params.search)
+    if (params?.page) qs.set('page', String(params.page))
+    if (params?.pageSize) qs.set('pageSize', String(params.pageSize))
+    const s = qs.toString()
+    return fetchApi<ClientesSemMaquininhaResposta>(`/maquininhas/sem-cadastro${s ? `?${s}` : ''}`)
   },
 
   // ─── Disponibilidade de Técnicos ───────────────────────────────

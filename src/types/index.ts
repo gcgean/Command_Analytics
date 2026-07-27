@@ -526,6 +526,19 @@ export interface Operadora {
   nome: string
 }
 
+export interface ClienteSemMaquininha {
+  id: number
+  nome: string
+  cnpj: string | null
+  cidade: string | null
+  uf: string | null
+}
+
+export interface ClientesSemMaquininhaResposta {
+  clientes: ClienteSemMaquininha[]
+  paginacao: { page: number; pageSize: number; total: number; hasMore: boolean }
+}
+
 export interface ClienteMaquininha {
   id: number
   clienteId: number
@@ -538,6 +551,7 @@ export interface ClienteMaquininha {
 }
 
 export interface MaquininhasRelatorio {
+  resumoCobertura: { totalAtivos: number; comCadastro: number; semCadastro: number }
   totais: { clientes: number; registros: number; maquininhas: number; integradas: number }
   porOperadora: Array<{ operadora: string; registros: number; maquininhas: number; integradas: number }>
   porTipo: Array<{ tipo: string; registros: number; maquininhas: number }>

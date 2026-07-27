@@ -232,12 +232,87 @@ export async function maquininhasRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
+  // ── Clientes ativos sem nenhuma maquininha cadastrada (nunca contatados) ──
+  app.get('/sem-cadastro', { preHandler: authMiddleware, schema: { tags: ['Maquininhas'], summary: 'Clientes ativos ainda sem nenhuma maquininha cadastrada' } }, async (request) => {
+    await ensureMaquininhas()
+    const { search, page, pageSize } = request.query as { search?: string; page?: string; pageSize?: string }
+
+    const busca = String(search ?? '').trim()
+    const cond: Prisma.Sql[] = [
+      Prisma.sql`C.ATIVO = 'S' AND C.cod_cli < 10000000 AND C.cod_cla <> 30`,
+      Prisma.sql`M.id IS NULL`,
+    ]
+    if (busca) {
+      cond.push(Prisma.sql`(C.NOME_FANTASIA LIKE ${'%' + busca + '%'} OR C.NOME_CLI LIKE ${'%' + busca + '%'} OR C.CNPJ_CLI LIKE ${'%' + busca + '%'})`)
+    }
+    const where = Prisma.sql`WHERE ${Prisma.join(cond, ' AND ')}`
+
+    const paginaAtual = Math.max(1, Number(page) || 1)
+    const tamanhoPagina = Math.min(200, Math.max(1, Number(pageSize) || 30))
+
+    const [totalRows, itens] = await Promise.all([
+      prisma.$queryRaw<Array<{ total: bigint }>>`
+        SELECT COUNT(*) AS total
+        FROM cliente C
+        LEFT JOIN cliente_maquininhas M ON M.cliente_id = C.cod_cli
+        ${where}
+      `,
+      prisma.$queryRaw<any[]>`
+        SELECT DISTINCT C.cod_cli AS id, COALESCE(C.NOME_FANTASIA, C.NOME_CLI) AS nome,
+               C.CNPJ_CLI AS cnpj, C.CIDRES_CLI AS cidade, C.ESTRES_CLI AS uf
+        FROM cliente C
+        LEFT JOIN cliente_maquininhas M ON M.cliente_id = C.cod_cli
+        ${where}
+        ORDER BY nome ASC
+        LIMIT ${tamanhoPagina} OFFSET ${(paginaAtual - 1) * tamanhoPagina}
+      `,
+    ])
+
+    const total = Number(totalRows[0]?.total ?? 0)
+    return {
+      clientes: itens.map((c) => ({
+        id: Number(c.id),
+        nome: c.nome,
+        cnpj: c.cnpj,
+        cidade: c.cidade,
+        uf: c.uf,
+      })),
+      paginacao: {
+        page: paginaAtual,
+        pageSize: tamanhoPagina,
+        total,
+        hasMore: paginaAtual * tamanhoPagina < total,
+      },
+    }
+  })
+
   // ── Relatório ──────────────────────────────────────────────
   app.get('/relatorio', { preHandler: authMiddleware, schema: { tags: ['Maquininhas'], summary: 'Relatório de maquininhas por operadora/tipo/status' } }, async (request) => {
     await ensureMaquininhas()
     const { operadoraId, tipo, statusIntegracao } = request.query as Record<string, string>
 
-    const cond: Prisma.Sql[] = [Prisma.sql`C.ATIVO = 'S'`]
+    // Cobertura: quantos dos clientes ativos já têm alguma maquininha cadastrada (contato feito)
+    // versus os que ainda não têm nenhum registro (nunca contatados). É uma métrica global,
+    // não afetada pelos filtros de operadora/tipo/status desta consulta.
+    const [coberturaRows] = await Promise.all([
+      prisma.$queryRaw<Array<{ totalAtivos: bigint; comCadastro: bigint }>>`
+        SELECT
+          COUNT(DISTINCT C.cod_cli) AS totalAtivos,
+          COUNT(DISTINCT M.cliente_id) AS comCadastro
+        FROM cliente C
+        LEFT JOIN cliente_maquininhas M ON M.cliente_id = C.cod_cli
+        WHERE C.ATIVO = 'S' AND C.cod_cli < 10000000 AND C.cod_cla <> 30
+      `,
+    ])
+    const totalAtivos = Number(coberturaRows[0]?.totalAtivos ?? 0)
+    const comCadastro = Number(coberturaRows[0]?.comCadastro ?? 0)
+    const resumoCobertura = {
+      totalAtivos,
+      comCadastro,
+      semCadastro: totalAtivos - comCadastro,
+    }
+
+    const cond: Prisma.Sql[] = [Prisma.sql`C.ATIVO = 'S' AND C.cod_cli < 10000000 AND C.cod_cla <> 30`]
     if (operadoraId && Number(operadoraId) > 0) cond.push(Prisma.sql`M.operadora_id = ${Number(operadoraId)}`)
     if (tipo && tipoValido(tipo)) cond.push(Prisma.sql`M.tipo = ${String(tipo).toUpperCase()}`)
     if (statusIntegracao && statusValido(statusIntegracao)) cond.push(Prisma.sql`M.status_integracao = ${String(statusIntegracao).toUpperCase()}`)
@@ -283,6 +358,7 @@ export async function maquininhasRoutes(app: FastifyInstance) {
     const num = (v: any) => (v === null || v === undefined ? 0 : Number(v))
 
     return {
+      resumoCobertura,
       totais: {
         clientes: new Set(detalhado.map((d) => Number(d.clienteId))).size,
         registros: detalhado.length,
