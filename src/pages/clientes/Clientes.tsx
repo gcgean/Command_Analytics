@@ -42,6 +42,7 @@ export function Clientes() {
   const [classificacoes, setClassificacoes] = useState<Array<{ id: number; nome: string | null }>>([])
   const [filterClassificacao, setFilterClassificacao] = useState('')
   const [filterCurva, setFilterCurva] = useState('')
+  const [filterSemMaquininha, setFilterSemMaquininha] = useState(false)
   const LIMIT = 30
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState(1)
@@ -77,10 +78,11 @@ export function Clientes() {
       search: search.trim(),
       filterCurva,
       filterClassificacao,
+      filterSemMaquininha,
       contadorId,
       statusParams,
     })
-  }, [search, filterCurva, filterClassificacao, contadorId, statusParams])
+  }, [search, filterCurva, filterClassificacao, filterSemMaquininha, contadorId, statusParams])
 
   useEffect(() => {
     api.getClassificacoes().then(setClassificacoes).catch(() => setClassificacoes([]))
@@ -113,6 +115,7 @@ export function Clientes() {
         ...(filterCurva ? { curvaABC: filterCurva } : {}),
         ...(filterClassificacao ? { codCla: filterClassificacao } : {}),
         ...(contadorId ? { contadorId } : {}),
+        ...(filterSemMaquininha ? { semMaquininha: true } : {}),
         ...statusParams,
       }, { signal: controller.signal })
 
@@ -143,7 +146,7 @@ export function Clientes() {
     void loadPage(1, { reset: true })
   }, [queryKey])
 
-  const hasCustomFilters = Boolean(search || filterClassificacao || filterCurva || filterStatus !== 'Ativo')
+  const hasCustomFilters = Boolean(search || filterClassificacao || filterCurva || filterSemMaquininha || filterStatus !== 'Ativo')
 
   const formatSafeDate = (value: any) => {
     if (!value) return '—'
@@ -188,9 +191,18 @@ export function Clientes() {
             onChange={e => setFilterCurva(e.target.value)}
           />
         </div>
+        <label className="flex items-center gap-2 h-10 px-3 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 cursor-pointer select-none whitespace-nowrap">
+          <input
+            type="checkbox"
+            checked={filterSemMaquininha}
+            onChange={(e) => setFilterSemMaquininha(e.target.checked)}
+            className="accent-blue-600"
+          />
+          Sem integração POS informada
+        </label>
         {hasCustomFilters && (
           <Button variant="ghost" size="sm" icon={<RefreshCw className="w-3.5 h-3.5" />}
-            onClick={() => { setSearch(''); setFilterStatus('Ativo'); setFilterClassificacao(''); setFilterCurva('') }}>
+            onClick={() => { setSearch(''); setFilterStatus('Ativo'); setFilterClassificacao(''); setFilterCurva(''); setFilterSemMaquininha(false) }}>
             Limpar
           </Button>
         )}

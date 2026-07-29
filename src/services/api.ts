@@ -272,6 +272,7 @@ export const api = {
     curvaABC?: string
     codCla?: string
     contadorId?: string
+    semMaquininha?: boolean
   }, options?: RequestInit) => {
     const qs = '?' + new URLSearchParams({
       page: String(params.page),
@@ -282,6 +283,7 @@ export const api = {
       ...(params.curvaABC ? { curvaABC: params.curvaABC } : {}),
       ...(params.codCla ? { codCla: params.codCla } : {}),
       ...(params.contadorId ? { contadorId: params.contadorId } : {}),
+      ...(params.semMaquininha ? { semMaquininha: 'true' } : {}),
     }).toString()
     return fetchApi<PaginatedResponse<Cliente>>(`/clientes${qs}`, options)
   },

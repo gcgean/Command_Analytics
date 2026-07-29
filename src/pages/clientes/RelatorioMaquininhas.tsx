@@ -201,7 +201,12 @@ export function RelatorioMaquininhas() {
                 ) : (
                   semContato.map((c) => (
                     <tr key={c.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                      <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-100">{c.nome}</td>
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-slate-800 dark:text-slate-100">{c.nomeFantasia || c.razaoSocial || c.nome}</p>
+                        {c.razaoSocial && c.nomeFantasia && c.razaoSocial !== c.nomeFantasia && (
+                          <p className="text-xs text-slate-500">{c.razaoSocial}</p>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{c.cnpj || '—'}</td>
                       <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{c.cidade ? `${c.cidade}${c.uf ? '/' + c.uf : ''}` : '—'}</td>
                       <td className="px-4 py-3">

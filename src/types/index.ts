@@ -529,6 +529,8 @@ export interface Operadora {
 export interface ClienteSemMaquininha {
   id: number
   nome: string
+  nomeFantasia: string | null
+  razaoSocial: string | null
   cnpj: string | null
   cidade: string | null
   uf: string | null

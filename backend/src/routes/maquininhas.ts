@@ -259,6 +259,7 @@ export async function maquininhasRoutes(app: FastifyInstance) {
       `,
       prisma.$queryRaw<any[]>`
         SELECT DISTINCT C.cod_cli AS id, COALESCE(C.NOME_FANTASIA, C.NOME_CLI) AS nome,
+               C.NOME_FANTASIA AS nomeFantasia, C.NOME_CLI AS razaoSocial,
                C.CNPJ_CLI AS cnpj, C.CIDRES_CLI AS cidade, C.ESTRES_CLI AS uf
         FROM cliente C
         LEFT JOIN cliente_maquininhas M ON M.cliente_id = C.cod_cli
@@ -273,6 +274,8 @@ export async function maquininhasRoutes(app: FastifyInstance) {
       clientes: itens.map((c) => ({
         id: Number(c.id),
         nome: c.nome,
+        nomeFantasia: c.nomeFantasia || null,
+        razaoSocial: c.razaoSocial || null,
         cnpj: c.cnpj,
         cidade: c.cidade,
         uf: c.uf,

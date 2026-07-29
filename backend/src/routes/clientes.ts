@@ -3,6 +3,7 @@ import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { registrarAuditoria } from '../utils/auditoria'
 import { ensureProntuarioGuard } from '../utils/prontuarioGuard'
+import { ensureMaquininhas } from '../utils/maquininhas'
 
 type LegacyContatoRow = {
   descricao?: string | null
@@ -274,7 +275,7 @@ function fmt(c: any) {
 export async function clientesRoutes(app: FastifyInstance) {
   // GET /clientes
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Clientes'], summary: 'Listar clientes' } }, async (request) => {
-    const { ativo, bloqueado, curvaABC, search, idSegmento, idRegime, idPlano, contadorId, codCla, page, limit } = request.query as Record<string, string>
+    const { ativo, bloqueado, curvaABC, search, idSegmento, idRegime, idPlano, contadorId, codCla, page, limit, semMaquininha } = request.query as Record<string, string>
 
     // Permite buscar CNPJ/CPF digitando só os números, sem pontuação (ex.: "42396737"),
     // já que o campo cnpj guarda o documento formatado ("42.396.737/0001-15").
@@ -316,6 +317,19 @@ export async function clientesRoutes(app: FastifyInstance) {
       })
       const clientIds = links.map(l => l.clienteId).filter(id => id !== null) as number[]
       where.id = { in: clientIds }
+    }
+
+    // "Sem integração POS informada": clientes que ainda não têm nenhuma maquininha
+    // cadastrada — ou seja, ninguém levantou essa informação com eles ainda.
+    if (semMaquininha === 'true' || semMaquininha === '1') {
+      await ensureMaquininhas()
+      const comCadastro = await prisma.$queryRaw<Array<{ cliente_id: number }>>`
+        SELECT DISTINCT cliente_id FROM cliente_maquininhas
+      `
+      const idsComCadastro = comCadastro.map((r) => Number(r.cliente_id))
+      if (idsComCadastro.length > 0) {
+        where.id = { ...(where.id ?? {}), notIn: idsComCadastro }
+      }
     }
 
     const pg = page ? Math.max(Number(page), 1) : undefined
