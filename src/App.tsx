@@ -21,6 +21,7 @@ import { MapaAtendimentos } from './pages/atendimentos/MapaAtendimentos'
 // Agenda
 import { Agenda } from './pages/agenda/Agenda'
 import { AgendamentoProgramado } from './pages/agenda/AgendamentoProgramado'
+import { LembretesFixos } from './pages/agenda/LembretesFixos'
 
 // Clientes
 import { Clientes } from './pages/clientes/Clientes'
@@ -201,6 +202,7 @@ export default function App() {
 
         <Route path="agenda" element={<PermissionRoute recurso="agenda"><Agenda /></PermissionRoute>} />
         <Route path="agenda/agendamentos" element={<PermissionRoute recurso="agenda-agendamentos"><AgendamentoProgramado /></PermissionRoute>} />
+        <Route path="agenda/lembretes-fixos" element={<PermissionRoute recurso="agenda-lembretes-fixos"><LembretesFixos /></PermissionRoute>} />
 
         <Route path="clientes" element={<PermissionRoute recurso="clientes"><Clientes /></PermissionRoute>} />
         <Route path="clientes/:id" element={<DetalheCliente />} />

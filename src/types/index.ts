@@ -541,6 +541,38 @@ export interface ClientesSemMaquininhaResposta {
   paginacao: { page: number; pageSize: number; total: number; hasMore: boolean }
 }
 
+export type TipoRecorrenciaLembrete = 'DIARIO' | 'A_CADA_N_DIAS' | 'DIA_MES' | 'DIA_SEMANA'
+
+export interface LembreteFixoRegra {
+  id: number
+  usuarioId: number
+  usuarioNome: string
+  titulo: string
+  mensagem: string
+  tipoRecorrencia: TipoRecorrenciaLembrete
+  intervaloDias: number | null
+  diaMes: number | null
+  diaSemana: number | null
+  somenteUsuarioVisualizar: string
+  ativo: boolean
+  descricaoRecorrencia: string
+  criadoEm: string
+}
+
+export interface LembreteFixoLegado {
+  usuarioId: number
+  usuarioNome: string
+  titulo: string
+  mensagem: string
+  ids: number[]
+  totalDias: number
+}
+
+export interface LembretesFixosResposta {
+  regras: LembreteFixoRegra[]
+  legado: LembreteFixoLegado[]
+}
+
 export interface ClienteMaquininha {
   id: number
   clienteId: number

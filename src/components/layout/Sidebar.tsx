@@ -7,7 +7,7 @@ import {
   Code2, Tag, Video, Target, Server,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
-  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard
+  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '../../store/authStore'
@@ -38,6 +38,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
         label: 'Agenda', icon: <Calendar className="w-4 h-4" />, children: [
           { label: 'Calendário',    icon: <Calendar className="w-4 h-4" />,     to: '/agenda',              recurso: 'agenda' },
           { label: 'Agendamentos', icon: <ClipboardList className="w-4 h-4" />, to: '/agenda/agendamentos', recurso: 'agenda-agendamentos' },
+          { label: 'Lembretes Fixos', icon: <Bell className="w-4 h-4" />, to: '/agenda/lembretes-fixos', recurso: 'agenda-lembretes-fixos' },
         ]
       },
       { label: 'Monitor Atendimentos', icon: <Monitor className="w-4 h-4" />, to: '/monitor', recurso: 'monitor' },

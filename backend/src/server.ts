@@ -38,6 +38,7 @@ import { procedimentosRoutes } from './routes/procedimentos'
 import { anexosRoutes } from './routes/anexos'
 import { notificacoesRoutes } from './routes/notificacoes'
 import { maquininhasRoutes } from './routes/maquininhas'
+import { lembretesFixosRoutes } from './routes/lembretesFixos'
 import { initAuditoria } from './utils/auditoria'
 import { initEtapas } from './utils/etapas'
 import { initChecklists } from './utils/checklists'
@@ -46,6 +47,7 @@ import { initAnexos } from './utils/anexos'
 import { initMetasCadastro } from './utils/metasCadastro'
 import { ensureProntuarioGuard } from './utils/prontuarioGuard'
 import { ensureMaquininhas } from './utils/maquininhas'
+import { ensureLembretesFixos, startLembretesFixosScheduler } from './utils/lembretesFixos'
 import { initNotificacoesAgendamento, startNotificacoesAgendamentoScheduler } from './utils/notificacoesAgendamento'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
@@ -162,6 +164,7 @@ app.register(async (api) => {
   api.register(anexosRoutes,       { prefix: '/anexos' })
   api.register(notificacoesRoutes, { prefix: '/notificacoes' })
   api.register(maquininhasRoutes,  { prefix: '/maquininhas' })
+  api.register(lembretesFixosRoutes, { prefix: '/lembretes-fixos' })
 }, { prefix: '/api' })
 
 // ─── Start ─────────────────────────────────────────────────────
@@ -198,6 +201,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   ensureMaquininhas()
     .then(() => console.log('✓ Tabelas de maquininhas verificadas'))
     .catch(e => console.warn('⚠ Maquininhas init:', e.message))
+  ensureLembretesFixos()
+    .then(() => { console.log('✓ Tabelas de lembretes fixos verificadas'); startLembretesFixosScheduler() })
+    .catch(e => console.warn('⚠ Lembretes fixos init:', e.message))
   initNotificacoesAgendamento()
     .then(() => console.log('✓ Tabelas de notificações de agendamento verificadas'))
     .catch(e => console.warn('⚠ Notificações init:', e.message))

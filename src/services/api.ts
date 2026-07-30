@@ -9,7 +9,7 @@ import type {
   DashboardMensalidadesEstatisticas, DashboardMensalidadesFaixa, DashboardMensalidadesFiltros,
   DashboardMensalidadesOpcoesFiltros, DashboardMensalidadesRanking, DashboardMensalidadesResumo,
   DesempenhoEquipe, Operadora, ClienteMaquininha, MaquininhasRelatorio, TipoMaquininha, StatusMaquininha,
-  ClientesSemMaquininhaResposta
+  ClientesSemMaquininhaResposta, LembretesFixosResposta, TipoRecorrenciaLembrete
 } from '../types'
 
 // ============================================================
@@ -411,6 +411,20 @@ export const api = {
     const s = qs.toString()
     return fetchApi<ClientesSemMaquininhaResposta>(`/maquininhas/sem-cadastro${s ? `?${s}` : ''}`)
   },
+
+  // ─── Lembretes fixos recorrentes ────────────────────────────
+  getLembretesFixos: () => fetchApi<LembretesFixosResposta>('/lembretes-fixos'),
+  createLembreteFixo: (data: {
+    usuarioId: number; titulo: string; mensagem: string; tipoRecorrencia: TipoRecorrenciaLembrete
+    intervaloDias?: number; diaMes?: number; diaSemana?: number; somenteUsuarioVisualizar?: boolean
+  }) => fetchApi<{ ok: boolean; id: number }>('/lembretes-fixos', { method: 'POST', body: JSON.stringify(data) }),
+  updateLembreteFixo: (id: number, data: Partial<{
+    usuarioId: number; titulo: string; mensagem: string; tipoRecorrencia: TipoRecorrenciaLembrete
+    intervaloDias: number; diaMes: number; diaSemana: number; somenteUsuarioVisualizar: boolean; ativo: boolean
+  }>) => fetchApi<{ ok: boolean }>(`/lembretes-fixos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteLembreteFixo: (id: number) => fetchApi<{ ok: boolean }>(`/lembretes-fixos/${id}`, { method: 'DELETE' }),
+  deleteLinhasLembreteLegado: (ids: number[]) =>
+    fetchApi<{ ok: boolean; removidos: number }>('/lembretes-fixos/linhas', { method: 'DELETE', body: JSON.stringify({ ids }) }),
 
   // ─── Disponibilidade de Técnicos ───────────────────────────────
   getDisponibilidades: () => fetchApi<any[]>('/agenda/disponibilidade'),

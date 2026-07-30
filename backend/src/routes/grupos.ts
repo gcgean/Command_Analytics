@@ -9,6 +9,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'atendimentos',             label: 'Atendimentos',                    grupo: 'OPERACIONAL' },
   { id: 'agenda',                   label: 'Agenda — Calendário',             grupo: 'OPERACIONAL' },
   { id: 'agenda-agendamentos',      label: 'Agenda — Agendamentos Programados', grupo: 'OPERACIONAL' },
+  { id: 'agenda-lembretes-fixos',   label: 'Agenda — Lembretes Fixos',        grupo: 'OPERACIONAL' },
   { id: 'monitor',                  label: 'Monitor de Atendimentos',         grupo: 'OPERACIONAL' },
   // CLIENTES
   { id: 'clientes',                 label: 'Clientes',                        grupo: 'CLIENTES' },
