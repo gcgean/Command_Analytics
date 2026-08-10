@@ -44,6 +44,7 @@ function MetricBar({ val, cor }: { val: number; cor: string }) {
 export function Servidores() {
   const [servidores, setServidores] = useState<ServidorMysql[]>([])
   const [loading, setLoading] = useState(true)
+  const [somenteAtivos, setSomenteAtivos] = useState(true)
 
   const carregar = () => {
     setLoading(true)
@@ -64,33 +65,45 @@ export function Servidores() {
     </div>
   )
 
-  const onlines = servidores.filter(s => s.online && !s.desativado).length
+  const visiveis = somenteAtivos ? servidores.filter(s => !s.desativado) : servidores
+  const onlines = visiveis.filter(s => s.online && !s.desativado).length
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Servidores em Nuvem</h1>
-          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">{onlines}/{servidores.length} servidores online</p>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">{onlines}/{visiveis.length} servidores online</p>
         </div>
-        <button className="btn-secondary flex items-center gap-2" onClick={carregar}>
-          <RefreshCw size={16} /> Verificar
-        </button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2 h-10 px-3 rounded-lg border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300">
+            <input
+              type="checkbox"
+              checked={somenteAtivos}
+              onChange={(e) => setSomenteAtivos(e.target.checked)}
+              className="accent-blue-600"
+            />
+            Somente ativos
+          </label>
+          <button className="btn-secondary flex items-center gap-2" onClick={carregar}>
+            <RefreshCw size={16} /> Verificar
+          </button>
+        </div>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-4 gap-4">
         {[
           { label: 'Online', val: onlines, cor: 'text-emerald-400' },
-          { label: 'Offline', val: servidores.length - onlines, cor: 'text-red-400' },
+          { label: 'Offline', val: visiveis.length - onlines, cor: 'text-red-400' },
           {
             label: 'CPU Médio',
-            val: `${Math.round(servidores.filter(s => s.online).reduce((a, s) => a + Number(s.cpuPercent ?? 0), 0) / Math.max(onlines, 1))}%`,
+            val: `${Math.round(visiveis.filter(s => s.online).reduce((a, s) => a + Number(s.cpuPercent ?? 0), 0) / Math.max(onlines, 1))}%`,
             cor: 'text-blue-400',
           },
           {
             label: 'RAM Médio',
-            val: `${Math.round(servidores.filter(s => s.online).reduce((a, s) => a + Number(s.ramPercent ?? 0), 0) / Math.max(onlines, 1))}%`,
+            val: `${Math.round(visiveis.filter(s => s.online).reduce((a, s) => a + Number(s.ramPercent ?? 0), 0) / Math.max(onlines, 1))}%`,
             cor: 'text-amber-400',
           },
         ].map(k => (
@@ -103,9 +116,10 @@ export function Servidores() {
 
       {/* Grid de servidores */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {servidores.map(s => {
-          const hist = s.historico ?? []
-          const sparkData = hist.map((h, i) => ({ t: i, v: Number(h.usoCpu ?? 0) }))
+        {visiveis.map(s => {
+          const hist = [...(s.historico ?? [])].reverse()
+          const sparkDataCpu = hist.map((h, i) => ({ t: i, v: Number(h.usoCpu ?? 0) }))
+          const sparkDataRam = hist.map((h, i) => ({ t: i, v: Number(h.usoMemoria ?? 0) }))
           const discoTotal = Number(s.discoTotal ?? 0)
           const discoLivre = Number(s.discoLivre ?? 0)
           const discoUsado = discoTotal - discoLivre
@@ -157,20 +171,36 @@ export function Servidores() {
                     </div>
                   </div>
 
-                  {sparkData.length > 0 && (
-                    <div>
-                      <p className="text-xs text-slate-500 mb-1">Histórico CPU</p>
-                      <ResponsiveContainer width="100%" height={50}>
-                        <LineChart data={sparkData}>
-                          <Line type="monotone" dataKey="v" stroke="#3b82f6" strokeWidth={1.5} dot={false} />
-                          <XAxis hide /><YAxis hide domain={[0, 100]} />
-                          <Tooltip
-                            contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '6px', fontSize: 11, color: '#94a3b8' }}
-                            formatter={(v: number) => [`${v.toFixed(0)}%`, 'CPU']}
-                            labelFormatter={() => ''}
-                          />
-                        </LineChart>
-                      </ResponsiveContainer>
+                  {sparkDataCpu.length > 1 && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-xs text-slate-500 mb-1">CPU (últimas 24h)</p>
+                        <ResponsiveContainer width="100%" height={50}>
+                          <LineChart data={sparkDataCpu}>
+                            <Line type="monotone" dataKey="v" stroke="#3b82f6" strokeWidth={1.5} dot={false} />
+                            <XAxis hide /><YAxis hide domain={[0, 100]} />
+                            <Tooltip
+                              contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '6px', fontSize: 11, color: '#94a3b8' }}
+                              formatter={(v: number) => [`${v.toFixed(0)}%`, 'CPU']}
+                              labelFormatter={() => ''}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div>
+                        <p className="text-xs text-slate-500 mb-1">RAM (últimas 24h)</p>
+                        <ResponsiveContainer width="100%" height={50}>
+                          <LineChart data={sparkDataRam}>
+                            <Line type="monotone" dataKey="v" stroke="#a855f7" strokeWidth={1.5} dot={false} />
+                            <XAxis hide /><YAxis hide domain={[0, 100]} />
+                            <Tooltip
+                              contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '6px', fontSize: 11, color: '#94a3b8' }}
+                              formatter={(v: number) => [`${v.toFixed(0)}%`, 'RAM']}
+                              labelFormatter={() => ''}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
                   )}
                 </>

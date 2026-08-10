@@ -3,6 +3,14 @@ import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { pollServidor } from '../utils/servidorMonitor'
 
+// Histórico das últimas 24h (a cada 5min ≈ até 288 pontos), usado nos gráficos de CPU/RAM.
+function historico24h() {
+  return {
+    where: { dataConsulta: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+    orderBy: { dataConsulta: 'desc' as const },
+  }
+}
+
 function fmt(s: any) {
   const ultimo = (s.historico ?? [])[0] ?? null
   return {
@@ -29,7 +37,7 @@ function fmt(s: any) {
         }
       : null,
     ultimaVerificacao: ultimo?.dataConsulta ?? null,
-    // Histórico: últimos 7 registros de hist_servidor_nuvem
+    // Histórico das últimas 24h de hist_servidor_nuvem (mais recente primeiro)
     historico: (s.historico ?? []).map((h: any) => ({
       id: h.id,
       cpuPercent: h.cpuPercent !== null ? Number(h.cpuPercent) : null,
@@ -57,10 +65,7 @@ export async function servidoresRoutes(app: FastifyInstance) {
         ...(desativado !== undefined && { desativado: desativado === 'true' }),
       },
       include: {
-        historico: {
-          orderBy: { dataConsulta: 'desc' },
-          take: 7,
-        },
+        historico: historico24h(),
       },
       orderBy: { nome: 'asc' },
     })
@@ -74,10 +79,7 @@ export async function servidoresRoutes(app: FastifyInstance) {
     const servidor = await prisma.servidor.findUnique({
       where: { id: Number(id) },
       include: {
-        historico: {
-          orderBy: { dataConsulta: 'desc' },
-          take: 7,
-        },
+        historico: historico24h(),
       },
     })
     if (!servidor) return reply.status(404).send({ error: 'Servidor não encontrado.' })
@@ -159,7 +161,7 @@ export async function servidoresRoutes(app: FastifyInstance) {
 
       const updated = await prisma.servidor.findUnique({
         where: { id: Number(id) },
-        include: { historico: { orderBy: { dataConsulta: 'desc' }, take: 7 } },
+        include: { historico: historico24h() },
       })
       return fmt(updated)
     }
