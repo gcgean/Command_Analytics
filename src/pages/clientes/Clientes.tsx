@@ -271,6 +271,7 @@ export function Clientes() {
             <table className="w-full">
               <thead>
                 <tr>
+                  <th className="table-header text-left">Ações</th>
                   <th className="table-header text-left">Código</th>
                   <th className="table-header text-left">Nome</th>
                   <th className="table-header text-left">Curva</th>
@@ -289,7 +290,6 @@ export function Clientes() {
                     </>
                   )}
                   <th className="table-header text-left">Status</th>
-                  <th className="table-header text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -304,6 +304,29 @@ export function Clientes() {
                       className="table-row cursor-pointer"
                       onClick={() => navigate(`/clientes/${c.id}`)}
                     >
+                      <td className="table-cell relative" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400"
+                          onClick={() => setMenuAbertoId(menuAbertoId === c.id ? null : c.id)}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                        {menuAbertoId === c.id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setMenuAbertoId(null)} />
+                            <div className="absolute left-4 top-full z-20 mt-1 w-56 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                              <button
+                                type="button"
+                                className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+                                onClick={() => handleToggleBeta(c)}
+                              >
+                                {c.usarVersaoBeta ? 'Retirar cliente do beta' : 'Colocar cliente em beta'}
+                              </button>
+                            </div>
+                          </>
+                        )}
+                      </td>
                       <td className="table-cell font-mono text-slate-500 dark:text-slate-400 text-xs">{c.id}</td>
                       <td className="table-cell">
                         <div>
@@ -341,29 +364,6 @@ export function Clientes() {
                         <span className={clsx('text-xs px-2 py-0.5 rounded-full font-medium', statusColors[getClienteStatus(c) as StatusCliente])}>
                           {getClienteStatus(c)}
                         </span>
-                      </td>
-                      <td className="table-cell text-right relative" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400"
-                          onClick={() => setMenuAbertoId(menuAbertoId === c.id ? null : c.id)}
-                        >
-                          <MoreVertical size={16} />
-                        </button>
-                        {menuAbertoId === c.id && (
-                          <>
-                            <div className="fixed inset-0 z-10" onClick={() => setMenuAbertoId(null)} />
-                            <div className="absolute right-4 top-full z-20 mt-1 w-56 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
-                              <button
-                                type="button"
-                                className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
-                                onClick={() => handleToggleBeta(c)}
-                              >
-                                {c.usarVersaoBeta ? 'Retirar cliente do beta' : 'Colocar cliente em beta'}
-                              </button>
-                            </div>
-                          </>
-                        )}
                       </td>
                     </tr>
                   ))

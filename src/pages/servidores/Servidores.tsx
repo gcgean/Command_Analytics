@@ -31,7 +31,12 @@ interface ServidorMysql {
 // Agrupa o histórico bruto (a cada ~5min) em até 24 baldes de 1h, com a média de cada hora,
 // pra o gráfico não ficar poluído com centenas de pontos.
 function bucketsPorHora(hist: HistoricoEntry[]) {
-  const agora = Date.now()
+  // Usa o timestamp mais recente do próprio histórico como referência de "agora", em vez do
+  // relógio do navegador — o backend/banco tem um desvio de fuso horário conhecido, então
+  // comparar com Date.now() faz pontos recentes parecerem "no futuro" e serem descartados.
+  const timestamps = hist.map(h => (h.dataConsulta ? new Date(h.dataConsulta).getTime() : null)).filter((t): t is number => t !== null)
+  if (timestamps.length === 0) return { cpu: [], ram: [] }
+  const agora = Math.max(...timestamps)
   const somas = new Map<number, { cpuSoma: number; cpuQtd: number; ramSoma: number; ramQtd: number }>()
 
   for (const h of hist) {
