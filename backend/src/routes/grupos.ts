@@ -45,6 +45,8 @@ export const SYSTEM_RESOURCES = [
   { id: 'historico-treinamentos-nota', label: 'Histórico de Treinamentos — Inserir/Alterar nota', grupo: 'RH' },
   // SISTEMA
   { id: 'servidores',               label: 'Servidores em Nuvem',             grupo: 'INFRAESTRUTURA' },
+  { id: 'conexoes',                 label: 'Conexões',                        grupo: 'INFRAESTRUTURA' },
+  { id: 'conexoes-acoes',           label: 'Conexões — Abrir/Reiniciar/Fechar', grupo: 'INFRAESTRUTURA' },
   { id: 'configuracoes',            label: 'Configurações',                   grupo: 'INFRAESTRUTURA' },
   { id: 'cadastro-etapas',          label: 'Cadastro de Etapas',              grupo: 'INFRAESTRUTURA' },
   { id: 'cadastro-procedimentos',   label: 'Cadastro de Procedimentos',        grupo: 'INFRAESTRUTURA' },

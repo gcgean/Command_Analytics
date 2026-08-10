@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, Comissao, Tarefa, Video, Meta,
-  AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, EtapaCadastro,
+  AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
@@ -658,6 +658,27 @@ export const api = {
   getServidores: () => fetchApi<Servidor[]>('/servidores'),
   getServidor: (id: number) => fetchApi<Servidor>(`/servidores/${id}`),
   verificarServidorAgora: (id: number) => fetchApi<Servidor>(`/servidores/${id}/verificar-agora`, { method: 'POST' }),
+
+  // ─── Conexões ──────────────────────────────────────────────
+  getConexoes: (params?: { servidorId?: number; search?: string; status?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams({
+          ...(params.servidorId ? { servidorId: String(params.servidorId) } : {}),
+          ...(params.search ? { search: params.search } : {}),
+          ...(params.status ? { status: params.status } : {}),
+        }).toString()
+      : ''
+    return fetchApi<ConexoesResposta>(`/connections${qs}`)
+  },
+  getSaudeConexao: (servidorId: number, connectionId: string) =>
+    fetchApi<{ id: string; name: string; status: string; ok: boolean; checkedAt?: string }>(
+      `/connections/saude?servidorId=${servidorId}&connectionId=${encodeURIComponent(connectionId)}`
+    ),
+  executarAcaoConexao: (servidorId: number, connectionId: string, acao: 'abrir' | 'reiniciar' | 'fechar', connectionName?: string) =>
+    fetchApi<{ ok: boolean }>('/connections/acao', {
+      method: 'POST',
+      body: JSON.stringify({ servidorId, connectionId, connectionName, acao }),
+    }),
 
   // ─── Usuários ──────────────────────────────────────────────
   getUsuarios: () => fetchApi<Usuario[]>('/usuarios'),

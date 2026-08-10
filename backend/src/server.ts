@@ -39,6 +39,7 @@ import { anexosRoutes } from './routes/anexos'
 import { notificacoesRoutes } from './routes/notificacoes'
 import { maquininhasRoutes } from './routes/maquininhas'
 import { lembretesFixosRoutes } from './routes/lembretesFixos'
+import { connectionsRoutes } from './routes/connections'
 import { initAuditoria } from './utils/auditoria'
 import { initEtapas } from './utils/etapas'
 import { initChecklists } from './utils/checklists'
@@ -154,6 +155,7 @@ app.register(async (api) => {
   api.register(certificadosRoutes, { prefix: '/certificados' })
   api.register(versoesRoutes,      { prefix: '/versoes' })
   api.register(servidoresRoutes,   { prefix: '/servidores' })
+  api.register(connectionsRoutes,  { prefix: '/connections' })
   api.register(dashboardRoutes,    { prefix: '/dashboard' })
   api.register(gruposRoutes,       { prefix: '/grupos' })
   api.register(auditoriaRoutes,    { prefix: '/auditoria' })

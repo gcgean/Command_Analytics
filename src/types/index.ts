@@ -996,6 +996,25 @@ export interface Servidor {
   historico?: ServidorHistoricoEntry[]
 }
 
+export interface Conexao {
+  id: string
+  name: string
+  status: string
+  restPort: number | string | null
+  processId: number | string | null
+  processActive: boolean
+  ports: string | null
+  servidorId: number
+  servidorNome: string | null
+  servidorAnydesk: string | null
+}
+
+export interface ConexoesResposta {
+  total: number
+  servidoresConsultados: number
+  data: Conexao[]
+}
+
 // ============================================================
 // GENÉRICO
 // ============================================================

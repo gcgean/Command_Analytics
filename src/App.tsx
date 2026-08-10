@@ -77,6 +77,7 @@ import { Versoes } from './pages/versoes/Versoes'
 
 // Servidores
 import { Servidores } from './pages/servidores/Servidores'
+import { Conexoes } from './pages/servidores/Conexoes'
 
 // RH
 import { BancoHoras } from './pages/rh/BancoHoras'
@@ -233,6 +234,7 @@ export default function App() {
         <Route path="clientes/maquininhas" element={<PermissionRoute recurso="maquininhas-relatorio"><RelatorioMaquininhas /></PermissionRoute>} />
         <Route path="versoes" element={<PermissionRoute recurso="versoes"><Versoes /></PermissionRoute>} />
         <Route path="servidores" element={<PermissionRoute recurso="servidores"><Servidores /></PermissionRoute>} />
+        <Route path="conexoes" element={<PermissionRoute recurso="conexoes"><Conexoes /></PermissionRoute>} />
 
         <Route path="banco-horas" element={<PermissionRoute recurso="banco-horas"><BancoHoras /></PermissionRoute>} />
         <Route path="historico-treinamentos" element={<PermissionRoute recurso="historico-treinamentos"><HistoricoTreinamentos /></PermissionRoute>} />

@@ -7,7 +7,7 @@ import {
   Code2, Tag, Video, Target, Server,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
-  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell
+  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell, Cable
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '../../store/authStore'
@@ -119,6 +119,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
     group: 'INFRAESTRUTURA',
     items: [
       { label: 'Servidores em Nuvem', icon: <Server className="w-4 h-4" />,      to: '/servidores',    recurso: 'servidores' },
+      { label: 'Conexões',            icon: <Cable className="w-4 h-4" />,       to: '/conexoes',      recurso: 'conexoes' },
       { label: 'Usuários',            icon: <Users className="w-4 h-4" />,       to: '/usuarios',      recurso: 'usuarios' },
       { label: 'Grupos de Acesso',    icon: <ShieldCheck className="w-4 h-4" />, to: '/grupos-acesso', recurso: 'grupos-acesso' },
       { label: 'Cadastro de Etapas',  icon: <Palette className="w-4 h-4" />,     to: '/cadastro-etapas', recurso: 'cadastro-etapas' },
