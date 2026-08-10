@@ -40,8 +40,8 @@ function fmt(s: any) {
     // Histórico das últimas 24h de hist_servidor_nuvem (mais recente primeiro)
     historico: (s.historico ?? []).map((h: any) => ({
       id: h.id,
-      cpuPercent: h.cpuPercent !== null ? Number(h.cpuPercent) : null,
-      ramPercent: h.ramPercent !== null ? Number(h.ramPercent) : null,
+      cpuPercent: h.usoCpu !== null ? Number(h.usoCpu) : null,
+      ramPercent: h.usoMemoria !== null ? Number(h.usoMemoria) : null,
       discoLivre: h.discoLivre,
       online: h.online,
       latencia: h.latencia !== null ? Number(h.latencia) : null,
