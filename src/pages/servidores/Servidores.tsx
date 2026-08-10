@@ -5,8 +5,8 @@ import { api } from '../../services/api'
 
 interface HistoricoEntry {
   id: number
-  usoCpu?: number | null
-  usoMemoria?: number | null
+  cpuPercent?: number | null
+  ramPercent?: number | null
   online?: number | null
   dataConsulta?: string | null
 }
@@ -45,12 +45,12 @@ function bucketsPorHora(hist: HistoricoEntry[]) {
     if (horasAtras < 0 || horasAtras > 23) continue
     const bucket = 23 - horasAtras
     const atual = somas.get(bucket) ?? { cpuSoma: 0, cpuQtd: 0, ramSoma: 0, ramQtd: 0 }
-    if (h.usoCpu !== null && h.usoCpu !== undefined) {
-      atual.cpuSoma += Number(h.usoCpu)
+    if (h.cpuPercent !== null && h.cpuPercent !== undefined) {
+      atual.cpuSoma += Number(h.cpuPercent)
       atual.cpuQtd += 1
     }
-    if (h.usoMemoria !== null && h.usoMemoria !== undefined) {
-      atual.ramSoma += Number(h.usoMemoria)
+    if (h.ramPercent !== null && h.ramPercent !== undefined) {
+      atual.ramSoma += Number(h.ramPercent)
       atual.ramQtd += 1
     }
     somas.set(bucket, atual)
@@ -180,11 +180,12 @@ export function Servidores() {
                     <p className="text-xs text-slate-600">{s.dns}</p>
                   </div>
                 </div>
-                {s.anydesk && (
-                  <div className="text-right text-xs text-slate-500">
-                    <p>AnyDesk: {s.anydesk}</p>
-                  </div>
-                )}
+                <div className="text-right text-xs text-slate-500">
+                  {s.anydesk && <p>AnyDesk: {s.anydesk}</p>}
+                  {ultimaVerif && (
+                    <p>Última atualização: {new Date(ultimaVerif).toLocaleString('pt-BR')}</p>
+                  )}
+                </div>
               </div>
 
               {s.online && !s.desativado && (
