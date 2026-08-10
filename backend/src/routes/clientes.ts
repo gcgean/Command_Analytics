@@ -283,6 +283,7 @@ function fmt(c: any) {
     contadorId: c.contadorId,
     observacoes: c.observacoes,
     obsVenda: c.obsVenda,
+    usarVersaoBeta: Boolean(c.usarVersaoBeta),
     // Contador embutido se incluído
     contador: c.contador
       ? {
@@ -299,7 +300,7 @@ function fmt(c: any) {
 export async function clientesRoutes(app: FastifyInstance) {
   // GET /clientes
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Clientes'], summary: 'Listar clientes' } }, async (request) => {
-    const { ativo, bloqueado, curvaABC, search, idSegmento, idRegime, idPlano, contadorId, codCla, page, limit, semMaquininha } = request.query as Record<string, string>
+    const { ativo, bloqueado, curvaABC, search, idSegmento, idRegime, idPlano, contadorId, codCla, page, limit, semMaquininha, somenteBeta } = request.query as Record<string, string>
 
     // Permite buscar CNPJ/CPF digitando só os números, sem pontuação (ex.: "42396737"),
     // já que o campo cnpj guarda o documento formatado ("42.396.737/0001-15").
@@ -332,6 +333,7 @@ export async function clientesRoutes(app: FastifyInstance) {
       ...(idRegime && { idRegime: Number(idRegime) }),
       ...(idPlano && { idPlano: Number(idPlano) }),
       ...(codCla && { codCla: Number(codCla) }),
+      ...((somenteBeta === 'true' || somenteBeta === '1') && { usarVersaoBeta: 1 }),
     }
 
     if (contadorId) {
@@ -693,6 +695,19 @@ export async function clientesRoutes(app: FastifyInstance) {
     const updated = await prisma.cliente.update({
       where: { id: Number(id) },
       data: { ativo: novoAtivo },
+    })
+    return fmt(updated)
+  })
+
+  // PATCH /clientes/:id/beta — colocar/retirar cliente da versão beta
+  app.patch('/:id/beta', { preHandler: authMiddleware, schema: { tags: ['Clientes'], summary: 'Alternar uso de versão beta' } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const cliente = await prisma.cliente.findUnique({ where: { id: Number(id) } })
+    if (!cliente) return reply.status(404).send({ error: 'Cliente não encontrado.' })
+    const novoValor = cliente.usarVersaoBeta === 1 ? 0 : 1
+    const updated = await prisma.cliente.update({
+      where: { id: Number(id) },
+      data: { usarVersaoBeta: novoValor },
     })
     return fmt(updated)
   })

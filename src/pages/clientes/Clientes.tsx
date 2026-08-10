@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Search, Plus, RefreshCw } from 'lucide-react'
+import { Search, Plus, RefreshCw, MoreVertical, SlidersHorizontal } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
@@ -43,6 +43,9 @@ export function Clientes() {
   const [filterClassificacao, setFilterClassificacao] = useState('')
   const [filterCurva, setFilterCurva] = useState('')
   const [filterSemMaquininha, setFilterSemMaquininha] = useState(false)
+  const [filterSomenteBeta, setFilterSomenteBeta] = useState(false)
+  const [menuAbertoId, setMenuAbertoId] = useState<number | null>(null)
+  const [maisFiltrosAberto, setMaisFiltrosAberto] = useState(false)
   const LIMIT = 30
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState(1)
@@ -79,10 +82,11 @@ export function Clientes() {
       filterCurva,
       filterClassificacao,
       filterSemMaquininha,
+      filterSomenteBeta,
       contadorId,
       statusParams,
     })
-  }, [search, filterCurva, filterClassificacao, filterSemMaquininha, contadorId, statusParams])
+  }, [search, filterCurva, filterClassificacao, filterSemMaquininha, filterSomenteBeta, contadorId, statusParams])
 
   useEffect(() => {
     api.getClassificacoes().then(setClassificacoes).catch(() => setClassificacoes([]))
@@ -116,6 +120,7 @@ export function Clientes() {
         ...(filterClassificacao ? { codCla: filterClassificacao } : {}),
         ...(contadorId ? { contadorId } : {}),
         ...(filterSemMaquininha ? { semMaquininha: true } : {}),
+        ...(filterSomenteBeta ? { somenteBeta: true } : {}),
         ...statusParams,
       }, { signal: controller.signal })
 
@@ -146,7 +151,25 @@ export function Clientes() {
     void loadPage(1, { reset: true })
   }, [queryKey])
 
-  const hasCustomFilters = Boolean(search || filterClassificacao || filterCurva || filterSemMaquininha || filterStatus !== 'Ativo')
+  async function handleToggleBeta(c: Cliente) {
+    const colocar = !c.usarVersaoBeta
+    const confirmado = window.confirm(
+      colocar
+        ? `Colocar "${c.nome ?? c.nomeRazao}" para receber a versão beta?`
+        : `Retirar "${c.nome ?? c.nomeRazao}" da versão beta?`
+    )
+    if (!confirmado) return
+    setMenuAbertoId(null)
+    try {
+      await api.toggleClienteBeta(c.id)
+      await loadPage(page)
+    } catch (e: any) {
+      window.alert(e?.message || 'Falha ao atualizar o cliente.')
+    }
+  }
+
+  const hasCustomFilters = Boolean(search || filterClassificacao || filterCurva || filterSemMaquininha || filterSomenteBeta || filterStatus !== 'Ativo')
+  const qtdMaisFiltrosAtivos = (filterSemMaquininha ? 1 : 0) + (filterSomenteBeta ? 1 : 0)
 
   const formatSafeDate = (value: any) => {
     if (!value) return '—'
@@ -191,18 +214,44 @@ export function Clientes() {
             onChange={e => setFilterCurva(e.target.value)}
           />
         </div>
-        <label className="flex items-center gap-2 h-10 px-3 rounded-lg border border-slate-300 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 cursor-pointer select-none whitespace-nowrap">
-          <input
-            type="checkbox"
-            checked={filterSemMaquininha}
-            onChange={(e) => setFilterSemMaquininha(e.target.checked)}
-            className="accent-blue-600"
-          />
-          Sem integração POS informada
-        </label>
+        <div className="relative">
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={<SlidersHorizontal className="w-3.5 h-3.5" />}
+            onClick={() => setMaisFiltrosAberto((v) => !v)}
+          >
+            Mais filtros{qtdMaisFiltrosAtivos > 0 ? ` (${qtdMaisFiltrosAtivos})` : ''}
+          </Button>
+          {maisFiltrosAberto && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setMaisFiltrosAberto(false)} />
+              <div className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-slate-200 bg-white p-3 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                <label className="flex items-center gap-2 py-1.5 text-sm text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={filterSemMaquininha}
+                    onChange={(e) => setFilterSemMaquininha(e.target.checked)}
+                    className="accent-blue-600"
+                  />
+                  Sem integração POS informada
+                </label>
+                <label className="flex items-center gap-2 py-1.5 text-sm text-slate-700 dark:text-slate-300 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={filterSomenteBeta}
+                    onChange={(e) => setFilterSomenteBeta(e.target.checked)}
+                    className="accent-blue-600"
+                  />
+                  Somente clientes que recebem versão beta
+                </label>
+              </div>
+            </>
+          )}
+        </div>
         {hasCustomFilters && (
           <Button variant="ghost" size="sm" icon={<RefreshCw className="w-3.5 h-3.5" />}
-            onClick={() => { setSearch(''); setFilterStatus('Ativo'); setFilterClassificacao(''); setFilterCurva(''); setFilterSemMaquininha(false) }}>
+            onClick={() => { setSearch(''); setFilterStatus('Ativo'); setFilterClassificacao(''); setFilterCurva(''); setFilterSemMaquininha(false); setFilterSomenteBeta(false) }}>
             Limpar
           </Button>
         )}
@@ -240,13 +289,14 @@ export function Clientes() {
                     </>
                   )}
                   <th className="table-header text-left">Status</th>
+                  <th className="table-header text-right">Ações</th>
                 </tr>
               </thead>
               <tbody>
                 {error ? (
-                  <tr><td colSpan={canViewValores ? 14 : 13} className="px-4 py-12 text-center text-sm text-red-400">{error}</td></tr>
+                  <tr><td colSpan={canViewValores ? 15 : 14} className="px-4 py-12 text-center text-sm text-red-400">{error}</td></tr>
                 ) : clientes.length === 0 ? (
-                  <tr><td colSpan={canViewValores ? 14 : 13} className="px-4 py-12 text-center text-sm text-slate-500">Nenhum cliente encontrado.</td></tr>
+                  <tr><td colSpan={canViewValores ? 15 : 14} className="px-4 py-12 text-center text-sm text-slate-500">Nenhum cliente encontrado.</td></tr>
                 ) : (
                   clientes.map(c => (
                     <tr
@@ -291,6 +341,29 @@ export function Clientes() {
                         <span className={clsx('text-xs px-2 py-0.5 rounded-full font-medium', statusColors[getClienteStatus(c) as StatusCliente])}>
                           {getClienteStatus(c)}
                         </span>
+                      </td>
+                      <td className="table-cell text-right relative" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400"
+                          onClick={() => setMenuAbertoId(menuAbertoId === c.id ? null : c.id)}
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                        {menuAbertoId === c.id && (
+                          <>
+                            <div className="fixed inset-0 z-10" onClick={() => setMenuAbertoId(null)} />
+                            <div className="absolute right-4 top-full z-20 mt-1 w-56 rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-800">
+                              <button
+                                type="button"
+                                className="w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+                                onClick={() => handleToggleBeta(c)}
+                              >
+                                {c.usarVersaoBeta ? 'Retirar cliente do beta' : 'Colocar cliente em beta'}
+                              </button>
+                            </div>
+                          </>
+                        )}
                       </td>
                     </tr>
                   ))

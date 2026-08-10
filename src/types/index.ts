@@ -101,6 +101,7 @@ export interface Cliente {
   contadorId?: number | null
   observacoes?: string | null
   obsVenda?: string | null
+  usarVersaoBeta?: boolean | null
   ultimoFTP?: string | null
   ultimoBackup?: string | null
   certificadoVencimento?: string | null

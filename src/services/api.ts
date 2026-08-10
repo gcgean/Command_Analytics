@@ -273,6 +273,7 @@ export const api = {
     codCla?: string
     contadorId?: string
     semMaquininha?: boolean
+    somenteBeta?: boolean
   }, options?: RequestInit) => {
     const qs = '?' + new URLSearchParams({
       page: String(params.page),
@@ -284,6 +285,7 @@ export const api = {
       ...(params.codCla ? { codCla: params.codCla } : {}),
       ...(params.contadorId ? { contadorId: params.contadorId } : {}),
       ...(params.semMaquininha ? { semMaquininha: 'true' } : {}),
+      ...(params.somenteBeta ? { somenteBeta: 'true' } : {}),
     }).toString()
     return fetchApi<PaginatedResponse<Cliente>>(`/clientes${qs}`, options)
   },
@@ -295,6 +297,7 @@ export const api = {
   updateClienteProntuario: (id: number, data: { observacoes: string; baseObservacoes?: string }) =>
     fetchApi<Cliente>(`/clientes/${id}/prontuario`, { method: 'PUT', body: JSON.stringify(data) }),
   getMonitorClientes: () => fetchApi('/clientes/monitor/resumo'),
+  toggleClienteBeta: (id: number) => fetchApi<Cliente>(`/clientes/${id}/beta`, { method: 'PATCH' }),
 
   // ─── Atendimentos ──────────────────────────────────────────
   getAtendimentos: (params?: Record<string, string>) => {
