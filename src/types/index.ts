@@ -272,6 +272,14 @@ export interface ClienteNuvemInfo {
   descricaoNuvem?: string | null
   numeroServidor?: string | null
   portaApiServidor?: string | null
+  online?: boolean | null
+  cpuPercent?: number | null
+  ramPercent?: number | null
+  conexoesTotal?: number | null
+  conexoesAberto?: number | null
+  conexoesTravado?: number | null
+  conexoesFechado?: number | null
+  ultimaVerificacao?: string | null
 }
 
 export interface ClienteLegadoAgenda {
@@ -948,20 +956,43 @@ export interface Versao {
 // ============================================================
 // SERVIDORES
 // ============================================================
+export interface ServidorHistoricoEntry {
+  id: number
+  cpuPercent?: number | null
+  ramPercent?: number | null
+  discoLivre?: number | null
+  online?: number | null
+  latencia?: number | null
+  conexoesTotal?: number | null
+  conexoesAberto?: number | null
+  conexoesTravado?: number | null
+  conexoesFechado?: number | null
+  dataConsulta?: string | null
+}
+
 export interface Servidor {
   id: number
-  nome: string
-  ip: string
-  provedor: string
-  localizacao: string
-  cpuPercent: number
-  ramPercent: number
-  discoUsado: number
-  discoTotal: number
-  online: boolean
-  latencia: number
-  historicoUso: number[]
-  ultimaVerificacao: string
+  nome?: string | null
+  descricao?: string | null
+  dns?: string | null
+  numeroServidor?: number | null
+  portaApi?: number | null
+  online?: boolean | null
+  cpuPercent?: number | null
+  ramPercent?: number | null
+  discoTotal?: number | null
+  discoLivre?: number | null
+  driveDisco?: string | null
+  anydesk?: string | null
+  desativado?: boolean | null
+  conexoes?: {
+    total: number | null
+    aberto: number | null
+    travado: number | null
+    fechado: number | null
+  } | null
+  ultimaVerificacao?: string | null
+  historico?: ServidorHistoricoEntry[]
 }
 
 // ============================================================

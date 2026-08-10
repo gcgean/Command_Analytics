@@ -653,6 +653,8 @@ export const api = {
 
   // ─── Servidores ────────────────────────────────────────────
   getServidores: () => fetchApi<Servidor[]>('/servidores'),
+  getServidor: (id: number) => fetchApi<Servidor>(`/servidores/${id}`),
+  verificarServidorAgora: (id: number) => fetchApi<Servidor>(`/servidores/${id}/verificar-agora`, { method: 'POST' }),
 
   // ─── Usuários ──────────────────────────────────────────────
   getUsuarios: () => fetchApi<Usuario[]>('/usuarios'),

@@ -1,22 +1,34 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
+import { pollServidor } from '../utils/servidorMonitor'
 
 function fmt(s: any) {
+  const ultimo = (s.historico ?? [])[0] ?? null
   return {
     id: s.id,
     nome: s.nome,
     descricao: s.descricao,
     dns: s.dns,
+    numeroServidor: s.numeroServidor,
+    portaApi: s.portaApi,
     online: s.online,
     cpuPercent: s.cpuPercent !== null ? Number(s.cpuPercent) : null,
     ramPercent: s.ramPercent !== null ? Number(s.ramPercent) : null,
     discoTotal: s.discoTotal,
     discoLivre: s.discoLivre,
     driveDisco: s.driveDisco,
-    latencia: s.latencia,
     anydesk: s.anydesk,
     desativado: s.desativado,
+    conexoes: ultimo
+      ? {
+          total: ultimo.conexoesTotal,
+          aberto: ultimo.conexoesAberto,
+          travado: ultimo.conexoesTravado,
+          fechado: ultimo.conexoesFechado,
+        }
+      : null,
+    ultimaVerificacao: ultimo?.dataConsulta ?? null,
     // Histórico: últimos 7 registros de hist_servidor_nuvem
     historico: (s.historico ?? []).map((h: any) => ({
       id: h.id,
@@ -24,7 +36,12 @@ function fmt(s: any) {
       ramPercent: h.ramPercent !== null ? Number(h.ramPercent) : null,
       discoLivre: h.discoLivre,
       online: h.online,
-      data: h.data,
+      latencia: h.latencia !== null ? Number(h.latencia) : null,
+      conexoesTotal: h.conexoesTotal,
+      conexoesAberto: h.conexoesAberto,
+      conexoesTravado: h.conexoesTravado,
+      conexoesFechado: h.conexoesFechado,
+      dataConsulta: h.dataConsulta,
     })),
   }
 }
@@ -107,6 +124,7 @@ export async function servidoresRoutes(app: FastifyInstance) {
           usoCpu: cpuPercent !== undefined ? Number(cpuPercent) : undefined,
           usoMemoria: ramPercent !== undefined ? Number(ramPercent) : undefined,
           online: online !== undefined ? (Boolean(online) ? 1 : 0) : undefined,
+          latencia: latencia !== undefined ? Number(latencia) : undefined,
           dataConsulta: new Date(),
         } as never,
       })
@@ -118,13 +136,31 @@ export async function servidoresRoutes(app: FastifyInstance) {
           ...(ramPercent !== undefined && { ramPercent: Number(ramPercent) }),
           ...(discoLivre !== undefined && { discoLivre: Number(discoLivre) }),
           ...(online !== undefined && { online: Boolean(online) }),
-          ...(latencia !== undefined && { latencia: Number(latencia) }),
         },
         include: {
           historico: { orderBy: { dataConsulta: 'desc' }, take: 7 },
         },
       })
 
+      return fmt(updated)
+    }
+  )
+
+  // POST /servidores/:id/verificar-agora — dispara checagem imediata (ready + monitor) e retorna o resultado
+  app.post(
+    '/:id/verificar-agora',
+    { preHandler: authMiddleware, schema: { tags: ['Servidores'], summary: 'Verificar servidor agora' } },
+    async (request, reply) => {
+      const { id } = request.params as { id: string }
+      const servidor = await prisma.servidor.findUnique({ where: { id: Number(id) } })
+      if (!servidor) return reply.status(404).send({ error: 'Servidor não encontrado.' })
+
+      await pollServidor(Number(id))
+
+      const updated = await prisma.servidor.findUnique({
+        where: { id: Number(id) },
+        include: { historico: { orderBy: { dataConsulta: 'desc' }, take: 7 } },
+      })
       return fmt(updated)
     }
   )

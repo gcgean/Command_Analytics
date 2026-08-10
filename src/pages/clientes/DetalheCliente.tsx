@@ -14,6 +14,10 @@ import {
   ClipboardList,
   CalendarDays,
   Phone,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  Loader2,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { Button } from '../../components/ui/Button'
@@ -243,7 +247,21 @@ export function DetalheCliente() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [verificandoServidorId, setVerificandoServidorId] = useState<number | null>(null)
   const canViewFinanceiro = can('clientes-valores')
+
+  const handleVerificarServidorAgora = async (idServerNuvem: number) => {
+    setVerificandoServidorId(idServerNuvem)
+    try {
+      await api.verificarServidorAgora(idServerNuvem)
+      const atualizado: any = await api.getClienteById(Number(id))
+      setCliente(atualizado as ClienteDetalhe)
+    } catch {
+      // Falha na checagem não deve travar a tela; o próximo ciclo do scheduler tenta de novo.
+    } finally {
+      setVerificandoServidorId(null)
+    }
+  }
 
   const tabs = [
     { key: 'dados', label: 'Dados', icon: <Building2 className="w-4 h-4" /> },
@@ -770,8 +788,6 @@ export function DetalheCliente() {
             <dl className="space-y-3">
               {[
                 { label: 'Versão do sistema', value: cliente.versaoSistema ?? '—' },
-                { label: 'Conexões ativas', value: cliente.conexoes ?? '—' },
-                { label: 'Caixas (PDV)', value: cliente.caixas ?? '—' },
                 { label: 'Último backup', value: formatSafeDateTime(cliente.ultimoBackup) },
                 { label: 'Último FTP', value: formatSafeDateTime(cliente.ultimoFTP) },
               ].map(({ label, value }) => (
@@ -797,6 +813,44 @@ export function DetalheCliente() {
                       index > 0 && 'mt-4',
                     )}
                   >
+                    {nuvem.idServerNuvem && (
+                      <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+                        <div className="flex items-center gap-2">
+                          {nuvem.online ? (
+                            <span className="flex items-center gap-1 badge bg-emerald-500/20 text-emerald-400 text-xs">
+                              <Wifi size={10} /> Online
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 badge bg-red-500/20 text-red-400 text-xs">
+                              <WifiOff size={10} /> {nuvem.online === null ? 'Sem checagem' : 'Offline'}
+                            </span>
+                          )}
+                          {nuvem.conexoesTotal !== null && nuvem.conexoesTotal !== undefined && (
+                            <span className="text-xs text-slate-600 dark:text-slate-400">
+                              {nuvem.conexoesTotal} conexão(ões) ativa(s)
+                            </span>
+                          )}
+                          {nuvem.cpuPercent !== null && nuvem.cpuPercent !== undefined && (
+                            <span className="text-xs text-slate-600 dark:text-slate-400">
+                              CPU {nuvem.cpuPercent}% · RAM {nuvem.ramPercent}%
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn-secondary flex items-center gap-1 !py-1 !px-2 text-xs"
+                          disabled={verificandoServidorId === nuvem.idServerNuvem}
+                          onClick={() => handleVerificarServidorAgora(nuvem.idServerNuvem as number)}
+                        >
+                          {verificandoServidorId === nuvem.idServerNuvem ? (
+                            <Loader2 size={12} className="animate-spin" />
+                          ) : (
+                            <RefreshCw size={12} />
+                          )}
+                          Verificar agora
+                        </button>
+                      </div>
+                    )}
                     <dl className="space-y-3">
                       {[
                         { label: 'Nuvem do cliente', value: nuvem.descricaoNuvemCliente ?? nuvem.descricaoNuvem ?? '—' },
@@ -809,6 +863,13 @@ export function DetalheCliente() {
                         { label: 'Porta de arquivos', value: nuvem.portaArquivos ?? '—' },
                         { label: 'Porta de aplicativos', value: nuvem.portaAplicativos ?? '—' },
                         { label: 'Porta API do servidor', value: nuvem.portaApiServidor ?? '—' },
+                        {
+                          label: 'Conexões (aberto/travado/fechado)',
+                          value: nuvem.conexoesTotal !== null && nuvem.conexoesTotal !== undefined
+                            ? `${nuvem.conexoesAberto ?? 0} / ${nuvem.conexoesTravado ?? 0} / ${nuvem.conexoesFechado ?? 0}`
+                            : '—',
+                        },
+                        { label: 'Última verificação', value: formatSafeDateTime(nuvem.ultimaVerificacao) },
                       ].map(({ label, value }) => (
                         <div key={label} className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
                           <dt className="text-xs text-slate-500">{label}</dt>

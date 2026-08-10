@@ -43,6 +43,14 @@ type ClienteNuvemRow = {
   descricaoNuvem?: string | null
   numeroServidor?: number | string | null
   portaApiServidor?: number | string | null
+  online?: number | boolean | null
+  cpuPercent?: number | string | null
+  ramPercent?: number | string | null
+  conexoesTotal?: number | null
+  conexoesAberto?: number | null
+  conexoesTravado?: number | null
+  conexoesFechado?: number | null
+  ultimaVerificacao?: Date | string | null
 }
 
 function toTimeText(value: Date | string | null | undefined) {
@@ -189,7 +197,15 @@ async function getClienteNuvemData(clienteId: number) {
         sn.nome_servidor AS nomeServidor,
         sn.descricao_nuvem AS descricaoNuvem,
         sn.numero_servidor AS numeroServidor,
-        sn.porta_api_servidor AS portaApiServidor
+        sn.porta_api_servidor AS portaApiServidor,
+        sn.disponivel AS online,
+        sn.uso_cpu AS cpuPercent,
+        sn.uso_memoria AS ramPercent,
+        (SELECT h.conexoes_total FROM hist_servidor_nuvem h WHERE h.id_servidor = sn.id_server_nuvem ORDER BY h.data_hora_consulta DESC LIMIT 1) AS conexoesTotal,
+        (SELECT h.conexoes_aberto FROM hist_servidor_nuvem h WHERE h.id_servidor = sn.id_server_nuvem ORDER BY h.data_hora_consulta DESC LIMIT 1) AS conexoesAberto,
+        (SELECT h.conexoes_travado FROM hist_servidor_nuvem h WHERE h.id_servidor = sn.id_server_nuvem ORDER BY h.data_hora_consulta DESC LIMIT 1) AS conexoesTravado,
+        (SELECT h.conexoes_fechado FROM hist_servidor_nuvem h WHERE h.id_servidor = sn.id_server_nuvem ORDER BY h.data_hora_consulta DESC LIMIT 1) AS conexoesFechado,
+        (SELECT h.data_hora_consulta FROM hist_servidor_nuvem h WHERE h.id_servidor = sn.id_server_nuvem ORDER BY h.data_hora_consulta DESC LIMIT 1) AS ultimaVerificacao
       FROM cliente c
       INNER JOIN grupo_clientes_dados_gerais gc
         ON gc.cod_cli = c.cod_cli
@@ -227,6 +243,14 @@ async function getClienteNuvemData(clienteId: number) {
       descricaoNuvem: row.descricaoNuvem ? String(row.descricaoNuvem).trim() : null,
       numeroServidor: row.numeroServidor != null && row.numeroServidor !== '' ? String(row.numeroServidor).trim() : null,
       portaApiServidor: row.portaApiServidor != null && row.portaApiServidor !== '' ? String(row.portaApiServidor).trim() : null,
+      online: row.online != null ? Boolean(Number(row.online)) : null,
+      cpuPercent: row.cpuPercent != null ? Number(row.cpuPercent) : null,
+      ramPercent: row.ramPercent != null ? Number(row.ramPercent) : null,
+      conexoesTotal: row.conexoesTotal != null ? Number(row.conexoesTotal) : null,
+      conexoesAberto: row.conexoesAberto != null ? Number(row.conexoesAberto) : null,
+      conexoesTravado: row.conexoesTravado != null ? Number(row.conexoesTravado) : null,
+      conexoesFechado: row.conexoesFechado != null ? Number(row.conexoesFechado) : null,
+      ultimaVerificacao: row.ultimaVerificacao ?? null,
     }))
   } catch {
     return []

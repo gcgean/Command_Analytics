@@ -48,6 +48,7 @@ import { initMetasCadastro } from './utils/metasCadastro'
 import { ensureProntuarioGuard } from './utils/prontuarioGuard'
 import { ensureMaquininhas } from './utils/maquininhas'
 import { ensureLembretesFixos, startLembretesFixosScheduler } from './utils/lembretesFixos'
+import { ensureServidorMonitorColumns, startServidorMonitorScheduler } from './utils/servidorMonitor'
 import { initNotificacoesAgendamento, startNotificacoesAgendamentoScheduler } from './utils/notificacoesAgendamento'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
@@ -208,4 +209,7 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
     .then(() => console.log('✓ Tabelas de notificações de agendamento verificadas'))
     .catch(e => console.warn('⚠ Notificações init:', e.message))
   startNotificacoesAgendamentoScheduler()
+  ensureServidorMonitorColumns()
+    .then(() => { console.log('✓ Tabelas de monitoramento de servidores verificadas'); startServidorMonitorScheduler() })
+    .catch(e => console.warn('⚠ Monitor de servidores init:', e.message))
 })
