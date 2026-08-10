@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { Server, Wifi, WifiOff, HardDrive, Cpu, MemoryStick, RefreshCw, Loader2 } from 'lucide-react'
+import clsx from 'clsx'
 import { api } from '../../services/api'
 
 interface HistoricoEntry {
@@ -56,14 +57,24 @@ function bucketsPorHora(hist: HistoricoEntry[]) {
     somas.set(bucket, atual)
   }
 
-  const cpu: Array<{ t: number; v: number | null }> = []
-  const ram: Array<{ t: number; v: number | null }> = []
+  const cpu: Array<{ t: number; v: number | null; hora: string }> = []
+  const ram: Array<{ t: number; v: number | null; hora: string }> = []
   for (let i = 0; i < 24; i++) {
     const b = somas.get(i)
-    cpu.push({ t: i, v: b && b.cpuQtd > 0 ? Math.round((b.cpuSoma / b.cpuQtd) * 10) / 10 : null })
-    ram.push({ t: i, v: b && b.ramQtd > 0 ? Math.round((b.ramSoma / b.ramQtd) * 10) / 10 : null })
+    const hora = new Date(agora - (23 - i) * 60 * 60 * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    cpu.push({ t: i, v: b && b.cpuQtd > 0 ? Math.round((b.cpuSoma / b.cpuQtd) * 10) / 10 : null, hora })
+    ram.push({ t: i, v: b && b.ramQtd > 0 ? Math.round((b.ramSoma / b.ramQtd) * 10) / 10 : null, hora })
   }
   return { cpu, ram }
+}
+
+function resumoSerie(pontos: Array<{ v: number | null }>) {
+  const valores = pontos.map(p => p.v).filter((v): v is number => v !== null)
+  if (valores.length === 0) return null
+  const min = Math.min(...valores)
+  const max = Math.max(...valores)
+  const media = valores.reduce((a, v) => a + v, 0) / valores.length
+  return { min: Math.round(min), max: Math.round(max), media: Math.round(media) }
 }
 
 function MetricBar({ val, cor }: { val: number; cor: string }) {
@@ -208,38 +219,56 @@ export function Servidores() {
                     </div>
                   </div>
 
-                  {(sparkDataCpu.some(p => p.v !== null) || sparkDataRam.some(p => p.v !== null)) && (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-xs text-slate-500 mb-1">CPU (últimas 24h, média por hora)</p>
-                        <ResponsiveContainer width="100%" height={50}>
-                          <LineChart data={sparkDataCpu}>
-                            <Line type="monotone" dataKey="v" stroke="#3b82f6" strokeWidth={1.5} dot={false} connectNulls />
-                            <XAxis hide /><YAxis hide domain={[0, 100]} />
-                            <Tooltip
-                              contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '6px', fontSize: 11, color: '#94a3b8' }}
-                              formatter={(v: number) => [`${v.toFixed(0)}%`, 'CPU']}
-                              labelFormatter={(t: number) => (t === 23 ? 'Última hora' : `${23 - t}h atrás`)}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
+                  {(sparkDataCpu.some(p => p.v !== null) || sparkDataRam.some(p => p.v !== null)) && (() => {
+                    const resumoCpu = resumoSerie(sparkDataCpu)
+                    const resumoRam = resumoSerie(sparkDataRam)
+                    return (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs text-slate-500">CPU (24h)</p>
+                            {resumoCpu && (
+                              <p className="text-xs text-slate-600 dark:text-slate-400">
+                                mín <span className="font-medium">{resumoCpu.min}%</span> · méd <span className="font-medium">{resumoCpu.media}%</span> · pico <span className={clsx('font-semibold', resumoCpu.max > 80 ? 'text-red-400' : resumoCpu.max > 60 ? 'text-amber-400' : 'text-slate-700 dark:text-slate-300')}>{resumoCpu.max}%</span>
+                              </p>
+                            )}
+                          </div>
+                          <ResponsiveContainer width="100%" height={50}>
+                            <LineChart data={sparkDataCpu}>
+                              <Line type="monotone" dataKey="v" stroke="#3b82f6" strokeWidth={1.5} dot={false} connectNulls />
+                              <XAxis hide /><YAxis hide domain={[0, 100]} />
+                              <Tooltip
+                                contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '6px', fontSize: 11, color: '#94a3b8' }}
+                                formatter={(v: number) => [`${v.toFixed(0)}%`, 'CPU']}
+                                labelFormatter={(_t: number, payload) => payload?.[0]?.payload?.hora ?? ''}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs text-slate-500">RAM (24h)</p>
+                            {resumoRam && (
+                              <p className="text-xs text-slate-600 dark:text-slate-400">
+                                mín <span className="font-medium">{resumoRam.min}%</span> · méd <span className="font-medium">{resumoRam.media}%</span> · pico <span className={clsx('font-semibold', resumoRam.max > 80 ? 'text-red-400' : resumoRam.max > 60 ? 'text-amber-400' : 'text-slate-700 dark:text-slate-300')}>{resumoRam.max}%</span>
+                              </p>
+                            )}
+                          </div>
+                          <ResponsiveContainer width="100%" height={50}>
+                            <LineChart data={sparkDataRam}>
+                              <Line type="monotone" dataKey="v" stroke="#a855f7" strokeWidth={1.5} dot={false} connectNulls />
+                              <XAxis hide /><YAxis hide domain={[0, 100]} />
+                              <Tooltip
+                                contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '6px', fontSize: 11, color: '#94a3b8' }}
+                                formatter={(v: number) => [`${v.toFixed(0)}%`, 'RAM']}
+                                labelFormatter={(_t: number, payload) => payload?.[0]?.payload?.hora ?? ''}
+                              />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-xs text-slate-500 mb-1">RAM (últimas 24h, média por hora)</p>
-                        <ResponsiveContainer width="100%" height={50}>
-                          <LineChart data={sparkDataRam}>
-                            <Line type="monotone" dataKey="v" stroke="#a855f7" strokeWidth={1.5} dot={false} connectNulls />
-                            <XAxis hide /><YAxis hide domain={[0, 100]} />
-                            <Tooltip
-                              contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '6px', fontSize: 11, color: '#94a3b8' }}
-                              formatter={(v: number) => [`${v.toFixed(0)}%`, 'RAM']}
-                              labelFormatter={(t: number) => (t === 23 ? 'Última hora' : `${23 - t}h atrás`)}
-                            />
-                          </LineChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  )}
+                    )
+                  })()}
                 </>
               )}
 
