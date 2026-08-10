@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, RefreshCw, Loader2, HeartPulse, Play, RotateCcw, Square } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
@@ -24,8 +24,12 @@ export function Conexoes() {
   const [conexoes, setConexoes] = useState<Conexao[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [acaoEmAndamento, setAcaoEmAndamento] = useState<string | null>(null)
   const [saudeById, setSaudeById] = useState<Record<string, { loading: boolean; texto: string }>>({})
+  const [acoesEmAndamento, setAcoesEmAndamento] = useState<Record<string, boolean>>({})
+
+  const PAGINA = 24
+  const [visivelAte, setVisivelAte] = useState(PAGINA)
+  const sentinelaRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     api.getServidores().then((data: any) => setServidores(Array.isArray(data) ? data : [])).catch(() => setServidores([]))
@@ -41,6 +45,7 @@ export function Conexoes() {
       .then((res) => {
         setConexoes(res.data)
         setTotal(res.total)
+        setVisivelAte(PAGINA)
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -53,6 +58,21 @@ export function Conexoes() {
   }, [servidorId, status, search])
 
   const servidoresAtivos = useMemo(() => servidores.filter(s => !s.desativado), [servidores])
+  const conexoesVisiveis = useMemo(() => conexoes.slice(0, visivelAte), [conexoes, visivelAte])
+
+  // Rolagem infinita: quando a sentinela no fim da lista entra na tela, revela mais 24 itens
+  // já carregados em memória (sem nova consulta aos servidores, que é a parte lenta).
+  useEffect(() => {
+    const alvo = sentinelaRef.current
+    if (!alvo) return
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0]?.isIntersecting) {
+        setVisivelAte((atual) => Math.min(atual + PAGINA, conexoes.length))
+      }
+    }, { rootMargin: '200px' })
+    observer.observe(alvo)
+    return () => observer.disconnect()
+  }, [conexoes.length])
 
   const handleVerSaude = async (c: Conexao) => {
     setSaudeById(prev => ({ ...prev, [c.id]: { loading: true, texto: '' } }))
@@ -65,17 +85,20 @@ export function Conexoes() {
   }
 
   const handleAcao = async (c: Conexao, acao: 'abrir' | 'reiniciar' | 'fechar') => {
-    const rotulo = acao === 'abrir' ? 'abrir' : acao === 'reiniciar' ? 'reiniciar' : 'fechar'
-    if (!window.confirm(`Deseja ${rotulo} a conexão "${c.name}"? Essa ação afeta diretamente o sistema em produção do cliente.`)) return
+    if (!window.confirm(`Deseja ${acao} a conexão "${c.name}"? Essa ação afeta diretamente o sistema em produção do cliente.`)) return
     const chave = `${c.servidorId}:${c.id}:${acao}`
-    setAcaoEmAndamento(chave)
+    setAcoesEmAndamento((prev) => ({ ...prev, [chave]: true }))
     try {
       await api.executarAcaoConexao(c.servidorId, c.id, acao, c.name)
-      setTimeout(carregar, 1500)
+      window.setTimeout(carregar, 1500)
     } catch (e: any) {
       window.alert(e?.message || 'Falha ao executar a ação.')
     } finally {
-      setAcaoEmAndamento(null)
+      setAcoesEmAndamento((prev) => {
+        const proximo = { ...prev }
+        delete proximo[chave]
+        return proximo
+      })
     }
   }
 
@@ -125,10 +148,15 @@ export function Conexoes() {
       ) : conexoes.length === 0 ? (
         <div className="card text-center py-12 text-sm text-slate-500">Nenhuma conexão encontrada.</div>
       ) : (
+        <>
+        <p className="text-xs text-slate-500">{conexoesVisiveis.length} de {conexoes.length} itens</p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {conexoes.map(c => {
+          {conexoesVisiveis.map(c => {
             const statusKey = c.status.toLowerCase()
             const saude = saudeById[c.id]
+            const abrindo = acoesEmAndamento[`${c.servidorId}:${c.id}:abrir`]
+            const reiniciando = acoesEmAndamento[`${c.servidorId}:${c.id}:reiniciar`]
+            const fechando = acoesEmAndamento[`${c.servidorId}:${c.id}:fechar`]
             return (
               <div key={`${c.servidorId}-${c.id}`} className="card">
                 <div className="flex items-start justify-between mb-2">
@@ -166,25 +194,25 @@ export function Conexoes() {
                         type="button"
                         className="btn-primary flex items-center gap-1 !py-1.5 !px-3 text-xs"
                         onClick={() => handleAcao(c, 'abrir')}
-                        disabled={acaoEmAndamento !== null}
+                        disabled={abrindo || reiniciando || fechando}
                       >
-                        <Play size={12} /> Abrir
+                        {abrindo ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} Abrir
                       </button>
                       <button
                         type="button"
                         className="btn-primary flex items-center gap-1 !py-1.5 !px-3 text-xs"
                         onClick={() => handleAcao(c, 'reiniciar')}
-                        disabled={acaoEmAndamento !== null}
+                        disabled={abrindo || reiniciando || fechando}
                       >
-                        <RotateCcw size={12} /> Reiniciar
+                        {reiniciando ? <Loader2 size={12} className="animate-spin" /> : <RotateCcw size={12} />} Reiniciar
                       </button>
                       <button
                         type="button"
                         className="btn-secondary flex items-center gap-1 !py-1.5 !px-3 text-xs"
                         onClick={() => handleAcao(c, 'fechar')}
-                        disabled={acaoEmAndamento !== null}
+                        disabled={abrindo || reiniciando || fechando}
                       >
-                        <Square size={12} /> Fechar
+                        {fechando ? <Loader2 size={12} className="animate-spin" /> : <Square size={12} />} Fechar
                       </button>
                     </>
                   )}
@@ -193,6 +221,12 @@ export function Conexoes() {
             )
           })}
         </div>
+        {visivelAte < conexoes.length && (
+          <div ref={sentinelaRef} className="flex items-center justify-center py-4 text-slate-500 dark:text-slate-400">
+            <Loader2 className="w-4 h-4 animate-spin mr-2" /> Carregando mais...
+          </div>
+        )}
+        </>
       )}
     </div>
   )
