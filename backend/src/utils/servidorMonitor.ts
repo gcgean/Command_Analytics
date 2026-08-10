@@ -1,7 +1,5 @@
 import { prisma } from '../database/client'
 
-const MONITOR_USERNAME = process.env.SERVIDOR_MONITOR_API_USERNAME || ''
-const MONITOR_PASSWORD = process.env.SERVIDOR_MONITOR_API_PASSWORD || ''
 const REQUEST_TIMEOUT_MS = 6000
 const POLL_INTERVAL_MS = 5 * 60 * 1000
 
@@ -29,8 +27,10 @@ export function ensureServidorMonitorColumns(): Promise<void> {
 }
 
 function authHeader(): Record<string, string> {
-  if (!MONITOR_USERNAME && !MONITOR_PASSWORD) return {}
-  const token = Buffer.from(`${MONITOR_USERNAME}:${MONITOR_PASSWORD}`).toString('base64')
+  const username = process.env.SERVIDOR_MONITOR_API_USERNAME || ''
+  const password = process.env.SERVIDOR_MONITOR_API_PASSWORD || ''
+  if (!username && !password) return {}
+  const token = Buffer.from(`${username}:${password}`).toString('base64')
   return { Authorization: `Basic ${token}` }
 }
 
