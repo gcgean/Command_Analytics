@@ -161,7 +161,7 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
     throw new Error('Falha de conexão com a API. Verifique sua rede, CORS ou disponibilidade do servidor.')
   }
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'Erro desconhecido' }))
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status} ${res.statusText || ''}`.trim() }))
     const backendError = typeof err?.error === 'string' ? err.error.trim() : ''
     const backendMessage = typeof err?.message === 'string' ? err.message.trim() : ''
     const genericErrors = new Set(['Internal Server Error', 'Erro desconhecido'])

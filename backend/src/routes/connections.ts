@@ -82,30 +82,34 @@ export async function connectionsRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Ação inválida.' })
     }
 
-    const [servidor] = await servidoresElegiveis(Number(servidorId))
-    if (!servidor) return reply.status(404).send({ error: 'Servidor não encontrado ou inativo.' })
-
-    const usuarioId = Number((request.user as any)?.id || 0) || null
-
     try {
-      await executarAcaoConexao(servidor, connectionId, acao)
-      await registrarAuditoria({
-        tabela: 'servidor_conexoes',
-        registroId: servidor.id,
-        acao: 'STATUS',
-        usuarioId,
-        dadosDepois: { acao, connectionId, connectionName: connectionName ?? null, servidor: servidor.nome },
-      })
-      return { ok: true }
+      const [servidor] = await servidoresElegiveis(Number(servidorId))
+      if (!servidor) return reply.status(404).send({ error: 'Servidor não encontrado ou inativo.' })
+
+      const usuarioId = Number((request.user as any)?.id || 0) || null
+
+      try {
+        await executarAcaoConexao(servidor, connectionId, acao)
+        await registrarAuditoria({
+          tabela: 'servidor_conexoes',
+          registroId: servidor.id,
+          acao: 'STATUS',
+          usuarioId,
+          dadosDepois: { acao, connectionId, connectionName: connectionName ?? null, servidor: servidor.nome },
+        }).catch(() => {})
+        return { ok: true }
+      } catch (e: any) {
+        await registrarAuditoria({
+          tabela: 'servidor_conexoes',
+          registroId: servidor.id,
+          acao: 'STATUS',
+          usuarioId,
+          dadosDepois: { acao, connectionId, connectionName: connectionName ?? null, servidor: servidor.nome, erro: e?.message },
+        }).catch(() => {})
+        return reply.status(502).send({ error: e?.message || 'Falha ao executar ação na conexão.' })
+      }
     } catch (e: any) {
-      await registrarAuditoria({
-        tabela: 'servidor_conexoes',
-        registroId: servidor.id,
-        acao: 'STATUS',
-        usuarioId,
-        dadosDepois: { acao, connectionId, connectionName: connectionName ?? null, servidor: servidor.nome, erro: e?.message },
-      })
-      return reply.status(502).send({ error: e?.message || 'Falha ao executar ação na conexão.' })
+      return reply.status(500).send({ error: e?.message || 'Erro inesperado ao processar a ação.' })
     }
   })
 }

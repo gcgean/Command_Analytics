@@ -84,5 +84,17 @@ export async function executarAcaoConexao(
 ): Promise<void> {
   const path = ACAO_PATH[acao]
   if (!path) throw new Error('Ação inválida.')
-  await fetchJson(`${baseUrl(servidor)}${path}?id=${encodeURIComponent(connectionId)}`)
+  // Os endpoints de ação (Open/Restart/Close) só confirmam com um 2xx — nem sempre respondem
+  // JSON, então não tenta interpretar o corpo, só valida o status.
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
+  try {
+    const response = await fetch(`${baseUrl(servidor)}${path}?id=${encodeURIComponent(connectionId)}`, {
+      headers: authHeader(),
+      signal: controller.signal,
+    })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+  } finally {
+    clearTimeout(timer)
+  }
 }
