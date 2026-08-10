@@ -28,6 +28,39 @@ interface ServidorMysql {
   historico?: HistoricoEntry[]
 }
 
+// Agrupa o histórico bruto (a cada ~5min) em até 24 baldes de 1h, com a média de cada hora,
+// pra o gráfico não ficar poluído com centenas de pontos.
+function bucketsPorHora(hist: HistoricoEntry[]) {
+  const agora = Date.now()
+  const somas = new Map<number, { cpuSoma: number; cpuQtd: number; ramSoma: number; ramQtd: number }>()
+
+  for (const h of hist) {
+    if (!h.dataConsulta) continue
+    const horasAtras = Math.floor((agora - new Date(h.dataConsulta).getTime()) / (60 * 60 * 1000))
+    if (horasAtras < 0 || horasAtras > 23) continue
+    const bucket = 23 - horasAtras
+    const atual = somas.get(bucket) ?? { cpuSoma: 0, cpuQtd: 0, ramSoma: 0, ramQtd: 0 }
+    if (h.usoCpu !== null && h.usoCpu !== undefined) {
+      atual.cpuSoma += Number(h.usoCpu)
+      atual.cpuQtd += 1
+    }
+    if (h.usoMemoria !== null && h.usoMemoria !== undefined) {
+      atual.ramSoma += Number(h.usoMemoria)
+      atual.ramQtd += 1
+    }
+    somas.set(bucket, atual)
+  }
+
+  const cpu: Array<{ t: number; v: number | null }> = []
+  const ram: Array<{ t: number; v: number | null }> = []
+  for (let i = 0; i < 24; i++) {
+    const b = somas.get(i)
+    cpu.push({ t: i, v: b && b.cpuQtd > 0 ? Math.round((b.cpuSoma / b.cpuQtd) * 10) / 10 : null })
+    ram.push({ t: i, v: b && b.ramQtd > 0 ? Math.round((b.ramSoma / b.ramQtd) * 10) / 10 : null })
+  }
+  return { cpu, ram }
+}
+
 function MetricBar({ val, cor }: { val: number; cor: string }) {
   const v = Math.min(Math.max(val || 0, 0), 100)
   const color = v > 80 ? 'bg-red-500' : v > 60 ? 'bg-amber-500' : cor
@@ -117,14 +150,12 @@ export function Servidores() {
       {/* Grid de servidores */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {visiveis.map(s => {
-          const hist = [...(s.historico ?? [])].reverse()
-          const sparkDataCpu = hist.map((h, i) => ({ t: i, v: Number(h.usoCpu ?? 0) }))
-          const sparkDataRam = hist.map((h, i) => ({ t: i, v: Number(h.usoMemoria ?? 0) }))
+          const { cpu: sparkDataCpu, ram: sparkDataRam } = bucketsPorHora(s.historico ?? [])
           const discoTotal = Number(s.discoTotal ?? 0)
           const discoLivre = Number(s.discoLivre ?? 0)
           const discoUsado = discoTotal - discoLivre
           const discoPer = discoTotal > 0 ? Math.round((discoUsado / discoTotal) * 100) : 0
-          const ultimaVerif = hist.length > 0 ? hist[hist.length - 1]?.dataConsulta : null
+          const ultimaVerif = s.historico?.[0]?.dataConsulta ?? null
 
           return (
             <div key={s.id} className={`card border-2 ${s.online && !s.desativado ? 'border-slate-200 dark:border-slate-700' : 'border-red-500/30'}`}>
@@ -171,32 +202,32 @@ export function Servidores() {
                     </div>
                   </div>
 
-                  {sparkDataCpu.length > 1 && (
+                  {(sparkDataCpu.some(p => p.v !== null) || sparkDataRam.some(p => p.v !== null)) && (
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <p className="text-xs text-slate-500 mb-1">CPU (últimas 24h)</p>
+                        <p className="text-xs text-slate-500 mb-1">CPU (últimas 24h, média por hora)</p>
                         <ResponsiveContainer width="100%" height={50}>
                           <LineChart data={sparkDataCpu}>
-                            <Line type="monotone" dataKey="v" stroke="#3b82f6" strokeWidth={1.5} dot={false} />
+                            <Line type="monotone" dataKey="v" stroke="#3b82f6" strokeWidth={1.5} dot={false} connectNulls />
                             <XAxis hide /><YAxis hide domain={[0, 100]} />
                             <Tooltip
                               contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '6px', fontSize: 11, color: '#94a3b8' }}
                               formatter={(v: number) => [`${v.toFixed(0)}%`, 'CPU']}
-                              labelFormatter={() => ''}
+                              labelFormatter={(t: number) => (t === 23 ? 'Última hora' : `${23 - t}h atrás`)}
                             />
                           </LineChart>
                         </ResponsiveContainer>
                       </div>
                       <div>
-                        <p className="text-xs text-slate-500 mb-1">RAM (últimas 24h)</p>
+                        <p className="text-xs text-slate-500 mb-1">RAM (últimas 24h, média por hora)</p>
                         <ResponsiveContainer width="100%" height={50}>
                           <LineChart data={sparkDataRam}>
-                            <Line type="monotone" dataKey="v" stroke="#a855f7" strokeWidth={1.5} dot={false} />
+                            <Line type="monotone" dataKey="v" stroke="#a855f7" strokeWidth={1.5} dot={false} connectNulls />
                             <XAxis hide /><YAxis hide domain={[0, 100]} />
                             <Tooltip
                               contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '6px', fontSize: 11, color: '#94a3b8' }}
                               formatter={(v: number) => [`${v.toFixed(0)}%`, 'RAM']}
-                              labelFormatter={() => ''}
+                              labelFormatter={(t: number) => (t === 23 ? 'Última hora' : `${23 - t}h atrás`)}
                             />
                           </LineChart>
                         </ResponsiveContainer>
