@@ -419,11 +419,11 @@ export const api = {
   getLembretesFixos: () => fetchApi<LembretesFixosResposta>('/lembretes-fixos'),
   createLembreteFixo: (data: {
     usuarioId: number; titulo: string; mensagem: string; tipoRecorrencia: TipoRecorrenciaLembrete
-    intervaloDias?: number; diaMes?: number; diaSemana?: number; somenteUsuarioVisualizar?: boolean
+    intervaloDias?: number; diaMes?: number; diaSemana?: number; hora: string; somenteUsuarioVisualizar?: boolean
   }) => fetchApi<{ ok: boolean; id: number }>('/lembretes-fixos', { method: 'POST', body: JSON.stringify(data) }),
   updateLembreteFixo: (id: number, data: Partial<{
     usuarioId: number; titulo: string; mensagem: string; tipoRecorrencia: TipoRecorrenciaLembrete
-    intervaloDias: number; diaMes: number; diaSemana: number; somenteUsuarioVisualizar: boolean; ativo: boolean
+    intervaloDias: number; diaMes: number; diaSemana: number; hora: string; somenteUsuarioVisualizar: boolean; ativo: boolean
   }>) => fetchApi<{ ok: boolean }>(`/lembretes-fixos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteLembreteFixo: (id: number) => fetchApi<{ ok: boolean }>(`/lembretes-fixos/${id}`, { method: 'DELETE' }),
   deleteLinhasLembreteLegado: (ids: number[]) =>

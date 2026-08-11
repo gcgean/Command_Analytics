@@ -564,6 +564,7 @@ export interface LembreteFixoRegra {
   intervaloDias: number | null
   diaMes: number | null
   diaSemana: number | null
+  hora: string | null
   somenteUsuarioVisualizar: string
   ativo: boolean
   descricaoRecorrencia: string

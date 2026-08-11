@@ -42,6 +42,7 @@ export async function initLembretesFixos(): Promise<void> {
   // A tabela legada não tem PK — adiciona sem perder nenhuma das linhas existentes.
   await ensureColumnExists('lembrete_dia_fixo_agenda', 'id', 'id INT AUTO_INCREMENT PRIMARY KEY FIRST')
   await ensureColumnExists('lembrete_dia_fixo_agenda', 'regra_id', 'regra_id INT NULL AFTER cod_usu')
+  await ensureColumnExists('lembrete_dia_fixo_agenda', 'hora', 'hora TIME NULL AFTER dia_semana')
 
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS lembrete_regra (
@@ -53,6 +54,7 @@ export async function initLembretesFixos(): Promise<void> {
       intervalo_dias              INT NULL,
       dia_mes                     INT NULL,
       dia_semana                  INT NULL,
+      hora                        TIME NULL,
       somente_usuario_visualizar  CHAR(1) NOT NULL DEFAULT 'S',
       ativo                       TINYINT(1) NOT NULL DEFAULT 1,
       criado_em                   DATETIME NOT NULL DEFAULT NOW(),
@@ -62,6 +64,7 @@ export async function initLembretesFixos(): Promise<void> {
       INDEX idx_lembrete_regra_ativo (ativo)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+  await ensureColumnExists('lembrete_regra', 'hora', 'hora TIME NULL AFTER dia_semana')
 }
 
 /** Calcula os dias-do-mês (1..31) em que uma regra deve disparar, para gerar as linhas legadas. */
@@ -94,14 +97,15 @@ export async function regenerarLinhasDaRegra(regraId: number, dados: {
   intervaloDias?: number | null
   diaMes?: number | null
   diaSemana?: number | null
+  hora?: string | null
   somenteUsuarioVisualizar: string
 }): Promise<void> {
   await prisma.$executeRaw`DELETE FROM lembrete_dia_fixo_agenda WHERE regra_id = ${regraId}`
 
   if (dados.tipoRecorrencia === 'DIA_SEMANA') {
     await prisma.$executeRaw`
-      INSERT INTO lembrete_dia_fixo_agenda (cod_usu, regra_id, dia_fixo, dia_semana, Mensagem, Titulo, Somente_usuario_Visualizar)
-      VALUES (${dados.usuarioId}, ${regraId}, NULL, ${dados.diaSemana}, ${dados.mensagem}, ${dados.titulo}, ${dados.somenteUsuarioVisualizar})
+      INSERT INTO lembrete_dia_fixo_agenda (cod_usu, regra_id, dia_fixo, dia_semana, hora, Mensagem, Titulo, Somente_usuario_Visualizar)
+      VALUES (${dados.usuarioId}, ${regraId}, NULL, ${dados.diaSemana}, ${dados.hora ?? null}, ${dados.mensagem}, ${dados.titulo}, ${dados.somenteUsuarioVisualizar})
     `
     return
   }
@@ -109,8 +113,8 @@ export async function regenerarLinhasDaRegra(regraId: number, dados: {
   const dias = calcularDiasDoMes(dados.tipoRecorrencia, dados.intervaloDias, dados.diaMes)
   for (const dia of dias) {
     await prisma.$executeRaw`
-      INSERT INTO lembrete_dia_fixo_agenda (cod_usu, regra_id, dia_fixo, dia_semana, Mensagem, Titulo, Somente_usuario_Visualizar)
-      VALUES (${dados.usuarioId}, ${regraId}, ${dia}, NULL, ${dados.mensagem}, ${dados.titulo}, ${dados.somenteUsuarioVisualizar})
+      INSERT INTO lembrete_dia_fixo_agenda (cod_usu, regra_id, dia_fixo, dia_semana, hora, Mensagem, Titulo, Somente_usuario_Visualizar)
+      VALUES (${dados.usuarioId}, ${regraId}, ${dia}, NULL, ${dados.hora ?? null}, ${dados.mensagem}, ${dados.titulo}, ${dados.somenteUsuarioVisualizar})
     `
   }
 }
@@ -143,12 +147,13 @@ export async function processarLembretesFixos(agora = new Date()): Promise<{ pro
   // Convenção: 1=Domingo ... 7=Sábado (getDay() é 0=Domingo..6=Sábado).
   const diaSemana = agora.getDay() + 1
   const hojeStr = agora.toISOString().slice(0, 10)
+  const horaAtual = agora.toTimeString().slice(0, 8) // 'HH:MM:SS'
 
   const linhas = await prisma.$queryRaw<Array<{
     id: number; cod_usu: number; Mensagem: string; Titulo: string | null
-    telegramId: string | null
+    telegramId: string | null; hora: string | null
   }>>`
-    SELECT L.id, L.cod_usu, L.Mensagem, L.Titulo, U.ID_TELEGRAM AS telegramId
+    SELECT L.id, L.cod_usu, L.Mensagem, L.Titulo, U.ID_TELEGRAM AS telegramId, L.hora
     FROM lembrete_dia_fixo_agenda L
     LEFT JOIN usuario U ON U.COD_USU = L.cod_usu
     WHERE L.cod_usu IS NOT NULL
@@ -156,6 +161,7 @@ export async function processarLembretesFixos(agora = new Date()): Promise<{ pro
         (L.dia_fixo IS NOT NULL AND L.dia_fixo = ${diaMes})
         OR (L.dia_fixo IS NULL AND L.dia_semana IS NOT NULL AND L.dia_semana = ${diaSemana})
       )
+      AND (L.hora IS NULL OR L.hora <= ${horaAtual})
   `
 
   let plataforma = 0
@@ -187,21 +193,74 @@ export async function processarLembretesFixos(agora = new Date()): Promise<{ pro
   return { processadas: linhas.length, plataforma, telegram }
 }
 
+/**
+ * Avisa (uma única vez) o dono de cada regra ativa criada antes do campo "hora" existir —
+ * sem horário definido, o lembrete continua dispando a qualquer momento do dia em que o
+ * scheduler rodar, em vez do horário escolhido. Some quando o usuário edita a regra e define
+ * um horário (chave de dedup usa o valor atual de "hora", então volta a avisar se for
+ * limpo de novo no futuro).
+ */
+export async function avisarRegrasSemHorario(): Promise<{ avisadas: number }> {
+  await ensureLembretesFixos()
+
+  const regras = await prisma.$queryRaw<Array<{
+    id: number; usuario_id: number; titulo: string; telegramId: string | null
+  }>>`
+    SELECT R.id, R.usuario_id, R.titulo, U.ID_TELEGRAM AS telegramId
+    FROM lembrete_regra R
+    LEFT JOIN usuario U ON U.COD_USU = R.usuario_id
+    WHERE R.ativo = 1 AND R.hora IS NULL
+  `
+
+  if (!regras.length) return { avisadas: 0 }
+
+  let avisadas = 0
+  const telegramConfig = await prisma.configuracaoTelegram.findFirst({ where: { ativo: true } })
+  const titulo = 'Defina o horário do seu lembrete fixo'
+
+  for (const regra of regras) {
+    const usuarioId = Number(regra.usuario_id)
+    const mensagem = `O lembrete "${regra.titulo}" ainda não tem um horário definido e está disparando a qualquer hora do dia. Edite o lembrete em Agenda > Lembretes Fixos e escolha um horário.`
+
+    const chavePlataforma = `lembrete_fixo_sem_hora:regra-${regra.id}`
+    let notificouAlgo = false
+    if (!(await jaNotificadoHoje(chavePlataforma, 'plataforma', usuarioId))) {
+      await registrarNotificacaoLembrete(usuarioId, 'plataforma', chavePlataforma, titulo, mensagem)
+      notificouAlgo = true
+    }
+
+    const chaveTelegram = `lembrete_fixo_sem_hora:regra-${regra.id}:tg`
+    const destino = regra.telegramId || telegramConfig?.userIdPadrao || ''
+    if (destino && !(await jaNotificadoHoje(chaveTelegram, 'telegram', usuarioId))) {
+      const envio = await TelegramService.enviar({ userId: destino, mensagem: `⏰ ${titulo}\n\n${mensagem}` })
+      if (envio.success) {
+        await registrarNotificacaoLembrete(usuarioId, 'telegram', chaveTelegram, titulo, mensagem)
+        notificouAlgo = true
+      }
+    }
+
+    if (notificouAlgo) avisadas += 1
+  }
+
+  return { avisadas }
+}
+
+async function executarCicloLembretes(): Promise<void> {
+  await processarLembretesFixos().catch((e) => console.warn('⚠ Lembretes fixos:', e?.message))
+  await avisarRegrasSemHorario().catch((e) => console.warn('⚠ Aviso de lembretes sem horário:', e?.message))
+}
+
 export function startLembretesFixosScheduler(): void {
   if (schedulerHandle) return
   schedulerHandle = setInterval(() => {
     if (processando) return
     processando = true
-    processarLembretesFixos()
-      .catch((e) => console.warn('⚠ Lembretes fixos:', e?.message))
-      .finally(() => { processando = false })
+    executarCicloLembretes().finally(() => { processando = false })
   }, INTERVALO_MS)
   // Primeira checagem logo após o boot, sem esperar o primeiro intervalo.
   setTimeout(() => {
     if (processando) return
     processando = true
-    processarLembretesFixos()
-      .catch((e) => console.warn('⚠ Lembretes fixos:', e?.message))
-      .finally(() => { processando = false })
+    executarCicloLembretes().finally(() => { processando = false })
   }, 15_000)
 }

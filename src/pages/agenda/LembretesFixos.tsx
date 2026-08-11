@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bell, Plus, Pencil, Trash2, X, Check, Loader2, Power } from 'lucide-react'
+import { Bell, Plus, Pencil, Trash2, X, Check, Loader2, Power, AlertTriangle } from 'lucide-react'
 import clsx from 'clsx'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -26,6 +26,7 @@ type FormState = {
   intervaloDias: string
   diaMes: string
   diaSemana: string
+  hora: string
   somenteUsuarioVisualizar: boolean
 }
 
@@ -37,6 +38,7 @@ const FORM_VAZIO: FormState = {
   intervaloDias: '5',
   diaMes: '1',
   diaSemana: '2',
+  hora: '08:00',
   somenteUsuarioVisualizar: true,
 }
 
@@ -87,6 +89,7 @@ export function LembretesFixos() {
       intervaloDias: String(r.intervaloDias ?? 5),
       diaMes: String(r.diaMes ?? 1),
       diaSemana: String(r.diaSemana ?? 2),
+      hora: r.hora || '08:00',
       somenteUsuarioVisualizar: r.somenteUsuarioVisualizar !== 'N',
     })
     setModalAberto(true)
@@ -101,6 +104,7 @@ export function LembretesFixos() {
     if (!form.usuarioId) return toast.error('Selecione o usuário.')
     if (!form.titulo.trim()) return toast.error('Informe o título.')
     if (!form.mensagem.trim()) return toast.error('Informe a mensagem.')
+    if (!form.hora) return toast.error('Selecione o horário do lembrete.')
 
     const payload = {
       usuarioId: Number(form.usuarioId),
@@ -110,6 +114,7 @@ export function LembretesFixos() {
       intervaloDias: form.tipoRecorrencia === 'A_CADA_N_DIAS' ? Number(form.intervaloDias) : undefined,
       diaMes: form.tipoRecorrencia === 'DIA_MES' ? Number(form.diaMes) : undefined,
       diaSemana: form.tipoRecorrencia === 'DIA_SEMANA' ? Number(form.diaSemana) : undefined,
+      hora: form.hora,
       somenteUsuarioVisualizar: form.somenteUsuarioVisualizar,
     }
 
@@ -196,16 +201,16 @@ export function LembretesFixos() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-slate-200 dark:border-slate-700 text-left">
-                {['Usuário', 'Título', 'Mensagem', 'Recorrência', 'Status', ''].map((h) => (
+                {['Usuário', 'Título', 'Mensagem', 'Recorrência', 'Horário', 'Status', ''].map((h) => (
                   <th key={h} className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500"><Loader2 className="w-5 h-5 animate-spin inline" /></td></tr>
+                <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-500"><Loader2 className="w-5 h-5 animate-spin inline" /></td></tr>
               ) : regras.length === 0 ? (
-                <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">Nenhum lembrete cadastrado ainda.</td></tr>
+                <tr><td colSpan={7} className="px-4 py-12 text-center text-slate-500">Nenhum lembrete cadastrado ainda.</td></tr>
               ) : (
                 regras.map((r) => (
                   <tr key={r.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -213,6 +218,15 @@ export function LembretesFixos() {
                     <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{r.titulo}</td>
                     <td className="px-4 py-3 text-slate-500 max-w-sm truncate">{r.mensagem}</td>
                     <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{r.descricaoRecorrencia}</td>
+                    <td className="px-4 py-3">
+                      {r.hora ? (
+                        <span className="text-slate-600 dark:text-slate-300">{r.hora}</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-amber-600 dark:text-amber-400 text-xs font-medium" title="Sem horário definido — dispara a qualquer hora do dia. Edite e escolha um horário.">
+                          <AlertTriangle className="w-3.5 h-3.5" /> Sem horário
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={clsx(
                         'rounded-full px-2.5 py-1 text-xs font-semibold',
@@ -347,6 +361,16 @@ export function LembretesFixos() {
                   onChange={(e) => setForm((f) => ({ ...f, diaSemana: e.target.value }))}
                 />
               )}
+              <div>
+                <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1.5">Horário</label>
+                <input
+                  type="time"
+                  value={form.hora}
+                  onChange={(e) => setForm((f) => ({ ...f, hora: e.target.value }))}
+                  className="w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-3 py-2"
+                />
+                <p className="text-xs text-slate-500 mt-1">O lembrete só dispara a partir desse horário no dia certo.</p>
+              </div>
               <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300 cursor-pointer">
                 <input
                   type="checkbox"

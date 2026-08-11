@@ -15,6 +15,19 @@ function tipoValido(valor: unknown): valor is TipoRecorrencia {
   return TIPOS_RECORRENCIA.includes(String(valor) as TipoRecorrencia)
 }
 
+// Prisma devolve colunas TIME de $queryRaw como objetos Date (época 1970, horário em UTC),
+// não como string "HH:MM:SS" — String(date) usa o fuso local e quebra tudo. Extrai via UTC.
+function horaParaString(valor: unknown): string | null {
+  if (!valor) return null
+  if (valor instanceof Date) {
+    const hh = String(valor.getUTCHours()).padStart(2, '0')
+    const mm = String(valor.getUTCMinutes()).padStart(2, '0')
+    const ss = String(valor.getUTCSeconds()).padStart(2, '0')
+    return `${hh}:${mm}:${ss}`
+  }
+  return String(valor)
+}
+
 export async function lembretesFixosRoutes(app: FastifyInstance) {
   // ── Regras (modelo novo) ────────────────────────────────────
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['LembretesFixos'], summary: 'Lista regras de lembrete fixo e o legado sem regra' } }, async () => {
@@ -23,7 +36,7 @@ export async function lembretesFixosRoutes(app: FastifyInstance) {
     const regras = await prisma.$queryRaw<any[]>`
       SELECT R.id, R.usuario_id AS usuarioId, COALESCE(U.NOME_USUARIO_COMPLETO, U.NOME_USU) AS usuarioNome,
              R.titulo, R.mensagem, R.tipo_recorrencia AS tipoRecorrencia, R.intervalo_dias AS intervaloDias,
-             R.dia_mes AS diaMes, R.dia_semana AS diaSemana, R.somente_usuario_visualizar AS somenteUsuarioVisualizar,
+             R.dia_mes AS diaMes, R.dia_semana AS diaSemana, R.hora, R.somente_usuario_visualizar AS somenteUsuarioVisualizar,
              R.ativo, R.criado_em AS criadoEm
       FROM lembrete_regra R
       LEFT JOIN usuario U ON U.COD_USU = R.usuario_id
@@ -53,6 +66,7 @@ export async function lembretesFixosRoutes(app: FastifyInstance) {
         intervaloDias: r.intervaloDias === null ? null : Number(r.intervaloDias),
         diaMes: r.diaMes === null ? null : Number(r.diaMes),
         diaSemana: r.diaSemana === null ? null : Number(r.diaSemana),
+        hora: horaParaString(r.hora)?.slice(0, 5) ?? null,
         somenteUsuarioVisualizar: r.somenteUsuarioVisualizar,
         ativo: Number(r.ativo) === 1,
         descricaoRecorrencia: descreverRecorrencia(r.tipoRecorrencia, r.intervaloDias, r.diaMes, r.diaSemana),
@@ -72,16 +86,18 @@ export async function lembretesFixosRoutes(app: FastifyInstance) {
   app.post('/', { preHandler: authMiddleware, schema: { tags: ['LembretesFixos'], summary: 'Cria uma regra de lembrete fixo' } }, async (request, reply) => {
     await ensureLembretesFixos()
     const usuarioId = Number((request.user as any)?.id || 0) || null
-    const { usuarioId: destinatarioId, titulo, mensagem, tipoRecorrencia, intervaloDias, diaMes, diaSemana, somenteUsuarioVisualizar } = request.body as Record<string, unknown>
+    const { usuarioId: destinatarioId, titulo, mensagem, tipoRecorrencia, intervaloDias, diaMes, diaSemana, hora, somenteUsuarioVisualizar } = request.body as Record<string, unknown>
 
     const idDestinatario = Number(destinatarioId)
     const tituloNorm = String(titulo ?? '').trim()
     const mensagemNorm = String(mensagem ?? '').trim()
+    const horaNorm = /^\d{2}:\d{2}$/.test(String(hora ?? '')) ? `${hora}:00` : null
 
     if (!Number.isFinite(idDestinatario) || idDestinatario <= 0) return reply.status(400).send({ error: 'Selecione o usuário.' })
     if (!tituloNorm) return reply.status(400).send({ error: 'Informe o título.' })
     if (!mensagemNorm) return reply.status(400).send({ error: 'Informe a mensagem do lembrete.' })
     if (!tipoValido(tipoRecorrencia)) return reply.status(400).send({ error: 'Tipo de recorrência inválido.' })
+    if (!horaNorm) return reply.status(400).send({ error: 'Selecione o horário do lembrete.' })
 
     const tipo = tipoRecorrencia as TipoRecorrencia
     const intervalo = tipo === 'A_CADA_N_DIAS' ? Number(intervaloDias) : null
@@ -102,9 +118,9 @@ export async function lembretesFixosRoutes(app: FastifyInstance) {
 
     await prisma.$executeRaw`
       INSERT INTO lembrete_regra
-        (usuario_id, titulo, mensagem, tipo_recorrencia, intervalo_dias, dia_mes, dia_semana, somente_usuario_visualizar, ativo, criado_em, criado_por, atualizado_em)
+        (usuario_id, titulo, mensagem, tipo_recorrencia, intervalo_dias, dia_mes, dia_semana, hora, somente_usuario_visualizar, ativo, criado_em, criado_por, atualizado_em)
       VALUES
-        (${idDestinatario}, ${tituloNorm}, ${mensagemNorm}, ${tipo}, ${intervalo}, ${dMes}, ${dSemana}, ${somenteVisivel}, 1, NOW(), ${usuarioId}, NOW())
+        (${idDestinatario}, ${tituloNorm}, ${mensagemNorm}, ${tipo}, ${intervalo}, ${dMes}, ${dSemana}, ${horaNorm}, ${somenteVisivel}, 1, NOW(), ${usuarioId}, NOW())
     `
     const novo = await prisma.$queryRaw<Array<{ id: number }>>`SELECT id FROM lembrete_regra ORDER BY id DESC LIMIT 1`
     const regraId = Number(novo[0]?.id || 0)
@@ -117,6 +133,7 @@ export async function lembretesFixosRoutes(app: FastifyInstance) {
       intervaloDias: intervalo,
       diaMes: dMes,
       diaSemana: dSemana,
+      hora: horaNorm,
       somenteUsuarioVisualizar: somenteVisivel,
     })
 
@@ -151,6 +168,17 @@ export async function lembretesFixosRoutes(app: FastifyInstance) {
       ? atual[0].somente_usuario_visualizar
       : (body.somenteUsuarioVisualizar === false || body.somenteUsuarioVisualizar === 'N' ? 'N' : 'S')
 
+    let horaNorm: string | null
+    if (body.hora === undefined) {
+      horaNorm = horaParaString(atual[0].hora)
+    } else if (body.hora === null || body.hora === '') {
+      horaNorm = null
+    } else if (/^\d{2}:\d{2}$/.test(String(body.hora))) {
+      horaNorm = `${body.hora}:00`
+    } else {
+      return reply.status(400).send({ error: 'Horário inválido.' })
+    }
+
     if (!tituloNorm) return reply.status(400).send({ error: 'Informe o título.' })
     if (!mensagemNorm) return reply.status(400).send({ error: 'Informe a mensagem do lembrete.' })
     if (!tipoValido(tipo)) return reply.status(400).send({ error: 'Tipo de recorrência inválido.' })
@@ -172,7 +200,7 @@ export async function lembretesFixosRoutes(app: FastifyInstance) {
     await prisma.$executeRaw`
       UPDATE lembrete_regra
       SET usuario_id = ${idDestinatario}, titulo = ${tituloNorm}, mensagem = ${mensagemNorm},
-          tipo_recorrencia = ${tipo}, intervalo_dias = ${intervalo}, dia_mes = ${dMes}, dia_semana = ${dSemana},
+          tipo_recorrencia = ${tipo}, intervalo_dias = ${intervalo}, dia_mes = ${dMes}, dia_semana = ${dSemana}, hora = ${horaNorm},
           somente_usuario_visualizar = ${somenteVisivel}, ativo = ${ativo ? 1 : 0}, atualizado_em = NOW()
       WHERE id = ${regraId}
     `
@@ -186,6 +214,7 @@ export async function lembretesFixosRoutes(app: FastifyInstance) {
         intervaloDias: intervalo,
         diaMes: dMes,
         diaSemana: dSemana,
+        hora: horaNorm,
         somenteUsuarioVisualizar: somenteVisivel,
       })
     } else {
