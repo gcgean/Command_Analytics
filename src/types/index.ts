@@ -512,6 +512,8 @@ export interface ImplantacaoCliente {
   progressoChecklist?: number
   slaDiasEtapa?: number
   diasNaEtapa?: number
+  dataLimite?: string | null
+  diasAteLimite?: number | null
   emAtraso?: boolean
 }
 

@@ -201,6 +201,27 @@ function getDiasNaEtapa(cliente: ImplantacaoCliente) {
 // um prazo máximo configurado (Cadastro de Etapas), a cor reflete esse prazo; sem prazo
 // configurado, só avisa acima de um limiar padrão (comportamento anterior).
 function getBadgeUrgencia(cliente: ImplantacaoCliente, slaDiasEtapa?: number) {
+  // Data-limite combinada com o cliente tem prioridade sobre o prazo padrão da etapa.
+  if (cliente.dataLimite) {
+    const diasAte = typeof cliente.diasAteLimite === 'number'
+      ? cliente.diasAteLimite
+      : (() => {
+          const [y, m, d] = cliente.dataLimite!.split('-').map(Number)
+          const limiteUTC = Date.UTC(y, m - 1, d)
+          const hoje = new Date()
+          const hojeUTC = Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate())
+          return Math.round((limiteUTC - hojeUTC) / 86400000)
+        })()
+    const dataFormatada = cliente.dataLimite.split('-').reverse().join('/').slice(0, 5)
+    if (diasAte < 0) {
+      return { label: `🔴 venceu ${dataFormatada}`, className: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300' }
+    }
+    if (diasAte <= 1) {
+      return { label: `⚠ até ${dataFormatada}`, className: 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' }
+    }
+    return { label: `📅 até ${dataFormatada}`, className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' }
+  }
+
   const dias = getDiasNaEtapa(cliente)
   const sla = slaDiasEtapa && slaDiasEtapa > 0 ? slaDiasEtapa : null
 
@@ -344,6 +365,7 @@ export function Pipeline() {
   const [editResponsaveis, setEditResponsaveis] = useState<Array<{ id: number; nome: string }>>([])
   const [editEtapasDisponiveis, setEditEtapasDisponiveis] = useState<ImplantacaoEtapa[]>([])
   const [editObs, setEditObs] = useState('')
+  const [editDataLimite, setEditDataLimite] = useState('')
   const [editErro, setEditErro] = useState('')
   const [editServicos, setEditServicos] = useState<Array<{ id: number; nome: string }>>([])
   const [editServicoId, setEditServicoId] = useState<string>('')
@@ -689,6 +711,7 @@ export function Pipeline() {
     setEditLoading(true)
     setEditCliente(cliente)
     setEditObs('')
+    setEditDataLimite('')
     setEditErro('')
     setEditItems([])
     try {
@@ -698,6 +721,7 @@ export function Pipeline() {
       setEditChecklists(data.checklists || [])
       setEditEtapa(data.cliente.statusInstal)
       setEditResponsavel(data.cliente.responsavelId ? String(data.cliente.responsavelId) : 'none')
+      setEditDataLimite(data.cliente.dataLimite || '')
       setEditChecklistIds(data.checklistIdsSelecionados || [])
       setEditServicos(data.servicos || [])
       const servicoAtual = data.servicoIdAtual ? String(data.servicoIdAtual) : ''
@@ -771,6 +795,7 @@ export function Pipeline() {
         observacao: editObs.trim() || undefined,
         processoId: editCliente.processoId,
         servicoId: editServicoId ? Number(editServicoId) : undefined,
+        dataLimite: editDataLimite || null,
       })
       setEditOpen(false)
       await carregarPainel()
@@ -1673,6 +1698,32 @@ export function Pipeline() {
                   ))}
                 </select>
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                Data limite combinada com o cliente
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={editDataLimite}
+                  onChange={(e) => setEditDataLimite(e.target.value)}
+                  className="h-10 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-3"
+                />
+                {editDataLimite && (
+                  <button
+                    type="button"
+                    className="text-xs text-slate-500 hover:text-red-500 underline"
+                    onClick={() => setEditDataLimite('')}
+                  >
+                    Remover
+                  </button>
+                )}
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                Quando preenchida, essa data vira a referência de atraso deste processo — passa a valer no lugar do prazo padrão da etapa.
+              </p>
             </div>
 
             {editServicos.length > 0 && (

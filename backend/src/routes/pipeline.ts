@@ -64,6 +64,7 @@ type ProcessoImplantacaoRow = {
   servicoId: number | null
   statusAtual: number | null
   observacao: string | null
+  dataLimite: Date | null
   processoPrincipal: number | boolean
   criadoEm: Date | null
   atualizadoEm: Date | null
@@ -286,6 +287,19 @@ function diffDays(fromIso: string | null | undefined): number {
   const from = new Date(fromIso)
   if (Number.isNaN(from.getTime())) return 0
   return Math.max(0, Math.floor((Date.now() - from.getTime()) / 86400000))
+}
+
+// Dias até a data-limite combinada com o cliente (negativo = já venceu). DATE não tem componente de
+// hora, então comparamos sempre em meia-noite UTC dos dois lados — não sofre com o desvio de fuso do
+// servidor de banco (ver comentário abaixo sobre UTC_TIMESTAMP() vs NOW()).
+function diasAteLimite(dataLimite: string | null | undefined): number | null {
+  if (!dataLimite) return null
+  const match = String(dataLimite).match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (!match) return null
+  const hoje = new Date()
+  const hojeUTC = Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate())
+  const limiteUTC = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+  return Math.round((limiteUTC - hojeUTC) / 86400000)
 }
 
 function normalizeDateFilter(value: string | null | undefined): string {
@@ -550,6 +564,7 @@ async function ensureImplantacaoBootstrap() {
       await ensureColumnExists('implantacao_movimentacoes', 'processo_id', 'processo_id INT NULL AFTER cliente_id')
       await ensureColumnExists('implantacao_processos', 'servico_id', 'servico_id INT NULL AFTER servico_nome')
       await ensureColumnExists('implantacao_processos', 'ativo', 'ativo TINYINT(1) NOT NULL DEFAULT 1 AFTER processo_principal')
+      await ensureColumnExists('implantacao_processos', 'data_limite', 'data_limite DATE NULL AFTER observacao')
       await ensureColumnExists('cadastro_etapas', 'sla_dias', 'sla_dias INT NULL AFTER cor')
 
       // Alarga colunas 'observacao' que ainda estejam em VARCHAR(500) — textos de observação mais
@@ -1017,6 +1032,7 @@ async function carregarClientesImplantacao() {
         WHEN P.processo_principal = 1 THEN COALESCE(P.observacao, PI.obs_treinamento)
         ELSE P.observacao
       END AS observacao,
+      P.data_limite AS dataLimite,
       P.processo_principal AS processoPrincipal,
       P.criado_em AS criadoEm,
       P.atualizado_em AS atualizadoEm,
@@ -1090,6 +1106,7 @@ async function carregarClientesImplantacao() {
       dataCadastro: row?.dataCadastro ? row.dataCadastro.toISOString() : null,
       dataInicioStatusAtual: dataInicioStatusAtual ? dataInicioStatusAtual.toISOString() : null,
       observacoes: processo.observacao || row?.observacoes || null,
+      dataLimite: processo.dataLimite ? processo.dataLimite.toISOString().slice(0, 10) : null,
       responsavelId: processo.responsavelId ? Number(processo.responsavelId) : null,
       responsavelNome: processo.responsavelNome || null,
       responsavelAtualizadoEm: processo.responsavelAtualizadoEm ? processo.responsavelAtualizadoEm.toISOString() : null,
@@ -1366,7 +1383,10 @@ export async function pipelineRoutes(app: FastifyInstance) {
         ?? cliente.dataCadastro
         ?? null
       const diasNaEtapa = diffDays(dataBase)
-      const emAtraso = slaDias > 0 && diasNaEtapa > slaDias
+      // Data-limite combinada com o cliente tem prioridade sobre o prazo padrão da etapa — só cai
+      // no SLA padrão quando o técnico ainda não confirmou um prazo com o cliente.
+      const diasAte = diasAteLimite((cliente as any).dataLimite)
+      const emAtraso = diasAte !== null ? diasAte < 0 : (slaDias > 0 && diasNaEtapa > slaDias)
 
       return {
         ...cliente,
@@ -1375,6 +1395,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
         progressoChecklist: progresso,
         slaDiasEtapa: slaDias,
         diasNaEtapa,
+        diasAteLimite: diasAte,
         emAtraso,
       }
     })
@@ -1699,7 +1720,8 @@ export async function pipelineRoutes(app: FastifyInstance) {
     const ultimaMudancaStatus = timeline.find((t) => t.tipo === 'status')?.dataHora ?? cliente.dataInicioStatusAtual ?? cliente.dataCadastro
     const diasNaEtapa = diffDays(ultimaMudancaStatus ?? null)
     const slaDiasEtapa = Number(etapaAtual?.slaDias ?? 0)
-    const emAtraso = slaDiasEtapa > 0 && diasNaEtapa > slaDiasEtapa
+    const diasAte = diasAteLimite(cliente.dataLimite)
+    const emAtraso = diasAte !== null ? diasAte < 0 : (slaDiasEtapa > 0 && diasNaEtapa > slaDiasEtapa)
 
     return {
       cliente: {
@@ -1710,6 +1732,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
         progressoChecklist: progresso,
         slaDiasEtapa,
         diasNaEtapa,
+        diasAteLimite: diasAte,
         emAtraso,
       },
       etapaAtual,
@@ -2116,13 +2139,14 @@ export async function pipelineRoutes(app: FastifyInstance) {
   app.put('/implantacao/:clienteId/configuracao', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Atualiza configuração da implantação por cliente' } }, async (request, reply) => {
     const { clienteId } = request.params as { clienteId: string }
     const id = Number(clienteId)
-    const { statusInstal, responsavelId, checklistIds, observacao, processoId, servicoId } = request.body as {
+    const { statusInstal, responsavelId, checklistIds, observacao, processoId, servicoId, dataLimite } = request.body as {
       statusInstal?: number
       responsavelId?: number | null
       checklistIds?: number[]
       observacao?: string
       processoId?: number
       servicoId?: number | null
+      dataLimite?: string | null
     }
     const usuarioId = Number((request.user as any)?.id || 0) || null
 
@@ -2149,12 +2173,20 @@ export async function pipelineRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Responsável inválido.' })
     }
 
+    const novaDataLimite = dataLimite === undefined
+      ? undefined
+      : (dataLimite === null || dataLimite === '' ? null : dataLimite)
+    if (novaDataLimite !== undefined && novaDataLimite !== null && !/^\d{4}-\d{2}-\d{2}$/.test(novaDataLimite)) {
+      return reply.status(400).send({ error: 'Data limite inválida.' })
+    }
+
     const idsChecklist = Array.from(new Set((checklistIds || []).map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0)))
 
     let statusMudou = false
     let responsavelMudou = false
     let checklistMudou = false
     let servicoMudou = false
+    let dataLimiteMudou = false
 
     // Troca de serviço do processo já criado — evita que o usuário precise criar um
     // processo novo (o que gerava duplicatas). Fica registrado no histórico e na auditoria.
@@ -2331,9 +2363,37 @@ export async function pipelineRoutes(app: FastifyInstance) {
       }
     }
 
-    // Se nada mudou (etapa/responsável/checklist) mas o usuário digitou uma observação,
+    // Data-limite combinada com o cliente pelo técnico — sobrepõe o prazo padrão da etapa no
+    // cálculo de atraso (ver diasAteLimite()).
+    if (novaDataLimite !== undefined && novaDataLimite !== (cliente.dataLimite ?? null)) {
+      dataLimiteMudou = true
+      await prisma.$executeRaw`
+        UPDATE implantacao_processos
+        SET data_limite = ${novaDataLimite}, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
+        WHERE id = ${contexto.processoId}
+      `
+      await registrarMovimentacao({
+        clienteId: id,
+        processoId: contexto.processoId,
+        tipo: 'observacao',
+        observacao: novaDataLimite
+          ? `Data limite combinada com o cliente atualizada para ${novaDataLimite.split('-').reverse().join('/')}.${obs ? ` ${obs}` : ''}`
+          : `Data limite removida.${obs ? ` ${obs}` : ''}`,
+        usuarioId,
+      })
+      await registrarAuditoria({
+        tabela: 'implantacao_processos',
+        registroId: contexto.processoId,
+        acao: 'ALTERACAO',
+        usuarioId,
+        dadosAntes: { dataLimite: cliente.dataLimite ?? null },
+        dadosDepois: { dataLimite: novaDataLimite },
+      })
+    }
+
+    // Se nada mudou (etapa/responsável/checklist/data-limite) mas o usuário digitou uma observação,
     // ela era descartada silenciosamente. Registra como evento avulso, igual ao endpoint dedicado de observação.
-    if (obs && !statusMudou && !responsavelMudou && !checklistMudou && !servicoMudou) {
+    if (obs && !statusMudou && !responsavelMudou && !checklistMudou && !servicoMudou && !dataLimiteMudou) {
       await prisma.$executeRaw`
         UPDATE implantacao_processos
         SET observacao = ${obs}, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
@@ -2349,7 +2409,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       })
     }
 
-    if (statusMudou || responsavelMudou || checklistMudou || servicoMudou || obs) {
+    if (statusMudou || responsavelMudou || checklistMudou || servicoMudou || dataLimiteMudou || obs) {
       const resumoConfig = await getClienteEProcessoResumo(id, contexto.processoId)
       const partes: string[] = []
       if (servicoMudou) partes.push('serviço do processo alterado')
@@ -2358,6 +2418,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       }
       if (responsavelMudou) partes.push('responsável atualizado')
       if (checklistMudou) partes.push('checklist(s) do processo atualizado(s)')
+      if (dataLimiteMudou) partes.push(novaDataLimite ? `data limite: ${novaDataLimite.split('-').reverse().join('/')}` : 'data limite removida')
       if (obs) partes.push(`observação: ${obs}`)
 
       await notificarProcesso({

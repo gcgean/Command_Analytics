@@ -516,7 +516,7 @@ export const api = {
     fetchApi<ImplantacaoConfiguracaoCliente>(`/pipeline/implantacao/${clienteId}/configuracao${processoId ? `?processoId=${processoId}` : ''}`),
   updateImplantacaoConfiguracao: (
     clienteId: number,
-    data: { statusInstal?: number; responsavelId?: number | null; checklistIds?: number[]; observacao?: string; processoId?: number; servicoId?: number | null }
+    data: { statusInstal?: number; responsavelId?: number | null; checklistIds?: number[]; observacao?: string; processoId?: number; servicoId?: number | null; dataLimite?: string | null }
   ) => fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/configuracao`, { method: 'PUT', body: JSON.stringify(data) }),
   getImplantacaoResponsaveis: () => fetchApi<Array<{ id: number; nome: string }>>('/pipeline/implantacao/responsaveis'),
   desativarProcessoImplantacao: (clienteId: number, processoId: number) =>
