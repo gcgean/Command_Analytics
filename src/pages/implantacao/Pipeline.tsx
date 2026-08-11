@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   GripVertical, LayoutList, Loader2, RefreshCcw, Search,
-  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen, Ban, X, AlertTriangle
+  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen, Ban, X, AlertTriangle, CheckCircle2
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
@@ -175,14 +175,13 @@ function clienteCorrespondeDataCadastro(cliente: ImplantacaoCliente, dataInicial
   return true
 }
 
-// Um único campo de filtro cobre responsável OU quem lançou o processo: escolhendo uma
-// pessoa, casa se ela for responsável OU criadora do processo (qualquer um dos dois papéis).
+// Filtra pelo responsável atual do processo (não considera quem lançou/criou).
 function clienteCorrespondePessoa(cliente: ImplantacaoCliente, pessoaFiltro: string) {
   if (pessoaFiltro === 'all') return true
   if (pessoaFiltro === 'sem-responsavel') return !cliente.responsavelId
   const id = Number(pessoaFiltro)
   if (!Number.isFinite(id)) return true
-  return cliente.responsavelId === id || cliente.criadoPor === id
+  return cliente.responsavelId === id
 }
 
 function getDiasNaEtapa(cliente: ImplantacaoCliente) {
@@ -335,6 +334,7 @@ export function Pipeline() {
   const [dataCadastroFinal, setDataCadastroFinal] = useState(() => searchParams.get('dataFinal') || '')
   const [pessoaFiltro, setPessoaFiltro] = useState(() => searchParams.get('pessoa') || 'all')
   const [somenteAtrasados, setSomenteAtrasados] = useState(() => searchParams.get('atrasados') === '1')
+  const [somenteEmDia, setSomenteEmDia] = useState(() => searchParams.get('emDia') === '1')
   const [viewMode, setViewMode] = useState<ViewMode>(() => (searchParams.get('view') as ViewMode) || 'kanban')
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
@@ -418,13 +418,12 @@ export function Pipeline() {
     return Array.from(unicos.values())
   }, [painel?.clientes])
 
-  // Lista de pessoas para o filtro combinado (responsável ou quem lançou o processo),
-  // construída a partir dos próprios processos carregados — sem precisar de outro endpoint.
+  // Lista de responsáveis atuais para o filtro, construída a partir dos próprios processos
+  // carregados — sem precisar de outro endpoint.
   const pessoasDisponiveis = useMemo(() => {
     const mapa = new Map<number, string>()
     clientesBase.forEach((cliente) => {
       if (cliente.responsavelId && cliente.responsavelNome) mapa.set(cliente.responsavelId, cliente.responsavelNome)
-      if (cliente.criadoPor && cliente.criadorNome) mapa.set(cliente.criadoPor, cliente.criadorNome)
     })
     return Array.from(mapa.entries())
       .map(([id, nome]) => ({ id, nome }))
@@ -437,9 +436,10 @@ export function Pipeline() {
       clienteCorrespondeTempoUltimaVenda(cliente, ultimaVendaFiltro) &&
       clienteCorrespondeDataCadastro(cliente, dataCadastroInicial, dataCadastroFinal) &&
       clienteCorrespondePessoa(cliente, pessoaFiltro) &&
-      (!somenteAtrasados || cliente.emAtraso)
+      (!somenteAtrasados || cliente.emAtraso) &&
+      (!somenteEmDia || !cliente.emAtraso)
     ),
-    [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, somenteAtrasados],
+    [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, somenteAtrasados, somenteEmDia],
   )
 
   const clientesVisiveis = useMemo(
@@ -522,9 +522,10 @@ export function Pipeline() {
     if (dataCadastroFinal) next.set('dataFinal', dataCadastroFinal)
     if (pessoaFiltro !== 'all') next.set('pessoa', pessoaFiltro)
     if (somenteAtrasados) next.set('atrasados', '1')
+    if (somenteEmDia) next.set('emDia', '1')
     if (viewMode !== 'kanban') next.set('view', viewMode)
     setSearchParams(next, { replace: true })
-  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, somenteAtrasados, viewMode, setSearchParams])
+  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, somenteAtrasados, somenteEmDia, viewMode, setSearchParams])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1032,19 +1033,28 @@ export function Pipeline() {
               <option value="sem-venda">Sem última venda</option>
             </select>
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden h-7 sm:h-8">
             <button
               type="button"
-              onClick={() => setSomenteAtrasados((prev) => !prev)}
+              onClick={() => { setSomenteAtrasados((prev) => !prev); setSomenteEmDia(false) }}
               className={clsx(
-                'h-7 sm:h-8 w-full flex items-center justify-center gap-1.5 rounded-lg border text-[11px] sm:text-xs font-medium transition-colors',
-                somenteAtrasados
-                  ? 'border-rose-500 bg-rose-600 text-white'
-                  : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300',
+                'flex-1 flex items-center justify-center gap-1 text-[11px] sm:text-xs font-medium transition-colors',
+                somenteAtrasados ? 'bg-rose-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300',
               )}
-              title="Mostrar só os processos que passaram do prazo (SLA) da etapa atual"
+              title="Mostrar só os processos que passaram do prazo (SLA/data limite) da etapa atual"
             >
-              <AlertTriangle className="w-3.5 h-3.5" /> Só atrasados
+              <AlertTriangle className="w-3.5 h-3.5" /> Atrasados
+            </button>
+            <button
+              type="button"
+              onClick={() => { setSomenteEmDia((prev) => !prev); setSomenteAtrasados(false) }}
+              className={clsx(
+                'flex-1 flex items-center justify-center gap-1 text-[11px] sm:text-xs font-medium transition-colors border-l border-slate-300 dark:border-slate-700',
+                somenteEmDia ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300',
+              )}
+              title="Mostrar só os processos dentro do prazo (SLA/data limite) da etapa atual"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" /> Em dia
             </button>
           </div>
           <div className="md:col-span-3">
@@ -1052,9 +1062,9 @@ export function Pipeline() {
               value={pessoaFiltro}
               onChange={(e) => setPessoaFiltro(e.target.value)}
               className="h-7 sm:h-8 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] sm:text-xs px-2.5"
-              title="Filtrar por responsável ou por quem lançou o processo"
+              title="Filtrar pelo responsável atual do processo"
             >
-              <option value="all">Responsável ou lançado por: todos</option>
+              <option value="all">Responsável: todos</option>
               <option value="sem-responsavel">Sem responsável</option>
               {pessoasDisponiveis.map((pessoa) => (
                 <option key={pessoa.id} value={String(pessoa.id)}>{pessoa.nome}</option>
