@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { pollServidor } from '../utils/servidorMonitor'
+import { usuarioEhAdmin } from '../utils/visibilidade'
 
 // Histórico das últimas 24h (a cada 5min ≈ até 288 pontos), usado nos gráficos de CPU/RAM.
 function historico24h() {
@@ -28,6 +29,7 @@ function fmt(s: any) {
     driveDisco: s.driveDisco,
     anydesk: s.anydesk,
     desativado: s.desativado,
+    somenteAdmin: Boolean(s.somenteAdmin),
     conexoes: ultimo
       ? {
           total: ultimo.conexoesTotal,
@@ -58,11 +60,13 @@ export async function servidoresRoutes(app: FastifyInstance) {
   // GET /servidores
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Servidores'] } }, async (request) => {
     const { online, desativado } = request.query as Record<string, string>
+    const admin = await usuarioEhAdmin(Number((request.user as any)?.id))
 
     const servidores = await prisma.servidor.findMany({
       where: {
         ...(online !== undefined && { online: online === 'true' }),
         ...(desativado !== undefined && { desativado: desativado === 'true' }),
+        ...(admin ? {} : { somenteAdmin: { not: true } }),
       },
       include: {
         historico: historico24h(),
@@ -83,8 +87,31 @@ export async function servidoresRoutes(app: FastifyInstance) {
       },
     })
     if (!servidor) return reply.status(404).send({ error: 'Servidor não encontrado.' })
+    if (servidor.somenteAdmin && !(await usuarioEhAdmin(Number((request.user as any)?.id)))) {
+      return reply.status(404).send({ error: 'Servidor não encontrado.' })
+    }
     return fmt(servidor)
   })
+
+  // PATCH /servidores/:id/somente-admin — restringe/libera visibilidade do servidor (só admin)
+  app.patch(
+    '/:id/somente-admin',
+    { preHandler: authMiddleware, schema: { tags: ['Servidores'], summary: 'Alternar visibilidade somente-admin' } },
+    async (request, reply) => {
+      if (!(await usuarioEhAdmin(Number((request.user as any)?.id)))) {
+        return reply.status(403).send({ error: 'Apenas administradores podem alterar essa visibilidade.' })
+      }
+      const { id } = request.params as { id: string }
+      const servidor = await prisma.servidor.findUnique({ where: { id: Number(id) } })
+      if (!servidor) return reply.status(404).send({ error: 'Servidor não encontrado.' })
+      const updated = await prisma.servidor.update({
+        where: { id: Number(id) },
+        data: { somenteAdmin: !servidor.somenteAdmin },
+        include: { historico: historico24h() },
+      })
+      return fmt(updated)
+    }
+  )
 
   // POST /servidores
   app.post('/', { preHandler: authMiddleware, schema: { tags: ['Servidores'] } }, async (request, reply) => {

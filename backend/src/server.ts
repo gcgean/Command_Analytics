@@ -50,6 +50,7 @@ import { ensureProntuarioGuard } from './utils/prontuarioGuard'
 import { ensureMaquininhas } from './utils/maquininhas'
 import { ensureLembretesFixos, startLembretesFixosScheduler } from './utils/lembretesFixos'
 import { ensureServidorMonitorColumns, startServidorMonitorScheduler } from './utils/servidorMonitor'
+import { ensureVisibilidadeTables } from './utils/visibilidade'
 import { initNotificacoesAgendamento, startNotificacoesAgendamentoScheduler } from './utils/notificacoesAgendamento'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
@@ -214,4 +215,7 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   ensureServidorMonitorColumns()
     .then(() => { console.log('✓ Tabelas de monitoramento de servidores verificadas'); startServidorMonitorScheduler() })
     .catch(e => console.warn('⚠ Monitor de servidores init:', e.message))
+  ensureVisibilidadeTables()
+    .then(() => console.log('✓ Tabelas de visibilidade (somente admin) verificadas'))
+    .catch(e => console.warn('⚠ Visibilidade init:', e.message))
 })

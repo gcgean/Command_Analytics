@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Server, Wifi, WifiOff, HardDrive, Cpu, MemoryStick, RefreshCw, Loader2 } from 'lucide-react'
+import { Server, Wifi, WifiOff, HardDrive, Cpu, MemoryStick, RefreshCw, Loader2, Lock, Unlock } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
+import { usePermissions } from '../../contexts/PermissionsContext'
 
 interface HistoricoEntry {
   id: number
@@ -25,6 +26,7 @@ interface ServidorMysql {
   driveDisco?: string | null
   anydesk?: string | null
   desativado?: boolean | null
+  somenteAdmin?: boolean | null
   valor?: number | null
   historico?: HistoricoEntry[]
 }
@@ -91,9 +93,11 @@ function MetricBar({ val, cor }: { val: number; cor: string }) {
 }
 
 export function Servidores() {
+  const { isSuperUser } = usePermissions()
   const [servidores, setServidores] = useState<ServidorMysql[]>([])
   const [loading, setLoading] = useState(true)
   const [somenteAtivos, setSomenteAtivos] = useState(true)
+  const [alternandoVisibilidade, setAlternandoVisibilidade] = useState<number | null>(null)
 
   const carregar = () => {
     setLoading(true)
@@ -104,6 +108,20 @@ export function Servidores() {
   }
 
   useEffect(() => { carregar() }, [])
+
+  const handleToggleSomenteAdmin = async (s: ServidorMysql) => {
+    const acao = s.somenteAdmin ? 'liberar esse servidor para todos os usuários' : 'restringir esse servidor para admins apenas'
+    if (!window.confirm(`Deseja ${acao} ("${s.nome}")?`)) return
+    setAlternandoVisibilidade(s.id)
+    try {
+      await api.toggleServidorSomenteAdmin(s.id)
+      carregar()
+    } catch (e: any) {
+      window.alert(e?.message || 'Falha ao alterar a visibilidade.')
+    } finally {
+      setAlternandoVisibilidade(null)
+    }
+  }
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -186,12 +204,32 @@ export function Servidores() {
                       {s.online && !s.desativado
                         ? <span className="flex items-center gap-1 badge bg-emerald-500/20 text-emerald-400 text-xs"><Wifi size={10} /> Online</span>
                         : <span className="flex items-center gap-1 badge bg-red-500/20 text-red-400 text-xs"><WifiOff size={10} /> Offline</span>}
+                      {s.somenteAdmin && (
+                        <span className="flex items-center gap-1 badge bg-purple-500/20 text-purple-400 text-xs"><Lock size={10} /> Somente admin</span>
+                      )}
                     </div>
                     <p className="text-xs text-slate-500">{s.descricao}</p>
                     <p className="text-xs text-slate-600">{s.dns}</p>
                   </div>
                 </div>
-                <div className="text-right text-xs text-slate-500">
+                <div className="text-right text-xs text-slate-500 flex flex-col items-end gap-1">
+                  {isSuperUser && (
+                    <button
+                      type="button"
+                      className="btn-secondary flex items-center gap-1 !py-1 !px-2 text-xs"
+                      onClick={() => handleToggleSomenteAdmin(s)}
+                      disabled={alternandoVisibilidade === s.id}
+                    >
+                      {alternandoVisibilidade === s.id ? (
+                        <Loader2 size={11} className="animate-spin" />
+                      ) : s.somenteAdmin ? (
+                        <Lock size={11} />
+                      ) : (
+                        <Unlock size={11} />
+                      )}
+                      {s.somenteAdmin ? 'Restrito' : 'Visível a todos'}
+                    </button>
+                  )}
                   {s.anydesk && <p>AnyDesk: {s.anydesk}</p>}
                   {ultimaVerif && (
                     <p>Última atualização: {new Date(ultimaVerif).toLocaleString('pt-BR')}</p>

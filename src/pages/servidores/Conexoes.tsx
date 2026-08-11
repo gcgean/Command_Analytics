@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Search, RefreshCw, Loader2, HeartPulse, Play, RotateCcw, Square } from 'lucide-react'
+import { Search, RefreshCw, Loader2, HeartPulse, Play, RotateCcw, Square, Lock, Unlock } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -14,8 +14,9 @@ const statusColors: Record<string, string> = {
 }
 
 export function Conexoes() {
-  const { can } = usePermissions()
+  const { can, isSuperUser } = usePermissions()
   const podeExecutarAcoes = can('conexoes-acoes')
+  const [alternandoVisibilidade, setAlternandoVisibilidade] = useState<string | null>(null)
 
   const [servidores, setServidores] = useState<Servidor[]>([])
   const [servidorId, setServidorId] = useState('')
@@ -73,6 +74,20 @@ export function Conexoes() {
     observer.observe(alvo)
     return () => observer.disconnect()
   }, [conexoes.length])
+
+  const handleToggleSomenteAdmin = async (c: Conexao) => {
+    const acao = c.somenteAdmin ? 'liberar essa conexão para todos os usuários' : 'restringir essa conexão para admins apenas'
+    if (!window.confirm(`Deseja ${acao} ("${c.name}")?`)) return
+    setAlternandoVisibilidade(`${c.servidorId}:${c.id}`)
+    try {
+      await api.toggleConexaoSomenteAdmin(c.servidorId, c.id)
+      carregar()
+    } catch (e: any) {
+      window.alert(e?.message || 'Falha ao alterar a visibilidade.')
+    } finally {
+      setAlternandoVisibilidade(null)
+    }
+  }
 
   const handleVerSaude = async (c: Conexao) => {
     setSaudeById(prev => ({ ...prev, [c.id]: { loading: true, texto: '' } }))
@@ -161,14 +176,38 @@ export function Conexoes() {
               <div key={`${c.servidorId}-${c.id}`} className="card">
                 <div className="flex items-start justify-between mb-2">
                   <div>
-                    <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{c.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{c.name}</p>
+                      {c.somenteAdmin && (
+                        <span className="flex items-center gap-1 badge bg-purple-500/20 text-purple-400 text-xs"><Lock size={10} /> Somente admin</span>
+                      )}
+                    </div>
                     <p className="text-xs text-slate-500">
                       {c.servidorNome} {c.servidorAnydesk ? `· AnyDesk ${c.servidorAnydesk}` : ''}
                     </p>
                   </div>
-                  <span className={clsx('text-xs px-2 py-0.5 rounded-full font-medium', statusColors[statusKey] ?? 'bg-slate-500/20 text-slate-500')}>
-                    {c.status || '—'}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    {isSuperUser && (
+                      <button
+                        type="button"
+                        className="btn-secondary flex items-center gap-1 !py-1 !px-2 text-xs"
+                        onClick={() => handleToggleSomenteAdmin(c)}
+                        disabled={alternandoVisibilidade === `${c.servidorId}:${c.id}`}
+                        title={c.somenteAdmin ? 'Liberar para todos' : 'Restringir a admins'}
+                      >
+                        {alternandoVisibilidade === `${c.servidorId}:${c.id}` ? (
+                          <Loader2 size={11} className="animate-spin" />
+                        ) : c.somenteAdmin ? (
+                          <Lock size={11} />
+                        ) : (
+                          <Unlock size={11} />
+                        )}
+                      </button>
+                    )}
+                    <span className={clsx('text-xs px-2 py-0.5 rounded-full font-medium', statusColors[statusKey] ?? 'bg-slate-500/20 text-slate-500')}>
+                      {c.status || '—'}
+                    </span>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-3 gap-2 text-xs text-slate-600 dark:text-slate-400 mb-3">

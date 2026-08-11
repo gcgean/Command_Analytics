@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { registrarAuditoria } from '../utils/auditoria'
+import { usuarioEhAdmin } from '../utils/visibilidade'
 import {
   listarConexoesDoServidor,
   checarSaudeConexao,
@@ -9,12 +10,13 @@ import {
   type ServidorParaConexoes,
 } from '../utils/servidorConnections'
 
-async function servidoresElegiveis(servidorId?: number): Promise<ServidorParaConexoes[]> {
+async function servidoresElegiveis(admin: boolean, servidorId?: number): Promise<ServidorParaConexoes[]> {
   const servidores = await prisma.servidor.findMany({
     where: {
       desativado: { not: true },
       dns: { not: null },
       portaApi: { not: null },
+      ...(admin ? {} : { somenteAdmin: { not: true } }),
       ...(servidorId ? { id: servidorId } : {}),
     },
     select: { id: true, nome: true, dns: true, portaApi: true, anydesk: true },
@@ -22,14 +24,27 @@ async function servidoresElegiveis(servidorId?: number): Promise<ServidorParaCon
   return servidores
 }
 
+async function conexoesRestritas(): Promise<Set<string>> {
+  const rows = await prisma.$queryRaw<Array<{ servidor_id: number; connection_id: string }>>`
+    SELECT servidor_id, connection_id FROM conexao_restricoes WHERE somente_admin = 1
+  `
+  return new Set(rows.map((r) => `${r.servidor_id}:${r.connection_id}`))
+}
+
 export async function connectionsRoutes(app: FastifyInstance) {
   // GET /connections — lista conexões (todas ou de um servidor específico)
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Conexões'] } }, async (request) => {
     const { servidorId, search, status } = request.query as Record<string, string>
+    const admin = await usuarioEhAdmin(Number((request.user as any)?.id))
 
-    const servidores = await servidoresElegiveis(servidorId ? Number(servidorId) : undefined)
+    const servidores = await servidoresElegiveis(admin, servidorId ? Number(servidorId) : undefined)
     const listas = await Promise.all(servidores.map((s) => listarConexoesDoServidor(s)))
     let conexoes = listas.flat()
+
+    const restritas = await conexoesRestritas()
+    if (!admin) {
+      conexoes = conexoes.filter((c) => !restritas.has(`${c.servidorId}:${c.id}`))
+    }
 
     if (status) {
       const statusLower = status.toLowerCase()
@@ -47,7 +62,7 @@ export async function connectionsRoutes(app: FastifyInstance) {
     return {
       total: conexoes.length,
       servidoresConsultados: servidores.length,
-      data: conexoes,
+      data: conexoes.map((c) => ({ ...c, somenteAdmin: restritas.has(`${c.servidorId}:${c.id}`) })),
     }
   })
 
@@ -56,8 +71,16 @@ export async function connectionsRoutes(app: FastifyInstance) {
     const { servidorId, connectionId } = request.query as Record<string, string>
     if (!servidorId || !connectionId) return reply.status(400).send({ error: 'servidorId e connectionId são obrigatórios.' })
 
-    const [servidor] = await servidoresElegiveis(Number(servidorId))
+    const admin = await usuarioEhAdmin(Number((request.user as any)?.id))
+    const [servidor] = await servidoresElegiveis(admin, Number(servidorId))
     if (!servidor) return reply.status(404).send({ error: 'Servidor não encontrado ou inativo.' })
+
+    if (!admin) {
+      const restritas = await conexoesRestritas()
+      if (restritas.has(`${servidor.id}:${connectionId}`)) {
+        return reply.status(404).send({ error: 'Conexão não encontrada.' })
+      }
+    }
 
     try {
       const saude = await checarSaudeConexao(servidor, connectionId)
@@ -65,6 +88,31 @@ export async function connectionsRoutes(app: FastifyInstance) {
     } catch (e: any) {
       return reply.status(502).send({ error: e?.message || 'Falha ao consultar saúde da conexão.' })
     }
+  })
+
+  // POST /connections/visibilidade — restringe/libera visibilidade de uma conexão (só admin)
+  app.post('/visibilidade', { preHandler: authMiddleware, schema: { tags: ['Conexões'], summary: 'Alternar visibilidade somente-admin de uma conexão' } }, async (request, reply) => {
+    if (!(await usuarioEhAdmin(Number((request.user as any)?.id)))) {
+      return reply.status(403).send({ error: 'Apenas administradores podem alterar essa visibilidade.' })
+    }
+    const { servidorId, connectionId } = request.body as { servidorId: number; connectionId: string }
+    if (!servidorId || !connectionId) {
+      return reply.status(400).send({ error: 'servidorId e connectionId são obrigatórios.' })
+    }
+
+    const restritas = await conexoesRestritas()
+    const jaRestrita = restritas.has(`${servidorId}:${connectionId}`)
+
+    if (jaRestrita) {
+      await prisma.$executeRaw`DELETE FROM conexao_restricoes WHERE servidor_id = ${servidorId} AND connection_id = ${connectionId}`
+    } else {
+      await prisma.$executeRaw`
+        INSERT INTO conexao_restricoes (servidor_id, connection_id, somente_admin)
+        VALUES (${servidorId}, ${connectionId}, 1)
+        ON DUPLICATE KEY UPDATE somente_admin = 1
+      `
+    }
+    return { somenteAdmin: !jaRestrita }
   })
 
   // POST /connections/acao — abrir/reiniciar/fechar aplicação de uma conexão
@@ -83,8 +131,16 @@ export async function connectionsRoutes(app: FastifyInstance) {
     }
 
     try {
-      const [servidor] = await servidoresElegiveis(Number(servidorId))
+      const admin = await usuarioEhAdmin(Number((request.user as any)?.id))
+      const [servidor] = await servidoresElegiveis(admin, Number(servidorId))
       if (!servidor) return reply.status(404).send({ error: 'Servidor não encontrado ou inativo.' })
+
+      if (!admin) {
+        const restritas = await conexoesRestritas()
+        if (restritas.has(`${servidor.id}:${connectionId}`)) {
+          return reply.status(404).send({ error: 'Conexão não encontrada.' })
+        }
+      }
 
       const usuarioId = Number((request.user as any)?.id || 0) || null
 

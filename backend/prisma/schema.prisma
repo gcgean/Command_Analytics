@@ -373,10 +373,24 @@ model Servidor {
   anydesk         String?  @db.VarChar(50)
   desativado      Boolean? @default(false)
   valor           Float?   @map("valor_nuvem")
+  somenteAdmin    Boolean? @default(false) @map("somente_admin")
 
   historico HistoricoServidor[]
 
   @@map("servidor_nuvem")
+}
+
+// Restrições de visibilidade por conexão — conexões não têm tabela própria (vêm ao vivo da API
+// de cada servidor), então guardamos aqui só as marcadas como "somente admin".
+model ConexaoRestricao {
+  id           Int      @id @default(autoincrement())
+  servidorId   Int      @map("servidor_id")
+  connectionId String   @map("connection_id") @db.VarChar(255)
+  somenteAdmin Boolean  @default(true) @map("somente_admin")
+  criadoEm     DateTime @default(now()) @map("criado_em")
+
+  @@unique([servidorId, connectionId])
+  @@map("conexao_restricoes")
 }
 
 model HistoricoServidor {

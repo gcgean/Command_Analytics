@@ -986,6 +986,7 @@ export interface Servidor {
   driveDisco?: string | null
   anydesk?: string | null
   desativado?: boolean | null
+  somenteAdmin?: boolean | null
   conexoes?: {
     total: number | null
     aberto: number | null
@@ -1007,6 +1008,7 @@ export interface Conexao {
   servidorId: number
   servidorNome: string | null
   servidorAnydesk: string | null
+  somenteAdmin?: boolean
 }
 
 export interface ConexoesResposta {

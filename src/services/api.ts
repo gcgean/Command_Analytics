@@ -658,6 +658,7 @@ export const api = {
   getServidores: () => fetchApi<Servidor[]>('/servidores'),
   getServidor: (id: number) => fetchApi<Servidor>(`/servidores/${id}`),
   verificarServidorAgora: (id: number) => fetchApi<Servidor>(`/servidores/${id}/verificar-agora`, { method: 'POST' }),
+  toggleServidorSomenteAdmin: (id: number) => fetchApi<Servidor>(`/servidores/${id}/somente-admin`, { method: 'PATCH' }),
 
   // ─── Conexões ──────────────────────────────────────────────
   getConexoes: (params?: { servidorId?: number; search?: string; status?: string }) => {
@@ -678,6 +679,11 @@ export const api = {
     fetchApi<{ ok: boolean }>('/connections/acao', {
       method: 'POST',
       body: JSON.stringify({ servidorId, connectionId, connectionName, acao }),
+    }),
+  toggleConexaoSomenteAdmin: (servidorId: number, connectionId: string) =>
+    fetchApi<{ somenteAdmin: boolean }>('/connections/visibilidade', {
+      method: 'POST',
+      body: JSON.stringify({ servidorId, connectionId }),
     }),
 
   // ─── Usuários ──────────────────────────────────────────────
