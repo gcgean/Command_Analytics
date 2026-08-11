@@ -333,8 +333,11 @@ export function Pipeline() {
   const [dataCadastroInicial, setDataCadastroInicial] = useState(() => searchParams.get('dataInicial') || '')
   const [dataCadastroFinal, setDataCadastroFinal] = useState(() => searchParams.get('dataFinal') || '')
   const [pessoaFiltro, setPessoaFiltro] = useState(() => searchParams.get('pessoa') || 'all')
-  const [somenteAtrasados, setSomenteAtrasados] = useState(() => searchParams.get('atrasados') === '1')
-  const [somenteEmDia, setSomenteEmDia] = useState(() => searchParams.get('emDia') === '1')
+  const [filtroPrazo, setFiltroPrazo] = useState<'todos' | 'atrasados' | 'em-dia'>(() => {
+    if (searchParams.get('atrasados') === '1') return 'atrasados'
+    if (searchParams.get('emDia') === '1') return 'em-dia'
+    return 'todos'
+  })
   const [viewMode, setViewMode] = useState<ViewMode>(() => (searchParams.get('view') as ViewMode) || 'kanban')
   const [loading, setLoading] = useState(true)
   const [updating, setUpdating] = useState(false)
@@ -436,10 +439,9 @@ export function Pipeline() {
       clienteCorrespondeTempoUltimaVenda(cliente, ultimaVendaFiltro) &&
       clienteCorrespondeDataCadastro(cliente, dataCadastroInicial, dataCadastroFinal) &&
       clienteCorrespondePessoa(cliente, pessoaFiltro) &&
-      (!somenteAtrasados || cliente.emAtraso) &&
-      (!somenteEmDia || !cliente.emAtraso)
+      (filtroPrazo === 'todos' || (filtroPrazo === 'atrasados' ? cliente.emAtraso : !cliente.emAtraso))
     ),
-    [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, somenteAtrasados, somenteEmDia],
+    [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, filtroPrazo],
   )
 
   const clientesVisiveis = useMemo(
@@ -521,11 +523,11 @@ export function Pipeline() {
     if (dataCadastroInicial) next.set('dataInicial', dataCadastroInicial)
     if (dataCadastroFinal) next.set('dataFinal', dataCadastroFinal)
     if (pessoaFiltro !== 'all') next.set('pessoa', pessoaFiltro)
-    if (somenteAtrasados) next.set('atrasados', '1')
-    if (somenteEmDia) next.set('emDia', '1')
+    if (filtroPrazo === 'atrasados') next.set('atrasados', '1')
+    if (filtroPrazo === 'em-dia') next.set('emDia', '1')
     if (viewMode !== 'kanban') next.set('view', viewMode)
     setSearchParams(next, { replace: true })
-  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, somenteAtrasados, somenteEmDia, viewMode, setSearchParams])
+  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, filtroPrazo, viewMode, setSearchParams])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1017,7 +1019,7 @@ export function Pipeline() {
               </select>
             </div>
           </div>
-          <div className="md:col-span-3">
+          <div className="md:col-span-2">
             <select
               value={ultimaVendaFiltro}
               onChange={(e) => setUltimaVendaFiltro(e.target.value as UltimaVendaFiltro)}
@@ -1033,13 +1035,24 @@ export function Pipeline() {
               <option value="sem-venda">Sem última venda</option>
             </select>
           </div>
-          <div className="md:col-span-2 flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden h-7 sm:h-8">
+          <div className="md:col-span-3 flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden h-7 sm:h-8">
             <button
               type="button"
-              onClick={() => { setSomenteAtrasados((prev) => !prev); setSomenteEmDia(false) }}
+              onClick={() => setFiltroPrazo('todos')}
               className={clsx(
                 'flex-1 flex items-center justify-center gap-1 text-[11px] sm:text-xs font-medium transition-colors',
-                somenteAtrasados ? 'bg-rose-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300',
+                filtroPrazo === 'todos' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300',
+              )}
+              title="Mostrar todos os processos"
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              onClick={() => setFiltroPrazo('atrasados')}
+              className={clsx(
+                'flex-1 flex items-center justify-center gap-1 text-[11px] sm:text-xs font-medium transition-colors border-l border-slate-300 dark:border-slate-700',
+                filtroPrazo === 'atrasados' ? 'bg-rose-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300',
               )}
               title="Mostrar só os processos que passaram do prazo (SLA/data limite) da etapa atual"
             >
@@ -1047,10 +1060,10 @@ export function Pipeline() {
             </button>
             <button
               type="button"
-              onClick={() => { setSomenteEmDia((prev) => !prev); setSomenteAtrasados(false) }}
+              onClick={() => setFiltroPrazo('em-dia')}
               className={clsx(
                 'flex-1 flex items-center justify-center gap-1 text-[11px] sm:text-xs font-medium transition-colors border-l border-slate-300 dark:border-slate-700',
-                somenteEmDia ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300',
+                filtroPrazo === 'em-dia' ? 'bg-emerald-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300',
               )}
               title="Mostrar só os processos dentro do prazo (SLA/data limite) da etapa atual"
             >
