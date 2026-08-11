@@ -449,7 +449,7 @@ async function getServicosChecklistMap(): Promise<Map<number, number[]>> {
   return map
 }
 
-async function ensureImplantacaoBootstrap() {
+export async function ensureImplantacaoBootstrap() {
   if (!bootstrapPromise) {
     bootstrapPromise = (async () => {
       await initEtapas()
@@ -565,6 +565,7 @@ async function ensureImplantacaoBootstrap() {
       await ensureColumnExists('implantacao_processos', 'servico_id', 'servico_id INT NULL AFTER servico_nome')
       await ensureColumnExists('implantacao_processos', 'ativo', 'ativo TINYINT(1) NOT NULL DEFAULT 1 AFTER processo_principal')
       await ensureColumnExists('implantacao_processos', 'data_limite', 'data_limite DATE NULL AFTER observacao')
+      await ensureColumnExists('implantacao_processos', 'notificado_vencimento', 'notificado_vencimento DATETIME NULL AFTER data_limite')
       await ensureColumnExists('cadastro_etapas', 'sla_dias', 'sla_dias INT NULL AFTER cor')
 
       // Alarga colunas 'observacao' que ainda estejam em VARCHAR(500) — textos de observação mais
@@ -771,7 +772,7 @@ async function ensureImplantacaoBootstrap() {
   await bootstrapPromise
 }
 
-async function registrarMovimentacao(args: {
+export async function registrarMovimentacao(args: {
   clienteId: number
   processoId?: number | null
   tipo: 'status' | 'checklist' | 'responsavel' | 'observacao'
@@ -1921,11 +1922,12 @@ export async function pipelineRoutes(app: FastifyInstance) {
   app.patch('/implantacao/:clienteId/transicao', { preHandler: authMiddleware, schema: { tags: ['Pipeline'], summary: 'Transição de etapa com checklist e log completo' } }, async (request, reply) => {
     const { clienteId } = request.params as { clienteId: string }
     const id = Number(clienteId)
-    const { statusDestino, observacao, checklist, processoId } = request.body as {
+    const { statusDestino, observacao, checklist, processoId, responsavelId } = request.body as {
       statusDestino: number
       observacao?: string
       checklist?: Array<{ checklistId: number; itemIndex: number; marcado: boolean; observacao?: string }>
       processoId?: number
+      responsavelId?: number | null
     }
     const destino = Number(statusDestino)
     const usuarioId = Number((request.user as any)?.id || 0) || null
@@ -1934,11 +1936,21 @@ export async function pipelineRoutes(app: FastifyInstance) {
     if (!(await getStatusValidos()).has(destino)) {
       return reply.status(400).send({ error: 'Etapa de destino inválida.' })
     }
+    const novoResponsavelId = responsavelId === undefined
+      ? undefined
+      : (responsavelId === null ? null : Number(responsavelId))
+    if (novoResponsavelId !== undefined && novoResponsavelId !== null && (!Number.isFinite(novoResponsavelId) || novoResponsavelId <= 0)) {
+      return reply.status(400).send({ error: 'Responsável inválido.' })
+    }
 
     await ensureImplantacaoBootstrap()
     const contexto = await getProcessoContexto(id, processoId)
     if (!contexto) return reply.status(404).send({ error: 'Processo não encontrado.' })
     const origem = contexto.statusAtual
+
+    const clientesAtuais = await carregarClientesImplantacaoCache()
+    const clienteAtual = clientesAtuais.find((c) => c.clienteId === id && Number(c.processoId || 0) === contexto.processoId)
+    const responsavelAtualId = clienteAtual?.responsavelId ?? null
 
     for (const item of checklist ?? []) {
       const checklistId = Number(item.checklistId)
@@ -2003,6 +2015,30 @@ export async function pipelineRoutes(app: FastifyInstance) {
       usuarioId,
     })
 
+    // Troca de responsável junto com a transição — evita precisar abrir "Editar" logo em seguida
+    // só pra reatribuir o processo pra quem for tocar a próxima etapa.
+    let responsavelMudou = false
+    if (novoResponsavelId !== undefined && novoResponsavelId !== responsavelAtualId) {
+      responsavelMudou = true
+      await prisma.$executeRaw`
+        INSERT INTO implantacao_responsavel_processo (processo_id, cliente_id, responsavel_id, atualizado_em, atualizado_por, observacao)
+        VALUES (${contexto.processoId}, ${id}, ${novoResponsavelId}, UTC_TIMESTAMP(), ${usuarioId}, ${obs || null})
+        ON DUPLICATE KEY UPDATE
+          responsavel_id = VALUES(responsavel_id),
+          atualizado_em = UTC_TIMESTAMP(),
+          atualizado_por = VALUES(atualizado_por),
+          observacao = VALUES(observacao)
+      `
+      await registrarMovimentacao({
+        clienteId: id,
+        processoId: contexto.processoId,
+        tipo: 'responsavel',
+        responsavelId: novoResponsavelId,
+        observacao: obs || null,
+        usuarioId,
+      })
+    }
+
     const resumoTransicao = await getClienteEProcessoResumo(id, contexto.processoId)
     const itensChecklistAtualizados = (checklist ?? []).length
     await notificarProcesso({
@@ -2012,6 +2048,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       usuarioId,
       titulo: 'Etapa alterada',
       mensagem: `O processo "${resumoTransicao.processoTitulo}" do cliente ${resumoTransicao.clienteNome} mudou de "${ETAPAS_PADRAO.find((e) => e.status === origem)?.nome ?? origem}" para "${ETAPAS_PADRAO.find((e) => e.status === destino)?.nome ?? destino}"`
+        + (responsavelMudou ? ' e o responsável foi atualizado' : '')
         + (itensChecklistAtualizados > 0 ? ` (${itensChecklistAtualizados} item(ns) de checklist revisado(s)).` : '.'),
     })
 
@@ -2369,7 +2406,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
       dataLimiteMudou = true
       await prisma.$executeRaw`
         UPDATE implantacao_processos
-        SET data_limite = ${novaDataLimite}, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
+        SET data_limite = ${novaDataLimite}, notificado_vencimento = NULL, atualizado_em = UTC_TIMESTAMP(), atualizado_por = ${usuarioId}
         WHERE id = ${contexto.processoId}
       `
       await registrarMovimentacao({

@@ -352,6 +352,7 @@ export function Pipeline() {
   const [transitionCliente, setTransitionCliente] = useState<ImplantacaoCliente | null>(null)
   const [transitionItems, setTransitionItems] = useState<TransitionItem[]>([])
   const [transitionObs, setTransitionObs] = useState('')
+  const [transitionResponsavel, setTransitionResponsavel] = useState('none')
   const [loadingTransitionChecklist, setLoadingTransitionChecklist] = useState(false)
 
   const [editOpen, setEditOpen] = useState(false)
@@ -835,6 +836,7 @@ export function Pipeline() {
     setTransitionCliente(cliente)
     setTransitionTargetStatus(targetStatus)
     setTransitionObs('')
+    setTransitionResponsavel(cliente.responsavelId ? String(cliente.responsavelId) : 'none')
     setTransitionItems([])
     setTransitionOpen(true)
     setLoadingTransitionChecklist(true)
@@ -875,6 +877,7 @@ export function Pipeline() {
         statusDestino: transitionTargetStatus,
         observacao: transitionObs.trim() || undefined,
         processoId: transitionCliente.processoId,
+        responsavelId: transitionResponsavel === 'none' ? null : Number(transitionResponsavel),
         checklist: transitionItems.map((item) => ({
           checklistId: item.checklistId,
           itemIndex: item.itemIndex,
@@ -1608,6 +1611,20 @@ export function Pipeline() {
               <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
                 {draggingFromStatus || transitionCliente.statusInstal} <MoveRight className="w-3.5 h-3.5" /> {transitionTargetStatus}
               </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Responsável</label>
+              <select
+                value={transitionResponsavel}
+                onChange={(e) => setTransitionResponsavel(e.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-3"
+              >
+                <option value="none">Sem responsável</option>
+                {createResponsaveis.map((responsavel) => (
+                  <option key={responsavel.id} value={String(responsavel.id)}>{responsavel.nome}</option>
+                ))}
+              </select>
             </div>
 
             <div>

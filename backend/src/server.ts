@@ -51,6 +51,7 @@ import { ensureMaquininhas } from './utils/maquininhas'
 import { ensureLembretesFixos, startLembretesFixosScheduler } from './utils/lembretesFixos'
 import { ensureServidorMonitorColumns, startServidorMonitorScheduler } from './utils/servidorMonitor'
 import { ensureVisibilidadeTables } from './utils/visibilidade'
+import { startNotificacoesVencimentoScheduler } from './utils/notificacoesVencimento'
 import { initNotificacoesAgendamento, startNotificacoesAgendamentoScheduler } from './utils/notificacoesAgendamento'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
@@ -218,4 +219,5 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   ensureVisibilidadeTables()
     .then(() => console.log('✓ Tabelas de visibilidade (somente admin) verificadas'))
     .catch(e => console.warn('⚠ Visibilidade init:', e.message))
+  startNotificacoesVencimentoScheduler()
 })

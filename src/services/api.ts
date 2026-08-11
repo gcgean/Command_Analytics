@@ -532,6 +532,7 @@ export const api = {
     observacao?: string
     checklist?: Array<{ checklistId: number; itemIndex: number; marcado: boolean; observacao?: string }>
     processoId?: number
+    responsavelId?: number | null
   }) => fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/transicao`, { method: 'PATCH', body: JSON.stringify(data) }),
   addImplantacaoObservacao: (clienteId: number, observacao: string, processoId?: number) =>
     fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/observacao`, { method: 'POST', body: JSON.stringify({ observacao, processoId }) }),
