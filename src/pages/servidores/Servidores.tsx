@@ -92,12 +92,96 @@ function MetricBar({ val, cor }: { val: number; cor: string }) {
   )
 }
 
+function RankingConsumo({ servidores }: { servidores: ServidorMysql[] }) {
+  const ranqueaveis = servidores
+    .filter(s => s.online && !s.desativado)
+    .map(s => {
+      const discoTotal = Number(s.discoTotal ?? 0)
+      const discoLivre = Number(s.discoLivre ?? 0)
+      const discoPercent = discoTotal > 0 ? Math.round(((discoTotal - discoLivre) / discoTotal) * 100) : 0
+      const cpuPercent = Math.round(Number(s.cpuPercent ?? 0))
+      const ramPercent = Math.round(Number(s.ramPercent ?? 0))
+      const score = Math.round((cpuPercent + ramPercent + discoPercent) / 3)
+      const metricas = [
+        { label: 'CPU', val: cpuPercent },
+        { label: 'RAM', val: ramPercent },
+        { label: 'Disco', val: discoPercent },
+      ]
+      const gargalo = metricas.reduce((pior, m) => (m.val > pior.val ? m : pior), metricas[0])
+      return { servidor: s, cpuPercent, ramPercent, discoPercent, score, gargalo }
+    })
+    .sort((a, b) => b.score - a.score)
+
+  const semDados = servidores.filter(s => !s.online || s.desativado)
+
+  const corScore = (score: number) => (score > 80 ? 'text-red-400' : score > 60 ? 'text-amber-400' : 'text-emerald-400')
+  const bgScore = (score: number) => (score > 80 ? 'bg-red-500/10 border-red-500/30' : score > 60 ? 'bg-amber-500/10 border-amber-500/30' : 'border-slate-200 dark:border-slate-700')
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-slate-500">
+        Ordenado do maior consumo médio (CPU + RAM + Disco) para o menor — servidores hospedam bancos Firebird 5 dos clientes, então disco cheio ou CPU/RAM no limite afeta o sistema deles diretamente.
+      </p>
+      <div className="space-y-2">
+        {ranqueaveis.map((r, i) => (
+          <div key={r.servidor.id} className={clsx('card flex items-center gap-4 border', bgScore(r.score))}>
+            <div className="w-8 text-center">
+              <span className="text-lg font-bold text-slate-400">{i + 1}º</span>
+            </div>
+            <div className="w-44 shrink-0">
+              <p className="text-sm font-bold text-slate-900 dark:text-slate-100">{r.servidor.nome ?? 'Servidor'}</p>
+              <p className="text-xs text-slate-500">{r.servidor.dns}</p>
+            </div>
+            <div className="flex-1 grid grid-cols-3 gap-4">
+              {[
+                { label: 'CPU', val: r.cpuPercent, cor: 'bg-blue-500' },
+                { label: 'RAM', val: r.ramPercent, cor: 'bg-purple-500' },
+                { label: 'Disco', val: r.discoPercent, cor: 'bg-cyan-500' },
+              ].map(m => (
+                <div key={m.label}>
+                  <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+                    <span>{m.label}</span>
+                    {r.gargalo.label === m.label && m.val > 60 && (
+                      <span className="text-red-400 font-medium">gargalo</span>
+                    )}
+                  </div>
+                  <MetricBar val={m.val} cor={m.cor} />
+                </div>
+              ))}
+            </div>
+            <div className="w-16 text-right">
+              <p className={clsx('text-xl font-bold', corScore(r.score))}>{r.score}%</p>
+              <p className="text-xs text-slate-500">médio</p>
+            </div>
+          </div>
+        ))}
+        {ranqueaveis.length === 0 && (
+          <div className="card text-center py-8 text-sm text-slate-500">Nenhum servidor online com dados para ranquear.</div>
+        )}
+      </div>
+      {semDados.length > 0 && (
+        <div>
+          <p className="text-xs text-slate-500 mb-2">Fora do ranking (offline/desativado/sem dados):</p>
+          <div className="flex flex-wrap gap-2">
+            {semDados.map(s => (
+              <span key={s.id} className="text-xs px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500">
+                {s.nome ?? `Servidor ${s.id}`}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export function Servidores() {
   const { isSuperUser } = usePermissions()
   const [servidores, setServidores] = useState<ServidorMysql[]>([])
   const [loading, setLoading] = useState(true)
   const [somenteAtivos, setSomenteAtivos] = useState(true)
   const [alternandoVisibilidade, setAlternandoVisibilidade] = useState<number | null>(null)
+  const [aba, setAba] = useState<'cards' | 'ranking'>('cards')
 
   const carregar = () => {
     setLoading(true)
@@ -181,7 +265,34 @@ export function Servidores() {
         ))}
       </div>
 
+      {/* Abas */}
+      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-700">
+        <button
+          type="button"
+          className={clsx(
+            'px-4 py-2 text-sm font-medium border-b-2 -mb-px',
+            aba === 'cards' ? 'border-blue-500 text-blue-500' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          )}
+          onClick={() => setAba('cards')}
+        >
+          Servidores
+        </button>
+        <button
+          type="button"
+          className={clsx(
+            'px-4 py-2 text-sm font-medium border-b-2 -mb-px',
+            aba === 'ranking' ? 'border-blue-500 text-blue-500' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          )}
+          onClick={() => setAba('ranking')}
+        >
+          Ranking de consumo
+        </button>
+      </div>
+
+      {aba === 'ranking' && <RankingConsumo servidores={visiveis} />}
+
       {/* Grid de servidores */}
+      {aba === 'cards' && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {visiveis.map(s => {
           const { cpu: sparkDataCpu, ram: sparkDataRam } = bucketsPorHora(s.historico ?? [])
@@ -325,6 +436,7 @@ export function Servidores() {
           )
         })}
       </div>
+      )}
     </div>
   )
 }
