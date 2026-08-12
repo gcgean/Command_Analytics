@@ -4,7 +4,7 @@ import {
   Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
 import {
-  Headphones, AlertTriangle, TrendingUp, DollarSign,
+  Headphones, AlertTriangle, TrendingUp,
   Users, Clock, Shield, Calendar, ChevronRight, Award, Building2, Trophy
 } from 'lucide-react'
 import { KPICard } from '../../components/ui/KPICard'
@@ -19,12 +19,9 @@ import clsx from 'clsx'
 interface KPIData {
   atendimentosHoje: number
   atendimentosAbertos: number
-  npsMedia: number
-  mrr: number
   clientesAtivos: number
   chamadosUrgentes: number
   atendimentosPorDepartamento: { departamento: string; count: number }[]
-  mrrHistorico: { mes: string; mrr: number }[]
 }
 
 const tipoContatoIcons: Record<string, string> = {
@@ -103,8 +100,6 @@ export function Dashboard() {
   // certificadoVencimento field no longer exists — use empty array
   const certVencendo: any[] = []
 
-  const formatMRR = (v: number) => `R$ ${v.toLocaleString('pt-BR')}`
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -127,13 +122,12 @@ export function Dashboard() {
       )}
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           title="Atendimentos Hoje"
           value={kpis?.atendimentosHoje ?? 0}
           icon={<Headphones className="w-5 h-5" />}
           color="blue"
-          trend={{ value: 12, label: 'vs ontem', positive: true }}
         />
         <KPICard
           title="Abertos"
@@ -141,20 +135,6 @@ export function Dashboard() {
           icon={<Clock className="w-5 h-5" />}
           color="amber"
           subtitle="Aguardando resolução"
-        />
-        <KPICard
-          title="NPS Médio"
-          value={`${kpis?.npsMedia ?? 0} pts`}
-          icon={<TrendingUp className="w-5 h-5" />}
-          color="green"
-          trend={{ value: 3, label: 'vs mês anterior', positive: true }}
-        />
-        <KPICard
-          title="MRR"
-          value={`R$ ${(kpis?.mrr ?? 0).toLocaleString('pt-BR')}`}
-          icon={<DollarSign className="w-5 h-5" />}
-          color="purple"
-          trend={{ value: 4.7, label: 'vs mês anterior', positive: true }}
         />
         <KPICard
           title="Clientes Ativos"
@@ -172,62 +152,28 @@ export function Dashboard() {
         />
       </div>
 
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        {/* Atendimentos por Departamento */}
-        <div className="card transition-colors duration-300">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Atendimentos por Departamento (últimos 7 dias)</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={kpis?.atendimentosPorDepartamento} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "#334155" : "#e2e8f0"} />
-              <XAxis dataKey="departamento" tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11 }} />
-              <YAxis tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11 }} />
-              <Tooltip
-                contentStyle={{ 
-                  backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', 
-                  border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, 
-                  borderRadius: '8px', 
-                  fontSize: '12px',
-                  boxShadow: isDarkMode ? 'none' : '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                }}
-                labelStyle={{ color: isDarkMode ? '#f1f5f9' : '#0f172a' }}
-                itemStyle={{ color: isDarkMode ? '#94a3b8' : '#475569' }}
-              />
-              <Bar dataKey="count" name="Atendimentos" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* MRR Histórico */}
-        <div className="card transition-colors duration-300">
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">MRR — Últimos 6 meses</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={kpis?.mrrHistorico} margin={{ top: 0, right: 0, left: -10, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "#334155" : "#e2e8f0"} />
-              <XAxis dataKey="mes" tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11 }} />
-              <YAxis tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11 }} tickFormatter={v => `R$${(v/1000).toFixed(0)}k`} />
-              <Tooltip
-                contentStyle={{ 
-                  backgroundColor: isDarkMode ? '#1e293b' : '#ffffff', 
-                  border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`, 
-                  borderRadius: '8px', 
-                  fontSize: '12px',
-                  boxShadow: isDarkMode ? 'none' : '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                }}
-                labelStyle={{ color: isDarkMode ? '#f1f5f9' : '#0f172a' }}
-                formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, 'MRR']}
-              />
-              <Line
-                type="monotone"
-                dataKey="mrr"
-                stroke="#10b981"
-                strokeWidth={2}
-                dot={{ fill: '#10b981', r: 4 }}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+      {/* Atendimentos por Departamento */}
+      <div className="card transition-colors duration-300">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-4">Atendimentos por Departamento (mês atual)</h3>
+        <ResponsiveContainer width="100%" height={220}>
+          <BarChart data={kpis?.atendimentosPorDepartamento} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "#334155" : "#e2e8f0"} />
+            <XAxis dataKey="departamento" tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11 }} />
+            <YAxis tick={{ fill: isDarkMode ? '#94a3b8' : '#64748b', fontSize: 11 }} />
+            <Tooltip
+              contentStyle={{
+                backgroundColor: isDarkMode ? '#1e293b' : '#ffffff',
+                border: `1px solid ${isDarkMode ? '#334155' : '#e2e8f0'}`,
+                borderRadius: '8px',
+                fontSize: '12px',
+                boxShadow: isDarkMode ? 'none' : '0 4px 6px -1px rgb(0 0 0 / 0.1)'
+              }}
+              labelStyle={{ color: isDarkMode ? '#f1f5f9' : '#0f172a' }}
+              itemStyle={{ color: isDarkMode ? '#94a3b8' : '#475569' }}
+            />
+            <Bar dataKey="count" name="Atendimentos" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
 
       {/* Bottom Row */}

@@ -495,23 +495,28 @@ export async function dashboardRoutes(app: FastifyInstance) {
       const amanha = new Date(hoje)
       amanha.setDate(amanha.getDate() + 1)
 
+      // Mês atual (do dia 1 até o dia 1 do mês seguinte) — usado no gráfico de atendimentos
+      // por departamento, que antes não tinha filtro nenhum apesar do título dizer "7 dias".
+      const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
+      const inicioProximoMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1)
+
       const [
         atendimentosHoje,
         atendimentosAbertos,
         chamadosUrgentes,
         clientesAtivos,
-        mrrResult,
         atendimentosPorDepto,
       ] = await Promise.all([
         // Atendimentos abertos hoje
         prisma.atendimento.count({
           where: { dataAbertura: { gte: hoje, lt: amanha } },
         }),
-        // Atendimentos em aberto (não fechados)
+        // Atendimentos em aberto (não fechados) — status atual, não faz sentido restringir por mês
+        // (um chamado aberto no mês passado e ainda não resolvido continua "aberto" hoje).
         prisma.atendimento.count({
           where: { status: { notIn: STATUS_FECHADOS } },
         }),
-        // Chamados urgentes (prioridade Alta = 'A') em aberto
+        // Chamados urgentes (prioridade Alta = 'A') em aberto — mesmo raciocínio acima.
         prisma.atendimento.count({
           where: { prioridade: 'A', status: { notIn: STATUS_FECHADOS } },
         }),
@@ -519,42 +524,25 @@ export async function dashboardRoutes(app: FastifyInstance) {
         prisma.cliente.count({
           where: { ativo: 'S', bloqueado: 'N' },
         }),
-        // MRR = soma das mensalidades dos clientes ativos
-        prisma.cliente.aggregate({
-          where: { ativo: 'S' },
-          _sum: { mensalidade: true },
-        }),
-        // Atendimentos por departamento (int)
+        // Atendimentos por departamento — mês atual
         prisma.atendimento.groupBy({
           by: ['departamento'],
           _count: { id: true },
+          where: { dataAbertura: { gte: inicioMes, lt: inicioProximoMes } },
           orderBy: { _count: { id: 'desc' } },
         }),
       ])
-
-      const mrr = Number(mrrResult._sum.mensalidade ?? 0)
-
-      // Histórico MRR — estimativa dos últimos 6 meses com base no MRR atual
-      const meses = ['Out/25', 'Nov/25', 'Dez/25', 'Jan/26', 'Fev/26', 'Mar/26']
-      const fatores = [0.88, 0.91, 0.94, 0.96, 0.98, 1.0]
-      const mrrHistorico = meses.map((mes, i) => ({
-        mes,
-        mrr: Math.round(mrr * fatores[i]),
-      }))
 
       return {
         atendimentosHoje,
         atendimentosAbertos,
         chamadosUrgentes,
         clientesAtivos,
-        mrr,
-        npsMedia: 0, // NPS não disponível no schema atual
         atendimentosPorDepartamento: atendimentosPorDepto.map(d => ({
           departamento: d.departamento,
           nome: DEPARTAMENTOS[d.departamento ?? 0] ?? `Depto ${d.departamento}`,
           count: d._count.id,
         })),
-        mrrHistorico,
       }
     }
   )
