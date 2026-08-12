@@ -46,6 +46,7 @@ import { PesquisaLeads } from './pages/crm/PesquisaLeads'
 
 // Financeiro
 import { AnaliseFinanceira } from './pages/financeiro/AnaliseFinanceira'
+import { FaturamentoClientes } from './pages/financeiro/FaturamentoClientes'
 
 // Comissões
 import { Comissoes } from './pages/comissoes/Comissoes'
@@ -223,6 +224,7 @@ export default function App() {
         <Route path="crm/leads" element={<PermissionRoute recurso="crm-leads"><PesquisaLeads /></PermissionRoute>} />
 
         <Route path="financeiro" element={<PermissionRoute recurso="financeiro"><AnaliseFinanceira /></PermissionRoute>} />
+        <Route path="financeiro/faturamento" element={<PermissionRoute recurso="faturamento-clientes"><FaturamentoClientes /></PermissionRoute>} />
         <Route path="comissoes" element={<PermissionRoute recurso="comissoes"><Comissoes /></PermissionRoute>} />
         <Route path="desenvolvimento" element={<PermissionRoute recurso="desenvolvimento"><Tarefas /></PermissionRoute>} />
         <Route path="videos" element={<PermissionRoute recurso="videos"><Videos /></PermissionRoute>} />

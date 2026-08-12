@@ -763,6 +763,19 @@ export interface AnaliseFinanceira {
   margemPercent: number
 }
 
+export interface AnaliseFaturamento {
+  periodo: { mesInicio: number; anoInicio: number; mesFim: number; anoFim: number; meses: number }
+  geral: {
+    faturamentoTotal: number
+    clientesComFaturamento: number
+    faturamentoMedioMensalPorCliente: number
+    faturamentoMedioPorClienteNoPeriodo: number
+    evolucaoMensal: Array<{ mes: string; total: number }>
+  }
+  porFormaPagamento: Array<{ forma: string; total: number; clientes: number; faturamentoMedioPorCliente: number; quantidade: number }>
+  porMaquininha: Array<{ operadora: string; total: number; clientes: number; faturamentoMedioPorCliente: number }>
+}
+
 export interface Comissao {
   id: number
   vendedorId: number

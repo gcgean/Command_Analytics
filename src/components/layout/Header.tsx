@@ -22,6 +22,7 @@ const routeTitles: Record<string, string> = {
   '/crm': 'CRM / Negócios',
   '/crm/leads': 'Pesquisa de Leads',
   '/financeiro': 'Análise Financeira',
+  '/financeiro/faturamento': 'Faturamento de Clientes',
   '/comissoes': 'Comissões',
   '/desenvolvimento': 'Tarefas de Desenvolvimento',
   '/videos': 'Vídeos',

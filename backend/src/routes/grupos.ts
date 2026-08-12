@@ -27,6 +27,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'maquininhas-relatorio',    label: 'Relatório de Maquininhas',        grupo: 'CLIENTES' },
   // FINANCEIRO
   { id: 'financeiro',               label: 'Análise Financeira',              grupo: 'FINANCEIRO' },
+  { id: 'faturamento-clientes',     label: 'Faturamento de Clientes',         grupo: 'FINANCEIRO' },
   { id: 'comissoes',                label: 'Comissões',                       grupo: 'FINANCEIRO' },
   { id: 'planos',                   label: 'Planos e Assinaturas',            grupo: 'FINANCEIRO' },
   // DESENVOLVIMENTO

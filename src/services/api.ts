@@ -1,6 +1,6 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
-  Negocio, Lead, AnaliseFinanceira, Comissao, Tarefa, Video, Meta,
+  Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, Comissao, Tarefa, Video, Meta,
   AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
@@ -569,6 +569,7 @@ export const api = {
   updateComissaoStatus: (id: number, status: string, dataPagamento?: string) =>
     fetchApi<Comissao>(`/financeiro/comissoes/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, dataPagamento }) }),
   getMRR: () => fetchApi('/financeiro/mrr'),
+  getAnaliseFaturamento: (meses = 6) => fetchApi<AnaliseFaturamento>(`/faturamento/analise?meses=${meses}`),
 
   // ─── Desenvolvimento ───────────────────────────────────────
   getTarefas: () => fetchApi<Tarefa[]>('/tarefas'),

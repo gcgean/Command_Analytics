@@ -73,6 +73,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
     group: 'FINANCEIRO',
     items: [
       { label: 'Análise Financeira', icon: <DollarSign className="w-4 h-4" />, to: '/financeiro', recurso: 'financeiro' },
+      { label: 'Faturamento de Clientes', icon: <CreditCard className="w-4 h-4" />, to: '/financeiro/faturamento', recurso: 'faturamento-clientes' },
       { label: 'Comissões',          icon: <Award className="w-4 h-4" />,      to: '/comissoes',  recurso: 'comissoes' },
       {
         label: 'Planos', icon: <Package className="w-4 h-4" />, recurso: 'planos', children: [
