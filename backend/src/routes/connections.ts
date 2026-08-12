@@ -7,6 +7,7 @@ import {
   listarConexoesDoServidor,
   checarSaudeConexao,
   executarAcaoConexao,
+  type Conexao,
   type ServidorParaConexoes,
 } from '../utils/servidorConnections'
 
@@ -31,21 +32,53 @@ async function conexoesRestritas(): Promise<Set<string>> {
   return new Set(rows.map((r) => `${r.servidor_id}:${r.connection_id}`))
 }
 
+// A aggregação consulta a API local de cada servidor ativo (fetch real, ~8s pra ~12 servidores).
+// Sem cache, toda letra digitada na busca refazia isso do zero. Cacheia a lista completa (sem
+// filtro de busca/status/servidor) por um período curto — filtros continuam instantâneos porque
+// são aplicados em memória sobre esse cache; "Atualizar" força ignorar o cache.
+const CACHE_TTL_MS = 25_000
+let cacheAdmin: { dados: Conexao[]; expiraEm: number } | null = null
+let cacheNaoAdmin: { dados: Conexao[]; expiraEm: number } | null = null
+
+async function obterConexoesAgregadas(admin: boolean, forcar: boolean): Promise<Conexao[]> {
+  const cacheAtual = admin ? cacheAdmin : cacheNaoAdmin
+  if (!forcar && cacheAtual && cacheAtual.expiraEm > Date.now()) {
+    return cacheAtual.dados
+  }
+
+  const servidores = await servidoresElegiveis(admin)
+  const listas = await Promise.all(servidores.map((s) => listarConexoesDoServidor(s)))
+  let conexoes = listas.flat()
+
+  if (!admin) {
+    const restritas = await conexoesRestritas()
+    conexoes = conexoes.filter((c) => !restritas.has(`${c.servidorId}:${c.id}`))
+  }
+
+  const entrada = { dados: conexoes, expiraEm: Date.now() + CACHE_TTL_MS }
+  if (admin) cacheAdmin = entrada
+  else cacheNaoAdmin = entrada
+  return conexoes
+}
+
+function invalidarCacheConexoes(): void {
+  cacheAdmin = null
+  cacheNaoAdmin = null
+}
+
 export async function connectionsRoutes(app: FastifyInstance) {
   // GET /connections — lista conexões (todas ou de um servidor específico)
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Conexões'] } }, async (request) => {
-    const { servidorId, search, status } = request.query as Record<string, string>
+    const { servidorId, search, status, force } = request.query as Record<string, string>
     const admin = await usuarioEhAdmin(Number((request.user as any)?.id))
 
-    const servidores = await servidoresElegiveis(admin, servidorId ? Number(servidorId) : undefined)
-    const listas = await Promise.all(servidores.map((s) => listarConexoesDoServidor(s)))
-    let conexoes = listas.flat()
+    let conexoes = await obterConexoesAgregadas(admin, force === 'true' || force === '1')
+    const totalServidores = new Set(conexoes.map((c) => c.servidorId)).size
 
-    const restritas = await conexoesRestritas()
-    if (!admin) {
-      conexoes = conexoes.filter((c) => !restritas.has(`${c.servidorId}:${c.id}`))
+    if (servidorId) {
+      const idFiltro = Number(servidorId)
+      conexoes = conexoes.filter((c) => c.servidorId === idFiltro)
     }
-
     if (status) {
       const statusLower = status.toLowerCase()
       conexoes = conexoes.filter((c) => c.status.toLowerCase() === statusLower)
@@ -57,12 +90,14 @@ export async function connectionsRoutes(app: FastifyInstance) {
       )
     }
 
-    conexoes.sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+    conexoes = [...conexoes].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'))
+
+    const restritas = admin ? await conexoesRestritas() : null
 
     return {
       total: conexoes.length,
-      servidoresConsultados: servidores.length,
-      data: conexoes.map((c) => ({ ...c, somenteAdmin: restritas.has(`${c.servidorId}:${c.id}`) })),
+      servidoresConsultados: totalServidores,
+      data: conexoes.map((c) => ({ ...c, somenteAdmin: restritas?.has(`${c.servidorId}:${c.id}`) ?? false })),
     }
   })
 
@@ -112,6 +147,7 @@ export async function connectionsRoutes(app: FastifyInstance) {
         ON DUPLICATE KEY UPDATE somente_admin = 1
       `
     }
+    invalidarCacheConexoes()
     return { somenteAdmin: !jaRestrita }
   })
 
@@ -153,6 +189,7 @@ export async function connectionsRoutes(app: FastifyInstance) {
           usuarioId,
           dadosDepois: { acao, connectionId, connectionName: connectionName ?? null, servidor: servidor.nome },
         }).catch(() => {})
+        invalidarCacheConexoes()
         return { ok: true }
       } catch (e: any) {
         await registrarAuditoria({

@@ -36,12 +36,13 @@ export function Conexoes() {
     api.getServidores().then((data: any) => setServidores(Array.isArray(data) ? data : [])).catch(() => setServidores([]))
   }, [])
 
-  const carregar = () => {
+  const carregar = (force = false) => {
     setLoading(true)
     api.getConexoes({
       servidorId: servidorId ? Number(servidorId) : undefined,
       search: search.trim() || undefined,
       status: status || undefined,
+      force,
     })
       .then((res) => {
         setConexoes(res.data)
@@ -81,7 +82,7 @@ export function Conexoes() {
     setAlternandoVisibilidade(`${c.servidorId}:${c.id}`)
     try {
       await api.toggleConexaoSomenteAdmin(c.servidorId, c.id)
-      carregar()
+      carregar(true)
     } catch (e: any) {
       window.alert(e?.message || 'Falha ao alterar a visibilidade.')
     } finally {
@@ -105,7 +106,7 @@ export function Conexoes() {
     setAcoesEmAndamento((prev) => ({ ...prev, [chave]: true }))
     try {
       await api.executarAcaoConexao(c.servidorId, c.id, acao, c.name)
-      window.setTimeout(carregar, 1500)
+      window.setTimeout(() => carregar(true), 1500)
     } catch (e: any) {
       window.alert(e?.message || 'Falha ao executar a ação.')
     } finally {
@@ -124,7 +125,7 @@ export function Conexoes() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Conexões</h1>
           <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">{total} conexão(ões) encontrada(s)</p>
         </div>
-        <button className="btn-secondary flex items-center gap-2" onClick={carregar}>
+        <button className="btn-secondary flex items-center gap-2" onClick={() => carregar(true)}>
           <RefreshCw size={16} /> Atualizar
         </button>
       </div>

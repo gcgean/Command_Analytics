@@ -662,12 +662,13 @@ export const api = {
   toggleServidorSomenteAdmin: (id: number) => fetchApi<Servidor>(`/servidores/${id}/somente-admin`, { method: 'PATCH' }),
 
   // ─── Conexões ──────────────────────────────────────────────
-  getConexoes: (params?: { servidorId?: number; search?: string; status?: string }) => {
+  getConexoes: (params?: { servidorId?: number; search?: string; status?: string; force?: boolean }) => {
     const qs = params
       ? '?' + new URLSearchParams({
           ...(params.servidorId ? { servidorId: String(params.servidorId) } : {}),
           ...(params.search ? { search: params.search } : {}),
           ...(params.status ? { status: params.status } : {}),
+          ...(params.force ? { force: 'true' } : {}),
         }).toString()
       : ''
     return fetchApi<ConexoesResposta>(`/connections${qs}`)
