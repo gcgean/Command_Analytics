@@ -21,7 +21,9 @@ function fmt(s: any) {
     dns: s.dns,
     numeroServidor: s.numeroServidor,
     portaApi: s.portaApi,
-    online: s.online,
+    // "online" vem de monitorOnline (coluna própria do monitor) — a coluna legada "disponivel"
+    // está travada por um trigger antigo (TRG_SERVIDOR_NUVEM_DISPONIVEL) e não é mais confiável.
+    online: s.monitorOnline,
     cpuPercent: s.cpuPercent !== null ? Number(s.cpuPercent) : null,
     ramPercent: s.ramPercent !== null ? Number(s.ramPercent) : null,
     discoTotal: s.discoTotal,
@@ -64,7 +66,7 @@ export async function servidoresRoutes(app: FastifyInstance) {
 
     const servidores = await prisma.servidor.findMany({
       where: {
-        ...(online !== undefined && { online: online === 'true' }),
+        ...(online !== undefined && { monitorOnline: online === 'true' }),
         ...(desativado !== undefined && { desativado: desativado === 'true' }),
         ...(admin ? {} : { somenteAdmin: { not: true } }),
       },
@@ -164,7 +166,7 @@ export async function servidoresRoutes(app: FastifyInstance) {
           ...(cpuPercent !== undefined && { cpuPercent: Number(cpuPercent) }),
           ...(ramPercent !== undefined && { ramPercent: Number(ramPercent) }),
           ...(discoLivre !== undefined && { discoLivre: Number(discoLivre) }),
-          ...(online !== undefined && { online: Boolean(online) }),
+          ...(online !== undefined && { monitorOnline: Boolean(online) }),
         },
         include: {
           historico: { orderBy: { dataConsulta: 'desc' }, take: 7 },

@@ -365,6 +365,10 @@ model Servidor {
   numeroServidor  Int?     @map("numero_servidor")
   portaApi        Int?     @map("porta_api_servidor")
   online          Boolean? @default(false) @map("disponivel")
+  // Campo próprio do monitor (poll a cada 5min). Criado porque um trigger legado
+  // (TRG_SERVIDOR_NUVEM_DISPONIVEL) trava qualquer UPDATE em "disponivel" no valor antigo,
+  // então o monitoramento não pode mais depender dessa coluna.
+  monitorOnline   Boolean? @default(false) @map("monitor_online")
   cpuPercent      Decimal? @map("uso_cpu") @db.Decimal(18, 2)
   ramPercent      Decimal? @map("uso_memoria") @db.Decimal(18, 2)
   discoTotal      Decimal? @map("espaco_total_disco") @db.Decimal(18, 2)

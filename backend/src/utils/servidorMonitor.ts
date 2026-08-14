@@ -21,6 +21,7 @@ export function ensureServidorMonitorColumns(): Promise<void> {
       await ensureColumnExists('hist_servidor_nuvem', 'conexoes_aberto', 'conexoes_aberto INT NULL')
       await ensureColumnExists('hist_servidor_nuvem', 'conexoes_travado', 'conexoes_travado INT NULL')
       await ensureColumnExists('hist_servidor_nuvem', 'conexoes_fechado', 'conexoes_fechado INT NULL')
+      await ensureColumnExists('servidor_nuvem', 'monitor_online', 'monitor_online TINYINT(1) NULL DEFAULT 0')
     })()
   }
   return ensurePromise
@@ -114,7 +115,9 @@ export async function pollServidor(servidorId: number): Promise<void> {
   await prisma.servidor.update({
     where: { id: servidorId },
     data: {
-      online: resultado.online,
+      // Não escreve mais em "online" (coluna disponivel) — um trigger legado
+      // (TRG_SERVIDOR_NUVEM_DISPONIVEL) trava essa coluna no valor antigo em qualquer UPDATE.
+      monitorOnline: resultado.online,
       ...(resultado.cpuPercent !== null && { cpuPercent: resultado.cpuPercent }),
       ...(resultado.ramPercent !== null && { ramPercent: resultado.ramPercent }),
       ...(resultado.discoTotal !== null && { discoTotal: resultado.discoTotal }),
