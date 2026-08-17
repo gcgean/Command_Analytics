@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Clock, Plus, X, Loader2, TrendingUp, AlertCircle, Trophy, Paperclip, MoreVertical, Route } from 'lucide-react'
+import { Clock, Plus, X, Loader2, TrendingUp, AlertCircle, AlertTriangle, Trophy, Paperclip, MoreVertical, Route } from 'lucide-react'
 import { useToast } from '../../components/ui/Toast'
 import { DateInput } from '../../components/ui/DateInput'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
@@ -171,10 +171,33 @@ export function BancoHoras() {
     .filter(l => l.tipo === 'Hora Extra')
     .reduce((s, l) => s + l.horas, 0)
 
+  // Regra de assiduidade: técnico com falta (c/ ou s/ atestado) no mês perde o direito a
+  // "Horas por Km" (e, futuramente, à comissão de treinamentos) naquele mês. Calculado na hora,
+  // sem travar o lançamento nem alterar o saldo acumulado real — é só um sinalizador de
+  // elegibilidade pra quem for fechar o pagamento/crédito do benefício depois.
+  const mesesComFaltaPorFuncionario = useMemo(() => {
+    const set = new Set<string>()
+    for (const l of lancamentosAtivos) {
+      if ((l.tipo === 'Falta c/ Atestado' || l.tipo === 'Falta s/ Atestado') && l.dataInicio) {
+        set.add(`${l.funcionarioId}:${l.dataInicio.slice(0, 7)}`)
+      }
+    }
+    return set
+  }, [lancamentosAtivos])
+
+  const elegivelBeneficioMes = (l: LancamentoBancoHoras) =>
+    !l.dataInicio || !mesesComFaltaPorFuncionario.has(`${l.funcionarioId}:${l.dataInicio.slice(0, 7)}`)
+
   const horasPorKm = useMemo(() => {
     const doTipo = filtrados.filter(l => l.tipo === 'Horas por Km')
-    return { horas: doTipo.reduce((s, l) => s + l.horas, 0), qtd: doTipo.length }
-  }, [filtrados])
+    const elegiveis = doTipo.filter(elegivelBeneficioMes)
+    return {
+      horas: elegiveis.reduce((s, l) => s + l.horas, 0),
+      qtd: doTipo.length,
+      naoElegiveis: doTipo.length - elegiveis.length,
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtrados, mesesComFaltaPorFuncionario])
 
   const faltasEDescontos = useMemo(() => {
     const somaHoras = (tipo: TipoMovimentoBancoHoras) =>
@@ -253,9 +276,14 @@ export function BancoHoras() {
         <div className="card flex items-center gap-4">
           <div className="p-3 rounded-lg bg-cyan-500/10"><Route className="w-5 h-5 text-cyan-400" /></div>
           <div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">Horas por Km</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400">Horas por Km (elegíveis)</p>
             <p className="text-2xl font-bold text-cyan-400">{horasPorKm.horas.toFixed(2)}h</p>
-            <p className="text-[11px] text-slate-500">{horasPorKm.qtd} lançamento(s)</p>
+            <p className="text-[11px] text-slate-500">
+              {horasPorKm.qtd} lançamento(s)
+              {horasPorKm.naoElegiveis > 0 && (
+                <span className="text-amber-500"> · {horasPorKm.naoElegiveis} sem direito (falta no mês)</span>
+              )}
+            </p>
           </div>
         </div>
         <div className="card flex items-center gap-4">
@@ -393,6 +421,14 @@ export function BancoHoras() {
                 <td className="table-cell font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">{l.funcionario}</td>
                 <td className="table-cell whitespace-nowrap">
                   <span className={`badge text-xs ${tipoCor[l.tipo]}`}>{l.tipo}</span>
+                  {l.tipo === 'Horas por Km' && !elegivelBeneficioMes(l) && (
+                    <span
+                      className="inline-flex items-center ml-1.5 text-amber-500"
+                      title="Sem direito a Horas por Km — houve falta (c/ ou s/ atestado) nesse mês"
+                    >
+                      <AlertTriangle size={13} />
+                    </span>
+                  )}
                 </td>
                 <td className="table-cell whitespace-nowrap">
                   <span className={l.tipoMov === 'C' ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>
