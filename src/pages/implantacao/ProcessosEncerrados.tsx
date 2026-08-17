@@ -17,6 +17,13 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { api } from '../../services/api'
 import type { ImplantacaoCliente, ImplantacaoEtapa } from '../../types'
 
+function brToIso(br: string): string {
+  if (!br) return ''
+  const [d, m, y] = br.split('/')
+  if (!d || !m || !y || y.length !== 4) return ''
+  return `${y}-${m}-${d}`
+}
+
 const STATUS_CONCLUIDO = 7
 const STATUS_DESISTENCIA = 10
 
@@ -76,8 +83,8 @@ export function ProcessosEncerrados() {
         search: filtros.search || undefined,
         situacao: filtros.situacao,
         responsavelId: filtros.responsavelId ? Number(filtros.responsavelId) : undefined,
-        dataInicial: filtros.dataInicial || undefined,
-        dataFinal: filtros.dataFinal || undefined,
+        dataInicial: brToIso(filtros.dataInicial) || undefined,
+        dataFinal: brToIso(filtros.dataFinal) || undefined,
       })
       setProcessos(data.processos)
       setEtapas(data.etapas)
@@ -248,13 +255,13 @@ export function ProcessosEncerrados() {
           </div>
           <DateInput
             label="Encerrado de"
-            mode="iso"
+            mode="br"
             value={filtros.dataInicial}
             onChange={(v) => setFiltros((f) => ({ ...f, dataInicial: v }))}
           />
           <DateInput
             label="Encerrado até"
-            mode="iso"
+            mode="br"
             value={filtros.dataFinal}
             onChange={(v) => setFiltros((f) => ({ ...f, dataFinal: v }))}
           />

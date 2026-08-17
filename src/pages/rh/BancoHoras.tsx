@@ -20,15 +20,35 @@ const tipoCor: Record<TipoMovimentoBancoHoras, string> = {
   'Desconto de Horas Padrão': 'bg-slate-500/20 text-slate-400',
 }
 
-function inicioMesAtual(): string {
+function inicioMesAtualISO(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
 }
 
-function fimMesAtual(): string {
+function fimMesAtualISO(): string {
   const d = new Date()
   const ultimo = new Date(d.getFullYear(), d.getMonth() + 1, 0)
   return `${ultimo.getFullYear()}-${String(ultimo.getMonth() + 1).padStart(2, '0')}-${String(ultimo.getDate()).padStart(2, '0')}`
+}
+
+// Padrão de data dd/mm/aaaa em todo o sistema (igual Agendamento/Agendamento Programado) —
+// o estado interno guarda BR, converte pra ISO só na hora de comparar/mandar pra API.
+function toBRDate(iso: string): string {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  if (!y || !m || !d) return ''
+  return `${d}/${m}/${y}`
+}
+
+function fromBRDate(br: string): string {
+  if (!br) return ''
+  const [d, m, y] = br.split('/')
+  if (!d || !m || !y || y.length !== 4) return ''
+  return `${y}-${m}-${d}`
+}
+
+function mesAtualBR() {
+  return { ini: toBRDate(inicioMesAtualISO()), fim: toBRDate(fimMesAtualISO()) }
 }
 
 function formatDate(s: string | null): string {
@@ -52,8 +72,8 @@ export function BancoHoras() {
   const [loadingLista, setLoadingLista] = useState(true)
   const [filtroFuncionario, setFiltroFuncionario] = useState('')
   const [filtroTipo, setFiltroTipo] = useState('')
-  const [filtroDataIni, setFiltroDataIni] = useState(inicioMesAtual())
-  const [filtroDataFim, setFiltroDataFim] = useState(fimMesAtual())
+  const [filtroDataIni, setFiltroDataIni] = useState(mesAtualBR().ini)
+  const [filtroDataFim, setFiltroDataFim] = useState(mesAtualBR().fim)
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
@@ -110,8 +130,10 @@ export function BancoHoras() {
       if (filtroTipo && l.tipo !== filtroTipo) return false
       if (l.dataInicio) {
         const data = l.dataInicio.slice(0, 10)
-        if (filtroDataIni && data < filtroDataIni) return false
-        if (filtroDataFim && data > filtroDataFim) return false
+        const dataIniIso = fromBRDate(filtroDataIni)
+        const dataFimIso = fromBRDate(filtroDataFim)
+        if (dataIniIso && data < dataIniIso) return false
+        if (dataFimIso && data > dataFimIso) return false
       }
       return true
     })
@@ -154,7 +176,11 @@ export function BancoHoras() {
     return { horas: doTipo.reduce((s, l) => s + l.horas, 0), qtd: doTipo.length }
   }, [filtrados])
 
-  const faltasPendentes = filtrados.filter(l => l.tipo === 'Falta s/ Atestado').length
+  const faltasEDescontos = useMemo(() => ({
+    comAtestado: filtrados.filter(l => l.tipo === 'Falta c/ Atestado').length,
+    semAtestado: filtrados.filter(l => l.tipo === 'Falta s/ Atestado').length,
+    descontos: filtrados.filter(l => l.tipo === 'Desconto de Horas Padrão').length,
+  }), [filtrados])
 
   const handleSalvar = async () => {
     if (!form.funcionarioId || !form.tipo || !form.horas || !form.dataInicio || !form.dataFim || !form.observacao.trim()) {
@@ -167,8 +193,8 @@ export function BancoHoras() {
         funcionarioId: Number(form.funcionarioId),
         tipo: form.tipo as TipoMovimentoBancoHoras,
         horas: Number(form.horas.replace(',', '.')),
-        dataInicio: form.dataInicio,
-        dataFim: form.dataFim,
+        dataInicio: fromBRDate(form.dataInicio),
+        dataFim: fromBRDate(form.dataFim),
         observacao: form.observacao,
       })
       if (anexoFiles.length > 0) {
@@ -231,8 +257,16 @@ export function BancoHoras() {
         <div className="card flex items-center gap-4">
           <div className="p-3 rounded-lg bg-amber-500/10"><AlertCircle className="w-5 h-5 text-amber-400" /></div>
           <div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">Faltas Pendentes</p>
-            <p className="text-2xl font-bold text-amber-400">{faltasPendentes}</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Faltas e Descontos</p>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              Com atestado <span className="font-bold text-amber-400">{faltasEDescontos.comAtestado}</span>
+            </p>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              Sem atestado <span className="font-bold text-red-400">{faltasEDescontos.semAtestado}</span>
+            </p>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              Desconto de horas <span className="font-bold text-slate-500">{faltasEDescontos.descontos}</span>
+            </p>
           </div>
         </div>
       </div>
@@ -312,16 +346,16 @@ export function BancoHoras() {
         </select>
         <div>
           <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">De</label>
-          <DateInput mode="iso" value={filtroDataIni} onChange={setFiltroDataIni} />
+          <DateInput mode="br" value={filtroDataIni} onChange={setFiltroDataIni} />
         </div>
         <div>
           <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Até</label>
-          <DateInput mode="iso" value={filtroDataFim} onChange={setFiltroDataFim} />
+          <DateInput mode="br" value={filtroDataFim} onChange={setFiltroDataFim} />
         </div>
         <button
           type="button"
           className="btn-secondary !py-2 text-xs"
-          onClick={() => { setFiltroDataIni(inicioMesAtual()); setFiltroDataFim(fimMesAtual()) }}
+          onClick={() => { const m = mesAtualBR(); setFiltroDataIni(m.ini); setFiltroDataFim(m.fim) }}
         >
           Mês atual
         </button>
@@ -448,11 +482,11 @@ export function BancoHoras() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Data Início *</label>
-                  <DateInput mode="iso" value={form.dataInicio} onChange={(value) => setForm(p => ({ ...p, dataInicio: value }))} />
+                  <DateInput mode="br" value={form.dataInicio} onChange={(value) => setForm(p => ({ ...p, dataInicio: value }))} />
                 </div>
                 <div>
                   <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Data Fim *</label>
-                  <DateInput mode="iso" value={form.dataFim} onChange={(value) => setForm(p => ({ ...p, dataFim: value }))} />
+                  <DateInput mode="br" value={form.dataFim} onChange={(value) => setForm(p => ({ ...p, dataFim: value }))} />
                 </div>
               </div>
               <div>

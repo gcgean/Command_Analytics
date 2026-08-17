@@ -94,11 +94,11 @@ export function Campanhas() {
             </div>
             <div>
               <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Data Início *</label>
-              <DateInput mode="iso" value={form.dataInicio} onChange={(value) => setForm(p => ({ ...p, dataInicio: value }))} />
+              <DateInput mode="br" value={form.dataInicio} onChange={(value) => setForm(p => ({ ...p, dataInicio: value }))} />
             </div>
             <div>
               <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Data Fim *</label>
-              <DateInput mode="iso" value={form.dataFim} onChange={(value) => setForm(p => ({ ...p, dataFim: value }))} />
+              <DateInput mode="br" value={form.dataFim} onChange={(value) => setForm(p => ({ ...p, dataFim: value }))} />
             </div>
             <div>
               <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Tipo</label>

@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react'
 import { Search, Download, RefreshCw } from 'lucide-react'
 
+function brToIso(br: string): string {
+  const [d, m, y] = br.split('/')
+  if (!d || !m || !y || y.length !== 4) return ''
+  return `${y}-${m}-${d}`
+}
+
 const DEPT_LABEL: Record<number, string> = {
   1: 'Suporte', 2: 'Financeiro', 3: 'Comercial', 4: 'Implantação',
   5: 'Desenvolvimento', 6: 'Fiscal', 7: 'Certificado', 8: 'CS', 9: 'Técnico', 10: 'Treinamento',
@@ -21,8 +27,8 @@ export function HistoricoAtendimentos() {
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
   const [filterDept, setFilterDept] = useState('')
-  const [dataInicio, setDataInicio] = useState('2026-01-01')
-  const [dataFim, setDataFim] = useState('2026-03-18')
+  const [dataInicio, setDataInicio] = useState('01/01/2026')
+  const [dataFim, setDataFim] = useState('18/03/2026')
 
   useEffect(() => {
     // getAtendimentos returns paginated {total, page, pages, limit, data:[]}
@@ -42,7 +48,9 @@ export function HistoricoAtendimentos() {
     const matchStatus = !filterStatus || String(a.status) === filterStatus
     const matchDept = !filterDept || deptLabel === filterDept
     const dataAt = a.dataAbertura ? new Date(a.dataAbertura) : null
-    const matchData = !dataAt || (dataAt >= new Date(dataInicio) && dataAt <= new Date(dataFim + 'T23:59:59'))
+    const iniIso = brToIso(dataInicio)
+    const fimIso = brToIso(dataFim)
+    const matchData = !dataAt || (!iniIso || dataAt >= new Date(iniIso)) && (!fimIso || dataAt <= new Date(fimIso + 'T23:59:59'))
     return matchSearch && matchStatus && matchDept && matchData
   })
 
@@ -90,10 +98,10 @@ export function HistoricoAtendimentos() {
             <Select label="Departamento" options={deptOptions} placeholder="Todos" value={filterDept} onChange={e => setFilterDept(e.target.value)} />
           </div>
           <div className="w-36">
-            <DateInput label="Data início" mode="iso" value={dataInicio} onChange={setDataInicio} />
+            <DateInput label="Data início" mode="br" value={dataInicio} onChange={setDataInicio} />
           </div>
           <div className="w-36">
-            <DateInput label="Data fim" mode="iso" value={dataFim} onChange={setDataFim} />
+            <DateInput label="Data fim" mode="br" value={dataFim} onChange={setDataFim} />
           </div>
           <Button variant="ghost" size="sm" icon={<RefreshCw className="w-4 h-4" />}
             onClick={() => { setSearch(''); setFilterStatus(''); setFilterDept('') }}>
