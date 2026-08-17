@@ -776,6 +776,30 @@ export interface AnaliseFaturamento {
   porMaquininha: Array<{ operadora: string; total: number; clientes: number; faturamentoMedioPorCliente: number }>
 }
 
+export type TipoMovimentoBancoHoras =
+  | 'Hora Extra'
+  | 'Falta c/ Atestado'
+  | 'Falta s/ Atestado'
+  | 'Home Office'
+  | 'Desconto de Horas Padrão'
+
+export interface LancamentoBancoHoras {
+  id: number
+  funcionarioId: number
+  funcionario: string
+  tipo: TipoMovimentoBancoHoras
+  tipoMov: 'C' | 'D'
+  tipoFalta: number | null
+  horas: number
+  afetaSaldo: boolean
+  dataInicio: string | null
+  dataFim: string | null
+  dataLancamento: string | null
+  observacao: string | null
+  lancadoPor: string | null
+  saldoAcumulado: number
+}
+
 export interface Comissao {
   id: number
   vendedorId: number

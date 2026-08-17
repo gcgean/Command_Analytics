@@ -1,6 +1,6 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
-  Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, Comissao, Tarefa, Video, Meta,
+  Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
   AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
@@ -414,6 +414,13 @@ export const api = {
     const s = qs.toString()
     return fetchApi<ClientesSemMaquininhaResposta>(`/maquininhas/sem-cadastro${s ? `?${s}` : ''}`)
   },
+
+  // ─── Banco de Horas ──────────────────────────────────────────
+  getBancoHoras: () => fetchApi<LancamentoBancoHoras[]>('/banco-horas'),
+  createLancamentoBancoHoras: (data: {
+    funcionarioId: number; tipo: TipoMovimentoBancoHoras; horas: number
+    dataInicio: string; dataFim: string; observacao: string
+  }) => fetchApi<{ ok: boolean; id: number }>('/banco-horas', { method: 'POST', body: JSON.stringify(data) }),
 
   // ─── Lembretes fixos recorrentes ────────────────────────────
   getLembretesFixos: () => fetchApi<LembretesFixosResposta>('/lembretes-fixos'),

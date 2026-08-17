@@ -1,104 +1,105 @@
-import { useState } from 'react'
-import { Clock, Plus, X, Loader2, TrendingUp, Calendar, AlertCircle } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { Clock, Plus, X, Loader2, TrendingUp, AlertCircle } from 'lucide-react'
 import { useToast } from '../../components/ui/Toast'
 import { DateInput } from '../../components/ui/DateInput'
+import { api } from '../../services/api'
 import clsx from 'clsx'
+import type { LancamentoBancoHoras, TipoMovimentoBancoHoras, Usuario } from '../../types'
 
-type TipoMovimento = 'Hora Extra' | 'Falta c/ Atestado' | 'Falta s/ Atestado' | 'Home Office'
+const tipos: TipoMovimentoBancoHoras[] = ['Hora Extra', 'Falta c/ Atestado', 'Falta s/ Atestado', 'Home Office', 'Desconto de Horas Padrão']
 
-interface Lancamento {
-  id: number
-  funcionario: string
-  tipo: TipoMovimento
-  horas: number
-  dataInicio: string
-  dataFim: string
-  saldoAtual: number
-  observacao?: string
-}
-
-const mockLancamentos: Lancamento[] = [
-  { id: 1, funcionario: 'Carlos Silva', tipo: 'Hora Extra', horas: 4, dataInicio: '2026-03-10', dataFim: '2026-03-10', saldoAtual: 12, observacao: 'Atendimento emergencial cliente' },
-  { id: 2, funcionario: 'Ana Rodrigues', tipo: 'Home Office', horas: 8, dataInicio: '2026-03-11', dataFim: '2026-03-11', saldoAtual: -8, observacao: '' },
-  { id: 3, funcionario: 'Pedro Alves', tipo: 'Hora Extra', horas: 6, dataInicio: '2026-03-12', dataFim: '2026-03-12', saldoAtual: 20, observacao: 'Deploy sistema' },
-  { id: 4, funcionario: 'Mariana Costa', tipo: 'Falta c/ Atestado', horas: 8, dataInicio: '2026-03-13', dataFim: '2026-03-13', saldoAtual: 2, observacao: 'Atestado médico' },
-  { id: 5, funcionario: 'Roberto Melo', tipo: 'Falta s/ Atestado', horas: 8, dataInicio: '2026-03-14', dataFim: '2026-03-14', saldoAtual: -16, observacao: '' },
-  { id: 6, funcionario: 'Carlos Silva', tipo: 'Hora Extra', horas: 3, dataInicio: '2026-03-15', dataFim: '2026-03-15', saldoAtual: 15, observacao: 'Suporte fora de hora' },
-]
-
-const funcionarios = ['Carlos Silva', 'Ana Rodrigues', 'Pedro Alves', 'Mariana Costa', 'Roberto Melo']
-const tipos: TipoMovimento[] = ['Hora Extra', 'Falta c/ Atestado', 'Falta s/ Atestado', 'Home Office']
-
-const tipoCor: Record<TipoMovimento, string> = {
+const tipoCor: Record<TipoMovimentoBancoHoras, string> = {
   'Hora Extra': 'bg-emerald-500/20 text-emerald-400',
   'Falta c/ Atestado': 'bg-amber-500/20 text-amber-400',
   'Falta s/ Atestado': 'bg-red-500/20 text-red-400',
   'Home Office': 'bg-blue-500/20 text-blue-400',
+  'Desconto de Horas Padrão': 'bg-slate-500/20 text-slate-400',
+}
+
+function formatDate(s: string | null): string {
+  if (!s) return '—'
+  return new Date(s).toLocaleDateString('pt-BR')
 }
 
 export function BancoHoras() {
   const { toast } = useToast()
-  const [lancamentos, setLancamentos] = useState<Lancamento[]>(mockLancamentos)
+  const [lancamentos, setLancamentos] = useState<LancamentoBancoHoras[]>([])
+  const [funcionarios, setFuncionarios] = useState<Usuario[]>([])
+  const [loadingLista, setLoadingLista] = useState(true)
   const [filtroFuncionario, setFiltroFuncionario] = useState('')
   const [filtroTipo, setFiltroTipo] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
-    funcionario: '',
-    tipo: '' as TipoMovimento | '',
+    funcionarioId: '',
+    tipo: '' as TipoMovimentoBancoHoras | '',
     horas: '',
     dataInicio: '',
     dataFim: '',
     observacao: '',
   })
 
+  const carregar = () => {
+    setLoadingLista(true)
+    api.getBancoHoras()
+      .then(setLancamentos)
+      .catch(() => toast.error('Falha ao carregar o banco de horas.'))
+      .finally(() => setLoadingLista(false))
+  }
+
+  useEffect(() => {
+    carregar()
+    api.getUsuarios().then(setFuncionarios).catch(() => setFuncionarios([]))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const filtrados = lancamentos.filter(l =>
-    (!filtroFuncionario || l.funcionario === filtroFuncionario) &&
+    (!filtroFuncionario || String(l.funcionarioId) === filtroFuncionario) &&
     (!filtroTipo || l.tipo === filtroTipo)
   )
 
-  const saldoTotal = lancamentos.reduce((s, l) => {
-    return s + (l.tipo === 'Hora Extra' ? l.horas : -l.horas)
-  }, 0)
+  const saldoTotal = useMemo(() => {
+    // Saldo por funcionário (último saldoAcumulado de cada um), somado — evita contar
+    // deltas de funcionários diferentes fora de ordem.
+    const ultimoPorFuncionario = new Map<number, number>()
+    for (const l of lancamentos) {
+      if (!ultimoPorFuncionario.has(l.funcionarioId)) ultimoPorFuncionario.set(l.funcionarioId, l.saldoAcumulado)
+    }
+    return Array.from(ultimoPorFuncionario.values()).reduce((s, v) => s + v, 0)
+  }, [lancamentos])
 
-  const horasExtras = lancamentos
-    .filter(l => l.tipo === 'Hora Extra' && l.dataInicio.startsWith('2026-03'))
+  const hoje = new Date()
+  const horasExtrasMes = lancamentos
+    .filter(l => l.tipo === 'Hora Extra' && l.dataInicio && new Date(l.dataInicio).getMonth() === hoje.getMonth() && new Date(l.dataInicio).getFullYear() === hoje.getFullYear())
     .reduce((s, l) => s + l.horas, 0)
 
-  const faltasPendentes = lancamentos
-    .filter(l => l.tipo === 'Falta s/ Atestado')
-    .length
+  const faltasPendentes = lancamentos.filter(l => l.tipo === 'Falta s/ Atestado').length
 
   const handleSalvar = async () => {
-    if (!form.funcionario || !form.tipo || !form.horas || !form.dataInicio || !form.dataFim) {
+    if (!form.funcionarioId || !form.tipo || !form.horas || !form.dataInicio || !form.dataFim || !form.observacao.trim()) {
       toast.error('Preencha todos os campos obrigatórios.')
       return
     }
     setLoading(true)
     try {
-      await new Promise(r => setTimeout(r, 800))
-      const novo: Lancamento = {
-        id: Date.now(),
-        funcionario: form.funcionario,
-        tipo: form.tipo as TipoMovimento,
-        horas: Number(form.horas),
+      await api.createLancamentoBancoHoras({
+        funcionarioId: Number(form.funcionarioId),
+        tipo: form.tipo as TipoMovimentoBancoHoras,
+        horas: Number(form.horas.replace(',', '.')),
         dataInicio: form.dataInicio,
         dataFim: form.dataFim,
-        saldoAtual: saldoTotal + (form.tipo === 'Hora Extra' ? Number(form.horas) : -Number(form.horas)),
         observacao: form.observacao,
-      }
-      setLancamentos(prev => [novo, ...prev])
+      })
       setShowModal(false)
-      setForm({ funcionario: '', tipo: '', horas: '', dataInicio: '', dataFim: '', observacao: '' })
+      setForm({ funcionarioId: '', tipo: '', horas: '', dataInicio: '', dataFim: '', observacao: '' })
       toast.success('Lançamento registrado com sucesso!')
-    } catch {
-      toast.error('Erro ao registrar lançamento.')
+      carregar()
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao registrar lançamento.')
     } finally {
       setLoading(false)
     }
   }
-
-  const formatDate = (s: string) => s.split('-').reverse().join('/')
 
   return (
     <div className="space-y-6">
@@ -119,7 +120,7 @@ export function BancoHoras() {
           <div>
             <p className="text-xs text-slate-600 dark:text-slate-400">Saldo Total de Horas</p>
             <p className={clsx('text-2xl font-bold', saldoTotal >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-              {saldoTotal >= 0 ? '+' : ''}{saldoTotal}h
+              {saldoTotal >= 0 ? '+' : ''}{saldoTotal.toFixed(2)}h
             </p>
           </div>
         </div>
@@ -127,7 +128,7 @@ export function BancoHoras() {
           <div className="p-3 rounded-lg bg-emerald-500/10"><TrendingUp className="w-5 h-5 text-emerald-400" /></div>
           <div>
             <p className="text-xs text-slate-600 dark:text-slate-400">Horas Extras do Mês</p>
-            <p className="text-2xl font-bold text-emerald-400">{horasExtras}h</p>
+            <p className="text-2xl font-bold text-emerald-400">{horasExtrasMes.toFixed(2)}h</p>
           </div>
         </div>
         <div className="card flex items-center gap-4">
@@ -141,9 +142,9 @@ export function BancoHoras() {
 
       {/* Filtros */}
       <div className="flex gap-3">
-        <select className="input-field max-w-[200px]" value={filtroFuncionario} onChange={e => setFiltroFuncionario(e.target.value)}>
+        <select className="input-field max-w-[220px]" value={filtroFuncionario} onChange={e => setFiltroFuncionario(e.target.value)}>
           <option value="">Todos funcionários</option>
-          {funcionarios.map(f => <option key={f} value={f}>{f}</option>)}
+          {funcionarios.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
         </select>
         <select className="input-field max-w-[200px]" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
           <option value="">Todos os tipos</option>
@@ -152,11 +153,16 @@ export function BancoHoras() {
       </div>
 
       {/* Tabela */}
+      {loadingLista ? (
+        <div className="flex items-center justify-center h-40 text-slate-500 dark:text-slate-400">
+          <Loader2 className="w-6 h-6 animate-spin mr-3" /> Carregando...
+        </div>
+      ) : (
       <div className="card p-0 overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-700">
-              {['Funcionário', 'Tipo', 'Horas', 'Data Início', 'Data Fim', 'Saldo Atual', 'Observação'].map(h => (
+              {['Funcionário', 'Tipo', 'Horas', 'Data Início', 'Data Fim', 'Saldo Acumulado', 'Lançado por', 'Observação'].map(h => (
                 <th key={h} className="table-header text-left">{h}</th>
               ))}
             </tr>
@@ -169,23 +175,28 @@ export function BancoHoras() {
                   <span className={`badge text-xs ${tipoCor[l.tipo]}`}>{l.tipo}</span>
                 </td>
                 <td className="table-cell">
-                  <span className={l.tipo === 'Hora Extra' ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>
-                    {l.tipo === 'Hora Extra' ? '+' : '-'}{l.horas}h
+                  <span className={l.tipoMov === 'C' ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>
+                    {l.tipoMov === 'C' ? '+' : '-'}{l.horas}h
                   </span>
                 </td>
                 <td className="table-cell text-slate-600 dark:text-slate-400">{formatDate(l.dataInicio)}</td>
                 <td className="table-cell text-slate-600 dark:text-slate-400">{formatDate(l.dataFim)}</td>
                 <td className="table-cell">
-                  <span className={clsx('font-semibold', l.saldoAtual >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-                    {l.saldoAtual >= 0 ? '+' : ''}{l.saldoAtual}h
+                  <span className={clsx('font-semibold', l.saldoAcumulado >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                    {l.saldoAcumulado >= 0 ? '+' : ''}{l.saldoAcumulado.toFixed(2)}h
                   </span>
                 </td>
+                <td className="table-cell text-slate-500">{l.lancadoPor || '—'}</td>
                 <td className="table-cell text-slate-500 italic">{l.observacao || '—'}</td>
               </tr>
             ))}
+            {filtrados.length === 0 && (
+              <tr><td colSpan={8} className="table-cell text-center py-8 text-slate-500">Nenhum lançamento encontrado.</td></tr>
+            )}
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Modal Lançar */}
       {showModal && (
@@ -200,14 +211,14 @@ export function BancoHoras() {
             <div className="space-y-4">
               <div>
                 <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Funcionário *</label>
-                <select className="input-field" value={form.funcionario} onChange={e => setForm(p => ({ ...p, funcionario: e.target.value }))}>
+                <select className="input-field" value={form.funcionarioId} onChange={e => setForm(p => ({ ...p, funcionarioId: e.target.value }))}>
                   <option value="">Selecione...</option>
-                  {funcionarios.map(f => <option key={f} value={f}>{f}</option>)}
+                  {funcionarios.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
                 </select>
               </div>
               <div>
                 <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Tipo *</label>
-                <select className="input-field" value={form.tipo} onChange={e => setForm(p => ({ ...p, tipo: e.target.value as TipoMovimento }))}>
+                <select className="input-field" value={form.tipo} onChange={e => setForm(p => ({ ...p, tipo: e.target.value as TipoMovimentoBancoHoras }))}>
                   <option value="">Selecione...</option>
                   {tipos.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
@@ -224,10 +235,10 @@ export function BancoHoras() {
               </div>
               <div>
                 <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Quantidade de Horas *</label>
-                <input type="number" min="1" max="24" className="input-field" placeholder="Ex: 4" value={form.horas} onChange={e => setForm(p => ({ ...p, horas: e.target.value }))} />
+                <input type="text" inputMode="decimal" className="input-field" placeholder="Ex: 4 ou 2,5" value={form.horas} onChange={e => setForm(p => ({ ...p, horas: e.target.value }))} />
               </div>
               <div>
-                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Observação</label>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Observação *</label>
                 <textarea className="input-field resize-none h-20" placeholder="Motivo ou detalhes..." value={form.observacao} onChange={e => setForm(p => ({ ...p, observacao: e.target.value }))} />
               </div>
             </div>
