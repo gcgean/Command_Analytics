@@ -798,6 +798,7 @@ export interface LancamentoBancoHoras {
   observacao: string | null
   lancadoPor: string | null
   saldoAcumulado: number
+  qtdAnexos: number
 }
 
 export interface Comissao {

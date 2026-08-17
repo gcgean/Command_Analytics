@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Clock, Plus, X, Loader2, TrendingUp, AlertCircle, Trophy } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Clock, Plus, X, Loader2, TrendingUp, AlertCircle, Trophy, Paperclip } from 'lucide-react'
 import { useToast } from '../../components/ui/Toast'
 import { DateInput } from '../../components/ui/DateInput'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
+import { Anexos } from '../../components/ui/Anexos'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { api } from '../../services/api'
 import clsx from 'clsx'
@@ -44,6 +45,9 @@ export function BancoHoras() {
     dataFim: '',
     observacao: '',
   })
+  const [atestadoFile, setAtestadoFile] = useState<File | null>(null)
+  const atestadoInputRef = useRef<HTMLInputElement | null>(null)
+  const [anexosDe, setAnexosDe] = useState<LancamentoBancoHoras | null>(null)
 
   const carregar = () => {
     setLoadingLista(true)
@@ -64,7 +68,16 @@ export function BancoHoras() {
     [funcionarios]
   )
 
-  const filtrados = lancamentos.filter(l =>
+  // Filtros, ranking e KPIs só devem considerar usuários ativos — GET /usuarios já só retorna
+  // ativos, então basta restringir os lançamentos aos funcionarioId presentes nessa lista
+  // (mantém o histórico de gente desligada fora da tela, mesmo que ela tenha lançamentos antigos).
+  const idsAtivos = useMemo(() => new Set(funcionarios.map(f => f.id)), [funcionarios])
+  const lancamentosAtivos = useMemo(
+    () => lancamentos.filter(l => idsAtivos.has(l.funcionarioId)),
+    [lancamentos, idsAtivos]
+  )
+
+  const filtrados = lancamentosAtivos.filter(l =>
     (!filtroFuncionario || String(l.funcionarioId) === filtroFuncionario) &&
     (!filtroTipo || l.tipo === filtroTipo)
   )
@@ -73,13 +86,13 @@ export function BancoHoras() {
     // saldoAcumulado já vem calculado em ordem cronológica; o primeiro registro de cada
     // funcionário na lista (mais recente primeiro) tem o saldo atual dele.
     const mapa = new Map<number, { funcionarioId: number; funcionario: string; saldo: number }>()
-    for (const l of lancamentos) {
+    for (const l of lancamentosAtivos) {
       if (!mapa.has(l.funcionarioId)) {
         mapa.set(l.funcionarioId, { funcionarioId: l.funcionarioId, funcionario: l.funcionario, saldo: l.saldoAcumulado })
       }
     }
     return Array.from(mapa.values()).sort((a, b) => b.saldo - a.saldo)
-  }, [lancamentos])
+  }, [lancamentosAtivos])
 
   const saldoTotal = useMemo(
     () => saldoPorFuncionario.reduce((s, f) => s + f.saldo, 0),
@@ -87,11 +100,11 @@ export function BancoHoras() {
   )
 
   const hoje = new Date()
-  const horasExtrasMes = lancamentos
+  const horasExtrasMes = lancamentosAtivos
     .filter(l => l.tipo === 'Hora Extra' && l.dataInicio && new Date(l.dataInicio).getMonth() === hoje.getMonth() && new Date(l.dataInicio).getFullYear() === hoje.getFullYear())
     .reduce((s, l) => s + l.horas, 0)
 
-  const faltasPendentes = lancamentos.filter(l => l.tipo === 'Falta s/ Atestado').length
+  const faltasPendentes = lancamentosAtivos.filter(l => l.tipo === 'Falta s/ Atestado').length
 
   const handleSalvar = async () => {
     if (!form.funcionarioId || !form.tipo || !form.horas || !form.dataInicio || !form.dataFim || !form.observacao.trim()) {
@@ -100,7 +113,7 @@ export function BancoHoras() {
     }
     setLoading(true)
     try {
-      await api.createLancamentoBancoHoras({
+      const { id } = await api.createLancamentoBancoHoras({
         funcionarioId: Number(form.funcionarioId),
         tipo: form.tipo as TipoMovimentoBancoHoras,
         horas: Number(form.horas.replace(',', '.')),
@@ -108,8 +121,16 @@ export function BancoHoras() {
         dataFim: form.dataFim,
         observacao: form.observacao,
       })
+      if (atestadoFile) {
+        try {
+          await api.uploadAnexos({ tabela: 'banco_de_horas', registroId: id, files: [atestadoFile] })
+        } catch (e: any) {
+          toast.error(e?.message || 'Lançamento salvo, mas falhou o anexo do atestado.')
+        }
+      }
       setShowModal(false)
       setForm({ funcionarioId: '', tipo: '', horas: '', dataInicio: '', dataFim: '', observacao: '' })
+      setAtestadoFile(null)
       toast.success('Lançamento registrado com sucesso!')
       carregar()
     } catch (e: any) {
@@ -245,7 +266,7 @@ export function BancoHoras() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-700">
-              {['Funcionário', 'Tipo', 'Horas', 'Data Início', 'Data Fim', 'Saldo Acumulado', 'Lançado por', 'Observação'].map(h => (
+              {['Funcionário', 'Tipo', 'Horas', 'Data Início', 'Data Fim', 'Saldo Acumulado', 'Lançado por', 'Observação', 'Atestado'].map(h => (
                 <th key={h} className="table-header text-left">{h}</th>
               ))}
             </tr>
@@ -271,10 +292,27 @@ export function BancoHoras() {
                 </td>
                 <td className="table-cell text-slate-500">{l.lancadoPor || '—'}</td>
                 <td className="table-cell text-slate-500 italic">{l.observacao || '—'}</td>
+                <td className="table-cell">
+                  {l.tipo === 'Falta c/ Atestado' && (
+                    <button
+                      type="button"
+                      onClick={() => setAnexosDe(l)}
+                      className={clsx(
+                        'flex items-center gap-1 text-xs px-2 py-1 rounded-lg',
+                        l.qtdAnexos > 0
+                          ? 'text-emerald-500 hover:bg-emerald-500/10'
+                          : 'text-slate-400 hover:bg-slate-500/10'
+                      )}
+                      title={l.qtdAnexos > 0 ? 'Ver atestado anexado' : 'Nenhum atestado anexado — clique para anexar'}
+                    >
+                      <Paperclip size={12} /> {l.qtdAnexos > 0 ? l.qtdAnexos : '—'}
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
             {filtrados.length === 0 && (
-              <tr><td colSpan={8} className="table-cell text-center py-8 text-slate-500">Nenhum lançamento encontrado.</td></tr>
+              <tr><td colSpan={9} className="table-cell text-center py-8 text-slate-500">Nenhum lançamento encontrado.</td></tr>
             )}
           </tbody>
         </table>
@@ -329,13 +367,48 @@ export function BancoHoras() {
                 <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Observação *</label>
                 <textarea className="input-field resize-none h-20" placeholder="Motivo ou detalhes..." value={form.observacao} onChange={e => setForm(p => ({ ...p, observacao: e.target.value }))} />
               </div>
+              {form.tipo === 'Falta c/ Atestado' && (
+                <div>
+                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Atestado (opcional)</label>
+                  <input
+                    ref={atestadoInputRef}
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onChange={e => setAtestadoFile(e.target.files?.[0] ?? null)}
+                    className="block w-full text-xs text-slate-600 dark:text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-slate-100 dark:file:bg-slate-700 file:text-slate-700 dark:file:text-slate-200"
+                  />
+                </div>
+              )}
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={handleSalvar} disabled={loading} className="btn-primary flex-1 justify-center disabled:opacity-60">
                 {loading ? <><Loader2 size={15} className="animate-spin" /> Salvando...</> : 'Salvar Lançamento'}
               </button>
-              <button onClick={() => setShowModal(false)} className="btn-secondary">Cancelar</button>
+              <button onClick={() => { setShowModal(false); setAtestadoFile(null) }} className="btn-secondary">Cancelar</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Atestado */}
+      {anexosDe && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setAnexosDe(null)}>
+          <div className="card max-w-lg w-full" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+                Atestado — {anexosDe.funcionario}
+              </h3>
+              <button onClick={() => setAnexosDe(null)} className="text-slate-400 hover:text-slate-800 dark:text-slate-200">
+                <X size={18} />
+              </button>
+            </div>
+            <Anexos
+              tabela="banco_de_horas"
+              registroId={anexosDe.id}
+              title="Atestado"
+              emptyLabel="Nenhum atestado anexado."
+              className="border-0 p-0"
+            />
           </div>
         </div>
       )}

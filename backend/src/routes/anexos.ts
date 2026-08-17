@@ -7,10 +7,10 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 
-type TabelaAnexo = 'agenda' | 'agendamento_programado' | 'cliente_prontuario'
+type TabelaAnexo = 'agenda' | 'agendamento_programado' | 'cliente_prontuario' | 'banco_de_horas'
 
 function isTabelaAnexo(value: unknown): value is TabelaAnexo {
-  return value === 'agenda' || value === 'agendamento_programado' || value === 'cliente_prontuario'
+  return value === 'agenda' || value === 'agendamento_programado' || value === 'cliente_prontuario' || value === 'banco_de_horas'
 }
 
 function toInt(value: unknown): number | null {
@@ -28,6 +28,9 @@ function sanitizeFilename(name: string): string {
 function getUploadsDir(tabela: TabelaAnexo): string {
   if (tabela === 'cliente_prontuario') {
     return path.resolve(process.cwd(), 'uploads', 'clientes', 'prontuario')
+  }
+  if (tabela === 'banco_de_horas') {
+    return path.resolve(process.cwd(), 'uploads', 'banco-horas')
   }
   return path.resolve(process.cwd(), 'uploads', 'agendamentos')
 }
@@ -56,6 +59,10 @@ async function assertRegistroExiste(tabela: TabelaAnexo, registroId: number): Pr
   }
   if (tabela === 'cliente_prontuario') {
     const row: any[] = await prisma.$queryRaw`SELECT cod_cli AS id FROM cliente WHERE cod_cli = ${registroId} LIMIT 1`
+    return row.length > 0
+  }
+  if (tabela === 'banco_de_horas') {
+    const row: any[] = await prisma.$queryRaw`SELECT ID_BH AS id FROM banco_de_horas WHERE ID_BH = ${registroId} LIMIT 1`
     return row.length > 0
   }
   const row: any[] = await prisma.$queryRaw`SELECT id AS id FROM agendamento_programado WHERE id = ${registroId} LIMIT 1`

@@ -330,11 +330,11 @@ export const api = {
   deleteAgendaItem: (id: number) => fetchApi(`/agenda/${id}`, { method: 'DELETE' }),
 
   // ─── Anexos (Agenda / Agendamentos Programados) ─────────────
-  listAnexos: (params: { tabela: 'agenda' | 'agendamento_programado' | 'cliente_prontuario'; registroId: number }) => {
+  listAnexos: (params: { tabela: 'agenda' | 'agendamento_programado' | 'cliente_prontuario' | 'banco_de_horas'; registroId: number }) => {
     const qs = '?' + new URLSearchParams({ tabela: params.tabela, registroId: String(params.registroId) }).toString()
     return fetchApi<ClienteAnexo[]>(`/anexos${qs}`)
   },
-  uploadAnexos: async (params: { tabela: 'agenda' | 'agendamento_programado' | 'cliente_prontuario'; registroId: number; files: File[]; onProgress?: (percent: number) => void }) => {
+  uploadAnexos: async (params: { tabela: 'agenda' | 'agendamento_programado' | 'cliente_prontuario' | 'banco_de_horas'; registroId: number; files: File[]; onProgress?: (percent: number) => void }) => {
     const qs = '?' + new URLSearchParams({ tabela: params.tabela, registroId: String(params.registroId) }).toString()
     const fd = new FormData()
     for (const file of params.files) fd.append('files', file)

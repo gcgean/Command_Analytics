@@ -44,6 +44,7 @@ interface LancamentoRow {
   OBS: string | null
   COD_USU_LANC: number
   lancadoPor: string | null
+  qtdAnexos: number | bigint
 }
 
 export async function bancoHorasRoutes(app: FastifyInstance) {
@@ -54,10 +55,15 @@ export async function bancoHorasRoutes(app: FastifyInstance) {
       SELECT b.ID_BH, b.COD_FUNCIONARIO, f.NOME_USU AS funcionario,
              b.QTD_HORAS, b.TIPO_MOV, b.TIPO_FALTA,
              b.DATA_HORA_INI, b.DATA_HORA_FIN, b.DATA_HORA_LANC, b.OBS,
-             b.COD_USU_LANC, l.NOME_USU AS lancadoPor
+             b.COD_USU_LANC, l.NOME_USU AS lancadoPor,
+             COALESCE(an.qtd, 0) AS qtdAnexos
       FROM banco_de_horas b
       LEFT JOIN usuario f ON f.COD_USU = b.COD_FUNCIONARIO
       LEFT JOIN usuario l ON l.COD_USU = b.COD_USU_LANC
+      LEFT JOIN (
+        SELECT registro_id, COUNT(*) AS qtd FROM agendamento_anexo
+        WHERE tabela = 'banco_de_horas' GROUP BY registro_id
+      ) an ON an.registro_id = b.ID_BH
       ORDER BY b.DATA_HORA_INI ASC, b.ID_BH ASC
     `
 
@@ -86,6 +92,7 @@ export async function bancoHorasRoutes(app: FastifyInstance) {
         observacao: r.OBS,
         lancadoPor: r.lancadoPor,
         saldoAcumulado,
+        qtdAnexos: Number(r.qtdAnexos ?? 0),
       }
     })
 

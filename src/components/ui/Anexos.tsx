@@ -5,7 +5,7 @@ import { Button } from './Button'
 import clsx from 'clsx'
 import { Modal } from './Modal'
 
-type TabelaAnexo = 'agenda' | 'agendamento_programado' | 'cliente_prontuario'
+type TabelaAnexo = 'agenda' | 'agendamento_programado' | 'cliente_prontuario' | 'banco_de_horas'
 
 type Anexo = {
   id: number
