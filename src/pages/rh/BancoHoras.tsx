@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Clock, Plus, X, Loader2, TrendingUp, AlertCircle } from 'lucide-react'
+import { Clock, Plus, X, Loader2, TrendingUp, AlertCircle, Trophy } from 'lucide-react'
 import { useToast } from '../../components/ui/Toast'
 import { DateInput } from '../../components/ui/DateInput'
+import { SearchableSelect } from '../../components/ui/SearchableSelect'
+import { usePermissions } from '../../contexts/PermissionsContext'
 import { api } from '../../services/api'
 import clsx from 'clsx'
 import type { LancamentoBancoHoras, TipoMovimentoBancoHoras, Usuario } from '../../types'
@@ -23,6 +25,10 @@ function formatDate(s: string | null): string {
 
 export function BancoHoras() {
   const { toast } = useToast()
+  const { can } = usePermissions()
+  const podeLancar = can('banco-horas-lancar')
+
+  const [aba, setAba] = useState<'lancamentos' | 'ranking'>('lancamentos')
   const [lancamentos, setLancamentos] = useState<LancamentoBancoHoras[]>([])
   const [funcionarios, setFuncionarios] = useState<Usuario[]>([])
   const [loadingLista, setLoadingLista] = useState(true)
@@ -53,20 +59,32 @@ export function BancoHoras() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const funcionarioOptions = useMemo(
+    () => funcionarios.map(f => ({ value: String(f.id), label: f.nome })),
+    [funcionarios]
+  )
+
   const filtrados = lancamentos.filter(l =>
     (!filtroFuncionario || String(l.funcionarioId) === filtroFuncionario) &&
     (!filtroTipo || l.tipo === filtroTipo)
   )
 
-  const saldoTotal = useMemo(() => {
-    // Saldo por funcionário (último saldoAcumulado de cada um), somado — evita contar
-    // deltas de funcionários diferentes fora de ordem.
-    const ultimoPorFuncionario = new Map<number, number>()
+  const saldoPorFuncionario = useMemo(() => {
+    // saldoAcumulado já vem calculado em ordem cronológica; o primeiro registro de cada
+    // funcionário na lista (mais recente primeiro) tem o saldo atual dele.
+    const mapa = new Map<number, { funcionarioId: number; funcionario: string; saldo: number }>()
     for (const l of lancamentos) {
-      if (!ultimoPorFuncionario.has(l.funcionarioId)) ultimoPorFuncionario.set(l.funcionarioId, l.saldoAcumulado)
+      if (!mapa.has(l.funcionarioId)) {
+        mapa.set(l.funcionarioId, { funcionarioId: l.funcionarioId, funcionario: l.funcionario, saldo: l.saldoAcumulado })
+      }
     }
-    return Array.from(ultimoPorFuncionario.values()).reduce((s, v) => s + v, 0)
+    return Array.from(mapa.values()).sort((a, b) => b.saldo - a.saldo)
   }, [lancamentos])
+
+  const saldoTotal = useMemo(
+    () => saldoPorFuncionario.reduce((s, f) => s + f.saldo, 0),
+    [saldoPorFuncionario]
+  )
 
   const hoje = new Date()
   const horasExtrasMes = lancamentos
@@ -108,9 +126,11 @@ export function BancoHoras() {
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Banco de Horas</h1>
           <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">Controle de horas extras e faltas da equipe</p>
         </div>
-        <button className="btn-primary" onClick={() => setShowModal(true)}>
-          <Plus size={16} /> Lançar Horas
-        </button>
+        {podeLancar && (
+          <button className="btn-primary" onClick={() => setShowModal(true)}>
+            <Plus size={16} /> Lançar Horas
+          </button>
+        )}
       </div>
 
       {/* KPIs */}
@@ -140,12 +160,75 @@ export function BancoHoras() {
         </div>
       </div>
 
+      {/* Abas */}
+      <div className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-700">
+        <button
+          type="button"
+          className={clsx(
+            'px-4 py-2 text-sm font-medium border-b-2 -mb-px',
+            aba === 'lancamentos' ? 'border-blue-500 text-blue-500' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          )}
+          onClick={() => setAba('lancamentos')}
+        >
+          Lançamentos
+        </button>
+        <button
+          type="button"
+          className={clsx(
+            'px-4 py-2 text-sm font-medium border-b-2 -mb-px',
+            aba === 'ranking' ? 'border-blue-500 text-blue-500' : 'border-transparent text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+          )}
+          onClick={() => setAba('ranking')}
+        >
+          Ranking de Horas
+        </button>
+      </div>
+
+      {aba === 'ranking' && (
+        <div className="card p-0 overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 dark:border-slate-700">
+                {['#', 'Técnico', 'Saldo Disponível'].map(h => (
+                  <th key={h} className="table-header text-left">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {saldoPorFuncionario.map((f, i) => (
+                <tr key={f.funcionarioId} className="table-row">
+                  <td className="table-cell text-slate-500 w-10">
+                    {i === 0 ? <Trophy size={16} className="text-amber-400" /> : i + 1}
+                  </td>
+                  <td className="table-cell font-medium text-slate-900 dark:text-slate-100">{f.funcionario}</td>
+                  <td className="table-cell">
+                    <span className={clsx('font-semibold', f.saldo >= 0 ? 'text-emerald-400' : 'text-red-400')}>
+                      {f.saldo >= 0 ? '+' : ''}{f.saldo.toFixed(2)}h
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {saldoPorFuncionario.length === 0 && (
+                <tr><td colSpan={3} className="table-cell text-center py-8 text-slate-500">Nenhum lançamento encontrado.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {aba === 'lancamentos' && (
+      <>
       {/* Filtros */}
       <div className="flex gap-3">
-        <select className="input-field max-w-[220px]" value={filtroFuncionario} onChange={e => setFiltroFuncionario(e.target.value)}>
-          <option value="">Todos funcionários</option>
-          {funcionarios.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-        </select>
+        <div className="w-64">
+          <SearchableSelect
+            value={filtroFuncionario}
+            onChange={setFiltroFuncionario}
+            options={[{ value: '', label: 'Todos funcionários' }, ...funcionarioOptions]}
+            placeholder="Todos funcionários"
+            searchPlaceholder="Buscar funcionário..."
+          />
+        </div>
         <select className="input-field max-w-[200px]" value={filtroTipo} onChange={e => setFiltroTipo(e.target.value)}>
           <option value="">Todos os tipos</option>
           {tipos.map(t => <option key={t} value={t}>{t}</option>)}
@@ -197,9 +280,11 @@ export function BancoHoras() {
         </table>
       </div>
       )}
+      </>
+      )}
 
       {/* Modal Lançar */}
-      {showModal && (
+      {showModal && podeLancar && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setShowModal(false)}>
           <div className="card max-w-lg w-full" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-5">
@@ -211,10 +296,13 @@ export function BancoHoras() {
             <div className="space-y-4">
               <div>
                 <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Funcionário *</label>
-                <select className="input-field" value={form.funcionarioId} onChange={e => setForm(p => ({ ...p, funcionarioId: e.target.value }))}>
-                  <option value="">Selecione...</option>
-                  {funcionarios.map(f => <option key={f.id} value={f.id}>{f.nome}</option>)}
-                </select>
+                <SearchableSelect
+                  value={form.funcionarioId}
+                  onChange={(v) => setForm(p => ({ ...p, funcionarioId: v }))}
+                  options={funcionarioOptions}
+                  placeholder="Selecione..."
+                  searchPlaceholder="Buscar funcionário..."
+                />
               </div>
               <div>
                 <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Tipo *</label>

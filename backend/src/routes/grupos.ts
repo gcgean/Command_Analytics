@@ -42,6 +42,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'certificados-digitais',    label: 'Controle de Certificados Digitais', grupo: 'CERTIFICADOS DIGITAIS' },
   // RH
   { id: 'banco-horas',              label: 'Banco de Horas',                  grupo: 'RH' },
+  { id: 'banco-horas-lancar',       label: 'Banco de Horas — Lançar/Descontar Horas', grupo: 'RH' },
   { id: 'historico-treinamentos',   label: 'Histórico de Treinamentos',       grupo: 'RH' },
   { id: 'historico-treinamentos-nota', label: 'Histórico de Treinamentos — Inserir/Alterar nota', grupo: 'RH' },
   // SISTEMA

@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { registrarAuditoria } from '../utils/auditoria'
+import { getUserPermissions } from './grupos'
 
 // Ponto de revenda da própria Cilos no legado (Command System em Delphi) — todos os
 // lançamentos existentes usam esse valor, então mantemos ao criar novos pelo web.
@@ -105,6 +106,11 @@ export async function bancoHorasRoutes(app: FastifyInstance) {
       observacao?: string
     }
     const usuarioId = Number((request.user as any)?.id || 0) || null
+
+    const permissoes = usuarioId ? await getUserPermissions(usuarioId) : []
+    if (!permissoes.includes('*') && !permissoes.includes('banco-horas-lancar')) {
+      return reply.status(403).send({ error: 'Você não tem permissão para lançar ou descontar horas.' })
+    }
 
     if (!funcionarioId) return reply.status(400).send({ error: 'Selecione o funcionário.' })
     if (!tipo) return reply.status(400).send({ error: 'Selecione o tipo de movimento.' })
