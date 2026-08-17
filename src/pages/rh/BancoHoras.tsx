@@ -24,6 +24,11 @@ function formatDate(s: string | null): string {
   return new Date(s).toLocaleDateString('pt-BR')
 }
 
+function formatDateTime(s: string | null): string {
+  if (!s) return '—'
+  return new Date(s).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+}
+
 export function BancoHoras() {
   const { toast } = useToast()
   const { can } = usePermissions()
@@ -45,8 +50,8 @@ export function BancoHoras() {
     dataFim: '',
     observacao: '',
   })
-  const [atestadoFile, setAtestadoFile] = useState<File | null>(null)
-  const atestadoInputRef = useRef<HTMLInputElement | null>(null)
+  const [anexoFiles, setAnexoFiles] = useState<File[]>([])
+  const anexoInputRef = useRef<HTMLInputElement | null>(null)
   const [anexosDe, setAnexosDe] = useState<LancamentoBancoHoras | null>(null)
 
   const carregar = () => {
@@ -77,10 +82,16 @@ export function BancoHoras() {
     [lancamentos, idsAtivos]
   )
 
-  const filtrados = lancamentosAtivos.filter(l =>
-    (!filtroFuncionario || String(l.funcionarioId) === filtroFuncionario) &&
-    (!filtroTipo || l.tipo === filtroTipo)
-  )
+  const filtrados = lancamentosAtivos
+    .filter(l =>
+      (!filtroFuncionario || String(l.funcionarioId) === filtroFuncionario) &&
+      (!filtroTipo || l.tipo === filtroTipo)
+    )
+    // Extrato sempre do mais novo pro mais antigo, pro gestor ver o último lançamento primeiro.
+    .sort((a, b) => {
+      const diff = new Date(b.dataInicio ?? 0).getTime() - new Date(a.dataInicio ?? 0).getTime()
+      return diff !== 0 ? diff : b.id - a.id
+    })
 
   const saldoPorFuncionario = useMemo(() => {
     // saldoAcumulado já vem calculado em ordem cronológica; o primeiro registro de cada
@@ -94,8 +105,10 @@ export function BancoHoras() {
     return Array.from(mapa.values()).sort((a, b) => b.saldo - a.saldo)
   }, [lancamentosAtivos])
 
+  // "Quanto a empresa ainda deve dar de horas" = soma só dos saldos positivos (quem tem saldo
+  // negativo deve horas à empresa, não o contrário — não faz sentido esse débito abater o total).
   const saldoTotal = useMemo(
-    () => saldoPorFuncionario.reduce((s, f) => s + f.saldo, 0),
+    () => saldoPorFuncionario.reduce((s, f) => s + Math.max(0, f.saldo), 0),
     [saldoPorFuncionario]
   )
 
@@ -121,16 +134,16 @@ export function BancoHoras() {
         dataFim: form.dataFim,
         observacao: form.observacao,
       })
-      if (atestadoFile) {
+      if (anexoFiles.length > 0) {
         try {
-          await api.uploadAnexos({ tabela: 'banco_de_horas', registroId: id, files: [atestadoFile] })
+          await api.uploadAnexos({ tabela: 'banco_de_horas', registroId: id, files: anexoFiles })
         } catch (e: any) {
-          toast.error(e?.message || 'Lançamento salvo, mas falhou o anexo do atestado.')
+          toast.error(e?.message || 'Lançamento salvo, mas falhou o envio dos anexos.')
         }
       }
       setShowModal(false)
       setForm({ funcionarioId: '', tipo: '', horas: '', dataInicio: '', dataFim: '', observacao: '' })
-      setAtestadoFile(null)
+      setAnexoFiles([])
       toast.success('Lançamento registrado com sucesso!')
       carregar()
     } catch (e: any) {
@@ -159,10 +172,8 @@ export function BancoHoras() {
         <div className="card flex items-center gap-4">
           <div className="p-3 rounded-lg bg-blue-500/10"><Clock className="w-5 h-5 text-blue-400" /></div>
           <div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">Saldo Total de Horas</p>
-            <p className={clsx('text-2xl font-bold', saldoTotal >= 0 ? 'text-emerald-400' : 'text-red-400')}>
-              {saldoTotal >= 0 ? '+' : ''}{saldoTotal.toFixed(2)}h
-            </p>
+            <p className="text-xs text-slate-600 dark:text-slate-400">Horas Devidas aos Técnicos</p>
+            <p className="text-2xl font-bold text-emerald-400">{saldoTotal.toFixed(2)}h</p>
           </div>
         </div>
         <div className="card flex items-center gap-4">
@@ -266,7 +277,7 @@ export function BancoHoras() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-700">
-              {['Funcionário', 'Tipo', 'Horas', 'Data Início', 'Data Fim', 'Saldo Acumulado', 'Lançado por', 'Observação', 'Atestado'].map(h => (
+              {['Funcionário', 'Tipo', 'Horas', 'Data Início', 'Data Fim', 'Saldo Acumulado', 'Lançado por', 'Lançado em', 'Observação', 'Arquivos Anexados'].map(h => (
                 <th key={h} className="table-header text-left">{h}</th>
               ))}
             </tr>
@@ -291,28 +302,27 @@ export function BancoHoras() {
                   </span>
                 </td>
                 <td className="table-cell text-slate-500">{l.lancadoPor || '—'}</td>
+                <td className="table-cell text-slate-500">{formatDateTime(l.dataLancamento)}</td>
                 <td className="table-cell text-slate-500 italic">{l.observacao || '—'}</td>
                 <td className="table-cell">
-                  {l.tipo === 'Falta c/ Atestado' && (
-                    <button
-                      type="button"
-                      onClick={() => setAnexosDe(l)}
-                      className={clsx(
-                        'flex items-center gap-1 text-xs px-2 py-1 rounded-lg',
-                        l.qtdAnexos > 0
-                          ? 'text-emerald-500 hover:bg-emerald-500/10'
-                          : 'text-slate-400 hover:bg-slate-500/10'
-                      )}
-                      title={l.qtdAnexos > 0 ? 'Ver atestado anexado' : 'Nenhum atestado anexado — clique para anexar'}
-                    >
-                      <Paperclip size={12} /> {l.qtdAnexos > 0 ? l.qtdAnexos : '—'}
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAnexosDe(l)}
+                    className={clsx(
+                      'flex items-center gap-1 text-xs px-2 py-1 rounded-lg',
+                      l.qtdAnexos > 0
+                        ? 'text-emerald-500 hover:bg-emerald-500/10'
+                        : 'text-slate-400 hover:bg-slate-500/10'
+                    )}
+                    title={l.qtdAnexos > 0 ? 'Ver arquivos anexados' : 'Nenhum arquivo anexado — clique para anexar'}
+                  >
+                    <Paperclip size={12} /> {l.qtdAnexos > 0 ? l.qtdAnexos : '—'}
+                  </button>
                 </td>
               </tr>
             ))}
             {filtrados.length === 0 && (
-              <tr><td colSpan={9} className="table-cell text-center py-8 text-slate-500">Nenhum lançamento encontrado.</td></tr>
+              <tr><td colSpan={10} className="table-cell text-center py-8 text-slate-500">Nenhum lançamento encontrado.</td></tr>
             )}
           </tbody>
         </table>
@@ -367,36 +377,34 @@ export function BancoHoras() {
                 <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Observação *</label>
                 <textarea className="input-field resize-none h-20" placeholder="Motivo ou detalhes..." value={form.observacao} onChange={e => setForm(p => ({ ...p, observacao: e.target.value }))} />
               </div>
-              {form.tipo === 'Falta c/ Atestado' && (
-                <div>
-                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Atestado (opcional)</label>
-                  <input
-                    ref={atestadoInputRef}
-                    type="file"
-                    accept="image/*,application/pdf"
-                    onChange={e => setAtestadoFile(e.target.files?.[0] ?? null)}
-                    className="block w-full text-xs text-slate-600 dark:text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-slate-100 dark:file:bg-slate-700 file:text-slate-700 dark:file:text-slate-200"
-                  />
-                </div>
-              )}
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Anexar arquivos (opcional)</label>
+                <input
+                  ref={anexoInputRef}
+                  type="file"
+                  multiple
+                  onChange={e => setAnexoFiles(Array.from(e.target.files ?? []))}
+                  className="block w-full text-xs text-slate-600 dark:text-slate-400 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-slate-100 dark:file:bg-slate-700 file:text-slate-700 dark:file:text-slate-200"
+                />
+              </div>
             </div>
             <div className="flex gap-2 mt-5">
               <button onClick={handleSalvar} disabled={loading} className="btn-primary flex-1 justify-center disabled:opacity-60">
                 {loading ? <><Loader2 size={15} className="animate-spin" /> Salvando...</> : 'Salvar Lançamento'}
               </button>
-              <button onClick={() => { setShowModal(false); setAtestadoFile(null) }} className="btn-secondary">Cancelar</button>
+              <button onClick={() => { setShowModal(false); setAnexoFiles([]) }} className="btn-secondary">Cancelar</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Modal de Atestado */}
+      {/* Modal de Anexos */}
       {anexosDe && (
         <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4" onClick={() => setAnexosDe(null)}>
           <div className="card max-w-lg w-full" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-                Atestado — {anexosDe.funcionario}
+                Arquivos Anexados — {anexosDe.funcionario}
               </h3>
               <button onClick={() => setAnexosDe(null)} className="text-slate-400 hover:text-slate-800 dark:text-slate-200">
                 <X size={18} />
@@ -405,8 +413,8 @@ export function BancoHoras() {
             <Anexos
               tabela="banco_de_horas"
               registroId={anexosDe.id}
-              title="Atestado"
-              emptyLabel="Nenhum atestado anexado."
+              title="Arquivos Anexados"
+              emptyLabel="Nenhum arquivo anexado."
               className="border-0 p-0"
             />
           </div>
