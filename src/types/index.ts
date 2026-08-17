@@ -778,6 +778,7 @@ export interface AnaliseFaturamento {
 
 export type TipoMovimentoBancoHoras =
   | 'Hora Extra'
+  | 'Horas por Km'
   | 'Falta c/ Atestado'
   | 'Falta s/ Atestado'
   | 'Home Office'

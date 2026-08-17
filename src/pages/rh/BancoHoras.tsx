@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Clock, Plus, X, Loader2, TrendingUp, AlertCircle, Trophy, Paperclip } from 'lucide-react'
+import { Clock, Plus, X, Loader2, TrendingUp, AlertCircle, Trophy, Paperclip, MoreVertical, Route } from 'lucide-react'
 import { useToast } from '../../components/ui/Toast'
 import { DateInput } from '../../components/ui/DateInput'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
@@ -9,14 +9,26 @@ import { api } from '../../services/api'
 import clsx from 'clsx'
 import type { LancamentoBancoHoras, TipoMovimentoBancoHoras, Usuario } from '../../types'
 
-const tipos: TipoMovimentoBancoHoras[] = ['Hora Extra', 'Falta c/ Atestado', 'Falta s/ Atestado', 'Home Office', 'Desconto de Horas Padrão']
+const tipos: TipoMovimentoBancoHoras[] = ['Hora Extra', 'Horas por Km', 'Falta c/ Atestado', 'Falta s/ Atestado', 'Home Office', 'Desconto de Horas Padrão']
 
 const tipoCor: Record<TipoMovimentoBancoHoras, string> = {
   'Hora Extra': 'bg-emerald-500/20 text-emerald-400',
+  'Horas por Km': 'bg-cyan-500/20 text-cyan-400',
   'Falta c/ Atestado': 'bg-amber-500/20 text-amber-400',
   'Falta s/ Atestado': 'bg-red-500/20 text-red-400',
   'Home Office': 'bg-blue-500/20 text-blue-400',
   'Desconto de Horas Padrão': 'bg-slate-500/20 text-slate-400',
+}
+
+function inicioMesAtual(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`
+}
+
+function fimMesAtual(): string {
+  const d = new Date()
+  const ultimo = new Date(d.getFullYear(), d.getMonth() + 1, 0)
+  return `${ultimo.getFullYear()}-${String(ultimo.getMonth() + 1).padStart(2, '0')}-${String(ultimo.getDate()).padStart(2, '0')}`
 }
 
 function formatDate(s: string | null): string {
@@ -40,6 +52,8 @@ export function BancoHoras() {
   const [loadingLista, setLoadingLista] = useState(true)
   const [filtroFuncionario, setFiltroFuncionario] = useState('')
   const [filtroTipo, setFiltroTipo] = useState('')
+  const [filtroDataIni, setFiltroDataIni] = useState(inicioMesAtual())
+  const [filtroDataFim, setFiltroDataFim] = useState(fimMesAtual())
   const [showModal, setShowModal] = useState(false)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
@@ -53,6 +67,7 @@ export function BancoHoras() {
   const [anexoFiles, setAnexoFiles] = useState<File[]>([])
   const anexoInputRef = useRef<HTMLInputElement | null>(null)
   const [anexosDe, setAnexosDe] = useState<LancamentoBancoHoras | null>(null)
+  const [menuAberto, setMenuAberto] = useState<number | null>(null)
 
   const carregar = () => {
     setLoadingLista(true)
@@ -61,6 +76,13 @@ export function BancoHoras() {
       .catch(() => toast.error('Falha ao carregar o banco de horas.'))
       .finally(() => setLoadingLista(false))
   }
+
+  useEffect(() => {
+    if (menuAberto === null) return
+    const fechar = () => setMenuAberto(null)
+    document.addEventListener('click', fechar)
+    return () => document.removeEventListener('click', fechar)
+  }, [menuAberto])
 
   useEffect(() => {
     carregar()
@@ -83,19 +105,25 @@ export function BancoHoras() {
   )
 
   const filtrados = lancamentosAtivos
-    .filter(l =>
-      (!filtroFuncionario || String(l.funcionarioId) === filtroFuncionario) &&
-      (!filtroTipo || l.tipo === filtroTipo)
-    )
+    .filter(l => {
+      if (filtroFuncionario && String(l.funcionarioId) !== filtroFuncionario) return false
+      if (filtroTipo && l.tipo !== filtroTipo) return false
+      if (l.dataInicio) {
+        const data = l.dataInicio.slice(0, 10)
+        if (filtroDataIni && data < filtroDataIni) return false
+        if (filtroDataFim && data > filtroDataFim) return false
+      }
+      return true
+    })
     // Extrato sempre do mais novo pro mais antigo, pro gestor ver o último lançamento primeiro.
     .sort((a, b) => {
       const diff = new Date(b.dataInicio ?? 0).getTime() - new Date(a.dataInicio ?? 0).getTime()
       return diff !== 0 ? diff : b.id - a.id
     })
 
+  // Ranking usa saldo global (todo o histórico), sem aplicar os filtros do extrato — é sempre
+  // "quanto cada um tem agora", não uma foto do período filtrado.
   const saldoPorFuncionario = useMemo(() => {
-    // saldoAcumulado já vem calculado em ordem cronológica; o primeiro registro de cada
-    // funcionário na lista (mais recente primeiro) tem o saldo atual dele.
     const mapa = new Map<number, { funcionarioId: number; funcionario: string; saldo: number }>()
     for (const l of lancamentosAtivos) {
       if (!mapa.has(l.funcionarioId)) {
@@ -105,19 +133,28 @@ export function BancoHoras() {
     return Array.from(mapa.values()).sort((a, b) => b.saldo - a.saldo)
   }, [lancamentosAtivos])
 
-  // "Quanto a empresa ainda deve dar de horas" = soma só dos saldos positivos (quem tem saldo
-  // negativo deve horas à empresa, não o contrário — não faz sentido esse débito abater o total).
-  const saldoTotal = useMemo(
-    () => saldoPorFuncionario.reduce((s, f) => s + Math.max(0, f.saldo), 0),
-    [saldoPorFuncionario]
-  )
+  // Totalizadores do topo seguem o técnico/tipo/período selecionados no extrato — usam o
+  // saldoAcumulado (já é o saldo GLOBAL correto até aquele ponto) do lançamento mais recente
+  // de cada funcionário dentro do filtro, então o valor continua sendo o saldo real, só que
+  // "como estava" na última movimentação visível com o filtro atual.
+  const saldoTotal = useMemo(() => {
+    const mapa = new Map<number, number>()
+    for (const l of filtrados) {
+      if (!mapa.has(l.funcionarioId)) mapa.set(l.funcionarioId, l.saldoAcumulado)
+    }
+    return Array.from(mapa.values()).reduce((s, v) => s + Math.max(0, v), 0)
+  }, [filtrados])
 
-  const hoje = new Date()
-  const horasExtrasMes = lancamentosAtivos
-    .filter(l => l.tipo === 'Hora Extra' && l.dataInicio && new Date(l.dataInicio).getMonth() === hoje.getMonth() && new Date(l.dataInicio).getFullYear() === hoje.getFullYear())
+  const horasExtrasPeriodo = filtrados
+    .filter(l => l.tipo === 'Hora Extra')
     .reduce((s, l) => s + l.horas, 0)
 
-  const faltasPendentes = lancamentosAtivos.filter(l => l.tipo === 'Falta s/ Atestado').length
+  const horasPorKm = useMemo(() => {
+    const doTipo = filtrados.filter(l => l.tipo === 'Horas por Km')
+    return { horas: doTipo.reduce((s, l) => s + l.horas, 0), qtd: doTipo.length }
+  }, [filtrados])
+
+  const faltasPendentes = filtrados.filter(l => l.tipo === 'Falta s/ Atestado').length
 
   const handleSalvar = async () => {
     if (!form.funcionarioId || !form.tipo || !form.horas || !form.dataInicio || !form.dataFim || !form.observacao.trim()) {
@@ -167,8 +204,8 @@ export function BancoHoras() {
         )}
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* KPIs — seguem o técnico/tipo/período selecionados no extrato abaixo */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="card flex items-center gap-4">
           <div className="p-3 rounded-lg bg-blue-500/10"><Clock className="w-5 h-5 text-blue-400" /></div>
           <div>
@@ -179,8 +216,16 @@ export function BancoHoras() {
         <div className="card flex items-center gap-4">
           <div className="p-3 rounded-lg bg-emerald-500/10"><TrendingUp className="w-5 h-5 text-emerald-400" /></div>
           <div>
-            <p className="text-xs text-slate-600 dark:text-slate-400">Horas Extras do Mês</p>
-            <p className="text-2xl font-bold text-emerald-400">{horasExtrasMes.toFixed(2)}h</p>
+            <p className="text-xs text-slate-600 dark:text-slate-400">Horas Extras no Período</p>
+            <p className="text-2xl font-bold text-emerald-400">{horasExtrasPeriodo.toFixed(2)}h</p>
+          </div>
+        </div>
+        <div className="card flex items-center gap-4">
+          <div className="p-3 rounded-lg bg-cyan-500/10"><Route className="w-5 h-5 text-cyan-400" /></div>
+          <div>
+            <p className="text-xs text-slate-600 dark:text-slate-400">Horas por Km</p>
+            <p className="text-2xl font-bold text-cyan-400">{horasPorKm.horas.toFixed(2)}h</p>
+            <p className="text-[11px] text-slate-500">{horasPorKm.qtd} lançamento(s)</p>
           </div>
         </div>
         <div className="card flex items-center gap-4">
@@ -251,7 +296,7 @@ export function BancoHoras() {
       {aba === 'lancamentos' && (
       <>
       {/* Filtros */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap items-end gap-3">
         <div className="w-64">
           <SearchableSelect
             value={filtroFuncionario}
@@ -265,6 +310,28 @@ export function BancoHoras() {
           <option value="">Todos os tipos</option>
           {tipos.map(t => <option key={t} value={t}>{t}</option>)}
         </select>
+        <div>
+          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">De</label>
+          <DateInput mode="iso" value={filtroDataIni} onChange={setFiltroDataIni} />
+        </div>
+        <div>
+          <label className="text-xs text-slate-500 dark:text-slate-400 block mb-1">Até</label>
+          <DateInput mode="iso" value={filtroDataFim} onChange={setFiltroDataFim} />
+        </div>
+        <button
+          type="button"
+          className="btn-secondary !py-2 text-xs"
+          onClick={() => { setFiltroDataIni(inicioMesAtual()); setFiltroDataFim(fimMesAtual()) }}
+        >
+          Mês atual
+        </button>
+        <button
+          type="button"
+          className="btn-secondary !py-2 text-xs"
+          onClick={() => { setFiltroDataIni(''); setFiltroDataFim('') }}
+        >
+          Limpar período
+        </button>
       </div>
 
       {/* Tabela */}
@@ -277,52 +344,71 @@ export function BancoHoras() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-200 dark:border-slate-700">
-              {['Funcionário', 'Tipo', 'Horas', 'Data Início', 'Data Fim', 'Saldo Acumulado', 'Lançado por', 'Lançado em', 'Observação', 'Arquivos Anexados'].map(h => (
+              {['Funcionário', 'Tipo', 'Horas', 'Data Início', 'Data Fim', 'Saldo Acumulado', 'Observação', ''].map(h => (
                 <th key={h} className="table-header text-left">{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {filtrados.map(l => (
-              <tr key={l.id} className="table-row">
-                <td className="table-cell font-medium text-slate-900 dark:text-slate-100">{l.funcionario}</td>
-                <td className="table-cell">
+              <tr key={l.id} className="table-row relative">
+                <td className="table-cell font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">{l.funcionario}</td>
+                <td className="table-cell whitespace-nowrap">
                   <span className={`badge text-xs ${tipoCor[l.tipo]}`}>{l.tipo}</span>
                 </td>
-                <td className="table-cell">
+                <td className="table-cell whitespace-nowrap">
                   <span className={l.tipoMov === 'C' ? 'text-emerald-400 font-semibold' : 'text-red-400 font-semibold'}>
                     {l.tipoMov === 'C' ? '+' : '-'}{l.horas}h
                   </span>
                 </td>
-                <td className="table-cell text-slate-600 dark:text-slate-400">{formatDate(l.dataInicio)}</td>
-                <td className="table-cell text-slate-600 dark:text-slate-400">{formatDate(l.dataFim)}</td>
-                <td className="table-cell">
+                <td className="table-cell text-slate-600 dark:text-slate-400 whitespace-nowrap">{formatDate(l.dataInicio)}</td>
+                <td className="table-cell text-slate-600 dark:text-slate-400 whitespace-nowrap">{formatDate(l.dataFim)}</td>
+                <td className="table-cell whitespace-nowrap">
                   <span className={clsx('font-semibold', l.saldoAcumulado >= 0 ? 'text-emerald-400' : 'text-red-400')}>
                     {l.saldoAcumulado >= 0 ? '+' : ''}{l.saldoAcumulado.toFixed(2)}h
                   </span>
                 </td>
-                <td className="table-cell text-slate-500">{l.lancadoPor || '—'}</td>
-                <td className="table-cell text-slate-500">{formatDateTime(l.dataLancamento)}</td>
-                <td className="table-cell text-slate-500 italic">{l.observacao || '—'}</td>
-                <td className="table-cell">
+                <td className="table-cell text-slate-500 italic max-w-[220px] truncate" title={l.observacao ?? undefined}>{l.observacao || '—'}</td>
+                <td className="table-cell text-right relative">
                   <button
                     type="button"
-                    onClick={() => setAnexosDe(l)}
-                    className={clsx(
-                      'flex items-center gap-1 text-xs px-2 py-1 rounded-lg',
-                      l.qtdAnexos > 0
-                        ? 'text-emerald-500 hover:bg-emerald-500/10'
-                        : 'text-slate-400 hover:bg-slate-500/10'
-                    )}
-                    title={l.qtdAnexos > 0 ? 'Ver arquivos anexados' : 'Nenhum arquivo anexado — clique para anexar'}
+                    onClick={(e) => { e.stopPropagation(); setMenuAberto(prev => prev === l.id ? null : l.id) }}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-500/10"
+                    title="Mais opções"
                   >
-                    <Paperclip size={12} /> {l.qtdAnexos > 0 ? l.qtdAnexos : '—'}
+                    <MoreVertical size={16} />
                   </button>
+                  {menuAberto === l.id && (
+                    <div
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute right-2 top-full mt-1 z-20 w-64 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg text-left p-3 space-y-2"
+                    >
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Lançado por <span className="text-slate-700 dark:text-slate-200 font-medium">{l.lancadoPor || '—'}</span>
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        Lançado em <span className="text-slate-700 dark:text-slate-200 font-medium">{formatDateTime(l.dataLancamento)}</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => { setAnexosDe(l); setMenuAberto(null) }}
+                        className={clsx(
+                          'flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg w-full',
+                          l.qtdAnexos > 0
+                            ? 'text-emerald-500 hover:bg-emerald-500/10'
+                            : 'text-slate-500 hover:bg-slate-500/10'
+                        )}
+                      >
+                        <Paperclip size={13} />
+                        {l.qtdAnexos > 0 ? `${l.qtdAnexos} arquivo(s) anexado(s)` : 'Nenhum arquivo — anexar'}
+                      </button>
+                    </div>
+                  )}
                 </td>
               </tr>
             ))}
             {filtrados.length === 0 && (
-              <tr><td colSpan={10} className="table-cell text-center py-8 text-slate-500">Nenhum lançamento encontrado.</td></tr>
+              <tr><td colSpan={8} className="table-cell text-center py-8 text-slate-500">Nenhum lançamento encontrado.</td></tr>
             )}
           </tbody>
         </table>

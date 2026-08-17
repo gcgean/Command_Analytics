@@ -12,7 +12,12 @@ const COD_PONTO_REVENDA_CILOS = 1
 // só débito com TIPO_FALTA nulo/0 ("Desconto de horas padrão") afeta o saldo; C sempre credita;
 // faltas com/sem atestado e home office (TIPO_FALTA 1/2/3) são só registro, não mexem no saldo.
 function classificar(tipoMov: string, tipoFalta: number | null): { tipo: string; afetaSaldo: boolean } {
-  if (tipoMov === 'C') return { tipo: 'Hora Extra', afetaSaldo: true }
+  if (tipoMov === 'C') {
+    // TIPO_FALTA=4 é uma extensão nossa (não existe no legado Delphi) pra diferenciar
+    // "Horas por Km" de "Hora Extra" comum — ambos são crédito e afetam o saldo igual.
+    if (tipoFalta === 4) return { tipo: 'Horas por Km', afetaSaldo: true }
+    return { tipo: 'Hora Extra', afetaSaldo: true }
+  }
   const falta = tipoFalta ?? 0
   if (falta === 1) return { tipo: 'Falta c/ Atestado', afetaSaldo: false }
   if (falta === 2) return { tipo: 'Falta s/ Atestado', afetaSaldo: false }
@@ -23,6 +28,7 @@ function classificar(tipoMov: string, tipoFalta: number | null): { tipo: string;
 function tipoParaMovFalta(tipo: string): { tipoMov: string; tipoFalta: number | null } {
   switch (tipo) {
     case 'Hora Extra': return { tipoMov: 'C', tipoFalta: null }
+    case 'Horas por Km': return { tipoMov: 'C', tipoFalta: 4 }
     case 'Falta c/ Atestado': return { tipoMov: 'D', tipoFalta: 1 }
     case 'Falta s/ Atestado': return { tipoMov: 'D', tipoFalta: 2 }
     case 'Home Office': return { tipoMov: 'D', tipoFalta: 3 }
