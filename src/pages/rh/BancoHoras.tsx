@@ -176,11 +176,15 @@ export function BancoHoras() {
     return { horas: doTipo.reduce((s, l) => s + l.horas, 0), qtd: doTipo.length }
   }, [filtrados])
 
-  const faltasEDescontos = useMemo(() => ({
-    comAtestado: filtrados.filter(l => l.tipo === 'Falta c/ Atestado').length,
-    semAtestado: filtrados.filter(l => l.tipo === 'Falta s/ Atestado').length,
-    descontos: filtrados.filter(l => l.tipo === 'Desconto de Horas Padrão').length,
-  }), [filtrados])
+  const faltasEDescontos = useMemo(() => {
+    const somaHoras = (tipo: TipoMovimentoBancoHoras) =>
+      filtrados.filter(l => l.tipo === tipo).reduce((s, l) => s + l.horas, 0)
+    return {
+      comAtestado: somaHoras('Falta c/ Atestado'),
+      semAtestado: somaHoras('Falta s/ Atestado'),
+      descontos: somaHoras('Desconto de Horas Padrão'),
+    }
+  }, [filtrados])
 
   const handleSalvar = async () => {
     if (!form.funcionarioId || !form.tipo || !form.horas || !form.dataInicio || !form.dataFim || !form.observacao.trim()) {
@@ -259,13 +263,13 @@ export function BancoHoras() {
           <div>
             <p className="text-xs text-slate-600 dark:text-slate-400 mb-1">Faltas e Descontos</p>
             <p className="text-xs text-slate-600 dark:text-slate-300">
-              Com atestado <span className="font-bold text-amber-400">{faltasEDescontos.comAtestado}</span>
+              Com atestado <span className="font-bold text-amber-400">{faltasEDescontos.comAtestado.toFixed(2)}h</span>
             </p>
             <p className="text-xs text-slate-600 dark:text-slate-300">
-              Sem atestado <span className="font-bold text-red-400">{faltasEDescontos.semAtestado}</span>
+              Sem atestado <span className="font-bold text-red-400">{faltasEDescontos.semAtestado.toFixed(2)}h</span>
             </p>
             <p className="text-xs text-slate-600 dark:text-slate-300">
-              Desconto de horas <span className="font-bold text-slate-500">{faltasEDescontos.descontos}</span>
+              Desconto de horas <span className="font-bold text-slate-500">{faltasEDescontos.descontos.toFixed(2)}h</span>
             </p>
           </div>
         </div>
