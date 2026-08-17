@@ -419,9 +419,15 @@ export function BancoHoras() {
                   {menuAberto === l.id && (
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute right-2 top-full mt-1 z-20 w-64 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg text-left p-3 space-y-2"
+                      className="absolute right-2 top-full mt-1 z-20 w-80 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg text-left p-3 space-y-2"
                     >
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                      <div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Observação</p>
+                        <p className="text-xs text-slate-700 dark:text-slate-200 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                          {l.observacao || '—'}
+                        </p>
+                      </div>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-slate-700">
                         Lançado por <span className="text-slate-700 dark:text-slate-200 font-medium">{l.lancadoPor || '—'}</span>
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
