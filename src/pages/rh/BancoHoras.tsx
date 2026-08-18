@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Clock, Plus, X, Loader2, TrendingUp, AlertCircle, AlertTriangle, Trophy, Paperclip, MoreVertical, Route } from 'lucide-react'
 import { useToast } from '../../components/ui/Toast'
 import { DateInput } from '../../components/ui/DateInput'
@@ -51,9 +52,14 @@ function mesAtualBR() {
   return { ini: toBRDate(inicioMesAtualISO()), fim: toBRDate(fimMesAtualISO()) }
 }
 
+// Extrai o dia direto da string ISO sem passar por new Date(...) — DATA_HORA_INI/FIM
+// representam um dia de calendário, não um instante; converter pelo fuso do navegador
+// pode voltar um dia (ex: "2026-08-04T00:00:00.000Z" vira 03/08 em fuso negativo).
 function formatDate(s: string | null): string {
   if (!s) return '—'
-  return new Date(s).toLocaleDateString('pt-BR')
+  const [y, m, d] = s.slice(0, 10).split('-')
+  if (!y || !m || !d) return '—'
+  return `${d}/${m}/${y}`
 }
 
 function formatDateTime(s: string | null): string {
@@ -88,6 +94,7 @@ export function BancoHoras() {
   const anexoInputRef = useRef<HTMLInputElement | null>(null)
   const [anexosDe, setAnexosDe] = useState<LancamentoBancoHoras | null>(null)
   const [menuAberto, setMenuAberto] = useState<number | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
 
   const carregar = () => {
     setLoadingLista(true)
@@ -99,10 +106,29 @@ export function BancoHoras() {
 
   useEffect(() => {
     if (menuAberto === null) return
-    const fechar = () => setMenuAberto(null)
+    const fechar = () => { setMenuAberto(null); setMenuPos(null) }
     document.addEventListener('click', fechar)
-    return () => document.removeEventListener('click', fechar)
+    window.addEventListener('scroll', fechar, true)
+    window.addEventListener('resize', fechar)
+    return () => {
+      document.removeEventListener('click', fechar)
+      window.removeEventListener('scroll', fechar, true)
+      window.removeEventListener('resize', fechar)
+    }
   }, [menuAberto])
+
+  function abrirMenu(e: React.MouseEvent<HTMLButtonElement>, id: number) {
+    e.stopPropagation()
+    if (menuAberto === id) {
+      setMenuAberto(null)
+      setMenuPos(null)
+      return
+    }
+    const rect = e.currentTarget.getBoundingClientRect()
+    const largura = 320
+    setMenuPos({ top: rect.bottom + 4, left: Math.max(8, rect.right - largura) })
+    setMenuAberto(id)
+  }
 
   useEffect(() => {
     carregar()
@@ -446,16 +472,17 @@ export function BancoHoras() {
                 <td className="table-cell text-right relative">
                   <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); setMenuAberto(prev => prev === l.id ? null : l.id) }}
+                    onClick={(e) => abrirMenu(e, l.id)}
                     className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-500/10"
                     title="Mais opções"
                   >
                     <MoreVertical size={16} />
                   </button>
-                  {menuAberto === l.id && (
+                  {menuAberto === l.id && menuPos && createPortal(
                     <div
                       onClick={(e) => e.stopPropagation()}
-                      className="absolute right-2 top-full mt-1 z-20 w-80 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg text-left p-3 space-y-2"
+                      style={{ position: 'fixed', top: menuPos.top, left: menuPos.left }}
+                      className="z-50 w-80 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg text-left p-3 space-y-2"
                     >
                       <div>
                         <p className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">Observação</p>
@@ -471,7 +498,7 @@ export function BancoHoras() {
                       </p>
                       <button
                         type="button"
-                        onClick={() => { setAnexosDe(l); setMenuAberto(null) }}
+                        onClick={() => { setAnexosDe(l); setMenuAberto(null); setMenuPos(null) }}
                         className={clsx(
                           'flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg w-full',
                           l.qtdAnexos > 0
@@ -482,7 +509,8 @@ export function BancoHoras() {
                         <Paperclip size={13} />
                         {l.qtdAnexos > 0 ? `${l.qtdAnexos} arquivo(s) anexado(s)` : 'Nenhum arquivo — anexar'}
                       </button>
-                    </div>
+                    </div>,
+                    document.body
                   )}
                 </td>
               </tr>
