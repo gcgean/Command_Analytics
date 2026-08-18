@@ -735,16 +735,15 @@ export function Agenda() {
                       <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{item.tecnicoNome || '—'}</span>
                     </div>
                     <div className="col-span-1">
-                      <span
-                        className={clsx(
-                          'text-xs px-2 py-0.5 rounded-full border',
-                          (item as any).origem === 'programado'
-                            ? 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30'
-                            : tipoClass
-                        )}
-                      >
-                        {tipoKey || '—'}
-                      </span>
+                      {(item as any).origem === 'programado' ? (
+                        <span className="text-xs px-2 py-0.5 rounded-full border bg-indigo-500/20 text-indigo-400 border-indigo-500/30">
+                          Programado
+                        </span>
+                      ) : (
+                        <span className={clsx('text-xs px-2 py-0.5 rounded-full border', tipoClass)}>
+                          {tipoKey || '—'}
+                        </span>
+                      )}
                     </div>
                     <div className="col-span-1">
                       <span className={clsx('text-xs px-2 py-0.5 rounded-full', statusColors[statusLabel] ?? '')}>
