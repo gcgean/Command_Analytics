@@ -496,7 +496,13 @@ export function Agenda() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <p className="text-sm text-slate-500 dark:text-slate-400">Clique em um dia para filtrar ou use os filtros abaixo</p>
-        <Button icon={<Plus className="w-4 h-4" />} onClick={() => setShowModal(true)}>
+        <Button
+          icon={<Plus className="w-4 h-4" />}
+          onClick={() => {
+            setForm(f => ({ ...f, data: filters.dataInicio, dataFim: filters.dataFim }))
+            setShowModal(true)
+          }}
+        >
           Novo Agendamento
         </Button>
       </div>
