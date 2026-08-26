@@ -55,6 +55,7 @@ import { ensureServidorMonitorColumns, startServidorMonitorScheduler } from './u
 import { ensureVisibilidadeTables } from './utils/visibilidade'
 import { startNotificacoesVencimentoScheduler } from './utils/notificacoesVencimento'
 import { initNotificacoesAgendamento, startNotificacoesAgendamentoScheduler } from './utils/notificacoesAgendamento'
+import { startTelegramPollingScheduler } from './utils/telegramBot'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
@@ -224,4 +225,5 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
     .then(() => console.log('✓ Tabelas de visibilidade (somente admin) verificadas'))
     .catch(e => console.warn('⚠ Visibilidade init:', e.message))
   startNotificacoesVencimentoScheduler()
+  startTelegramPollingScheduler()
 })

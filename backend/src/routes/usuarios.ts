@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
+import { gerarCodigoVinculo } from '../utils/telegramBot'
 
 const nome = (u: any) => u?.nomeCompleto || u?.nomeUsu || 'Usuário'
 
@@ -122,6 +123,35 @@ export async function usuariosRoutes(app: FastifyInstance) {
       }
       return reply.status(400).send({ error: err?.message || 'Falha ao atualizar usuário.' })
     }
+  })
+
+  // ─── Vínculo de Telegram (auto-captura do ID assim que o usuário manda o código pro bot) ──
+  app.post('/:id/telegram/gerar-codigo', { preHandler: authMiddleware, schema: { tags: ['Usuários'], summary: 'Gera código de vínculo do Telegram' } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const usuario = await prisma.usuario.findUnique({ where: { id: Number(id) } })
+    if (!usuario) return reply.status(404).send({ error: 'Usuário não encontrado.' })
+
+    const { codigo, botUsername, expiraEm } = await gerarCodigoVinculo(usuario.id)
+    if (!botUsername) return reply.status(503).send({ error: 'Bot do Telegram não configurado (verifique o token em Configurações > Telegram).' })
+
+    return { codigo, botUsername, expiraEm }
+  })
+
+  app.get('/:id/telegram/status', { preHandler: authMiddleware, schema: { tags: ['Usuários'], summary: 'Status do vínculo do Telegram' } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const usuario = await prisma.usuario.findUnique({ where: { id: Number(id) } })
+    if (!usuario) return reply.status(404).send({ error: 'Usuário não encontrado.' })
+    return { idTelegram: usuario.idTelegram || null }
+  })
+
+  app.post('/:id/telegram/desconectar', { preHandler: authMiddleware, schema: { tags: ['Usuários'], summary: 'Remove o vínculo do Telegram' } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const usuario = await prisma.usuario.update({
+      where: { id: Number(id) },
+      data: { idTelegram: null },
+    }).catch(() => null)
+    if (!usuario) return reply.status(404).send({ error: 'Usuário não encontrado.' })
+    return { ok: true }
   })
 
   app.patch('/:id/toggle', { preHandler: authMiddleware, schema: { tags: ['Usuários'], summary: 'Ativar/inativar usuário' } }, async (request, reply) => {

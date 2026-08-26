@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Search, Plus, RefreshCw, UserCheck, UserX, User, Shield, Edit2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Search, Plus, RefreshCw, UserCheck, UserX, User, Shield, Edit2, Send, Unlink, MessageCircle, Loader2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
@@ -18,6 +18,129 @@ type UsuarioForm = {
   cargo: string
   departamento: Departamento
   idTelegram: string
+}
+
+function TelegramVinculo({ usuarioId, idTelegram, onChange }: { usuarioId: number; idTelegram: string; onChange: (v: string) => void }) {
+  const [gerando, setGerando] = useState(false)
+  const [codigo, setCodigo] = useState<{ codigo: string; botUsername: string | null; expiraEm: number } | null>(null)
+  const [erro, setErro] = useState('')
+  const [testando, setTestando] = useState(false)
+  const [mensagemTeste, setMensagemTeste] = useState('Mensagem de teste do Command Analytics.')
+  const [enviandoTeste, setEnviandoTeste] = useState(false)
+  const [testeResultado, setTesteResultado] = useState('')
+  const pollRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => { if (pollRef.current) window.clearInterval(pollRef.current) }
+  }, [])
+
+  async function gerarCodigo() {
+    setErro('')
+    setGerando(true)
+    try {
+      const res = await api.gerarCodigoTelegramUsuario(usuarioId)
+      setCodigo(res)
+      if (pollRef.current) window.clearInterval(pollRef.current)
+      pollRef.current = window.setInterval(async () => {
+        try {
+          const status = await api.statusTelegramUsuario(usuarioId)
+          if (status.idTelegram) {
+            onChange(status.idTelegram)
+            setCodigo(null)
+            if (pollRef.current) window.clearInterval(pollRef.current)
+          } else if (Date.now() > res.expiraEm) {
+            setCodigo(null)
+            if (pollRef.current) window.clearInterval(pollRef.current)
+          }
+        } catch { /* ignora erro pontual de polling */ }
+      }, 3000)
+    } catch (e: any) {
+      setErro(e?.message || 'Falha ao gerar código.')
+    } finally {
+      setGerando(false)
+    }
+  }
+
+  async function desconectar() {
+    if (!window.confirm('Desvincular o Telegram desse usuário?')) return
+    try {
+      await api.desconectarTelegramUsuario(usuarioId)
+      onChange('')
+    } catch (e: any) {
+      setErro(e?.message || 'Falha ao desvincular.')
+    }
+  }
+
+  async function enviarTeste() {
+    setEnviandoTeste(true)
+    setTesteResultado('')
+    try {
+      await api.sendTelegramMessage({ userId: idTelegram, mensagem: mensagemTeste })
+      setTesteResultado('Mensagem enviada!')
+    } catch (e: any) {
+      setTesteResultado(e?.message || 'Falha ao enviar.')
+    } finally {
+      setEnviandoTeste(false)
+    }
+  }
+
+  return (
+    <div>
+      <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Telegram</label>
+      {idTelegram ? (
+        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <span className="flex items-center gap-1.5 text-xs text-emerald-500 font-medium">
+              <MessageCircle size={14} /> Conectado (ID: {idTelegram})
+            </span>
+            <div className="flex items-center gap-3">
+              <button type="button" onClick={() => setTestando(t => !t)} className="text-xs text-slate-500 hover:text-blue-400 flex items-center gap-1">
+                <Send size={12} /> Testar
+              </button>
+              <button type="button" onClick={desconectar} className="text-xs text-red-400 hover:text-red-500 flex items-center gap-1">
+                <Unlink size={12} /> Desconectar
+              </button>
+            </div>
+          </div>
+          {testando && (
+            <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <textarea
+                className="input-field resize-none h-16 text-sm w-full"
+                value={mensagemTeste}
+                onChange={e => setMensagemTeste(e.target.value)}
+                placeholder="Digite a mensagem de teste..."
+              />
+              <div className="flex items-center gap-2">
+                <Button type="button" size="sm" disabled={enviandoTeste} onClick={enviarTeste}>
+                  {enviandoTeste ? 'Enviando...' : 'Enviar Teste'}
+                </Button>
+                {testeResultado && <span className="text-xs text-slate-500">{testeResultado}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+          {!codigo ? (
+            <Button type="button" variant="secondary" size="sm" disabled={gerando} onClick={gerarCodigo}>
+              {gerando ? 'Gerando...' : 'Conectar Telegram'}
+            </Button>
+          ) : (
+            <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
+              <p>
+                Abra o Telegram, procure{' '}
+                <span className="font-semibold text-slate-800 dark:text-slate-200">@{codigo.botUsername}</span>{' '}
+                e envie o código:
+              </p>
+              <p className="text-lg font-bold tracking-widest text-blue-500">{codigo.codigo}</p>
+              <p className="flex items-center gap-1 text-slate-500"><Loader2 size={12} className="animate-spin" /> Aguardando confirmação... (expira em 10 min)</p>
+            </div>
+          )}
+          {erro && <p className="text-xs text-red-400">{erro}</p>}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function Usuarios() {
@@ -306,13 +429,16 @@ export function Usuarios() {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="ID Telegram (para notificações)"
-                  value={form.idTelegram}
-                  onChange={e => setForm({ ...form, idTelegram: e.target.value })}
-                  placeholder="Ex: 12345678"
-                />
+              <div>
+                {editId ? (
+                  <TelegramVinculo
+                    usuarioId={editId}
+                    idTelegram={form.idTelegram}
+                    onChange={(v) => setForm(f => ({ ...f, idTelegram: v }))}
+                  />
+                ) : (
+                  <p className="text-xs text-slate-500">Salve o usuário primeiro pra poder conectar o Telegram.</p>
+                )}
               </div>
 
               <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800 mt-6">

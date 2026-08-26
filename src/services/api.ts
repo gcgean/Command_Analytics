@@ -704,6 +704,12 @@ export const api = {
   updateUsuario: (id: number, data: Partial<Usuario> & { senha?: string }) =>
     fetchApi<Usuario>(`/usuarios/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleUsuario: (id: number) => fetchApi<Usuario>(`/usuarios/${id}/toggle`, { method: 'PATCH' }),
+  gerarCodigoTelegramUsuario: (id: number) =>
+    fetchApi<{ codigo: string; botUsername: string | null; expiraEm: number }>(`/usuarios/${id}/telegram/gerar-codigo`, { method: 'POST' }),
+  statusTelegramUsuario: (id: number) =>
+    fetchApi<{ idTelegram: string | null }>(`/usuarios/${id}/telegram/status`),
+  desconectarTelegramUsuario: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/usuarios/${id}/telegram/desconectar`, { method: 'POST' }),
 
   // ─── Grupos de Acesso ────────────────────────────────────
   getGrupos: () => fetchApi<any[]>('/grupos'),
