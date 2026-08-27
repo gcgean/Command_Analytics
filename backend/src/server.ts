@@ -41,6 +41,7 @@ import { maquininhasRoutes } from './routes/maquininhas'
 import { lembretesFixosRoutes } from './routes/lembretesFixos'
 import { faturamentoRoutes } from './routes/faturamento'
 import { bancoHorasRoutes } from './routes/bancoHoras'
+import { assistenteRoutes } from './routes/assistente'
 import { connectionsRoutes } from './routes/connections'
 import { initAuditoria } from './utils/auditoria'
 import { initEtapas } from './utils/etapas'
@@ -175,6 +176,7 @@ app.register(async (api) => {
   api.register(lembretesFixosRoutes, { prefix: '/lembretes-fixos' })
   api.register(faturamentoRoutes,  { prefix: '/faturamento' })
   api.register(bancoHorasRoutes,   { prefix: '/banco-horas' })
+  api.register(assistenteRoutes,   { prefix: '/assistente' })
 }, { prefix: '/api' })
 
 // ─── Start ─────────────────────────────────────────────────────

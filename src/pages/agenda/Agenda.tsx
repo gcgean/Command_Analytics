@@ -261,10 +261,23 @@ export function Agenda() {
   // agendamento já com cliente e observação prontos.
   useEffect(() => {
     const prefill = (location.state as any)?.criarAgendamentoPrefill as
-      | { clienteId: number; clienteNome?: string; observacao?: string }
+      | {
+          clienteId: number; clienteNome?: string; observacao?: string
+          tecnicoId?: number; tipo?: string; data?: string; horaInicio?: string; horaFim?: string
+        }
       | undefined
     if (prefill?.clienteId) {
-      setForm(f => ({ ...f, clienteId: String(prefill.clienteId), observacoes: prefill.observacao || '' }))
+      setForm(f => ({
+        ...f,
+        clienteId: String(prefill.clienteId),
+        observacoes: prefill.observacao || '',
+        tecnicoId: prefill.tecnicoId ? String(prefill.tecnicoId) : f.tecnicoId,
+        tipo: prefill.tipo || f.tipo,
+        data: prefill.data ? toBRDate(prefill.data) : f.data,
+        dataFim: prefill.data ? toBRDate(prefill.data) : f.dataFim,
+        horario: prefill.horaInicio || f.horario,
+        horarioFim: prefill.horaFim || f.horarioFim,
+      }))
       setFormClienteNome(prefill.clienteNome || '')
       setShowModal(true)
       navigate(location.pathname + location.search, { replace: true, state: null })

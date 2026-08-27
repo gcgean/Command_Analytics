@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Clock, Plus, X, Loader2, TrendingUp, AlertCircle, AlertTriangle, Trophy, Paperclip, MoreVertical, Route } from 'lucide-react'
 import { useToast } from '../../components/ui/Toast'
 import { DateInput } from '../../components/ui/DateInput'
@@ -71,6 +72,8 @@ export function BancoHoras() {
   const { toast } = useToast()
   const { can } = usePermissions()
   const podeLancar = can('banco-horas-lancar')
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const [aba, setAba] = useState<'lancamentos' | 'ranking'>('lancamentos')
   const [lancamentos, setLancamentos] = useState<LancamentoBancoHoras[]>([])
@@ -116,6 +119,27 @@ export function BancoHoras() {
       window.removeEventListener('resize', fechar)
     }
   }, [menuAberto])
+
+  // Chegando do Assistente de IA com um lançamento pré-preenchido: abre o modal já com os
+  // campos prontos pra pessoa conferir e salvar — a IA nunca grava direto.
+  useEffect(() => {
+    const prefill = (location.state as any)?.lancarHorasPrefill as
+      | { funcionarioId: number; tipo: TipoMovimentoBancoHoras; horas: number; dataInicio: string; dataFim: string; observacao?: string }
+      | undefined
+    if (prefill?.funcionarioId) {
+      setForm({
+        funcionarioId: String(prefill.funcionarioId),
+        tipo: prefill.tipo,
+        horas: String(prefill.horas),
+        dataInicio: toBRDate(prefill.dataInicio),
+        dataFim: toBRDate(prefill.dataFim),
+        observacao: prefill.observacao || '',
+      })
+      setShowModal(true)
+      navigate(location.pathname + location.search, { replace: true, state: null })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   function abrirMenu(e: React.MouseEvent<HTMLButtonElement>, id: number) {
     e.stopPropagation()

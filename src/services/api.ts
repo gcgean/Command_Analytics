@@ -734,6 +734,14 @@ export const api = {
   sendTelegramMessage: (data: { userId: string; mensagem: string }) =>
     fetchApi('/telegram/enviar', { method: 'POST', body: JSON.stringify(data) }),
 
+  // ─── Assistente de IA ────────────────────────────────────────
+  getAssistenteStatus: () => fetchApi<{ disponivel: boolean }>('/assistente/status'),
+  conversarAssistente: (historico: Array<{ papel: 'user' | 'assistant'; conteudo: string }>) =>
+    fetchApi<{ texto: string; proposta: { ferramenta: string; dados: Record<string, any> } | null }>(
+      '/assistente/conversar',
+      { method: 'POST', body: JSON.stringify({ historico }) }
+    ),
+
   // ─── Notificações de Agendamento ───────────────────────────
   getNotificacoesAgendamentoConfig: () =>
     fetchApi<ConfiguracaoNotificacaoAgendamento>('/notificacoes/config-agendamento'),
