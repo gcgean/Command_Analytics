@@ -96,11 +96,15 @@ export async function assistenteRoutes(app: FastifyInstance) {
     }
     // Nunca confia num "quem está perguntando" vindo do corpo da requisição — o usuarioId
     // sempre vem do JWT autenticado, é isso que é passado como contexto pras ferramentas.
-    const permissoes = await getUserPermissions(usuarioId)
+    const [permissoes, usuario] = await Promise.all([
+      getUserPermissions(usuarioId),
+      prisma.usuario.findUnique({ where: { id: usuarioId }, select: { nomeUsu: true, nomeCompleto: true } }),
+    ])
+    const usuarioNome = usuario?.nomeCompleto || usuario?.nomeUsu || `usuário #${usuarioId}`
 
     try {
       const provedor = new ProvedorDeepSeek(config.apiKey, config.modelo)
-      const resultado = await conversarComAssistente(provedor, historico, { usuarioId, permissoes })
+      const resultado = await conversarComAssistente(provedor, historico, { usuarioId, usuarioNome, permissoes })
       return resultado
     } catch (e: any) {
       request.log.error(e)

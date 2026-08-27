@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client'
 import { prisma } from '../database/client'
 import type { ContextoIA } from './seguranca'
 import { possuiPermissao } from './seguranca'
@@ -8,6 +9,10 @@ export interface Ferramenta {
   nome: string
   descricao: string
   risco: NivelRisco
+  // Recurso do sistema de permissões (mesmo id usado nas telas, ver grupos.ts/SYSTEM_RESOURCES).
+  // A ferramenta só aparece pro modelo se o usuário logado tiver esse acesso — ver
+  // ferramentasParaUsuario() no fim do arquivo.
+  permissao: string
   schemaParametros: Record<string, any>
   executar: (args: Record<string, any>, ctx: ContextoIA) => Promise<any>
 }
@@ -34,6 +39,7 @@ export const ferramentas: Ferramenta[] = [
       'Busca clientes ativos pelo nome fantasia, razão social ou CNPJ. Use SEMPRE antes de ' +
       'criar um agendamento pra descobrir o id real do cliente — nunca invente um id.',
     risco: 'consulta',
+    permissao: 'clientes',
     schemaParametros: {
       type: 'object',
       properties: { busca: { type: 'string', description: 'Nome, parte do nome ou CNPJ do cliente' } },
@@ -63,6 +69,10 @@ export const ferramentas: Ferramenta[] = [
       'Busca funcionários/técnicos ativos pelo nome. Use SEMPRE antes de criar um agendamento ' +
       'ou lançar horas no banco de horas pra descobrir o id real da pessoa — nunca invente um id.',
     risco: 'consulta',
+    // Sem gate específico — nomes/cargos de funcionários ativos já são visíveis em selects por
+    // todo o sistema pra qualquer usuário logado (ex.: escolher técnico numa agenda), não é uma
+    // tela própria com permissão dedicada.
+    permissao: '',
     schemaParametros: {
       type: 'object',
       properties: { busca: { type: 'string', description: 'Nome ou parte do nome do funcionário' } },
@@ -86,6 +96,7 @@ export const ferramentas: Ferramenta[] = [
     nome: 'consultar_agenda',
     descricao: 'Lista agendamentos num período, opcionalmente filtrando por cliente ou técnico (já resolvidos pra id).',
     risco: 'consulta',
+    permissao: 'agenda',
     schemaParametros: {
       type: 'object',
       properties: {
@@ -129,6 +140,7 @@ export const ferramentas: Ferramenta[] = [
     nome: 'consultar_atendimentos',
     descricao: 'Lista atendimentos recentes, opcionalmente filtrando por cliente já resolvido pra id.',
     risco: 'consulta',
+    permissao: 'atendimentos',
     schemaParametros: {
       type: 'object',
       properties: {
@@ -160,6 +172,7 @@ export const ferramentas: Ferramenta[] = [
     nome: 'consultar_banco_horas',
     descricao: 'Mostra o saldo atual e os últimos lançamentos de banco de horas de um funcionário (id já resolvido).',
     risco: 'consulta',
+    permissao: 'banco-horas',
     schemaParametros: {
       type: 'object',
       properties: { funcionarioId: { type: 'integer' } },
@@ -188,6 +201,92 @@ export const ferramentas: Ferramenta[] = [
     },
   },
 
+  {
+    nome: 'consultar_pipeline_implantacao',
+    descricao:
+      'Lista processos do Pipeline de Implantação (etapa atual, responsável, data limite), ' +
+      'opcionalmente filtrando por cliente já resolvido pra id.',
+    risco: 'consulta',
+    permissao: 'implantacao',
+    schemaParametros: {
+      type: 'object',
+      properties: {
+        clienteId: { type: 'integer' },
+        limite: { type: 'integer', description: 'Quantos registros retornar (padrão 15, máx 30)' },
+      },
+    },
+    async executar(args) {
+      const limite = Math.min(30, Math.max(1, Number(args.limite) || 15))
+      const rows = await prisma.$queryRaw<Array<{
+        id: number; clienteNome: string | null; tipo: string; titulo: string | null
+        statusAtual: number; dataLimite: Date | null; observacao: string | null
+        responsavelNome: string | null
+      }>>`
+        SELECT p.id, c.NOME_FANTASIA AS clienteNome, p.tipo, p.titulo, p.status_atual AS statusAtual,
+               p.data_limite AS dataLimite, p.observacao,
+               u.NOME_USU AS responsavelNome
+        FROM implantacao_processos p
+        LEFT JOIN cliente c ON c.cod_cli = p.cliente_id
+        LEFT JOIN implantacao_responsavel_processo r ON r.processo_id = p.id
+        LEFT JOIN usuario u ON u.COD_USU = r.responsavel_id
+        WHERE p.ativo = 1 ${args.clienteId ? Prisma.sql`AND p.cliente_id = ${Number(args.clienteId)}` : Prisma.empty}
+        ORDER BY p.atualizado_em DESC
+        LIMIT ${limite}
+      `
+      return {
+        processos: rows.map((r) => ({
+          id: r.id,
+          cliente: r.clienteNome,
+          tipo: r.tipo,
+          titulo: r.titulo,
+          statusAtual: r.statusAtual,
+          responsavel: r.responsavelNome,
+          dataLimite: r.dataLimite,
+          observacao: r.observacao,
+        })),
+      }
+    },
+  },
+  {
+    nome: 'consultar_negocios_crm',
+    descricao:
+      'Lista negócios do CRM/pipeline de vendas (etapa, funil, responsável), opcionalmente ' +
+      'filtrando por cliente já resolvido pra id.',
+    risco: 'consulta',
+    permissao: 'crm',
+    schemaParametros: {
+      type: 'object',
+      properties: {
+        clienteId: { type: 'integer' },
+        limite: { type: 'integer', description: 'Quantos registros retornar (padrão 15, máx 30)' },
+      },
+    },
+    async executar(args) {
+      const limite = Math.min(30, Math.max(1, Number(args.limite) || 15))
+      const negocios = await prisma.negocio.findMany({
+        where: args.clienteId ? { clienteId: Number(args.clienteId) } : undefined,
+        include: {
+          cliente: { select: { nome: true } },
+          responsavel: { select: { nomeUsu: true } },
+        },
+        orderBy: { dataCriacao: 'desc' },
+        take: limite,
+      })
+      return {
+        negocios: negocios.map((n) => ({
+          id: n.id,
+          titulo: n.nome,
+          cliente: n.cliente?.nome ?? null,
+          responsavel: n.responsavel?.nomeUsu ?? null,
+          etapa: n.etapa,
+          funil: n.funil,
+          status: n.status,
+          descricao: n.descricao,
+        })),
+      }
+    },
+  },
+
   // ─────────────────────────── CRÍTICA (vira proposta) ───────────────────────────
   {
     nome: 'criar_agendamento',
@@ -196,6 +295,7 @@ export const ferramentas: Ferramenta[] = [
       'buscar_funcionarios antes). NÃO grava sozinho: gera um preview que abre o formulário real ' +
       `de Novo Agendamento pra pessoa conferir e salvar. Tipos válidos: ${TIPOS_AGENDA_VALIDOS.join(', ')}.`,
     risco: 'critica',
+    permissao: 'agenda',
     schemaParametros: {
       type: 'object',
       properties: {
@@ -242,6 +342,7 @@ export const ferramentas: Ferramenta[] = [
       'buscar_funcionarios antes). NÃO grava sozinho: gera um preview que abre o formulário real ' +
       `de Lançar Horas pra pessoa conferir e salvar. Tipos válidos: ${TIPOS_BANCO_HORAS_VALIDOS.join(', ')}.`,
     risco: 'critica',
+    permissao: 'banco-horas-lancar',
     schemaParametros: {
       type: 'object',
       properties: {
@@ -290,8 +391,8 @@ export const ferramentas: Ferramenta[] = [
 ]
 
 export function ferramentasParaUsuario(ctx: ContextoIA): Ferramenta[] {
-  // Todas as ferramentas de consulta ficam disponíveis pra qualquer usuário autenticado (mesmas
-  // regras de leitura que ele já tem no resto do sistema). As críticas de escrita já se
-  // autodefendem dentro de executar() checando a permissão específica.
-  return ferramentas
+  // O modelo só recebe a DECLARAÇÃO de ferramentas cujo recurso o usuário logado tem acesso —
+  // ele nem fica sabendo que elas existem, não é só um erro depois de tentar chamar. Isso segue
+  // a mesma regra de acesso das telas (SYSTEM_RESOURCES em grupos.ts).
+  return ferramentas.filter((f) => !f.permissao || possuiPermissao(ctx, f.permissao))
 }

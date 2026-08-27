@@ -29,6 +29,7 @@ export function sanitizarParaIA(valor: any): any {
  */
 export interface ContextoIA {
   usuarioId: number
+  usuarioNome: string
   permissoes: string[]
 }
 
