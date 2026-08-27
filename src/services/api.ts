@@ -741,6 +741,10 @@ export const api = {
       '/assistente/conversar',
       { method: 'POST', body: JSON.stringify({ historico }) }
     ),
+  getAssistenteConfig: () =>
+    fetchApi<{ ativo: boolean; modelo: string; temApiKey: boolean; modelosDisponiveis: string[] }>('/assistente/config'),
+  updateAssistenteConfig: (data: { ativo?: boolean; modelo?: string; apiKey?: string }) =>
+    fetchApi<{ ok: boolean }>('/assistente/config', { method: 'PUT', body: JSON.stringify(data) }),
 
   // ─── Notificações de Agendamento ───────────────────────────
   getNotificacoesAgendamentoConfig: () =>

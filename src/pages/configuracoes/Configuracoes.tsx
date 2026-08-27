@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Save, Loader2, Plus, X, CheckCircle, Wifi, Send } from 'lucide-react'
+import { Save, Loader2, Plus, X, CheckCircle, Wifi, Send, Sparkles } from 'lucide-react'
 import { useToast } from '../../components/ui/Toast'
 import { api } from '../../services/api'
 import clsx from 'clsx'
 import type { StatusProcessamentoNotificacaoAgendamento } from '../../types'
 
-type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'notificacoes' | 'parametros'
+type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'assistente' | 'notificacoes' | 'parametros'
 
 interface TokenWhats {
   id: number
@@ -82,15 +82,50 @@ export function Configuracoes() {
   const [statusNotificacoes, setStatusNotificacoes] = useState<StatusProcessamentoNotificacaoAgendamento | null>(null)
   const [processandoNotificacoesAgora, setProcessandoNotificacoesAgora] = useState(false)
 
+  // Assistente IA
+  const [assistente, setAssistente] = useState({ ativo: true, modelo: 'deepseek-chat', temApiKey: false, modelosDisponiveis: ['deepseek-chat', 'deepseek-reasoner'] })
+  const [novaApiKeyIA, setNovaApiKeyIA] = useState('')
+  const [salvandoAssistente, setSalvandoAssistente] = useState(false)
+
   useEffect(() => {
     if (aba === 'telegram') {
       carregarConfigTelegram()
+    }
+    if (aba === 'assistente') {
+      carregarConfigAssistente()
     }
     if (aba === 'notificacoes') {
       carregarConfigNotificacoesAgendamento()
       carregarStatusNotificacoesAgendamento()
     }
   }, [aba])
+
+  const carregarConfigAssistente = async () => {
+    try {
+      const config = await api.getAssistenteConfig()
+      setAssistente(config)
+    } catch {
+      toast.error('Erro ao carregar configurações do assistente de IA.')
+    }
+  }
+
+  const handleSalvarAssistente = async () => {
+    setSalvandoAssistente(true)
+    try {
+      await api.updateAssistenteConfig({
+        ativo: assistente.ativo,
+        modelo: assistente.modelo,
+        apiKey: novaApiKeyIA.trim() || undefined,
+      })
+      setNovaApiKeyIA('')
+      toast.success('Configurações do assistente salvas!')
+      carregarConfigAssistente()
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao salvar configurações do assistente.')
+    } finally {
+      setSalvandoAssistente(false)
+    }
+  }
 
   const carregarConfigTelegram = async () => {
     try {
@@ -230,6 +265,7 @@ export function Configuracoes() {
     { key: 'whatsapp', label: 'WhatsApp' },
     { key: 'email', label: 'E-mail' },
     { key: 'telegram', label: 'Telegram' },
+    { key: 'assistente', label: 'Assistente IA' },
     { key: 'notificacoes', label: 'Notificações' },
     { key: 'parametros', label: 'Parâmetros' },
   ]
@@ -449,7 +485,68 @@ export function Configuracoes() {
         </div>
       )}
 
-      {/* Aba Notificações */} 
+      {/* Aba Assistente IA */}
+      {aba === 'assistente' && (
+        <div className="space-y-5 max-w-2xl">
+          <div className="card space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                <Sparkles size={16} className="text-blue-400" /> Assistente Command Analytics
+              </h3>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="assistente-ativo"
+                  checked={assistente.ativo}
+                  onChange={e => setAssistente(p => ({ ...p, ativo: e.target.checked }))}
+                  className="rounded border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600"
+                />
+                <label htmlFor="assistente-ativo" className="text-xs text-slate-600 dark:text-slate-400">Ativar assistente</label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Modelo (DeepSeek)</label>
+                <select
+                  className="input-field"
+                  value={assistente.modelo}
+                  onChange={e => setAssistente(p => ({ ...p, modelo: e.target.value }))}
+                >
+                  {assistente.modelosDisponiveis.map(m => (
+                    <option key={m} value={m}>{m}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  <code>deepseek-chat</code> é o recomendado — tem melhor suporte a chamar ferramentas (consultar dados, preparar agendamentos/lançamentos). <code>deepseek-reasoner</code> é um modelo de raciocínio mais lento e pode não seguir tão bem essas ferramentas.
+                </p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">
+                  {assistente.temApiKey ? 'Nova API Key (deixe em branco para não alterar)' : 'API Key da DeepSeek'}
+                </label>
+                <input
+                  type="password"
+                  className="input-field font-mono text-xs"
+                  value={novaApiKeyIA}
+                  onChange={e => setNovaApiKeyIA(e.target.value)}
+                  placeholder={assistente.temApiKey ? '••••••••••••••••' : 'sk-...'}
+                  autoComplete="off"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">
+                  {assistente.temApiKey ? 'Já existe uma chave configurada.' : 'Nenhuma chave configurada ainda.'} Gere em platform.deepseek.com.
+                </p>
+              </div>
+            </div>
+
+            <button onClick={handleSalvarAssistente} disabled={salvandoAssistente} className="btn-primary disabled:opacity-60">
+              {salvandoAssistente ? <><Loader2 size={15} className="animate-spin" /> Salvando...</> : <><Save size={15} /> Salvar Configurações</>}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Aba Notificações */}
       {aba === 'notificacoes' && (
         <div className="space-y-5 max-w-2xl">
           <div className="card space-y-4">

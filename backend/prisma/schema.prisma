@@ -499,3 +499,14 @@ model ConfiguracaoTelegram {
 
   @@map("configuracao_telegram")
 }
+
+model ConfiguracaoIA {
+  id          Int      @id @default(autoincrement())
+  ativo       Boolean  @default(true)
+  provedor    String   @default("deepseek") @map("provedor")
+  modelo      String   @default("deepseek-chat") @map("modelo")
+  apiKey      String?  @map("api_key")
+  dataCriacao DateTime @default(now()) @map("data_criacao")
+
+  @@map("configuracao_ia")
+}

@@ -1,8 +1,45 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Sparkles, X, Send, Loader2, CalendarPlus, Clock3 } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { api } from '../../services/api'
 import clsx from 'clsx'
+
+function MensagemFormatada({ texto, corUser }: { texto: string; corUser: boolean }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        p: ({ children }) => <p className="mb-1.5 last:mb-0 leading-snug">{children}</p>,
+        strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+        ul: ({ children }) => <ul className="list-disc pl-4 mb-1.5 space-y-0.5">{children}</ul>,
+        ol: ({ children }) => <ol className="list-decimal pl-4 mb-1.5 space-y-0.5">{children}</ol>,
+        li: ({ children }) => <li>{children}</li>,
+        a: ({ children, href }) => (
+          <a href={href} target="_blank" rel="noreferrer" className={clsx('underline', corUser ? 'text-white' : 'text-blue-500')}>
+            {children}
+          </a>
+        ),
+        code: ({ children }) => (
+          <code className={clsx('px-1 py-0.5 rounded text-[11px]', corUser ? 'bg-white/20' : 'bg-slate-200 dark:bg-slate-800')}>
+            {children}
+          </code>
+        ),
+        table: ({ children }) => (
+          <div className="overflow-x-auto mb-1.5 rounded-lg border border-slate-200 dark:border-slate-600">
+            <table className="w-full text-[11px] border-collapse">{children}</table>
+          </div>
+        ),
+        thead: ({ children }) => <thead className={clsx(corUser ? 'bg-white/10' : 'bg-slate-200 dark:bg-slate-800')}>{children}</thead>,
+        th: ({ children }) => <th className="px-2 py-1 text-left font-semibold border-b border-slate-300 dark:border-slate-600">{children}</th>,
+        td: ({ children }) => <td className="px-2 py-1 border-b border-slate-200/60 dark:border-slate-700/60 align-top">{children}</td>,
+      }}
+    >
+      {texto}
+    </ReactMarkdown>
+  )
+}
 
 interface MensagemChat {
   papel: 'user' | 'assistant'
@@ -133,13 +170,13 @@ export function AssistenteChat() {
               <div key={i} className={clsx('flex', m.papel === 'user' ? 'justify-end' : 'justify-start')}>
                 <div
                   className={clsx(
-                    'max-w-[85%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap',
+                    'max-w-[85%] rounded-xl px-3 py-2 text-sm',
                     m.papel === 'user'
                       ? 'bg-blue-500 text-white rounded-br-sm'
                       : 'bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-bl-sm'
                   )}
                 >
-                  {m.conteudo}
+                  <MensagemFormatada texto={m.conteudo} corUser={m.papel === 'user'} />
                   {m.proposta && (
                     <button
                       type="button"
