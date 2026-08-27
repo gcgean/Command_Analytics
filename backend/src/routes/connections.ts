@@ -40,7 +40,7 @@ const CACHE_TTL_MS = 25_000
 let cacheAdmin: { dados: Conexao[]; expiraEm: number } | null = null
 let cacheNaoAdmin: { dados: Conexao[]; expiraEm: number } | null = null
 
-async function obterConexoesAgregadas(admin: boolean, forcar: boolean): Promise<Conexao[]> {
+export async function obterConexoesAgregadas(admin: boolean, forcar: boolean): Promise<Conexao[]> {
   const cacheAtual = admin ? cacheAdmin : cacheNaoAdmin
   if (!forcar && cacheAtual && cacheAtual.expiraEm > Date.now()) {
     return cacheAtual.dados

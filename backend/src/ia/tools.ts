@@ -2,6 +2,8 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '../database/client'
 import type { ContextoIA } from './seguranca'
 import { possuiPermissao } from './seguranca'
+import { obterConexoesAgregadas } from '../routes/connections'
+import { usuarioEhAdmin } from '../utils/visibilidade'
 
 export type NivelRisco = 'consulta' | 'escrita' | 'critica'
 
@@ -284,6 +286,41 @@ export const ferramentas: Ferramenta[] = [
           descricao: n.descricao,
         })),
       }
+    },
+  },
+  {
+    nome: 'buscar_conexao',
+    descricao:
+      'Busca a conexão de um cliente na tela de Conexões (infraestrutura) pelo nome. Use essa ' +
+      'ferramenta sempre que o usuário pedir o AnyDesk, servidor, portas ou status de conexão de ' +
+      'um cliente — o AnyDesk retornado é do SERVIDOR onde a conexão do cliente está hospedada ' +
+      '(pode ser o mesmo AnyDesk de outros clientes no mesmo servidor).',
+    risco: 'consulta',
+    permissao: 'conexoes',
+    schemaParametros: {
+      type: 'object',
+      properties: { busca: { type: 'string', description: 'Nome do cliente ou da conexão' } },
+      required: ['busca'],
+    },
+    async executar(args, ctx) {
+      const busca = String(args.busca ?? '').trim().toLowerCase()
+      if (!busca) return { erro: 'Informe um termo de busca.' }
+      const admin = await usuarioEhAdmin(ctx.usuarioId)
+      const todas = await obterConexoesAgregadas(admin, false)
+      const encontradas = todas
+        .filter((c) => c.name.toLowerCase().includes(busca))
+        .slice(0, 10)
+        .map((c) => ({
+          nome: c.name,
+          status: c.status,
+          servidor: c.servidorNome,
+          servidorAnydesk: c.servidorAnydesk,
+          portas: c.ports,
+        }))
+      if (encontradas.length === 0) {
+        return { erro: `Nenhuma conexão encontrada com "${args.busca}". Confira o nome ou peça pra buscar por outra variação.` }
+      }
+      return { conexoes: encontradas }
     },
   },
 
