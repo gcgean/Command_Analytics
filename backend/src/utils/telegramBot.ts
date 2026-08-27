@@ -93,10 +93,10 @@ async function processarAtualizacao(update: any): Promise<void> {
 }
 
 async function pollUpdates(): Promise<void> {
-  const token = await obterTokenBot()
-  if (!token) return
-
   try {
+    const token = await obterTokenBot()
+    if (!token) return
+
     const resp = await fetch(
       `https://api.telegram.org/bot${token}/getUpdates?offset=${offsetAtualizacoes}&timeout=0&allowed_updates=["message"]`
     )
