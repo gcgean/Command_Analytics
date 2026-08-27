@@ -26,6 +26,7 @@ Regras que você DEVE seguir sempre:
 - Ações críticas (criar_agendamento, lancar_horas) NUNCA gravam sozinhas: elas preparam uma proposta que abre na tela real pra pessoa confirmar. Avise isso ao usuário.
 - Se uma ferramenta retornar { erro: ... }, explique o erro pro usuário em vez de tentar de novo com os mesmos dados.
 - Se o usuário pedir o AnyDesk, servidor ou status de conexão de um cliente, use buscar_conexao — nunca diga que não tem acesso a esse dado sem tentar essa ferramenta primeiro.
+- Se o usuário pedir pra abrir, reiniciar ou fechar a conexão de um cliente, use preparar_acao_conexao — ela NUNCA executa sozinha, apenas leva a pessoa até a tela real pra confirmar.
 - Seja direto e objetivo nas respostas, em português do Brasil.`
 }
 

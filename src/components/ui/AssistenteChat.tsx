@@ -121,6 +121,17 @@ export function AssistenteChat() {
           },
         },
       })
+    } else if (proposta.ferramenta === 'acao_conexao') {
+      navigate('/conexoes', {
+        state: {
+          acaoConexaoPrefill: {
+            servidorId: proposta.dados.servidorId,
+            connectionId: proposta.dados.connectionId,
+            connectionName: proposta.dados.connectionName,
+            acao: proposta.dados.acao,
+          },
+        },
+      })
     }
   }
 

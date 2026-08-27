@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Search, RefreshCw, Loader2, HeartPulse, Play, RotateCcw, Square, Lock, Unlock } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
@@ -16,7 +17,12 @@ const statusColors: Record<string, string> = {
 export function Conexoes() {
   const { can, isSuperUser } = usePermissions()
   const podeExecutarAcoes = can('conexoes-acoes')
+  const location = useLocation()
+  const navigate = useNavigate()
   const [alternandoVisibilidade, setAlternandoVisibilidade] = useState<string | null>(null)
+  const acaoConexaoPrefill = (location.state as any)?.acaoConexaoPrefill as
+    | { servidorId: number; connectionId: string; connectionName: string; acao: 'abrir' | 'reiniciar' | 'fechar' }
+    | undefined
 
   const [servidores, setServidores] = useState<Servidor[]>([])
   const [servidorId, setServidorId] = useState('')
@@ -34,6 +40,14 @@ export function Conexoes() {
 
   useEffect(() => {
     api.getServidores().then((data: any) => setServidores(Array.isArray(data) ? data : [])).catch(() => setServidores([]))
+  }, [])
+
+  // Veio do assistente de IA pedindo pra abrir/reiniciar/fechar uma conexão específica — filtra
+  // pra ela aparecer, mas quem confirma a ação de verdade é a pessoa, no botão real abaixo.
+  const acaoConexaoDisparada = useRef(false)
+  useEffect(() => {
+    if (acaoConexaoPrefill) setSearch(acaoConexaoPrefill.connectionName)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const carregar = (force = false) => {
@@ -117,6 +131,16 @@ export function Conexoes() {
       })
     }
   }
+
+  useEffect(() => {
+    if (!acaoConexaoPrefill || acaoConexaoDisparada.current || loading || !podeExecutarAcoes) return
+    const c = conexoes.find((x) => x.servidorId === acaoConexaoPrefill.servidorId && x.id === acaoConexaoPrefill.connectionId)
+    if (!c) return
+    acaoConexaoDisparada.current = true
+    navigate(location.pathname, { replace: true, state: {} })
+    handleAcao(c, acaoConexaoPrefill.acao)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conexoes, loading])
 
   return (
     <div className="space-y-6">

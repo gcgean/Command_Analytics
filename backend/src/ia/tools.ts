@@ -326,6 +326,50 @@ export const ferramentas: Ferramenta[] = [
 
   // ─────────────────────────── CRÍTICA (vira proposta) ───────────────────────────
   {
+    nome: 'preparar_acao_conexao',
+    descricao:
+      'Prepara abrir, reiniciar ou fechar a conexão de um cliente na tela de Conexões. NÃO executa ' +
+      'sozinho: leva a pessoa até a tela real de Conexões, já filtrada na conexão certa, pra ela ' +
+      'clicar no botão e confirmar. Use buscar_conexao antes se precisar confirmar o nome exato.',
+    risco: 'critica',
+    permissao: 'conexoes-acoes',
+    schemaParametros: {
+      type: 'object',
+      properties: {
+        busca: { type: 'string', description: 'Nome do cliente ou da conexão' },
+        acao: { type: 'string', enum: ['abrir', 'reiniciar', 'fechar'] },
+      },
+      required: ['busca', 'acao'],
+    },
+    async executar(args, ctx) {
+      const busca = String(args.busca ?? '').trim().toLowerCase()
+      const acao = String(args.acao ?? '')
+      if (!busca) return { erro: 'Informe um termo de busca.' }
+      if (!['abrir', 'reiniciar', 'fechar'].includes(acao)) return { erro: 'Ação inválida. Use abrir, reiniciar ou fechar.' }
+
+      const admin = await usuarioEhAdmin(ctx.usuarioId)
+      const todas = await obterConexoesAgregadas(admin, false)
+      const encontradas = todas.filter((c) => c.name.toLowerCase().includes(busca))
+
+      if (encontradas.length === 0) {
+        return { erro: `Nenhuma conexão encontrada com "${args.busca}". Confira o nome ou peça pra buscar por outra variação.` }
+      }
+      if (encontradas.length > 1) {
+        return {
+          erro: `Encontrei ${encontradas.length} conexões com "${args.busca}" — preciso do nome exato pra não arriscar mexer na errada.`,
+          opcoes: encontradas.slice(0, 10).map((c) => c.name),
+        }
+      }
+
+      const c = encontradas[0]
+      return {
+        proposta: 'acao_conexao',
+        dados: { servidorId: c.servidorId, connectionId: c.id, connectionName: c.name, acao },
+        mensagemParaUsuario: `Preparei pra ${acao} a conexão "${c.name}" — confirme na tela de Conexões que vai abrir.`,
+      }
+    },
+  },
+  {
     nome: 'criar_agendamento',
     descricao:
       'Prepara um novo agendamento na Agenda com os ids já resolvidos (use buscar_clientes e ' +
