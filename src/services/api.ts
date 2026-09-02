@@ -718,6 +718,24 @@ export const api = {
     fetchApi<{ ok: boolean; prioritario: boolean }>(`/solicitacoes/${id}/prioritario`, { method: 'PATCH' }),
   toggleOrientacaoSolicitacao: (id: number) =>
     fetchApi<{ ok: boolean; somenteOrientacao: boolean }>(`/solicitacoes/${id}/orientacao`, { method: 'PATCH' }),
+  criarSolicitacao: (data: {
+    clienteId: number; observacoes: string; status: number; tipoContato?: number
+    tecnicoId?: number | null; desenvolvedorId?: number | null
+    urgente?: boolean; foraHorario?: boolean; bugSistema?: boolean
+  }) => fetchApi<{ ok: boolean; id: number }>('/solicitacoes', { method: 'POST', body: JSON.stringify(data) }),
+  atualizarSolicitacao: (id: number, data: Record<string, unknown>) =>
+    fetchApi<{ ok: boolean }>(`/solicitacoes/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  finalizarSolicitacao: (id: number, solucao: string) =>
+    fetchApi<{ ok: boolean }>(`/solicitacoes/${id}/finalizar`, { method: 'POST', body: JSON.stringify({ solucao }) }),
+  getCatalogoProcedimentos: () =>
+    fetchApi<{ data: Array<{ id: number; descricao: string; pontuacao: number }> }>('/solicitacoes/procedimentos'),
+  getProcedimentosSolicitacao: (id: number) =>
+    fetchApi<{ data: Array<{ id: number; descricao: string; pontuacao: number; data: string }> }>(`/solicitacoes/${id}/procedimentos`),
+  addProcedimentoSolicitacao: (id: number, procedimentoId: number) =>
+    fetchApi<{ ok: boolean }>(`/solicitacoes/${id}/procedimentos`, { method: 'POST', body: JSON.stringify({ procedimentoId }) }),
+  removeProcedimentoSolicitacao: (id: number, procedimentoId: number) =>
+    fetchApi<{ ok: boolean }>(`/solicitacoes/${id}/procedimentos/${procedimentoId}`, { method: 'DELETE' }),
+
   cancelarSolicitacao: (id: number, motivo: string) =>
     fetchApi<{ ok: boolean }>(`/solicitacoes/${id}/cancelar`, {
       method: 'POST',

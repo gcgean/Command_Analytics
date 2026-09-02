@@ -170,7 +170,165 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     return { data: linhas }
   })
 
+  // GET /solicitacoes/procedimentos — catálogo de procedimentos (tabela legada)
+  app.get('/procedimentos', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async () => {
+    const linhas = await prisma.$queryRaw<Array<{ id: number; descricao: string; pontuacao: number }>>`
+      SELECT cod_procedimento AS id, TRIM(descricao) AS descricao, COALESCE(pontuacao, 0) AS pontuacao
+        FROM procedimentos
+       WHERE descricao IS NOT NULL AND TRIM(descricao) <> ''
+       ORDER BY TRIM(descricao)
+    `
+    return { data: linhas }
+  })
+
+  // GET /solicitacoes/:id/procedimentos — procedimentos efetuados no atendimento
+  app.get('/:id/procedimentos', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request) => {
+    const { id } = request.params as { id: string }
+    const linhas = await prisma.$queryRaw<Array<{ id: number; descricao: string; pontuacao: number; data: Date }>>`
+      SELECT p.cod_procedimento AS id, p.descricao, pa.pontuacao, pa.data_hora_lan AS data
+        FROM procedimentos_atendimentos pa
+        INNER JOIN procedimentos p ON p.cod_procedimento = pa.cod_procedimento
+       WHERE pa.cod_atendimento = ${Number(id)}
+       ORDER BY pa.data_hora_lan
+    `
+    return { data: linhas }
+  })
+
   // ─────────────────────────────── Ações ───────────────────────────────
+
+  // POST /solicitacoes — Novo Atendimento (aba "Salvar atendimento" do lançamento)
+  app.post('/', { preHandler: [authMiddleware, exigirPermissaoDeAcao], schema: { tags: ['Solicitações'] } }, async (request, reply) => {
+    const b = request.body as Record<string, any>
+    const usuarioId = Number((request.user as any)?.id || 0)
+
+    if (!b.clienteId) return reply.status(400).send({ error: 'Selecione o cliente.' })
+    if (!b.observacoes?.trim()) return reply.status(400).send({ error: 'Descreva os dados do atendimento.' })
+
+    // Mesmas opções de abertura que o Delphi oferece no lançamento.
+    const statusAbertura: number[] = [1, 2, 3, 4, 6, 9]
+    const status = Number(b.status ?? STATUS.EM_ATENDIMENTO)
+    if (!statusAbertura.includes(status)) {
+      return reply.status(400).send({ error: 'Status de abertura inválido.' })
+    }
+    if (status === STATUS.AGUARDANDO_TESTES && !b.desenvolvedorId) {
+      return reply.status(400).send({ error: 'Vincule um desenvolvedor para abrir aguardando testes.' })
+    }
+
+    const agora = new Date()
+    const bug = b.bugSistema ? 'S' : ''
+    const criado = await prisma.atendimento.create({
+      data: {
+        clienteId: Number(b.clienteId),
+        tipoContato: Number(b.tipoContato ?? 0),
+        observacoes: String(b.observacoes).slice(0, 5000),
+        status,
+        dataAbertura: agora,
+        dataAtendimento: b.dataAtendimento ? new Date(b.dataAtendimento) : agora,
+        usuarioLancId: usuarioId,
+        // O Delphi grava 'S' ou string vazia — não 'N'. Manter igual pra não divergir das telas legadas.
+        prioritario: b.urgente ? 'S' : '',
+        foraHorario: b.foraHorario ? 'S' : '',
+        bugSistema: bug,
+        // Bug do sistema entra como prioridade A, exatamente como no lançamento legado.
+        prioridade: bug ? 'A' : '',
+        // Sem técnico escolhido o atendimento fica com quem lançou.
+        tecnicoId: b.tecnicoId ? Number(b.tecnicoId) : usuarioId,
+        desenvolvedorId: b.desenvolvedorId ? Number(b.desenvolvedorId) : null,
+      },
+      select: { id: true },
+    })
+
+    await gravarLog(criado.id, usuarioId, 'Atendimento lançado')
+    return reply.status(201).send({ ok: true, id: criado.id })
+  })
+
+  // PUT /solicitacoes/:id — Alterar Atendimento
+  app.put('/:id', { preHandler: [authMiddleware, exigirPermissaoDeAcao], schema: { tags: ['Solicitações'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const b = request.body as Record<string, any>
+    const usuarioId = Number((request.user as any)?.id || 0)
+
+    const atual = await prisma.atendimento.findUnique({ where: { id: Number(id) }, select: { id: true } })
+    if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
+
+    const dados: Record<string, any> = { dataUltAlteracao: new Date() }
+    if (b.clienteId) dados.clienteId = Number(b.clienteId)
+    if (b.observacoes !== undefined) dados.observacoes = String(b.observacoes).slice(0, 5000)
+    if (b.solucao !== undefined) dados.solucao = String(b.solucao).slice(0, 2000)
+    if (b.tipoContato !== undefined) dados.tipoContato = Number(b.tipoContato)
+    if (b.tecnicoId !== undefined) dados.tecnicoId = b.tecnicoId ? Number(b.tecnicoId) : null
+    if (b.desenvolvedorId !== undefined) dados.desenvolvedorId = b.desenvolvedorId ? Number(b.desenvolvedorId) : null
+    if (b.urgente !== undefined) dados.prioritario = b.urgente ? 'S' : ''
+    if (b.foraHorario !== undefined) dados.foraHorario = b.foraHorario ? 'S' : ''
+    if (b.bugSistema !== undefined) {
+      dados.bugSistema = b.bugSistema ? 'S' : ''
+      dados.prioridade = b.bugSistema ? 'A' : ''
+    }
+
+    await prisma.atendimento.update({ where: { id: Number(id) }, data: dados })
+    await gravarLog(Number(id), usuarioId, 'Atendimento alterado')
+    return { ok: true }
+  })
+
+  // POST /solicitacoes/:id/finalizar — aba "Finalização" do lançamento
+  app.post('/:id/finalizar', { preHandler: [authMiddleware, exigirPermissaoDeAcao], schema: { tags: ['Solicitações'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { solucao } = request.body as { solucao?: string }
+    const usuarioId = Number((request.user as any)?.id || 0)
+
+    if (!solucao?.trim()) return reply.status(400).send({ error: 'Descreva a solução antes de finalizar.' })
+
+    const atual = await prisma.atendimento.findUnique({ where: { id: Number(id) }, select: { id: true, status: true } })
+    if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
+    if (atual.status === STATUS.CONCLUIDO) return reply.status(400).send({ error: 'Essa solicitação já está concluída.' })
+
+    const agora = new Date()
+    await prisma.atendimento.update({
+      where: { id: Number(id) },
+      data: {
+        status: STATUS.CONCLUIDO,
+        solucao: solucao.trim().slice(0, 2000),
+        dataFechamento: agora,
+        dataUltAlteracao: agora,
+      },
+    })
+    await gravarLog(Number(id), usuarioId, `Atendimento finalizado: ${solucao.trim()}`)
+    return { ok: true }
+  })
+
+  // POST /solicitacoes/:id/procedimentos — registra um procedimento efetuado
+  app.post('/:id/procedimentos', { preHandler: [authMiddleware, exigirPermissaoDeAcao], schema: { tags: ['Solicitações'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { procedimentoId } = request.body as { procedimentoId: number }
+    const usuarioId = Number((request.user as any)?.id || 0)
+
+    if (!procedimentoId) return reply.status(400).send({ error: 'Selecione o procedimento.' })
+
+    const [proc] = await prisma.$queryRaw<Array<{ descricao: string; pontuacao: number }>>`
+      SELECT descricao, pontuacao FROM procedimentos WHERE cod_procedimento = ${Number(procedimentoId)}
+    `
+    if (!proc) return reply.status(404).send({ error: 'Procedimento não encontrado.' })
+
+    await prisma.$executeRaw`
+      INSERT INTO procedimentos_atendimentos (cod_atendimento, cod_procedimento, pontuacao, data_hora_lan)
+      VALUES (${Number(id)}, ${Number(procedimentoId)}, ${proc.pontuacao ?? 0}, NOW())
+    `
+    await gravarLog(Number(id), usuarioId, `Procedimento efetuado: ${proc.descricao}`)
+    return reply.status(201).send({ ok: true })
+  })
+
+  // DELETE /solicitacoes/:id/procedimentos/:procedimentoId
+  app.delete('/:id/procedimentos/:procedimentoId', { preHandler: [authMiddleware, exigirPermissaoDeAcao], schema: { tags: ['Solicitações'] } }, async (request) => {
+    const { id, procedimentoId } = request.params as { id: string; procedimentoId: string }
+    const usuarioId = Number((request.user as any)?.id || 0)
+
+    await prisma.$executeRaw`
+      DELETE FROM procedimentos_atendimentos
+       WHERE cod_atendimento = ${Number(id)} AND cod_procedimento = ${Number(procedimentoId)}
+    `
+    await gravarLog(Number(id), usuarioId, 'Procedimento removido')
+    return { ok: true }
+  })
 
   // PATCH /solicitacoes/:id/status — troca de status genérica do fluxo
   app.patch('/:id/status', { preHandler: [authMiddleware, exigirPermissaoDeAcao], schema: { tags: ['Solicitações'] } }, async (request, reply) => {

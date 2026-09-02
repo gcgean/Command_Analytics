@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   RefreshCw, Loader2, Star, Search, MoreVertical, AlertTriangle,
-  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb,
+  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus,
 } from 'lucide-react'
 import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -10,6 +10,7 @@ import { useToast } from '../../components/ui/Toast'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { StatusBadge } from '../../components/ui/StatusBadge'
+import { LancamentoSolicitacao } from './LancamentoSolicitacao'
 import type { Solicitacao, StatusAtendimento, Usuario } from '../../types'
 
 type Aba = 'suporte' | 'testes' | 'finalizadas'
@@ -76,6 +77,7 @@ export function MapaSolicitacoes() {
   const [modalCancelar, setModalCancelar] = useState<Solicitacao | null>(null)
   const [texto, setTexto] = useState('')
   const [salvando, setSalvando] = useState(false)
+  const [lancamento, setLancamento] = useState<{ aberto: boolean; item: Solicitacao | null }>({ aberto: false, item: null })
 
   const carregar = useCallback(() => {
     setLoading(true)
@@ -169,6 +171,7 @@ export function MapaSolicitacoes() {
     }
 
     return [
+      { label: 'Alterar / Finalizar', icon: <Pencil size={13} />, onClick: () => setLancamento({ aberto: true, item }) },
       { label: 'Vincular Dev', icon: <UserPlus size={13} />, onClick: () => setModalDev(item) },
       { label: 'Em Desenvolvimento', icon: <Code2 size={13} />, onClick: () => mudarStatus(item, S.EM_DESENVOLVIMENTO, 'Em Desenvolvimento') },
       { label: 'Aguardando Testes', icon: <FlaskConical size={13} />, onClick: () => mudarStatus(item, S.AGUARDANDO_TESTES, 'Aguardando Testes') },
@@ -197,9 +200,16 @@ export function MapaSolicitacoes() {
             {loading ? 'Carregando...' : `${itens.length} solicitação(ões) — o que cada cliente pediu e em que etapa está`}
           </p>
         </div>
-        <button className="btn-secondary flex items-center gap-2" onClick={carregar} disabled={loading}>
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <button className="btn-secondary flex items-center gap-2" onClick={carregar} disabled={loading}>
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Atualizar
+          </button>
+          {podeAgir && (
+            <button className="btn-primary flex items-center gap-2" onClick={() => setLancamento({ aberto: true, item: null })}>
+              <Plus size={16} /> Novo Atendimento
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Abas */}
@@ -424,6 +434,15 @@ export function MapaSolicitacoes() {
           )}
         </div>
       </div>
+
+      {/* Lançamento — Novo / Alterar / Finalizar */}
+      <LancamentoSolicitacao
+        aberto={lancamento.aberto}
+        solicitacao={lancamento.item}
+        usuarios={devs}
+        onClose={() => setLancamento({ aberto: false, item: null })}
+        onSalvo={carregar}
+      />
 
       {/* Log do atendimento */}
       <Modal isOpen={!!modalLog} onClose={() => setModalLog(null)} title={`Log da solicitação #${modalLog?.id ?? ''}`} size="lg">
