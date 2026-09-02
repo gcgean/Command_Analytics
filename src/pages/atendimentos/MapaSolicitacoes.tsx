@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   RefreshCw, Loader2, Star, Search, MoreVertical, AlertTriangle,
-  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info,
+  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText,
 } from 'lucide-react'
 import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -11,6 +11,7 @@ import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { LancamentoSolicitacao } from './LancamentoSolicitacao'
+import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import type { Solicitacao, StatusAtendimento, Usuario } from '../../types'
 
 type Aba = 'suporte' | 'finalizadas'
@@ -158,6 +159,7 @@ export function MapaSolicitacoes() {
   const [filtroDesenvolvedorId, setFiltroDesenvolvedorIdState] = useState<string[]>(() => lerFiltroSalvo(CHAVE_FILTRO_DEV))
   const [filtroPrioritario, setFiltroPrioritario] = useState(false)
   const [modalDetalhes, setModalDetalhes] = useState<Solicitacao | null>(null)
+  const [auditoriaItem, setAuditoriaItem] = useState<Solicitacao | null>(null)
   const [menuAberto, setMenuAberto] = useState<number | null>(null)
 
   const [dataInicio, setDataInicio] = useState(hojeISO())
@@ -276,6 +278,7 @@ export function MapaSolicitacoes() {
     const base = [
       { label: 'Exibir Detalhes', icon: <Info size={13} />, onClick: () => setModalDetalhes(item), sempre: true },
       { label: 'Consultar Log', icon: <History size={13} />, onClick: () => abrirLog(item), sempre: true },
+      { label: 'Histórico de Auditoria', icon: <ScrollText size={13} />, onClick: () => setAuditoriaItem(item), sempre: true },
     ]
     if (!podeAgir) return base
 
@@ -630,6 +633,16 @@ export function MapaSolicitacoes() {
         onClose={() => setLancamento({ aberto: false, item: null })}
         onSalvo={carregar}
       />
+
+      {/* Histórico de auditoria — mesmo componente padrão usado em Agenda/Pipeline */}
+      {auditoriaItem && (
+        <AuditoriaTimeline
+          tabela="atendimentos"
+          registroId={auditoriaItem.id}
+          titulo={`#${auditoriaItem.id} — ${auditoriaItem.clienteNome}`}
+          onClose={() => setAuditoriaItem(null)}
+        />
+      )}
 
       {/* Log do atendimento */}
       <Modal isOpen={!!modalLog} onClose={() => setModalLog(null)} title={`Log da solicitação #${modalLog?.id ?? ''}`} size="lg">

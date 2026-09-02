@@ -4,6 +4,7 @@ import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { api } from '../../services/api'
 import { useToast } from '../../components/ui/Toast'
 import { Modal } from '../../components/ui/Modal'
+import { Select } from '../../components/ui/Select'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
 import type { Solicitacao, Usuario } from '../../types'
 
@@ -204,33 +205,33 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
 
             <div className="space-y-3">
               {!editando && (
-                <div>
-                  <label className="block text-xs text-slate-500 mb-1">Status do Atendimento</label>
-                  <select className="input w-full" value={status} onChange={(e) => setStatus(Number(e.target.value))}>
-                    {STATUS_ABERTURA.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                </div>
+                <Select
+                  label="Status do Atendimento"
+                  value={status}
+                  onChange={(e) => setStatus(Number(e.target.value))}
+                  options={STATUS_ABERTURA.map(([v, l]) => ({ value: v, label: l }))}
+                />
               )}
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Contato via</label>
-                <select className="input w-full" value={tipoContato} onChange={(e) => setTipoContato(Number(e.target.value))}>
-                  {TIPOS_CONTATO.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Técnico</label>
-                <select className="input w-full" value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)}>
-                  <option value="">(quem está lançando)</option>
-                  {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nome || u.nomeUsu}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">Desenvolvedor</label>
-                <select className="input w-full" value={desenvolvedorId} onChange={(e) => setDesenvolvedorId(e.target.value)}>
-                  <option value="">(nenhum)</option>
-                  {usuarios.map((u) => <option key={u.id} value={u.id}>{u.nome || u.nomeUsu}</option>)}
-                </select>
-              </div>
+              <Select
+                label="Contato via"
+                value={tipoContato}
+                onChange={(e) => setTipoContato(Number(e.target.value))}
+                options={TIPOS_CONTATO.map(([v, l]) => ({ value: v, label: l }))}
+              />
+              <Select
+                label="Técnico"
+                placeholder="(quem está lançando)"
+                value={tecnicoId}
+                onChange={(e) => setTecnicoId(e.target.value)}
+                options={usuarios.map((u) => ({ value: u.id, label: u.nome || u.nomeUsu || '' }))}
+              />
+              <Select
+                label="Desenvolvedor"
+                placeholder="(nenhum)"
+                value={desenvolvedorId}
+                onChange={(e) => setDesenvolvedorId(e.target.value)}
+                options={usuarios.map((u) => ({ value: u.id, label: u.nome || u.nomeUsu || '' }))}
+              />
 
               <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
                 <input type="checkbox" checked={urgente} onChange={(e) => setUrgente(e.target.checked)} />
@@ -251,10 +252,14 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
         {aba === 'procedimentos' && (
           <div className="space-y-3">
             <div className="flex gap-2">
-              <select className="input flex-1" value={procSelecionado} onChange={(e) => setProcSelecionado(e.target.value)}>
-                <option value="">Selecione o procedimento...</option>
-                {catalogo.map((p) => <option key={p.id} value={p.id}>{p.descricao}</option>)}
-              </select>
+              <div className="flex-1">
+                <Select
+                  placeholder="Selecione o procedimento..."
+                  value={procSelecionado}
+                  onChange={(e) => setProcSelecionado(e.target.value)}
+                  options={catalogo.map((p) => ({ value: p.id, label: p.descricao }))}
+                />
+              </div>
               <button
                 type="button"
                 className="btn-primary flex items-center gap-1"

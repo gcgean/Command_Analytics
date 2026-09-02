@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { getUserPermissions } from './grupos'
+import { registrarAuditoria } from '../utils/auditoria'
 
 // Códigos de Status_Atendimento — contrato com o sistema Delphi legado (UMapaAtendimentos.pas,
 // combo CbSituacao). Não existe status 15. Alterar esses números quebra o fluxo real de
@@ -261,6 +262,13 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     })
 
     await gravarLog(criado.id, usuarioId, 'Atendimento lançado')
+    await registrarAuditoria({
+      tabela: 'atendimentos',
+      registroId: criado.id,
+      acao: 'CRIACAO',
+      usuarioId,
+      dadosDepois: { clienteId: Number(b.clienteId), status, observacoes: String(b.observacoes).slice(0, 500) },
+    })
     return reply.status(201).send({ ok: true, id: criado.id })
   })
 
@@ -270,7 +278,13 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     const b = request.body as Record<string, any>
     const usuarioId = Number((request.user as any)?.id || 0)
 
-    const atual = await prisma.atendimento.findUnique({ where: { id: Number(id) }, select: { id: true } })
+    const atual = await prisma.atendimento.findUnique({
+      where: { id: Number(id) },
+      select: {
+        clienteId: true, observacoes: true, solucao: true, tipoContato: true,
+        tecnicoId: true, desenvolvedorId: true, prioritario: true, foraHorario: true, bugSistema: true,
+      },
+    })
     if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
 
     const dados: Record<string, any> = { dataUltAlteracao: new Date() }
@@ -289,6 +303,15 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
     await prisma.atendimento.update({ where: { id: Number(id) }, data: dados })
     await gravarLog(Number(id), usuarioId, 'Atendimento alterado')
+    const { dataUltAlteracao, ...dadosAuditados } = dados
+    await registrarAuditoria({
+      tabela: 'atendimentos',
+      registroId: Number(id),
+      acao: 'ALTERACAO',
+      usuarioId,
+      dadosAntes: atual,
+      dadosDepois: { ...atual, ...dadosAuditados },
+    })
     return { ok: true }
   })
 
@@ -315,6 +338,14 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       },
     })
     await gravarLog(Number(id), usuarioId, `Atendimento finalizado: ${solucao.trim()}`)
+    await registrarAuditoria({
+      tabela: 'atendimentos',
+      registroId: Number(id),
+      acao: 'STATUS',
+      usuarioId,
+      dadosAntes: { status: atual.status },
+      dadosDepois: { status: STATUS.CONCLUIDO, solucao: solucao.trim().slice(0, 500) },
+    })
     return { ok: true }
   })
 
@@ -336,6 +367,13 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       VALUES (${Number(id)}, ${Number(procedimentoId)}, ${proc.pontuacao ?? 0}, NOW())
     `
     await gravarLog(Number(id), usuarioId, `Procedimento efetuado: ${proc.descricao}`)
+    await registrarAuditoria({
+      tabela: 'procedimentos_atendimentos',
+      registroId: Number(id),
+      acao: 'CRIACAO',
+      usuarioId,
+      dadosDepois: { procedimentoId: Number(procedimentoId), descricao: proc.descricao },
+    })
     return reply.status(201).send({ ok: true })
   })
 
@@ -349,6 +387,13 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
        WHERE cod_atendimento = ${Number(id)} AND cod_procedimento = ${Number(procedimentoId)}
     `
     await gravarLog(Number(id), usuarioId, 'Procedimento removido')
+    await registrarAuditoria({
+      tabela: 'procedimentos_atendimentos',
+      registroId: Number(id),
+      acao: 'EXCLUSAO',
+      usuarioId,
+      dadosAntes: { procedimentoId: Number(procedimentoId) },
+    })
     return { ok: true }
   })
 
@@ -369,7 +414,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
     const atual = await prisma.atendimento.findUnique({
       where: { id: Number(id) },
-      select: { id: true, desenvolvedorId: true },
+      select: { id: true, status: true, desenvolvedorId: true },
     })
     if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
 
@@ -401,6 +446,14 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       : rotulos[Number(status)]
 
     await alterarStatus(Number(id), usuarioId, Number(status), texto)
+    await registrarAuditoria({
+      tabela: 'atendimentos',
+      registroId: Number(id),
+      acao: 'STATUS',
+      usuarioId,
+      dadosAntes: { status: atual.status },
+      dadosDepois: { status: Number(status), observacao: observacao?.trim() || null },
+    })
     return { ok: true }
   })
 
@@ -409,6 +462,9 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string }
     const { desenvolvedorId } = request.body as { desenvolvedorId: number | null }
     const usuarioId = Number((request.user as any)?.id || 0)
+
+    const atual = await prisma.atendimento.findUnique({ where: { id: Number(id) }, select: { desenvolvedorId: true } })
+    if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
 
     if (desenvolvedorId) {
       const dev = await prisma.usuario.findUnique({
@@ -422,6 +478,14 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
         data: { desenvolvedorId: dev.id, dataUltAlteracao: new Date() },
       })
       await gravarLog(Number(id), usuarioId, `Desenvolvedor vinculado: ${nome(dev)}`)
+      await registrarAuditoria({
+        tabela: 'atendimentos',
+        registroId: Number(id),
+        acao: 'ALTERACAO',
+        usuarioId,
+        dadosAntes: { desenvolvedorId: atual.desenvolvedorId },
+        dadosDepois: { desenvolvedorId: dev.id },
+      })
       return { ok: true, desenvolvedorNome: nome(dev) }
     }
 
@@ -430,6 +494,14 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       data: { desenvolvedorId: null, dataUltAlteracao: new Date() },
     })
     await gravarLog(Number(id), usuarioId, 'Desenvolvedor desvinculado')
+    await registrarAuditoria({
+      tabela: 'atendimentos',
+      registroId: Number(id),
+      acao: 'ALTERACAO',
+      usuarioId,
+      dadosAntes: { desenvolvedorId: atual.desenvolvedorId },
+      dadosDepois: { desenvolvedorId: null },
+    })
     return { ok: true, desenvolvedorNome: null }
   })
 
@@ -450,6 +522,14 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       data: { prioritario: marcado ? 'N' : 'S', dataUltAlteracao: new Date() },
     })
     await gravarLog(Number(id), usuarioId, marcado ? 'Removido como prioritário' : 'Marcado como prioritário')
+    await registrarAuditoria({
+      tabela: 'atendimentos',
+      registroId: Number(id),
+      acao: 'ALTERACAO',
+      usuarioId,
+      dadosAntes: { prioritario: atual.prioritario },
+      dadosDepois: { prioritario: marcado ? 'N' : 'S' },
+    })
     return { ok: true, prioritario: !marcado }
   })
 
@@ -470,6 +550,14 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       data: { somenteOrientacao: marcado ? 'N' : 'S', dataUltAlteracao: new Date() },
     })
     await gravarLog(Number(id), usuarioId, marcado ? 'Removido de Somente Orientação' : 'Marcado como Somente Orientação (não desenvolver)')
+    await registrarAuditoria({
+      tabela: 'atendimentos',
+      registroId: Number(id),
+      acao: 'ALTERACAO',
+      usuarioId,
+      dadosAntes: { somenteOrientacao: atual.somenteOrientacao },
+      dadosDepois: { somenteOrientacao: marcado ? 'N' : 'S' },
+    })
     return { ok: true, somenteOrientacao: !marcado }
   })
 
@@ -481,7 +569,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
     if (!motivo?.trim()) return reply.status(400).send({ error: 'Informe o motivo do cancelamento.' })
 
-    const atual = await prisma.atendimento.findUnique({ where: { id: Number(id) }, select: { id: true } })
+    const atual = await prisma.atendimento.findUnique({ where: { id: Number(id) }, select: { status: true } })
     if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
 
     await prisma.atendimento.update({
@@ -495,6 +583,14 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       },
     })
     await gravarLog(Number(id), usuarioId, `Atendimento cancelado: ${motivo.trim()}`)
+    await registrarAuditoria({
+      tabela: 'atendimentos',
+      registroId: Number(id),
+      acao: 'STATUS',
+      usuarioId,
+      dadosAntes: { status: atual.status },
+      dadosDepois: { status: STATUS.CANCELADO, motivo: motivo.trim().slice(0, 300) },
+    })
     return { ok: true }
   })
 }
