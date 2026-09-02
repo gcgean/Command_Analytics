@@ -27,22 +27,6 @@ const S = {
   TESTADO_COM_ERRO: 17,
 } as const
 
-// Cor da faixa do rodapé do card, seguindo a leitura do mapa legado.
-const CORES_RODAPE: Record<number, string> = {
-  1: 'bg-slate-500 text-white',
-  2: 'bg-teal-700 text-white',
-  3: 'bg-amber-600 text-white',
-  4: 'bg-orange-700 text-white',
-  5: 'bg-indigo-900 text-white',
-  6: 'bg-slate-400 text-slate-900',
-  9: 'bg-sky-200 text-slate-900',
-  10: 'bg-blue-600 text-white',
-  11: 'bg-fuchsia-900 text-white',
-  13: 'bg-amber-900 text-white',
-  16: 'bg-violet-700 text-white',
-  17: 'bg-rose-700 text-white',
-}
-
 // Rótulo do status 2 só nesta tela — no resto do sistema (Atendimentos geral, dashboards) esse
 // status representa "técnico atendendo agora", e mudar o rótulo global misrepresentaria isso lá.
 // Aqui, no contexto do backlog de dev, "Aguardando Desenvolvimento" é o que faz sentido.
@@ -51,20 +35,25 @@ const ROTULO_STATUS: Record<number, string> = {
   [S.EM_ATENDIMENTO]: 'Aguardando Desenvolvimento',
 }
 
-// Mesmas cores do StatusBadge padrão (não exportadas de lá) — usado aqui pra respeitar o rótulo
-// local em vez do rótulo global do componente compartilhado.
+// Paleta agrupada por significado, não por status isolado — usada tanto no badge quanto no
+// rodapé do card, pra ler rápido o que cada cor quer dizer:
+//   cinza/azul  → parado esperando alguém (fila, aguardando cliente)
+//   âmbar       → aguardando algo específico (procedimento, testes, análise, dev)
+//   azul/roxo   → em progresso ativo (desenvolvimento, testes)
+//   verde       → resultado positivo (testado OK, corrigido)
+//   vermelho    → problema (testado com erro)
 const CORES_ETAPA: Record<number, string> = {
-  1: 'bg-slate-500/20 text-slate-400 border border-slate-500/30',
-  2: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
-  3: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
-  4: 'bg-orange-500/20 text-orange-400 border border-orange-500/30',
-  6: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
-  9: 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30',
-  10: 'bg-teal-500/20 text-teal-400 border border-teal-500/30',
-  11: 'bg-green-500/20 text-green-400 border border-green-500/30',
-  13: 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30',
-  16: 'bg-violet-500/20 text-violet-400 border border-violet-500/30',
-  17: 'bg-rose-500/20 text-rose-400 border border-rose-500/30',
+  1: 'bg-slate-500/20 text-slate-500 dark:text-slate-400 border border-slate-500/30', // Em Fila
+  3: 'bg-slate-500/20 text-slate-500 dark:text-slate-400 border border-slate-500/30', // Aguardando Cliente
+  2: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30', // Aguardando Desenvolvimento
+  4: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30', // Aguardando Análise Dev
+  6: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30', // Aguardando Procedimento
+  9: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30', // Aguardando Testes
+  13: 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30', // Em Desenvolvimento
+  10: 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30', // Em Testes
+  11: 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30', // Testado OK
+  16: 'bg-green-500/20 text-green-600 dark:text-green-400 border border-green-500/30', // Corrigido pelo Dev
+  17: 'bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30', // Testado com Erro
 }
 
 function EtapaBadge({ status, className }: { status: number; className?: string }) {
@@ -352,6 +341,15 @@ export function MapaSolicitacoes() {
             {loading ? 'Carregando...' : `${itens.length} solicitação(ões) — o que cada cliente pediu e em que etapa está`}
           </p>
         </div>
+        {/* Resumo por etapa da aba atual */}
+        <div className="flex flex-wrap items-center gap-2">
+          {Object.entries(contagens).map(([st, qtd]) => (
+            <span key={st} className="flex items-center gap-1.5 text-xs">
+              <EtapaBadge status={Number(st)} />
+              <span className="text-slate-500 font-medium">{qtd}</span>
+            </span>
+          ))}
+        </div>
         <div className="flex items-center gap-2">
           <button className="btn-secondary flex items-center gap-2" onClick={carregar} disabled={loading}>
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Atualizar
@@ -455,15 +453,6 @@ export function MapaSolicitacoes() {
             </label>
           </>
         )}
-        {/* Resumo por etapa da aba atual */}
-        <div className="flex flex-wrap gap-2 ml-auto">
-          {Object.entries(contagens).map(([st, qtd]) => (
-            <span key={st} className="flex items-center gap-1.5 text-xs">
-              <EtapaBadge status={Number(st)} />
-              <span className="text-slate-500 font-medium">{qtd}</span>
-            </span>
-          ))}
-        </div>
       </div>
 
       {/* Grade de cards — largura cheia; detalhes agora vivem no menu de cada card */}
@@ -546,7 +535,7 @@ export function MapaSolicitacoes() {
 
                   <div className={clsx(
                     'px-1.5 py-0.5 flex items-center justify-between text-[9px] font-bold uppercase',
-                    CORES_RODAPE[item.status] ?? 'bg-slate-600 text-white'
+                    CORES_ETAPA[item.status] ?? 'bg-slate-500/20 text-slate-500 dark:text-slate-400 border border-slate-500/30'
                   )}>
                     <span className="truncate">
                       {item.tecnicoNome ?? '—'}
