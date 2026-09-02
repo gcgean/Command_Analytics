@@ -686,18 +686,18 @@ export const api = {
       `/connections/saude?servidorId=${servidorId}&connectionId=${encodeURIComponent(connectionId)}`
     ),
   // ─── Mapa de Solicitações (setor de desenvolvimento) ───
-  getSolicitacoesSuporte: (params?: { status?: number; tecnicoId?: number; desenvolvedorId?: number; busca?: string }) => {
+  getSolicitacoesSuporte: (params?: { status?: number[]; tecnicoId?: number[]; desenvolvedorId?: number[]; busca?: string; prioritario?: boolean }) => {
     const qs = params
       ? '?' + new URLSearchParams({
-          ...(params.status ? { status: String(params.status) } : {}),
-          ...(params.tecnicoId ? { tecnicoId: String(params.tecnicoId) } : {}),
-          ...(params.desenvolvedorId ? { desenvolvedorId: String(params.desenvolvedorId) } : {}),
+          ...(params.status?.length ? { status: params.status.join(',') } : {}),
+          ...(params.tecnicoId?.length ? { tecnicoId: params.tecnicoId.join(',') } : {}),
+          ...(params.desenvolvedorId?.length ? { desenvolvedorId: params.desenvolvedorId.join(',') } : {}),
           ...(params.busca ? { busca: params.busca } : {}),
+          ...(params.prioritario ? { prioritario: 'true' } : {}),
         }).toString()
       : ''
     return fetchApi<{ total: number; data: Solicitacao[] }>(`/solicitacoes/suporte${qs}`)
   },
-  getSolicitacoesTestes: () => fetchApi<{ total: number; data: Solicitacao[] }>('/solicitacoes/testes'),
   getSolicitacoesFinalizadas: (dataInicio: string, dataFim: string) =>
     fetchApi<{ total: number; data: Solicitacao[] }>(
       `/solicitacoes/finalizadas?dataInicio=${dataInicio}&dataFim=${dataFim}`

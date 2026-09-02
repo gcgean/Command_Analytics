@@ -28,6 +28,9 @@ export const STATUS = {
 // Abas do mapa, exatamente como o Delphi as consulta.
 export const STATUS_SUPORTE = [1, 2, 3, 6, 13, 16, 17]
 export const STATUS_TESTES = [9, 10, 11, 16, 17]
+// Aba única "Backlog de Desenvolvimento" — os filtros da tela substituem a antiga aba separada
+// de testes, então por padrão mostra as duas frentes juntas.
+const STATUS_BACKLOG = Array.from(new Set([...STATUS_SUPORTE, ...STATUS_TESTES]))
 
 // Status em que o atendimento fica "parado esperando alguém" — passando de 3 dias nesse
 // estado o Delphi pinta o card de vermelho.
@@ -100,28 +103,21 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
   // GET /solicitacoes/suporte — cards da aba Suporte
   app.get('/suporte', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request) => {
-    const { tecnicoId, desenvolvedorId, clienteId, status, busca } = request.query as Record<string, string>
+    const { tecnicoId, desenvolvedorId, clienteId, status, busca, prioritario } = request.query as Record<string, string>
 
-    const where: Record<string, any> = { status: { in: STATUS_SUPORTE } }
-    if (status) where.status = Number(status)
-    if (tecnicoId) where.tecnicoId = Number(tecnicoId)
-    if (desenvolvedorId) where.desenvolvedorId = Number(desenvolvedorId)
+    // Cada filtro aceita uma lista separada por vírgula (multi-seleção na tela) ou um valor único.
+    const paraLista = (v?: string) => v?.split(',').map(Number).filter((n) => !Number.isNaN(n)) ?? []
+
+    const statusLista = paraLista(status)
+    const tecnicoLista = paraLista(tecnicoId)
+    const desenvolvedorLista = paraLista(desenvolvedorId)
+
+    const where: Record<string, any> = { status: { in: statusLista.length ? statusLista : STATUS_BACKLOG } }
+    if (tecnicoLista.length) where.tecnicoId = { in: tecnicoLista }
+    if (desenvolvedorLista.length) where.desenvolvedorId = { in: desenvolvedorLista }
     if (clienteId) where.clienteId = Number(clienteId)
     if (busca) where.cliente = { nome: { contains: busca } }
-
-    const itens = await prisma.atendimento.findMany({
-      where,
-      include: INCLUDE_CARD,
-      orderBy: { id: 'asc' },
-    })
-    return { total: itens.length, data: itens.map(paraCard) }
-  })
-
-  // GET /solicitacoes/testes — cards da aba Gerenciamento de Teste
-  app.get('/testes', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request) => {
-    const { desenvolvedorId } = request.query as Record<string, string>
-    const where: Record<string, any> = { status: { in: STATUS_TESTES } }
-    if (desenvolvedorId) where.desenvolvedorId = Number(desenvolvedorId)
+    if (prioritario === 'true') where.prioritario = 'S'
 
     const itens = await prisma.atendimento.findMany({
       where,

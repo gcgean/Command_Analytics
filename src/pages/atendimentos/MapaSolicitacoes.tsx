@@ -8,13 +8,12 @@ import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useToast } from '../../components/ui/Toast'
 import { Input } from '../../components/ui/Input'
-import { Select } from '../../components/ui/Select'
 import { Modal } from '../../components/ui/Modal'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { LancamentoSolicitacao } from './LancamentoSolicitacao'
 import type { Solicitacao, StatusAtendimento, Usuario } from '../../types'
 
-type Aba = 'suporte' | 'testes' | 'finalizadas'
+type Aba = 'suporte' | 'finalizadas'
 
 // Mesmos códigos do Delphi (UMapaAtendimentos.pas). Não existe status 15.
 const S = {
@@ -55,15 +54,92 @@ function formatarDataHora(valor: string | null): string {
   return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+const CHAVE_FILTRO_ETAPA = 'mapaSolicitacoes:filtroEtapa'
 const CHAVE_FILTRO_TECNICO = 'mapaSolicitacoes:filtroTecnicoId'
 const CHAVE_FILTRO_DEV = 'mapaSolicitacoes:filtroDesenvolvedorId'
 
-function lerFiltroSalvo(chave: string): string {
+function lerFiltroSalvo(chave: string): string[] {
   try {
-    return localStorage.getItem(chave) ?? ''
+    const raw = localStorage.getItem(chave)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.map(String) : []
   } catch {
-    return ''
+    return []
   }
+}
+
+function salvarFiltro(chave: string, valores: string[]): void {
+  try {
+    valores.length ? localStorage.setItem(chave, JSON.stringify(valores)) : localStorage.removeItem(chave)
+  } catch {
+    /* ignora — filtro só deixa de persistir, tela continua funcionando */
+  }
+}
+
+/** Dropdown com checkboxes — mesmo visual do Select do projeto, mas permite marcar mais de uma opção. */
+function MultiSelectFiltro({
+  placeholder, options, selecionados, onChange,
+}: {
+  placeholder: string
+  options: Array<{ value: string; label: string }>
+  selecionados: string[]
+  onChange: (valores: string[]) => void
+}) {
+  const [aberto, setAberto] = useState(false)
+  const ref = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!aberto) return
+    const fechar = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false)
+    }
+    document.addEventListener('click', fechar)
+    return () => document.removeEventListener('click', fechar)
+  }, [aberto])
+
+  const toggle = (value: string) => {
+    onChange(selecionados.includes(value) ? selecionados.filter((v) => v !== value) : [...selecionados, value])
+  }
+
+  const resumo =
+    selecionados.length === 0
+      ? placeholder
+      : selecionados.length === 1
+        ? (options.find((o) => o.value === selecionados[0])?.label ?? placeholder)
+        : `${selecionados.length} selecionadas`
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        type="button"
+        onClick={() => setAberto((a) => !a)}
+        className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg px-3 py-2 text-sm w-full text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
+      >
+        <span className={clsx('truncate', selecionados.length === 0 && 'text-slate-500')}>{resumo}</span>
+        <span className="text-slate-400 flex-shrink-0">▾</span>
+      </button>
+      {aberto && (
+        <div className="absolute z-40 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1">
+          {selecionados.length > 0 && (
+            <button
+              type="button"
+              className="w-full text-left px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+              onClick={() => onChange([])}
+            >
+              Limpar seleção
+            </button>
+          )}
+          {options.map((opt) => (
+            <label key={opt.value} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
+              <input type="checkbox" checked={selecionados.includes(opt.value)} onChange={() => toggle(opt.value)} />
+              <span className="text-slate-700 dark:text-slate-300">{opt.label}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function MapaSolicitacoes() {
@@ -75,10 +151,12 @@ export function MapaSolicitacoes() {
   const [itens, setItens] = useState<Solicitacao[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
-  const [filtroEtapa, setFiltroEtapa] = useState<number | ''>('')
-  // Filtro por dev/técnico persiste entre visitas — evita refiltrar toda vez que volta na tela.
-  const [filtroTecnicoId, setFiltroTecnicoId] = useState(() => lerFiltroSalvo(CHAVE_FILTRO_TECNICO))
-  const [filtroDesenvolvedorId, setFiltroDesenvolvedorId] = useState(() => lerFiltroSalvo(CHAVE_FILTRO_DEV))
+  // Filtros de etapa/técnico/dev aceitam múltipla seleção e persistem entre visitas — evita
+  // refiltrar toda vez que volta na tela.
+  const [filtroEtapa, setFiltroEtapaState] = useState<string[]>(() => lerFiltroSalvo(CHAVE_FILTRO_ETAPA))
+  const [filtroTecnicoId, setFiltroTecnicoIdState] = useState<string[]>(() => lerFiltroSalvo(CHAVE_FILTRO_TECNICO))
+  const [filtroDesenvolvedorId, setFiltroDesenvolvedorIdState] = useState<string[]>(() => lerFiltroSalvo(CHAVE_FILTRO_DEV))
+  const [filtroPrioritario, setFiltroPrioritario] = useState(false)
   const [modalDetalhes, setModalDetalhes] = useState<Solicitacao | null>(null)
   const [menuAberto, setMenuAberto] = useState<number | null>(null)
 
@@ -104,13 +182,12 @@ export function MapaSolicitacoes() {
       aba === 'suporte'
         ? api.getSolicitacoesSuporte({
             ...(busca.trim() ? { busca: busca.trim() } : {}),
-            ...(filtroEtapa ? { status: filtroEtapa } : {}),
-            ...(filtroTecnicoId ? { tecnicoId: Number(filtroTecnicoId) } : {}),
-            ...(filtroDesenvolvedorId ? { desenvolvedorId: Number(filtroDesenvolvedorId) } : {}),
+            ...(filtroEtapa.length ? { status: filtroEtapa.map(Number) } : {}),
+            ...(filtroTecnicoId.length ? { tecnicoId: filtroTecnicoId.map(Number) } : {}),
+            ...(filtroDesenvolvedorId.length ? { desenvolvedorId: filtroDesenvolvedorId.map(Number) } : {}),
+            ...(filtroPrioritario ? { prioritario: true } : {}),
           })
-        : aba === 'testes'
-          ? api.getSolicitacoesTestes()
-          : api.getSolicitacoesFinalizadas(dataInicio, dataFim)
+        : api.getSolicitacoesFinalizadas(dataInicio, dataFim)
 
     req
       .then((res) => {
@@ -121,16 +198,11 @@ export function MapaSolicitacoes() {
         toast.error(e?.message || 'Falha ao carregar as solicitações.')
         setLoading(false)
       })
-  }, [aba, busca, filtroEtapa, filtroTecnicoId, filtroDesenvolvedorId, dataInicio, dataFim, toast])
+  }, [aba, busca, filtroEtapa, filtroTecnicoId, filtroDesenvolvedorId, filtroPrioritario, dataInicio, dataFim, toast])
 
-  const setFiltroTecnico = (id: string) => {
-    setFiltroTecnicoId(id)
-    try { id ? localStorage.setItem(CHAVE_FILTRO_TECNICO, id) : localStorage.removeItem(CHAVE_FILTRO_TECNICO) } catch { /* ignora */ }
-  }
-  const setFiltroDesenvolvedor = (id: string) => {
-    setFiltroDesenvolvedorId(id)
-    try { id ? localStorage.setItem(CHAVE_FILTRO_DEV, id) : localStorage.removeItem(CHAVE_FILTRO_DEV) } catch { /* ignora */ }
-  }
+  const setFiltroEtapa = (v: string[]) => { setFiltroEtapaState(v); salvarFiltro(CHAVE_FILTRO_ETAPA, v) }
+  const setFiltroTecnico = (v: string[]) => { setFiltroTecnicoIdState(v); salvarFiltro(CHAVE_FILTRO_TECNICO, v) }
+  const setFiltroDesenvolvedor = (v: string[]) => { setFiltroDesenvolvedorIdState(v); salvarFiltro(CHAVE_FILTRO_DEV, v) }
 
   useEffect(() => {
     // Busca é digitada — espera o usuário parar antes de bater no servidor.
@@ -207,23 +279,17 @@ export function MapaSolicitacoes() {
     ]
     if (!podeAgir) return base
 
-    if (aba === 'testes') {
-      return [
-        { label: 'Em Testes', icon: <FlaskConical size={13} />, onClick: () => mudarStatus(item, S.EM_TESTES, 'Em Testes') },
-        { label: 'Testado com Erro', icon: <XCircle size={13} />, onClick: () => { setTexto(''); setModalJustificativa({ item, status: S.TESTADO_COM_ERRO, titulo: 'Motivo do erro' }) } },
-        { label: 'Corrigido pelo Dev', icon: <Code2 size={13} />, onClick: () => { setTexto(''); setModalJustificativa({ item, status: S.CORRIGIDO_DEV, titulo: 'Observação da correção' }) } },
-        { label: 'Testado OK', icon: <CheckCircle2 size={13} />, onClick: () => mudarStatus(item, S.TESTADO_OK, 'Testado OK') },
-        { label: 'Voltar p/ Em Atendimento', icon: <RefreshCw size={13} />, onClick: () => mudarStatus(item, S.EM_ATENDIMENTO, 'Voltou para Em Atendimento') },
-        ...base,
-      ]
-    }
-
     return [
       { label: 'Alterar / Finalizar', icon: <Pencil size={13} />, onClick: () => setLancamento({ aberto: true, item }) },
       { label: 'Vincular Dev', icon: <UserPlus size={13} />, onClick: () => setModalDev(item) },
       { label: 'Em Desenvolvimento', icon: <Code2 size={13} />, onClick: () => mudarStatus(item, S.EM_DESENVOLVIMENTO, 'Em Desenvolvimento') },
       { label: 'Aguardando Testes', icon: <FlaskConical size={13} />, onClick: () => mudarStatus(item, S.AGUARDANDO_TESTES, 'Aguardando Testes') },
       { label: 'Aguardando Análise Dev', icon: <AlertTriangle size={13} />, onClick: () => mudarStatus(item, S.AGUARDANDO_ANALISE_DEV, 'Aguardando Análise do Dev') },
+      { label: 'Em Testes', icon: <FlaskConical size={13} />, onClick: () => mudarStatus(item, S.EM_TESTES, 'Em Testes') },
+      { label: 'Testado com Erro', icon: <XCircle size={13} />, onClick: () => { setTexto(''); setModalJustificativa({ item, status: S.TESTADO_COM_ERRO, titulo: 'Motivo do erro' }) } },
+      { label: 'Corrigido pelo Dev', icon: <Code2 size={13} />, onClick: () => { setTexto(''); setModalJustificativa({ item, status: S.CORRIGIDO_DEV, titulo: 'Observação da correção' }) } },
+      { label: 'Testado OK', icon: <CheckCircle2 size={13} />, onClick: () => mudarStatus(item, S.TESTADO_OK, 'Testado OK') },
+      { label: 'Voltar p/ Em Atendimento', icon: <RefreshCw size={13} />, onClick: () => mudarStatus(item, S.EM_ATENDIMENTO, 'Voltou para Em Atendimento') },
       {
         label: item.prioritario === 'S' ? 'Remover Prioritário' : 'Marcar como Prioritário',
         icon: <Star size={13} />,
@@ -263,8 +329,7 @@ export function MapaSolicitacoes() {
       {/* Abas */}
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
         {([
-          ['suporte', 'Suporte'],
-          ['testes', 'Gerenciamento de Teste'],
+          ['suporte', 'Backlog de Desenvolvimento'],
           ['finalizadas', 'Solicitações finalizadas'],
         ] as Array<[Aba, string]>).map(([id, label]) => (
           <button
@@ -312,39 +377,44 @@ export function MapaSolicitacoes() {
         {aba === 'suporte' && (
           <>
             <div className="w-52">
-              <Select
+              <MultiSelectFiltro
                 placeholder="Todas as etapas"
-                value={filtroEtapa}
-                onChange={(e) => setFiltroEtapa(e.target.value ? Number(e.target.value) : '')}
+                selecionados={filtroEtapa}
+                onChange={setFiltroEtapa}
                 options={[
-                  { value: S.EM_DESENVOLVIMENTO, label: 'Em Desenvolvimento' },
-                  { value: 1, label: 'Em Fila' },
-                  { value: S.EM_ATENDIMENTO, label: 'Em Atendimento' },
-                  { value: 3, label: 'Aguardando Cliente' },
-                  { value: 6, label: 'Aguardando Procedimento' },
-                  { value: S.CORRIGIDO_DEV, label: 'Corrigido pelo Dev' },
-                  { value: S.TESTADO_COM_ERRO, label: 'Testado com Erro' },
+                  { value: String(S.EM_DESENVOLVIMENTO), label: 'Em Desenvolvimento' },
+                  { value: '1', label: 'Em Fila' },
+                  { value: String(S.EM_ATENDIMENTO), label: 'Em Atendimento' },
+                  { value: '3', label: 'Aguardando Cliente' },
+                  { value: '6', label: 'Aguardando Procedimento' },
+                  { value: String(S.AGUARDANDO_TESTES), label: 'Aguardando Testes' },
+                  { value: String(S.EM_TESTES), label: 'Em Testes' },
+                  { value: String(S.TESTADO_OK), label: 'Testado OK' },
+                  { value: String(S.CORRIGIDO_DEV), label: 'Corrigido pelo Dev' },
+                  { value: String(S.TESTADO_COM_ERRO), label: 'Testado com Erro' },
                 ]}
               />
             </div>
             <div className="w-52">
-              <Select
+              <MultiSelectFiltro
                 placeholder="Todos os técnicos"
-                value={filtroTecnicoId}
-                onChange={(e) => setFiltroTecnico(e.target.value)}
-                title="Filtrar pelo técnico"
-                options={devs.map((d) => ({ value: d.id, label: d.nome || d.nomeUsu || '' }))}
+                selecionados={filtroTecnicoId}
+                onChange={setFiltroTecnico}
+                options={devs.map((d) => ({ value: String(d.id), label: d.nome || d.nomeUsu || '' }))}
               />
             </div>
             <div className="w-52">
-              <Select
+              <MultiSelectFiltro
                 placeholder="Todos os desenvolvedores"
-                value={filtroDesenvolvedorId}
-                onChange={(e) => setFiltroDesenvolvedor(e.target.value)}
-                title="Filtrar pelo desenvolvedor"
-                options={devs.map((d) => ({ value: d.id, label: d.nome || d.nomeUsu || '' }))}
+                selecionados={filtroDesenvolvedorId}
+                onChange={setFiltroDesenvolvedor}
+                options={devs.map((d) => ({ value: String(d.id), label: d.nome || d.nomeUsu || '' }))}
               />
             </div>
+            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 px-1 h-[38px]">
+              <input type="checkbox" checked={filtroPrioritario} onChange={(e) => setFiltroPrioritario(e.target.checked)} />
+              Só prioritárias
+            </label>
           </>
         )}
         {/* Resumo por etapa da aba atual */}
@@ -375,17 +445,20 @@ export function MapaSolicitacoes() {
                   key={item.id}
                   className="group relative"
                 >
-                  {/* Tooltip com a reclamação — mesma informação do "Exibir Detalhes", só que ao passar o mouse */}
-                  <div className="pointer-events-none absolute left-0 top-full z-40 mt-1 w-64 max-h-56 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-2.5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity">
-                    <p className="text-[10px] text-slate-500 mb-1">
-                      Início: {formatarDataHora(item.dataAtendimento ?? item.dataAbertura)}
-                      {item.diasParado > 0 && ` · ${item.diasParado} dia(s)`}
-                    </p>
-                    <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-0.5">Reclamação</p>
-                    <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap line-clamp-6">
-                      {item.observacoes?.trim() || '—'}
-                    </p>
-                  </div>
+                  {/* Tooltip com a reclamação — mesma informação do "Exibir Detalhes", só que ao passar o mouse.
+                      Escondido enquanto o menu de ações deste card está aberto, pra não sobrepor os itens. */}
+                  {menuAberto !== item.id && (
+                    <div className="pointer-events-none absolute left-0 top-full z-20 mt-1 w-64 max-h-56 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-2.5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity">
+                      <p className="text-[10px] text-slate-500 mb-1">
+                        Início: {formatarDataHora(item.dataAtendimento ?? item.dataAbertura)}
+                        {item.diasParado > 0 && ` · ${item.diasParado} dia(s)`}
+                      </p>
+                      <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-0.5">Reclamação</p>
+                      <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap line-clamp-6">
+                        {item.observacoes?.trim() || '—'}
+                      </p>
+                    </div>
+                  )}
 
                   <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden group-hover:border-slate-300 dark:group-hover:border-slate-600 transition-colors">
                   <div className="p-1.5">
@@ -417,6 +490,12 @@ export function MapaSolicitacoes() {
                       item.atrasado ? 'text-red-600 dark:text-red-400' : 'text-blue-700 dark:text-blue-400'
                     )}>
                       {item.id}
+                    </p>
+                    {item.prioritario === 'S' && (
+                      <div className="h-1 -mx-1.5 mb-0.5 bg-red-600" title="Prioritário" />
+                    )}
+                    <p className="text-center text-[9px] font-medium text-slate-500 dark:text-slate-400 -mt-0.5 mb-0.5 truncate">
+                      {statusAtendimentoLabel[item.status]}
                     </p>
 
                     <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-500">
