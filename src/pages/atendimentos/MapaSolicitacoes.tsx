@@ -8,6 +8,7 @@ import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useToast } from '../../components/ui/Toast'
 import { Input } from '../../components/ui/Input'
+import { Select } from '../../components/ui/Select'
 import { Modal } from '../../components/ui/Modal'
 import { StatusBadge } from '../../components/ui/StatusBadge'
 import { LancamentoSolicitacao } from './LancamentoSolicitacao'
@@ -310,38 +311,40 @@ export function MapaSolicitacoes() {
         )}
         {aba === 'suporte' && (
           <>
-            <select
-              className="input"
-              value={filtroEtapa}
-              onChange={(e) => setFiltroEtapa(e.target.value ? Number(e.target.value) : '')}
-            >
-              <option value="">Todas as etapas</option>
-              <option value={S.EM_DESENVOLVIMENTO}>Em Desenvolvimento</option>
-              <option value={1}>Em Fila</option>
-              <option value={S.EM_ATENDIMENTO}>Em Atendimento</option>
-              <option value={3}>Aguardando Cliente</option>
-              <option value={6}>Aguardando Procedimento</option>
-              <option value={S.CORRIGIDO_DEV}>Corrigido pelo Dev</option>
-              <option value={S.TESTADO_COM_ERRO}>Testado com Erro</option>
-            </select>
-            <select
-              className="input"
-              value={filtroTecnicoId}
-              onChange={(e) => setFiltroTecnico(e.target.value)}
-              title="Filtrar pelo técnico"
-            >
-              <option value="">Todos os técnicos</option>
-              {devs.map((d) => <option key={d.id} value={d.id}>{d.nome || d.nomeUsu}</option>)}
-            </select>
-            <select
-              className="input"
-              value={filtroDesenvolvedorId}
-              onChange={(e) => setFiltroDesenvolvedor(e.target.value)}
-              title="Filtrar pelo desenvolvedor"
-            >
-              <option value="">Todos os desenvolvedores</option>
-              {devs.map((d) => <option key={d.id} value={d.id}>{d.nome || d.nomeUsu}</option>)}
-            </select>
+            <div className="w-52">
+              <Select
+                placeholder="Todas as etapas"
+                value={filtroEtapa}
+                onChange={(e) => setFiltroEtapa(e.target.value ? Number(e.target.value) : '')}
+                options={[
+                  { value: S.EM_DESENVOLVIMENTO, label: 'Em Desenvolvimento' },
+                  { value: 1, label: 'Em Fila' },
+                  { value: S.EM_ATENDIMENTO, label: 'Em Atendimento' },
+                  { value: 3, label: 'Aguardando Cliente' },
+                  { value: 6, label: 'Aguardando Procedimento' },
+                  { value: S.CORRIGIDO_DEV, label: 'Corrigido pelo Dev' },
+                  { value: S.TESTADO_COM_ERRO, label: 'Testado com Erro' },
+                ]}
+              />
+            </div>
+            <div className="w-52">
+              <Select
+                placeholder="Todos os técnicos"
+                value={filtroTecnicoId}
+                onChange={(e) => setFiltroTecnico(e.target.value)}
+                title="Filtrar pelo técnico"
+                options={devs.map((d) => ({ value: d.id, label: d.nome || d.nomeUsu || '' }))}
+              />
+            </div>
+            <div className="w-52">
+              <Select
+                placeholder="Todos os desenvolvedores"
+                value={filtroDesenvolvedorId}
+                onChange={(e) => setFiltroDesenvolvedor(e.target.value)}
+                title="Filtrar pelo desenvolvedor"
+                options={devs.map((d) => ({ value: d.id, label: d.nome || d.nomeUsu || '' }))}
+              />
+            </div>
           </>
         )}
         {/* Resumo por etapa da aba atual */}
@@ -399,36 +402,13 @@ export function MapaSolicitacoes() {
                         {item.prioritario === 'S' && (
                           <Star size={11} className="text-amber-400 fill-amber-400" aria-label="Prioritário" />
                         )}
-                        <div className="relative">
-                          <button
-                            type="button"
-                            className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
-                            onClick={() => setMenuAberto(menuAberto === item.id ? null : item.id)}
-                          >
-                            <MoreVertical size={12} className="text-slate-400" />
-                          </button>
-                          {menuAberto === item.id && (
-                            <div
-                              className="absolute right-0 top-5 z-30 w-56 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {acoes.map((a) => (
-                                <button
-                                  key={a.label}
-                                  type="button"
-                                  disabled={salvando}
-                                  onClick={() => { setMenuAberto(null); a.onClick() }}
-                                  className={clsx(
-                                    'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50',
-                                    (a as any).perigo ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'
-                                  )}
-                                >
-                                  {a.icon} {a.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        <button
+                          type="button"
+                          className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                          onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === item.id ? null : item.id) }}
+                        >
+                          <MoreVertical size={12} className="text-slate-400" />
+                        </button>
                       </div>
                     </div>
 
@@ -463,6 +443,29 @@ export function MapaSolicitacoes() {
                     </span>
                   </div>
                   </div>
+
+                  {/* Fora do card visual (que tem overflow-hidden pros cantos arredondados) pra não ser clipado */}
+                  {menuAberto === item.id && (
+                    <div
+                      className="absolute right-1 top-6 z-30 w-56 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {acoes.map((a) => (
+                        <button
+                          key={a.label}
+                          type="button"
+                          disabled={salvando}
+                          onClick={() => { setMenuAberto(null); a.onClick() }}
+                          className={clsx(
+                            'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50',
+                            (a as any).perigo ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'
+                          )}
+                        >
+                          {a.icon} {a.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             })}
