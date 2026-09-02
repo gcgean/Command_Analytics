@@ -13,7 +13,7 @@ type AbaForm = 'atendimento' | 'procedimentos' | 'finalizacao'
 // Status oferecidos na abertura, iguais aos radios do lançamento legado.
 const STATUS_ABERTURA: Array<[number, string]> = [
   [1, 'Em Fila'],
-  [2, 'Em Atendimento'],
+  [2, 'Aguardando Desenvolvimento'],
   [3, 'Aguardando Cliente'],
   [4, 'Aguardando Análise do Desenvolvimento'],
   [6, 'Aguardando Procedimento do Suporte'],

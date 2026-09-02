@@ -9,10 +9,9 @@ import { usePermissions } from '../../contexts/PermissionsContext'
 import { useToast } from '../../components/ui/Toast'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
-import { StatusBadge } from '../../components/ui/StatusBadge'
 import { LancamentoSolicitacao } from './LancamentoSolicitacao'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
-import type { Solicitacao, StatusAtendimento, Usuario } from '../../types'
+import type { Solicitacao, Usuario } from '../../types'
 
 type Aba = 'suporte' | 'finalizadas'
 
@@ -42,6 +41,42 @@ const CORES_RODAPE: Record<number, string> = {
   13: 'bg-amber-900 text-white',
   16: 'bg-violet-700 text-white',
   17: 'bg-rose-700 text-white',
+}
+
+// Rótulo do status 2 só nesta tela — no resto do sistema (Atendimentos geral, dashboards) esse
+// status representa "técnico atendendo agora", e mudar o rótulo global misrepresentaria isso lá.
+// Aqui, no contexto do backlog de dev, "Aguardando Desenvolvimento" é o que faz sentido.
+const ROTULO_STATUS: Record<number, string> = {
+  ...statusAtendimentoLabel,
+  [S.EM_ATENDIMENTO]: 'Aguardando Desenvolvimento',
+}
+
+// Mesmas cores do StatusBadge padrão (não exportadas de lá) — usado aqui pra respeitar o rótulo
+// local em vez do rótulo global do componente compartilhado.
+const CORES_ETAPA: Record<number, string> = {
+  1: 'bg-slate-500/20 text-slate-400 border border-slate-500/30',
+  2: 'bg-blue-500/20 text-blue-400 border border-blue-500/30',
+  3: 'bg-amber-500/20 text-amber-400 border border-amber-500/30',
+  4: 'bg-orange-500/20 text-orange-400 border border-orange-500/30',
+  6: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30',
+  9: 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30',
+  10: 'bg-teal-500/20 text-teal-400 border border-teal-500/30',
+  11: 'bg-green-500/20 text-green-400 border border-green-500/30',
+  13: 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30',
+  16: 'bg-violet-500/20 text-violet-400 border border-violet-500/30',
+  17: 'bg-rose-500/20 text-rose-400 border border-rose-500/30',
+}
+
+function EtapaBadge({ status, className }: { status: number; className?: string }) {
+  return (
+    <span className={clsx(
+      'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap',
+      CORES_ETAPA[status] ?? 'bg-slate-500/20 text-slate-400 border border-slate-500/30',
+      className
+    )}>
+      {ROTULO_STATUS[status] ?? status}
+    </span>
+  )
 }
 
 function hojeISO(): string {
@@ -292,7 +327,7 @@ export function MapaSolicitacoes() {
       { label: 'Testado com Erro', icon: <XCircle size={13} />, onClick: () => { setTexto(''); setModalJustificativa({ item, status: S.TESTADO_COM_ERRO, titulo: 'Motivo do erro' }) } },
       { label: 'Corrigido pelo Dev', icon: <Code2 size={13} />, onClick: () => { setTexto(''); setModalJustificativa({ item, status: S.CORRIGIDO_DEV, titulo: 'Observação da correção' }) } },
       { label: 'Testado OK', icon: <CheckCircle2 size={13} />, onClick: () => mudarStatus(item, S.TESTADO_OK, 'Testado OK') },
-      { label: 'Voltar p/ Em Atendimento', icon: <RefreshCw size={13} />, onClick: () => mudarStatus(item, S.EM_ATENDIMENTO, 'Voltou para Em Atendimento') },
+      { label: 'Voltar p/ Aguardando Desenvolvimento', icon: <RefreshCw size={13} />, onClick: () => mudarStatus(item, S.EM_ATENDIMENTO, 'Voltou para Em Atendimento') },
       {
         label: item.prioritario === 'S' ? 'Remover Prioritário' : 'Marcar como Prioritário',
         icon: <Star size={13} />,
@@ -387,7 +422,7 @@ export function MapaSolicitacoes() {
                 options={[
                   { value: String(S.EM_DESENVOLVIMENTO), label: 'Em Desenvolvimento' },
                   { value: '1', label: 'Em Fila' },
-                  { value: String(S.EM_ATENDIMENTO), label: 'Em Atendimento' },
+                  { value: String(S.EM_ATENDIMENTO), label: 'Aguardando Desenvolvimento' },
                   { value: '3', label: 'Aguardando Cliente' },
                   { value: '6', label: 'Aguardando Procedimento' },
                   { value: String(S.AGUARDANDO_TESTES), label: 'Aguardando Testes' },
@@ -424,7 +459,7 @@ export function MapaSolicitacoes() {
         <div className="flex flex-wrap gap-2 ml-auto">
           {Object.entries(contagens).map(([st, qtd]) => (
             <span key={st} className="flex items-center gap-1.5 text-xs">
-              <StatusBadge status={Number(st) as StatusAtendimento} />
+              <EtapaBadge status={Number(st)} />
               <span className="text-slate-500 font-medium">{qtd}</span>
             </span>
           ))}
@@ -495,7 +530,7 @@ export function MapaSolicitacoes() {
                       {item.id}
                     </p>
                     <p className="text-center text-[9px] font-medium text-slate-500 dark:text-slate-400 -mt-0.5 mb-0.5 truncate">
-                      {statusAtendimentoLabel[item.status]}
+                      {ROTULO_STATUS[item.status]}
                     </p>
 
                     <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-500">
@@ -517,7 +552,7 @@ export function MapaSolicitacoes() {
                       {item.tecnicoNome ?? '—'}
                       {item.desenvolvedorNome ? ` / ${item.desenvolvedorNome}` : ''}
                     </span>
-                    <span className="flex-shrink-0 ml-1 opacity-90" title={statusAtendimentoLabel[item.status]}>
+                    <span className="flex-shrink-0 ml-1 opacity-90" title={ROTULO_STATUS[item.status]}>
                       {item.diasParado}
                     </span>
                   </div>
@@ -579,7 +614,7 @@ export function MapaSolicitacoes() {
             </div>
             <div>
               <p className="text-slate-500 mb-1">Etapa</p>
-              <StatusBadge status={modalDetalhes.status} />
+              <EtapaBadge status={modalDetalhes.status} />
             </div>
             <div>
               <p className="text-slate-500 mb-1">Reclamação</p>
