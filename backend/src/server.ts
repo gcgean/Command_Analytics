@@ -83,7 +83,8 @@ app.register(jwt, {
 
 app.register(multipart, {
   limits: {
-    fileSize: 10 * 1024 * 1024,
+    // 50MB — precisa caber vídeos/áudios curtos anexados em solicitações, não só documentos.
+    fileSize: 50 * 1024 * 1024,
   },
 })
 

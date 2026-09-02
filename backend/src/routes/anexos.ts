@@ -7,10 +7,12 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 
-type TabelaAnexo = 'agenda' | 'agendamento_programado' | 'cliente_prontuario' | 'banco_de_horas'
+type TabelaAnexo = 'agenda' | 'agendamento_programado' | 'cliente_prontuario' | 'banco_de_horas' | 'atendimentos'
+
+const TABELAS_ANEXO: TabelaAnexo[] = ['agenda', 'agendamento_programado', 'cliente_prontuario', 'banco_de_horas', 'atendimentos']
 
 function isTabelaAnexo(value: unknown): value is TabelaAnexo {
-  return value === 'agenda' || value === 'agendamento_programado' || value === 'cliente_prontuario' || value === 'banco_de_horas'
+  return TABELAS_ANEXO.includes(value as TabelaAnexo)
 }
 
 function toInt(value: unknown): number | null {
@@ -31,6 +33,9 @@ function getUploadsDir(tabela: TabelaAnexo): string {
   }
   if (tabela === 'banco_de_horas') {
     return path.resolve(process.cwd(), 'uploads', 'banco-horas')
+  }
+  if (tabela === 'atendimentos') {
+    return path.resolve(process.cwd(), 'uploads', 'atendimentos')
   }
   return path.resolve(process.cwd(), 'uploads', 'agendamentos')
 }
@@ -65,16 +70,22 @@ async function assertRegistroExiste(tabela: TabelaAnexo, registroId: number): Pr
     const row: any[] = await prisma.$queryRaw`SELECT ID_BH AS id FROM banco_de_horas WHERE ID_BH = ${registroId} LIMIT 1`
     return row.length > 0
   }
+  if (tabela === 'atendimentos') {
+    const row: any[] = await prisma.$queryRaw`SELECT id_Atend AS id FROM atendimentos WHERE id_Atend = ${registroId} LIMIT 1`
+    return row.length > 0
+  }
   const row: any[] = await prisma.$queryRaw`SELECT id AS id FROM agendamento_programado WHERE id = ${registroId} LIMIT 1`
   return row.length > 0
 }
 
-const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024
+// 50MB — precisa caber vídeos/áudios curtos anexados em solicitações, não só documentos.
+const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024
 const MAX_FILES_PER_RECORD = 10
 const ALLOWED_MIME = new Set([
   'image/jpeg',
   'image/png',
   'image/webp',
+  'image/gif',
   'application/pdf',
   'application/zip',
   'application/x-zip-compressed',
@@ -84,6 +95,18 @@ const ALLOWED_MIME = new Set([
   'application/vnd.ms-excel',
   'application/x-pkcs12',
   'application/x-pkcs7-certificates',
+  // Vídeo e áudio — pedido explicitamente pra anexar em solicitações do Mapa de Desenvolvimento.
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'video/x-msvideo',
+  'audio/mpeg',
+  'audio/mp4',
+  'audio/wav',
+  'audio/x-wav',
+  'audio/ogg',
+  'audio/webm',
+  'audio/aac',
 ])
 const ALLOWED_CERT_EXT = new Set(['.pfx', '.p12'])
 
@@ -175,7 +198,7 @@ export async function anexosRoutes(app: FastifyInstance) {
     } catch (e: any) {
       const message = String(e?.message ?? '')
       if (message.toLowerCase().includes('file size') || message.toLowerCase().includes('limit')) {
-        return reply.status(413).send({ error: 'Arquivo excede o limite de 10MB.' })
+        return reply.status(413).send({ error: 'Arquivo excede o limite de 50MB.' })
       }
       return reply.status(400).send({ error: 'Falha ao processar upload.' })
     }

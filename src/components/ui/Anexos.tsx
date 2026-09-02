@@ -5,7 +5,7 @@ import { Button } from './Button'
 import clsx from 'clsx'
 import { Modal } from './Modal'
 
-type TabelaAnexo = 'agenda' | 'agendamento_programado' | 'cliente_prontuario' | 'banco_de_horas'
+type TabelaAnexo = 'agenda' | 'agendamento_programado' | 'cliente_prontuario' | 'banco_de_horas' | 'atendimentos'
 
 type Anexo = {
   id: number
@@ -22,7 +22,7 @@ type PreviewState = {
   title: string
 }
 
-const MAX_BYTES = 10 * 1024 * 1024
+const MAX_BYTES = 50 * 1024 * 1024
 const MAX_FILES = 10
 
 function formatBytes(bytes: number) {
@@ -106,7 +106,7 @@ export function Anexos({
       return
     }
     if (selected.some(f => f.size > MAX_BYTES)) {
-      setError('Um ou mais arquivos excedem 10MB.')
+      setError('Um ou mais arquivos excedem 50MB.')
       return
     }
     setUploading(true)

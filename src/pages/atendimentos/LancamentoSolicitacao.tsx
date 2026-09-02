@@ -6,6 +6,8 @@ import { useToast } from '../../components/ui/Toast'
 import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
+import { Anexos } from '../../components/ui/Anexos'
+import { AnexosDraft } from '../../components/ui/AnexosDraft'
 import type { Solicitacao, Usuario } from '../../types'
 
 type AbaForm = 'atendimento' | 'procedimentos' | 'finalizacao'
@@ -58,6 +60,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
   const [catalogo, setCatalogo] = useState<Array<{ id: number; descricao: string; pontuacao: number }>>([])
   const [efetuados, setEfetuados] = useState<Array<{ id: number; descricao: string; pontuacao: number; data: string }>>([])
   const [procSelecionado, setProcSelecionado] = useState('')
+  const [anexosNovos, setAnexosNovos] = useState<File[]>([])
 
   // Recarrega o formulário toda vez que abre, pra não vazar dados do registro anterior.
   useEffect(() => {
@@ -75,6 +78,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
     setSolucao(solicitacao?.solucao ?? '')
     setProcSelecionado('')
     setEfetuados([])
+    setAnexosNovos([])
   }, [aberto, solicitacao])
 
   useEffect(() => {
@@ -124,6 +128,13 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
           bugSistema,
         })
         toast.success(`Solicitação #${r.id} criada`)
+        if (anexosNovos.length) {
+          try {
+            await api.uploadAnexos({ tabela: 'atendimentos', registroId: r.id, files: anexosNovos })
+          } catch (e: any) {
+            toast.error(e?.message || 'Solicitação criada, mas falhou ao enviar os anexos.')
+          }
+        }
       }
       onSalvo()
       onClose()
@@ -200,6 +211,14 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
                   value={observacoes}
                   onChange={(e) => setObservacoes(e.target.value)}
                 />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">Anexos (fotos, vídeos, áudios)</label>
+                {editando ? (
+                  <Anexos tabela="atendimentos" registroId={solicitacao!.id} emptyLabel="Nenhum anexo ainda." />
+                ) : (
+                  <AnexosDraft files={anexosNovos} onChange={setAnexosNovos} />
+                )}
               </div>
             </div>
 

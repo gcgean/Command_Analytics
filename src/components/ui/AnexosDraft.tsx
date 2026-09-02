@@ -4,7 +4,7 @@ import { Button } from './Button'
 import clsx from 'clsx'
 import { Modal } from './Modal'
 
-const MAX_BYTES = 10 * 1024 * 1024
+const MAX_BYTES = 50 * 1024 * 1024
 const MAX_FILES = 10
 
 function formatBytes(bytes: number) {
@@ -51,7 +51,7 @@ export function AnexosDraft({ files, onChange }: { files: File[]; onChange: (fil
       setError(null)
     }
     if (limited.some(f => f.size > MAX_BYTES)) {
-      setError('Um ou mais arquivos excedem 10MB.')
+      setError('Um ou mais arquivos excedem 50MB.')
       return
     }
     onChange([...
