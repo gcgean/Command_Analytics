@@ -473,7 +473,7 @@ export function MapaSolicitacoes() {
                       </p>
                       <div className="flex items-center gap-0.5 flex-shrink-0">
                         {item.prioritario === 'S' && (
-                          <Star size={11} className="text-amber-400 fill-amber-400" aria-label="Prioritário" />
+                          <AlertTriangle size={12} className="text-red-600 fill-red-100 dark:fill-red-950" aria-label="Prioritário / urgente" />
                         )}
                         <button
                           type="button"
@@ -491,9 +491,6 @@ export function MapaSolicitacoes() {
                     )}>
                       {item.id}
                     </p>
-                    {item.prioritario === 'S' && (
-                      <div className="h-1 -mx-1.5 mb-0.5 bg-red-600" title="Prioritário" />
-                    )}
                     <p className="text-center text-[9px] font-medium text-slate-500 dark:text-slate-400 -mt-0.5 mb-0.5 truncate">
                       {statusAtendimentoLabel[item.status]}
                     </p>
