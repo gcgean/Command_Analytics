@@ -370,8 +370,21 @@ export function MapaSolicitacoes() {
               return (
                 <div
                   key={item.id}
-                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
+                  className="group relative"
                 >
+                  {/* Tooltip com a reclamação — mesma informação do "Exibir Detalhes", só que ao passar o mouse */}
+                  <div className="pointer-events-none absolute left-0 top-full z-40 mt-1 w-64 max-h-56 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-2.5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity">
+                    <p className="text-[10px] text-slate-500 mb-1">
+                      Início: {formatarDataHora(item.dataAtendimento ?? item.dataAbertura)}
+                      {item.diasParado > 0 && ` · ${item.diasParado} dia(s)`}
+                    </p>
+                    <p className="text-[10px] font-semibold text-slate-600 dark:text-slate-400 mb-0.5">Reclamação</p>
+                    <p className="text-xs text-slate-700 dark:text-slate-300 whitespace-pre-wrap line-clamp-6">
+                      {item.observacoes?.trim() || '—'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden group-hover:border-slate-300 dark:group-hover:border-slate-600 transition-colors">
                   <div className="p-1.5">
                     <div className="flex items-start justify-between gap-1">
                       <p
@@ -448,6 +461,7 @@ export function MapaSolicitacoes() {
                     <span className="flex-shrink-0 ml-1 opacity-90" title={statusAtendimentoLabel[item.status]}>
                       {item.diasParado}
                     </span>
+                  </div>
                   </div>
                 </div>
               )
