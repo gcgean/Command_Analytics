@@ -27,6 +27,10 @@ const S = {
   TESTADO_COM_ERRO: 17,
 } as const
 
+// Ordem fixa do resumo de totalizadores — segue a sequência do fluxo (fila → desenvolvimento →
+// testes → resultado), não a ordem em que os status aparecem nos dados carregados.
+const ORDEM_STATUS_RESUMO = [1, 3, S.EM_ATENDIMENTO, 6, S.AGUARDANDO_ANALISE_DEV, S.EM_DESENVOLVIMENTO, S.AGUARDANDO_TESTES, S.EM_TESTES, S.TESTADO_OK, S.CORRIGIDO_DEV, S.TESTADO_COM_ERRO]
+
 // Rótulo do status 2 só nesta tela — no resto do sistema (Atendimentos geral, dashboards) esse
 // status representa "técnico atendendo agora", e mudar o rótulo global misrepresentaria isso lá.
 // Aqui, no contexto do backlog de dev, "Aguardando Desenvolvimento" é o que faz sentido.
@@ -357,12 +361,12 @@ export function MapaSolicitacoes() {
             {loading ? 'Carregando...' : `${itens.length} solicitação(ões) — o que cada cliente pediu e em que etapa está`}
           </p>
         </div>
-        {/* Resumo por etapa da aba atual */}
+        {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero */}
         <div className="flex flex-wrap items-center gap-2">
-          {Object.entries(contagens).map(([st, qtd]) => (
+          {ORDEM_STATUS_RESUMO.map((st) => (
             <span key={st} className="flex items-center gap-1.5 text-xs">
-              <EtapaBadge status={Number(st)} />
-              <span className="text-slate-500 font-medium">{qtd}</span>
+              <EtapaBadge status={st} />
+              <span className="text-slate-500 font-medium">{contagens[st] ?? 0}</span>
             </span>
           ))}
         </div>
