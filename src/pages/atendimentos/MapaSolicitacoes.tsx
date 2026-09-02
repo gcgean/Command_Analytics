@@ -42,15 +42,17 @@ const ROTULO_STATUS: Record<number, string> = {
 const CORES_ETAPA: Record<number, string> = {
   1: 'bg-slate-500 text-white', // Em Fila
   3: 'bg-cyan-600 text-white', // Aguardando Cliente
-  2: 'bg-amber-500 text-white', // Aguardando Desenvolvimento
   4: 'bg-orange-600 text-white', // Aguardando Análise Dev
   6: 'bg-yellow-500 text-slate-900', // Aguardando Procedimento
-  9: 'bg-pink-500 text-white', // Aguardando Testes
-  13: 'bg-indigo-600 text-white', // Em Desenvolvimento
-  10: 'bg-blue-600 text-white', // Em Testes
-  11: 'bg-emerald-600 text-white', // Testado OK
-  16: 'bg-teal-600 text-white', // Corrigido pelo Dev
-  17: 'bg-red-600 text-white', // Testado com Erro
+  // Paleta customizada pedida pelo usuário (nomes das cores conforme o próprio pediu):
+  2: 'bg-[#A7AF52] text-white', // Aguardando Desenvolvimento — verde menta
+  13: 'bg-[#292566] text-white', // Em Desenvolvimento — azul mar
+  9: 'bg-[#3E97AF] text-white', // Aguardando Testes — azul ciano
+  10: 'bg-[#2E4053] text-white', // Em Testes — azul mediterrâneo
+  11: 'bg-[#00473E] text-white', // Testado OK — verde floresta
+  17: 'bg-[#C1272D] text-white', // Testado com Erro — vermelho telha
+  16: 'bg-[#5C7A36] text-white', // Corrigido pelo Dev — verde folha
+  7: 'bg-[#00473E] text-white', // Concluído (aba Finalizadas) — verde floresta, igual Testado OK
 }
 
 // Mesma família de cor de CORES_ETAPA, só que como texto legível sobre o card branco — usado no
@@ -58,15 +60,16 @@ const CORES_ETAPA: Record<number, string> = {
 const TEXTO_ETAPA: Record<number, string> = {
   1: 'text-slate-600 dark:text-slate-400',
   3: 'text-cyan-700 dark:text-cyan-400',
-  2: 'text-amber-700 dark:text-amber-400',
   4: 'text-orange-700 dark:text-orange-400',
   6: 'text-yellow-700 dark:text-yellow-500',
-  9: 'text-pink-700 dark:text-pink-400',
-  13: 'text-indigo-700 dark:text-indigo-400',
-  10: 'text-blue-700 dark:text-blue-400',
-  11: 'text-emerald-700 dark:text-emerald-400',
-  16: 'text-teal-700 dark:text-teal-400',
-  17: 'text-red-700 dark:text-red-400',
+  2: 'text-[#7d8340] dark:text-[#c3ca8c]', // verde menta
+  13: 'text-[#292566] dark:text-[#8886c4]', // azul mar
+  9: 'text-[#2f7488] dark:text-[#7fc3d6]', // azul ciano
+  10: 'text-[#2E4053] dark:text-[#96a5b2]', // azul mediterrâneo
+  11: 'text-[#00473E] dark:text-[#4fbfae]', // verde floresta
+  17: 'text-[#C1272D] dark:text-[#f28c8f]', // vermelho telha
+  16: 'text-[#5C7A36] dark:text-[#a3c47c]', // verde folha
+  7: 'text-[#00473E] dark:text-[#4fbfae]', // Concluído — igual Testado OK
 }
 
 function EtapaBadge({ status, className }: { status: number; className?: string }) {
