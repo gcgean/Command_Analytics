@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   RefreshCw, Loader2, Star, Search, MoreVertical, AlertTriangle,
-  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus,
+  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy,
 } from 'lucide-react'
 import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -63,6 +63,7 @@ export function MapaSolicitacoes() {
   const [itens, setItens] = useState<Solicitacao[]>([])
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
+  const [filtroEtapa, setFiltroEtapa] = useState<number | ''>('')
   const [selecionado, setSelecionado] = useState<Solicitacao | null>(null)
   const [menuAberto, setMenuAberto] = useState<number | null>(null)
 
@@ -78,12 +79,18 @@ export function MapaSolicitacoes() {
   const [texto, setTexto] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [lancamento, setLancamento] = useState<{ aberto: boolean; item: Solicitacao | null }>({ aberto: false, item: null })
+  const [modalNotas, setModalNotas] = useState(false)
+  const [notasTexto, setNotasTexto] = useState('')
+  const [carregandoNotas, setCarregandoNotas] = useState(false)
 
   const carregar = useCallback(() => {
     setLoading(true)
     const req =
       aba === 'suporte'
-        ? api.getSolicitacoesSuporte(busca.trim() ? { busca: busca.trim() } : undefined)
+        ? api.getSolicitacoesSuporte({
+            ...(busca.trim() ? { busca: busca.trim() } : {}),
+            ...(filtroEtapa ? { status: filtroEtapa } : {}),
+          })
         : aba === 'testes'
           ? api.getSolicitacoesTestes()
           : api.getSolicitacoesFinalizadas(dataInicio, dataFim)
@@ -97,7 +104,7 @@ export function MapaSolicitacoes() {
         toast.error(e?.message || 'Falha ao carregar as solicitações.')
         setLoading(false)
       })
-  }, [aba, busca, dataInicio, dataFim, toast])
+  }, [aba, busca, filtroEtapa, dataInicio, dataFim, toast])
 
   useEffect(() => {
     // Busca é digitada — espera o usuário parar antes de bater no servidor.
@@ -135,6 +142,20 @@ export function MapaSolicitacoes() {
 
   const mudarStatus = (item: Solicitacao, status: number, rotulo: string) =>
     executar(() => api.alterarStatusSolicitacao(item.id, status), `${rotulo} — #${item.id}`)
+
+  const abrirNotasAtualizacao = async () => {
+    setModalNotas(true)
+    setCarregandoNotas(true)
+    try {
+      const res = await api.getNotasAtualizacao(dataInicio, dataFim)
+      setNotasTexto(res.texto)
+    } catch (e: any) {
+      toast.error(e?.message || 'Falha ao gerar as notas.')
+      setNotasTexto('')
+    } finally {
+      setCarregandoNotas(false)
+    }
+  }
 
   const abrirLog = async (item: Solicitacao) => {
     setModalLog(item)
@@ -256,7 +277,26 @@ export function MapaSolicitacoes() {
               <label className="block text-xs text-slate-500 mb-1">Até</label>
               <input type="date" className="input" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
             </div>
+            <button className="btn-secondary flex items-center gap-2" onClick={abrirNotasAtualizacao}>
+              <FileText size={14} /> Notas de atualização
+            </button>
           </>
+        )}
+        {aba === 'suporte' && (
+          <select
+            className="input"
+            value={filtroEtapa}
+            onChange={(e) => setFiltroEtapa(e.target.value ? Number(e.target.value) : '')}
+          >
+            <option value="">Todas as etapas</option>
+            <option value={S.EM_DESENVOLVIMENTO}>Em Desenvolvimento</option>
+            <option value={1}>Em Fila</option>
+            <option value={S.EM_ATENDIMENTO}>Em Atendimento</option>
+            <option value={3}>Aguardando Cliente</option>
+            <option value={6}>Aguardando Procedimento</option>
+            <option value={S.CORRIGIDO_DEV}>Corrigido pelo Dev</option>
+            <option value={S.TESTADO_COM_ERRO}>Testado com Erro</option>
+          </select>
         )}
         {/* Resumo por etapa da aba atual */}
         <div className="flex flex-wrap gap-2 ml-auto">
@@ -434,6 +474,32 @@ export function MapaSolicitacoes() {
           )}
         </div>
       </div>
+
+      {/* Notas de atualização */}
+      <Modal isOpen={modalNotas} onClose={() => setModalNotas(false)} title="Notas de atualização" size="lg">
+        {carregandoNotas ? (
+          <div className="flex items-center justify-center h-32 text-slate-500">
+            <Loader2 className="w-5 h-5 animate-spin mr-2" /> Gerando...
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <textarea readOnly className="input w-full h-72 resize-none font-mono text-xs" value={notasTexto} />
+            <div className="flex justify-end gap-2">
+              <button className="btn-secondary" onClick={() => setModalNotas(false)}>Fechar</button>
+              <button
+                className="btn-primary flex items-center gap-2"
+                disabled={!notasTexto}
+                onClick={async () => {
+                  await navigator.clipboard.writeText(notasTexto)
+                  toast.success('Copiado para a área de transferência')
+                }}
+              >
+                <Copy size={14} /> Copiar
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* Lançamento — Novo / Alterar / Finalizar */}
       <LancamentoSolicitacao

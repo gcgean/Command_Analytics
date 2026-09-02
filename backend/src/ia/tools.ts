@@ -4,6 +4,7 @@ import type { ContextoIA } from './seguranca'
 import { possuiPermissao } from './seguranca'
 import { obterConexoesAgregadas } from '../routes/connections'
 import { usuarioEhAdmin } from '../utils/visibilidade'
+import { STATUS_SUPORTE, STATUS_TESTES } from '../routes/solicitacoes'
 
 export type NivelRisco = 'consulta' | 'escrita' | 'critica'
 
@@ -284,6 +285,58 @@ export const ferramentas: Ferramenta[] = [
           funil: n.funil,
           status: n.status,
           descricao: n.descricao,
+        })),
+      }
+    },
+  },
+  {
+    nome: 'consultar_solicitacoes',
+    descricao:
+      'Busca solicitações no Mapa de Solicitações (setor de desenvolvimento) pelo nome do cliente — ' +
+      'o que o cliente pediu, em que etapa está (fila, em desenvolvimento, em testes, etc.), técnico ' +
+      'e desenvolvedor responsáveis. Cobre as solicitações ainda ativas (não inclui as já concluídas).',
+    risco: 'consulta',
+    permissao: 'solicitacoes',
+    schemaParametros: {
+      type: 'object',
+      properties: {
+        busca: { type: 'string', description: 'Nome do cliente' },
+        limite: { type: 'integer', description: 'Quantos registros retornar (padrão 10, máx 20)' },
+      },
+      required: ['busca'],
+    },
+    async executar(args) {
+      const busca = String(args.busca ?? '').trim()
+      if (!busca) return { erro: 'Informe o nome do cliente.' }
+      const limite = Math.min(20, Math.max(1, Number(args.limite) || 10))
+
+      const itens = await prisma.atendimento.findMany({
+        where: {
+          status: { in: [...STATUS_SUPORTE, ...STATUS_TESTES] },
+          cliente: { nome: { contains: busca } },
+        },
+        include: {
+          cliente: { select: { nome: true } },
+          tecnico: { select: { nomeUsu: true, nomeCompleto: true } },
+          desenvolvedor: { select: { nomeUsu: true, nomeCompleto: true } },
+        },
+        orderBy: { id: 'asc' },
+        take: limite,
+      })
+
+      if (itens.length === 0) {
+        return { erro: `Nenhuma solicitação ativa encontrada para "${args.busca}".` }
+      }
+
+      return {
+        solicitacoes: itens.map((a) => ({
+          id: a.id,
+          cliente: a.cliente?.nome ?? null,
+          status: a.status,
+          tecnico: a.tecnico?.nomeCompleto || a.tecnico?.nomeUsu || null,
+          desenvolvedor: a.desenvolvedor?.nomeCompleto || a.desenvolvedor?.nomeUsu || null,
+          prioritario: a.prioritario === 'S',
+          reclamacao: a.observacoes,
         })),
       }
     },

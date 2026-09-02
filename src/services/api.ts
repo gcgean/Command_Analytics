@@ -702,6 +702,8 @@ export const api = {
     fetchApi<{ total: number; data: Solicitacao[] }>(
       `/solicitacoes/finalizadas?dataInicio=${dataInicio}&dataFim=${dataFim}`
     ),
+  getNotasAtualizacao: (dataInicio: string, dataFim: string) =>
+    fetchApi<{ total: number; texto: string }>(`/solicitacoes/notas-atualizacao?dataInicio=${dataInicio}&dataFim=${dataFim}`),
   getSolicitacaoLog: (id: number) =>
     fetchApi<{ data: Array<{ obs: string; data: string; usuario: string | null }> }>(`/solicitacoes/${id}/log`),
   alterarStatusSolicitacao: (id: number, status: number, observacao?: string) =>

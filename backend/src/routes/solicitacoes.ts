@@ -26,8 +26,8 @@ export const STATUS = {
 } as const
 
 // Abas do mapa, exatamente como o Delphi as consulta.
-const STATUS_SUPORTE = [1, 2, 3, 6, 13, 16, 17]
-const STATUS_TESTES = [9, 10, 11, 16, 17]
+export const STATUS_SUPORTE = [1, 2, 3, 6, 13, 16, 17]
+export const STATUS_TESTES = [9, 10, 11, 16, 17]
 
 // Status em que o atendimento fica "parado esperando alguém" — passando de 3 dias nesse
 // estado o Delphi pinta o card de vermelho.
@@ -153,6 +153,32 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       take: 500,
     })
     return { total: itens.length, data: itens.map(paraCard) }
+  })
+
+  // GET /solicitacoes/notas-atualizacao — botão "Notas de atualização" da aba Finalizadas:
+  // junta o Obs_Atendimento de tudo que foi concluído no período, pronto pra virar release notes.
+  app.get('/notas-atualizacao', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request, reply) => {
+    const { dataInicio, dataFim } = request.query as Record<string, string>
+    if (!dataInicio || !dataFim) return reply.status(400).send({ error: 'Informe dataInicio e dataFim.' })
+
+    const fim = new Date(`${dataFim}T00:00:00`)
+    fim.setDate(fim.getDate() + 1)
+
+    const itens = await prisma.atendimento.findMany({
+      where: {
+        status: STATUS.CONCLUIDO,
+        dataFechamento: { gte: new Date(`${dataInicio}T00:00:00`), lt: fim },
+      },
+      select: { observacoes: true },
+      orderBy: { dataFechamento: 'asc' },
+    })
+
+    const texto = itens
+      .map((a) => a.observacoes?.trim())
+      .filter((obs): obs is string => !!obs)
+      .join('\n')
+
+    return { total: itens.length, texto }
   })
 
   // GET /solicitacoes/:id/log — "Consultar Log do Atendimento (F11)"
