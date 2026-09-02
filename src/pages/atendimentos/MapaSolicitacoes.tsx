@@ -35,32 +35,45 @@ const ROTULO_STATUS: Record<number, string> = {
   [S.EM_ATENDIMENTO]: 'Aguardando Desenvolvimento',
 }
 
-// Paleta agrupada por significado, não por status isolado — usada tanto no badge quanto no
-// rodapé do card, pra ler rápido o que cada cor quer dizer:
-//   cinza/azul  → parado esperando alguém (fila, aguardando cliente)
-//   âmbar       → aguardando algo específico (procedimento, testes, análise, dev)
-//   azul/roxo   → em progresso ativo (desenvolvimento, testes)
-//   verde       → resultado positivo (testado OK, corrigido)
-//   vermelho    → problema (testado com erro)
+// Cor sólida e única por status — nada de tons repetidos nem de translúcido apagado, cada etapa
+// precisa ser reconhecível de longe. A família de cor ainda dá uma pista do sentido geral
+// (âmbares/amarelo/laranja = aguardando algo, azuis/roxo = em progresso, verde = positivo,
+// vermelho = problema), mas o tom em si nunca se repete entre status diferentes.
 const CORES_ETAPA: Record<number, string> = {
-  1: 'bg-slate-500/20 text-slate-500 dark:text-slate-400 border border-slate-500/30', // Em Fila
-  3: 'bg-slate-500/20 text-slate-500 dark:text-slate-400 border border-slate-500/30', // Aguardando Cliente
-  2: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30', // Aguardando Desenvolvimento
-  4: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30', // Aguardando Análise Dev
-  6: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30', // Aguardando Procedimento
-  9: 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30', // Aguardando Testes
-  13: 'bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 border border-indigo-500/30', // Em Desenvolvimento
-  10: 'bg-blue-500/20 text-blue-600 dark:text-blue-400 border border-blue-500/30', // Em Testes
-  11: 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30', // Testado OK
-  16: 'bg-green-500/20 text-green-600 dark:text-green-400 border border-green-500/30', // Corrigido pelo Dev
-  17: 'bg-rose-500/20 text-rose-600 dark:text-rose-400 border border-rose-500/30', // Testado com Erro
+  1: 'bg-slate-500 text-white', // Em Fila
+  3: 'bg-cyan-600 text-white', // Aguardando Cliente
+  2: 'bg-amber-500 text-white', // Aguardando Desenvolvimento
+  4: 'bg-orange-600 text-white', // Aguardando Análise Dev
+  6: 'bg-yellow-500 text-slate-900', // Aguardando Procedimento
+  9: 'bg-pink-500 text-white', // Aguardando Testes
+  13: 'bg-indigo-600 text-white', // Em Desenvolvimento
+  10: 'bg-blue-600 text-white', // Em Testes
+  11: 'bg-emerald-600 text-white', // Testado OK
+  16: 'bg-teal-600 text-white', // Corrigido pelo Dev
+  17: 'bg-red-600 text-white', // Testado com Erro
+}
+
+// Mesma família de cor de CORES_ETAPA, só que como texto legível sobre o card branco — usado no
+// nome do cliente, número do ticket e nome da etapa, pra tudo isso "acompanhar" a cor do status.
+const TEXTO_ETAPA: Record<number, string> = {
+  1: 'text-slate-600 dark:text-slate-400',
+  3: 'text-cyan-700 dark:text-cyan-400',
+  2: 'text-amber-700 dark:text-amber-400',
+  4: 'text-orange-700 dark:text-orange-400',
+  6: 'text-yellow-700 dark:text-yellow-500',
+  9: 'text-pink-700 dark:text-pink-400',
+  13: 'text-indigo-700 dark:text-indigo-400',
+  10: 'text-blue-700 dark:text-blue-400',
+  11: 'text-emerald-700 dark:text-emerald-400',
+  16: 'text-teal-700 dark:text-teal-400',
+  17: 'text-red-700 dark:text-red-400',
 }
 
 function EtapaBadge({ status, className }: { status: number; className?: string }) {
   return (
     <span className={clsx(
       'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap',
-      CORES_ETAPA[status] ?? 'bg-slate-500/20 text-slate-400 border border-slate-500/30',
+      CORES_ETAPA[status] ?? 'bg-slate-500 text-white',
       className
     )}>
       {ROTULO_STATUS[status] ?? status}
@@ -494,7 +507,7 @@ export function MapaSolicitacoes() {
                         className="text-[10px] font-bold uppercase leading-tight line-clamp-2 flex-1"
                         title={item.clienteNome}
                       >
-                        <span className={item.atrasado ? 'text-red-600 dark:text-red-400' : 'text-blue-800 dark:text-blue-300'}>
+                        <span className={item.atrasado ? 'text-red-600 dark:text-red-400' : (TEXTO_ETAPA[item.status] ?? 'text-slate-700 dark:text-slate-300')}>
                           {item.clienteNome || 'SEM CLIENTE'}
                         </span>
                       </p>
@@ -514,11 +527,14 @@ export function MapaSolicitacoes() {
 
                     <p className={clsx(
                       'text-center text-sm font-bold my-0.5',
-                      item.atrasado ? 'text-red-600 dark:text-red-400' : 'text-blue-700 dark:text-blue-400'
+                      item.atrasado ? 'text-red-600 dark:text-red-400' : (TEXTO_ETAPA[item.status] ?? 'text-slate-700 dark:text-slate-300')
                     )}>
                       {item.id}
                     </p>
-                    <p className="text-center text-[9px] font-medium text-slate-500 dark:text-slate-400 -mt-0.5 mb-0.5 truncate">
+                    <p className={clsx(
+                      'text-center text-[9px] font-medium -mt-0.5 mb-0.5 truncate',
+                      item.atrasado ? 'text-red-600 dark:text-red-400' : (TEXTO_ETAPA[item.status] ?? 'text-slate-500 dark:text-slate-400')
+                    )}>
                       {ROTULO_STATUS[item.status]}
                     </p>
 
@@ -535,7 +551,7 @@ export function MapaSolicitacoes() {
 
                   <div className={clsx(
                     'px-1.5 py-0.5 flex items-center justify-between text-[9px] font-bold uppercase',
-                    CORES_ETAPA[item.status] ?? 'bg-slate-500/20 text-slate-500 dark:text-slate-400 border border-slate-500/30'
+                    CORES_ETAPA[item.status] ?? 'bg-slate-500 text-white'
                   )}>
                     <span className="truncate">
                       {item.tecnicoNome ?? '—'}
