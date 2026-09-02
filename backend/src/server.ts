@@ -13,6 +13,7 @@ import { clientesRoutes } from './routes/clientes'
 import { segmentosRoutes } from './routes/segmentos'
 import { classificacoesRoutes } from './routes/classificacoes'
 import { atendimentosRoutes } from './routes/atendimentos'
+import { solicitacoesRoutes } from './routes/solicitacoes'
 import { agendaRoutes } from './routes/agenda'
 import { planosRoutes } from './routes/planos'
 import { pipelineRoutes } from './routes/pipeline'
@@ -149,6 +150,7 @@ app.register(async (api) => {
   api.register(segmentosRoutes,    { prefix: '/segmentos' })
   api.register(classificacoesRoutes,{ prefix: '/classificacoes' })
   api.register(atendimentosRoutes, { prefix: '/atendimentos' })
+  api.register(solicitacoesRoutes, { prefix: '/solicitacoes' })
   api.register(agendaRoutes,       { prefix: '/agenda' })
   api.register(planosRoutes,       { prefix: '/planos' })
   api.register(pipelineRoutes,     { prefix: '/pipeline' })

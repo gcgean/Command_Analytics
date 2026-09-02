@@ -32,6 +32,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
           { label: 'Novo Atendimento',   icon: <MessageSquare className="w-4 h-4" />, to: '/atendimentos/novo' },
           { label: 'Histórico',          icon: <FileText className="w-4 h-4" />,      to: '/atendimentos/historico' },
           { label: 'Mapa',               icon: <Map className="w-4 h-4" />,           to: '/atendimentos/mapa' },
+          { label: 'Mapa de Solicitações', icon: <Code2 className="w-4 h-4" />,       to: '/atendimentos/solicitacoes', recurso: 'solicitacoes' },
         ]
       },
       {

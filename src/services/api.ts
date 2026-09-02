@@ -9,7 +9,7 @@ import type {
   DashboardMensalidadesEstatisticas, DashboardMensalidadesFaixa, DashboardMensalidadesFiltros,
   DashboardMensalidadesOpcoesFiltros, DashboardMensalidadesRanking, DashboardMensalidadesResumo,
   DesempenhoEquipe, Operadora, ClienteMaquininha, MaquininhasRelatorio, TipoMaquininha, StatusMaquininha,
-  ClientesSemMaquininhaResposta, LembretesFixosResposta, TipoRecorrenciaLembrete
+  ClientesSemMaquininhaResposta, LembretesFixosResposta, TipoRecorrenciaLembrete, Solicitacao
 } from '../types'
 
 // ============================================================
@@ -685,6 +685,45 @@ export const api = {
     fetchApi<{ id: string; name: string; status: string; ok: boolean; checkedAt?: string }>(
       `/connections/saude?servidorId=${servidorId}&connectionId=${encodeURIComponent(connectionId)}`
     ),
+  // ─── Mapa de Solicitações (setor de desenvolvimento) ───
+  getSolicitacoesSuporte: (params?: { status?: number; tecnicoId?: number; desenvolvedorId?: number; busca?: string }) => {
+    const qs = params
+      ? '?' + new URLSearchParams({
+          ...(params.status ? { status: String(params.status) } : {}),
+          ...(params.tecnicoId ? { tecnicoId: String(params.tecnicoId) } : {}),
+          ...(params.desenvolvedorId ? { desenvolvedorId: String(params.desenvolvedorId) } : {}),
+          ...(params.busca ? { busca: params.busca } : {}),
+        }).toString()
+      : ''
+    return fetchApi<{ total: number; data: Solicitacao[] }>(`/solicitacoes/suporte${qs}`)
+  },
+  getSolicitacoesTestes: () => fetchApi<{ total: number; data: Solicitacao[] }>('/solicitacoes/testes'),
+  getSolicitacoesFinalizadas: (dataInicio: string, dataFim: string) =>
+    fetchApi<{ total: number; data: Solicitacao[] }>(
+      `/solicitacoes/finalizadas?dataInicio=${dataInicio}&dataFim=${dataFim}`
+    ),
+  getSolicitacaoLog: (id: number) =>
+    fetchApi<{ data: Array<{ obs: string; data: string; usuario: string | null }> }>(`/solicitacoes/${id}/log`),
+  alterarStatusSolicitacao: (id: number, status: number, observacao?: string) =>
+    fetchApi<{ ok: boolean }>(`/solicitacoes/${id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, observacao }),
+    }),
+  vincularDesenvolvedor: (id: number, desenvolvedorId: number | null) =>
+    fetchApi<{ ok: boolean; desenvolvedorNome: string | null }>(`/solicitacoes/${id}/desenvolvedor`, {
+      method: 'PATCH',
+      body: JSON.stringify({ desenvolvedorId }),
+    }),
+  togglePrioritarioSolicitacao: (id: number) =>
+    fetchApi<{ ok: boolean; prioritario: boolean }>(`/solicitacoes/${id}/prioritario`, { method: 'PATCH' }),
+  toggleOrientacaoSolicitacao: (id: number) =>
+    fetchApi<{ ok: boolean; somenteOrientacao: boolean }>(`/solicitacoes/${id}/orientacao`, { method: 'PATCH' }),
+  cancelarSolicitacao: (id: number, motivo: string) =>
+    fetchApi<{ ok: boolean }>(`/solicitacoes/${id}/cancelar`, {
+      method: 'POST',
+      body: JSON.stringify({ motivo }),
+    }),
+
   executarAcaoConexao: (servidorId: number, connectionId: string, acao: 'abrir' | 'reiniciar' | 'fechar', connectionName?: string) =>
     fetchApi<{ ok: boolean }>('/connections/acao', {
       method: 'POST',
@@ -831,8 +870,8 @@ export const statusAtendimentoLabel: Record<StatusAtendimento, string> = {
   12: 'Aprovado Dev',
   13: 'Em Desenvolvimento',
   14: 'Arquivados',
-  15: 'Testado com Erro',
   16: 'Corrigido Dev',
+  17: 'Testado com Erro',
 }
 
 export const departamentoColors: Record<string, string> = {

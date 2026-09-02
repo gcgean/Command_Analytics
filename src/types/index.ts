@@ -46,8 +46,34 @@ export type StatusAtendimento =
   | 12 // Aprovado Dev
   | 13 // Em Desenvolvimento
   | 14 // Arquivados
-  | 15 // Testado com Erro
-  | 16 // Corrigido Dev
+  | 16 // Corrigido pelo Desenvolvimento
+  | 17 // Testado com Erro
+
+/** Card do Mapa de Solicitações — atendimento visto pela ótica do setor de desenvolvimento. */
+export interface Solicitacao {
+  id: number
+  clienteId: number | null
+  clienteNome: string
+  clienteCurva: string | null
+  clienteTelefone: string | null
+  tecnicoId: number | null
+  tecnicoNome: string | null
+  desenvolvedorId: number | null
+  desenvolvedorNome: string | null
+  status: StatusAtendimento
+  observacoes: string | null
+  solucao: string | null
+  prioritario: string | null
+  somenteOrientacao: string | null
+  dataAbertura: string | null
+  dataAtendimento: string | null
+  dataFechamento: string | null
+  dataUltAlteracao: string | null
+  /** Dias desde o início do atendimento — base do destaque de atraso. */
+  diasParado: number
+  /** Mais de 3 dias parado nos status 1, 4 ou 6 (mesma regra do Delphi). */
+  atrasado: boolean
+}
 
 export type StatusPipeline =
   | 1  // Aguardando Instalação

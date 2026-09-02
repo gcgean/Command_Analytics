@@ -18,8 +18,8 @@ const statusColors: Record<StatusAtendimento, string> = {
   12: 'bg-lime-500/20 text-lime-400 border border-lime-500/30',   // Aprovado Dev
   13: 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30', // Em Desenvolvimento
   14: 'bg-slate-700/40 text-slate-500 border border-slate-700/30', // Arquivados
-  15: 'bg-rose-500/20 text-rose-400 border border-rose-500/30',   // Testado com Erro
   16: 'bg-violet-500/20 text-violet-400 border border-violet-500/30', // Corrigido Dev
+  17: 'bg-rose-500/20 text-rose-400 border border-rose-500/30',   // Testado com Erro
 }
 
 interface StatusBadgeProps {

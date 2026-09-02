@@ -29,6 +29,7 @@ model Usuario {
   idTelegram        String?  @map("ID_TELEGRAM") @db.VarChar(100)
 
   atendimentosTecnico Atendimento[]          @relation("Tecnico")
+  atendimentosDesenv  Atendimento[]          @relation("Desenvolvedor")
   agendaItens         AgendaItem[]           @relation("TecnicoAgenda")
   negocios            Negocio[]              @relation("ResponsavelNegocio")
   comissoes           Comissao[]             @relation("VendedorComissao")
@@ -103,6 +104,8 @@ model Atendimento {
   cliente          Cliente? @relation(fields: [clienteId], references: [id])
   tecnicoId        Int?     @map("cod_tecnico")
   tecnico          Usuario? @relation("Tecnico", fields: [tecnicoId], references: [id])
+  desenvolvedorId  Int?     @map("cod_desenvolvedor")
+  desenvolvedor    Usuario? @relation("Desenvolvedor", fields: [desenvolvedorId], references: [id])
   departamento     Int?
   tipoContato      Int?     @map("tipo_contato_cli")
   status           Int?     @default(1) @map("Status_Atendimento")
@@ -115,6 +118,18 @@ model Atendimento {
   dataFechamento   DateTime? @map("Data_hora_finalizacao")
   tempoAtendimento Int?     @map("TEMPO_ATEND")
   protocolo        String?  @db.VarChar(50)
+
+  // Campos usados pelo Mapa de Solicitações (mesmos que o Delphi legado grava)
+  usuarioLancId        Int?      @map("cod_usu_lanc")
+  dataAtendimento      DateTime? @map("Data_hora_atendimento")
+  dataUltAlteracao     DateTime? @map("Data_Ult_alteracao") @db.Date
+  prioritario          String?   @map("Atendimento_prioritario") @db.Char(1)
+  somenteOrientacao    String?   @map("Somente_Orientacao") @db.VarChar(1)
+  clienteAtualizado    Int?      @map("cliente_atualizado")
+  tempoDesenvolvimento Decimal?  @map("tempo_desenvolvimento") @db.Decimal(10, 2)
+  motivoCancelamento   String?   @map("Motivo_Cancelamento") @db.VarChar(300)
+  usuarioCancelamentoId Int?     @map("cod_usu_cancelamento")
+  dataCancelamento     DateTime? @map("data_hora_cancelamento")
 
   @@map("atendimentos")
 }

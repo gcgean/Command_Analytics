@@ -17,6 +17,7 @@ import { Atendimentos } from './pages/atendimentos/Atendimentos'
 import { NovoAtendimento } from './pages/atendimentos/NovoAtendimento'
 import { HistoricoAtendimentos } from './pages/atendimentos/HistoricoAtendimentos'
 import { MapaAtendimentos } from './pages/atendimentos/MapaAtendimentos'
+import { MapaSolicitacoes } from './pages/atendimentos/MapaSolicitacoes'
 
 // Agenda
 import { Agenda } from './pages/agenda/Agenda'
@@ -201,6 +202,7 @@ export default function App() {
         <Route path="atendimentos/novo" element={<NovoAtendimento />} />
         <Route path="atendimentos/historico" element={<HistoricoAtendimentos />} />
         <Route path="atendimentos/mapa" element={<MapaAtendimentos />} />
+        <Route path="atendimentos/solicitacoes" element={<PermissionRoute recurso="solicitacoes"><MapaSolicitacoes /></PermissionRoute>} />
 
         <Route path="agenda" element={<PermissionRoute recurso="agenda"><Agenda /></PermissionRoute>} />
         <Route path="agenda/agendamentos" element={<PermissionRoute recurso="agenda-agendamentos"><AgendamentoProgramado /></PermissionRoute>} />

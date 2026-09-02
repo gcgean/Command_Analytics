@@ -12,6 +12,7 @@ const routeTitles: Record<string, string> = {
   '/atendimentos/novo': 'Novo Atendimento',
   '/atendimentos/historico': 'Histórico de Atendimentos',
   '/atendimentos/mapa': 'Mapa de Atendimentos',
+  '/atendimentos/solicitacoes': 'Mapa de Solicitações',
   '/agenda': 'Agenda',
   '/clientes': 'Clientes',
   '/clientes/monitor': 'Monitor de Clientes',
