@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   RefreshCw, Loader2, Star, Search, MoreVertical, AlertTriangle,
-  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy,
+  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info,
 } from 'lucide-react'
 import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -54,6 +54,17 @@ function formatarDataHora(valor: string | null): string {
   return d.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
 }
 
+const CHAVE_FILTRO_TECNICO = 'mapaSolicitacoes:filtroTecnicoId'
+const CHAVE_FILTRO_DEV = 'mapaSolicitacoes:filtroDesenvolvedorId'
+
+function lerFiltroSalvo(chave: string): string {
+  try {
+    return localStorage.getItem(chave) ?? ''
+  } catch {
+    return ''
+  }
+}
+
 export function MapaSolicitacoes() {
   const { can } = usePermissions()
   const podeAgir = can('solicitacoes-acoes')
@@ -64,7 +75,10 @@ export function MapaSolicitacoes() {
   const [loading, setLoading] = useState(true)
   const [busca, setBusca] = useState('')
   const [filtroEtapa, setFiltroEtapa] = useState<number | ''>('')
-  const [selecionado, setSelecionado] = useState<Solicitacao | null>(null)
+  // Filtro por dev/técnico persiste entre visitas — evita refiltrar toda vez que volta na tela.
+  const [filtroTecnicoId, setFiltroTecnicoId] = useState(() => lerFiltroSalvo(CHAVE_FILTRO_TECNICO))
+  const [filtroDesenvolvedorId, setFiltroDesenvolvedorId] = useState(() => lerFiltroSalvo(CHAVE_FILTRO_DEV))
+  const [modalDetalhes, setModalDetalhes] = useState<Solicitacao | null>(null)
   const [menuAberto, setMenuAberto] = useState<number | null>(null)
 
   const [dataInicio, setDataInicio] = useState(hojeISO())
@@ -90,6 +104,8 @@ export function MapaSolicitacoes() {
         ? api.getSolicitacoesSuporte({
             ...(busca.trim() ? { busca: busca.trim() } : {}),
             ...(filtroEtapa ? { status: filtroEtapa } : {}),
+            ...(filtroTecnicoId ? { tecnicoId: Number(filtroTecnicoId) } : {}),
+            ...(filtroDesenvolvedorId ? { desenvolvedorId: Number(filtroDesenvolvedorId) } : {}),
           })
         : aba === 'testes'
           ? api.getSolicitacoesTestes()
@@ -104,7 +120,16 @@ export function MapaSolicitacoes() {
         toast.error(e?.message || 'Falha ao carregar as solicitações.')
         setLoading(false)
       })
-  }, [aba, busca, filtroEtapa, dataInicio, dataFim, toast])
+  }, [aba, busca, filtroEtapa, filtroTecnicoId, filtroDesenvolvedorId, dataInicio, dataFim, toast])
+
+  const setFiltroTecnico = (id: string) => {
+    setFiltroTecnicoId(id)
+    try { id ? localStorage.setItem(CHAVE_FILTRO_TECNICO, id) : localStorage.removeItem(CHAVE_FILTRO_TECNICO) } catch { /* ignora */ }
+  }
+  const setFiltroDesenvolvedor = (id: string) => {
+    setFiltroDesenvolvedorId(id)
+    try { id ? localStorage.setItem(CHAVE_FILTRO_DEV, id) : localStorage.removeItem(CHAVE_FILTRO_DEV) } catch { /* ignora */ }
+  }
 
   useEffect(() => {
     // Busca é digitada — espera o usuário parar antes de bater no servidor.
@@ -176,6 +201,7 @@ export function MapaSolicitacoes() {
 
   const acoesDoCard = (item: Solicitacao) => {
     const base = [
+      { label: 'Exibir Detalhes', icon: <Info size={13} />, onClick: () => setModalDetalhes(item), sempre: true },
       { label: 'Consultar Log', icon: <History size={13} />, onClick: () => abrirLog(item), sempre: true },
     ]
     if (!podeAgir) return base
@@ -242,7 +268,7 @@ export function MapaSolicitacoes() {
         ] as Array<[Aba, string]>).map(([id, label]) => (
           <button
             key={id}
-            onClick={() => { setAba(id); setSelecionado(null) }}
+            onClick={() => setAba(id)}
             className={clsx(
               'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
               aba === id
@@ -283,20 +309,40 @@ export function MapaSolicitacoes() {
           </>
         )}
         {aba === 'suporte' && (
-          <select
-            className="input"
-            value={filtroEtapa}
-            onChange={(e) => setFiltroEtapa(e.target.value ? Number(e.target.value) : '')}
-          >
-            <option value="">Todas as etapas</option>
-            <option value={S.EM_DESENVOLVIMENTO}>Em Desenvolvimento</option>
-            <option value={1}>Em Fila</option>
-            <option value={S.EM_ATENDIMENTO}>Em Atendimento</option>
-            <option value={3}>Aguardando Cliente</option>
-            <option value={6}>Aguardando Procedimento</option>
-            <option value={S.CORRIGIDO_DEV}>Corrigido pelo Dev</option>
-            <option value={S.TESTADO_COM_ERRO}>Testado com Erro</option>
-          </select>
+          <>
+            <select
+              className="input"
+              value={filtroEtapa}
+              onChange={(e) => setFiltroEtapa(e.target.value ? Number(e.target.value) : '')}
+            >
+              <option value="">Todas as etapas</option>
+              <option value={S.EM_DESENVOLVIMENTO}>Em Desenvolvimento</option>
+              <option value={1}>Em Fila</option>
+              <option value={S.EM_ATENDIMENTO}>Em Atendimento</option>
+              <option value={3}>Aguardando Cliente</option>
+              <option value={6}>Aguardando Procedimento</option>
+              <option value={S.CORRIGIDO_DEV}>Corrigido pelo Dev</option>
+              <option value={S.TESTADO_COM_ERRO}>Testado com Erro</option>
+            </select>
+            <select
+              className="input"
+              value={filtroTecnicoId}
+              onChange={(e) => setFiltroTecnico(e.target.value)}
+              title="Filtrar pelo técnico"
+            >
+              <option value="">Todos os técnicos</option>
+              {devs.map((d) => <option key={d.id} value={d.id}>{d.nome || d.nomeUsu}</option>)}
+            </select>
+            <select
+              className="input"
+              value={filtroDesenvolvedorId}
+              onChange={(e) => setFiltroDesenvolvedor(e.target.value)}
+              title="Filtrar pelo desenvolvedor"
+            >
+              <option value="">Todos os desenvolvedores</option>
+              {devs.map((d) => <option key={d.id} value={d.id}>{d.nome || d.nomeUsu}</option>)}
+            </select>
+          </>
         )}
         {/* Resumo por etapa da aba atual */}
         <div className="flex flex-wrap gap-2 ml-auto">
@@ -309,171 +355,153 @@ export function MapaSolicitacoes() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-4 gap-5">
-        {/* Painel de detalhe — equivalente ao lado esquerdo da tela legada */}
-        <div className="xl:col-span-1 order-2 xl:order-1">
-          <div className="card sticky top-4">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100 mb-3">
-              {selecionado ? `Solicitação #${selecionado.id}` : 'Detalhes'}
-            </h3>
-            {!selecionado ? (
-              <p className="text-xs text-slate-500">Clique em um card para ver o pedido do cliente.</p>
-            ) : (
-              <div className="space-y-3 text-xs">
-                <div>
-                  <p className="text-slate-500">Cliente</p>
-                  <p className="font-semibold text-slate-800 dark:text-slate-200">{selecionado.clienteNome}</p>
-                </div>
-                <div className="flex gap-4">
-                  <div>
-                    <p className="text-slate-500">Técnico</p>
-                    <p className="text-slate-700 dark:text-slate-300">{selecionado.tecnicoNome ?? '—'}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-500">Desenvolvedor</p>
-                    <p className="text-slate-700 dark:text-slate-300">{selecionado.desenvolvedorNome ?? '—'}</p>
-                  </div>
-                </div>
-                <div>
-                  <p className="text-slate-500">Início do atendimento</p>
-                  <p className="text-slate-700 dark:text-slate-300">
-                    {formatarDataHora(selecionado.dataAtendimento ?? selecionado.dataAbertura)}
-                    {selecionado.diasParado > 0 && `, ${selecionado.diasParado} dia(s)`}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-slate-500 mb-1">Etapa</p>
-                  <StatusBadge status={selecionado.status} />
-                </div>
-                <div>
-                  <p className="text-slate-500 mb-1">Reclamação</p>
-                  <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-300 max-h-72 overflow-y-auto leading-relaxed">
-                    {selecionado.observacoes?.trim() || '—'}
-                  </p>
-                </div>
-                {selecionado.solucao?.trim() && (
-                  <div>
-                    <p className="text-slate-500 mb-1">Solução</p>
-                    <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-300 max-h-40 overflow-y-auto">
-                      {selecionado.solucao}
+      {/* Grade de cards — largura cheia; detalhes agora vivem no menu de cada card */}
+      <div ref={gridRef}>
+        {loading ? (
+          <div className="flex items-center justify-center h-40 text-slate-500">
+            <Loader2 className="w-6 h-6 animate-spin mr-3" /> Carregando solicitações...
+          </div>
+        ) : itens.length === 0 ? (
+          <div className="card text-center py-12 text-sm text-slate-500">Nenhuma solicitação nesta aba.</div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
+            {itens.map((item) => {
+              const acoes = acoesDoCard(item)
+              return (
+                <div
+                  key={item.id}
+                  className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden hover:border-slate-300 dark:hover:border-slate-600 transition-colors"
+                >
+                  <div className="p-1.5">
+                    <div className="flex items-start justify-between gap-1">
+                      <p
+                        className="text-[10px] font-bold uppercase leading-tight line-clamp-2 flex-1"
+                        title={item.clienteNome}
+                      >
+                        <span className={item.atrasado ? 'text-red-600 dark:text-red-400' : 'text-blue-800 dark:text-blue-300'}>
+                          {item.clienteNome || 'SEM CLIENTE'}
+                        </span>
+                      </p>
+                      <div className="flex items-center gap-0.5 flex-shrink-0">
+                        {item.prioritario === 'S' && (
+                          <Star size={11} className="text-amber-400 fill-amber-400" aria-label="Prioritário" />
+                        )}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
+                            onClick={() => setMenuAberto(menuAberto === item.id ? null : item.id)}
+                          >
+                            <MoreVertical size={12} className="text-slate-400" />
+                          </button>
+                          {menuAberto === item.id && (
+                            <div
+                              className="absolute right-0 top-5 z-30 w-56 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {acoes.map((a) => (
+                                <button
+                                  key={a.label}
+                                  type="button"
+                                  disabled={salvando}
+                                  onClick={() => { setMenuAberto(null); a.onClick() }}
+                                  className={clsx(
+                                    'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50',
+                                    (a as any).perigo ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'
+                                  )}
+                                >
+                                  {a.icon} {a.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className={clsx(
+                      'text-center text-sm font-bold my-0.5',
+                      item.atrasado ? 'text-red-600 dark:text-red-400' : 'text-blue-700 dark:text-blue-400'
+                    )}>
+                      {item.id}
                     </p>
+
+                    <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-500">
+                      {item.clienteCurva && <span className="font-bold">{item.clienteCurva}</span>}
+                      {item.somenteOrientacao === 'S' && (
+                        <span className="text-amber-600 dark:text-amber-400 font-medium">orientação</span>
+                      )}
+                      {item.atrasado && (
+                        <span className="text-red-600 dark:text-red-400 font-medium">{item.diasParado}d</span>
+                      )}
+                    </div>
                   </div>
-                )}
+
+                  <div className={clsx(
+                    'px-1.5 py-0.5 flex items-center justify-between text-[9px] font-bold uppercase',
+                    CORES_RODAPE[item.status] ?? 'bg-slate-600 text-white'
+                  )}>
+                    <span className="truncate">
+                      {item.tecnicoNome ?? '—'}
+                      {item.desenvolvedorNome ? ` / ${item.desenvolvedorNome}` : ''}
+                    </span>
+                    <span className="flex-shrink-0 ml-1 opacity-90" title={statusAtendimentoLabel[item.status]}>
+                      {item.diasParado}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Exibir Detalhes */}
+      <Modal isOpen={!!modalDetalhes} onClose={() => setModalDetalhes(null)} title={`Solicitação #${modalDetalhes?.id ?? ''}`}>
+        {modalDetalhes && (
+          <div className="space-y-3 text-xs">
+            <div>
+              <p className="text-slate-500">Cliente</p>
+              <p className="font-semibold text-slate-800 dark:text-slate-200">{modalDetalhes.clienteNome}</p>
+            </div>
+            <div className="flex gap-4">
+              <div>
+                <p className="text-slate-500">Técnico</p>
+                <p className="text-slate-700 dark:text-slate-300">{modalDetalhes.tecnicoNome ?? '—'}</p>
+              </div>
+              <div>
+                <p className="text-slate-500">Desenvolvedor</p>
+                <p className="text-slate-700 dark:text-slate-300">{modalDetalhes.desenvolvedorNome ?? '—'}</p>
+              </div>
+            </div>
+            <div>
+              <p className="text-slate-500">Início do atendimento</p>
+              <p className="text-slate-700 dark:text-slate-300">
+                {formatarDataHora(modalDetalhes.dataAtendimento ?? modalDetalhes.dataAbertura)}
+                {modalDetalhes.diasParado > 0 && `, ${modalDetalhes.diasParado} dia(s)`}
+              </p>
+            </div>
+            <div>
+              <p className="text-slate-500 mb-1">Etapa</p>
+              <StatusBadge status={modalDetalhes.status} />
+            </div>
+            <div>
+              <p className="text-slate-500 mb-1">Reclamação</p>
+              <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-300 max-h-72 overflow-y-auto leading-relaxed">
+                {modalDetalhes.observacoes?.trim() || '—'}
+              </p>
+            </div>
+            {modalDetalhes.solucao?.trim() && (
+              <div>
+                <p className="text-slate-500 mb-1">Solução</p>
+                <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-300 max-h-40 overflow-y-auto">
+                  {modalDetalhes.solucao}
+                </p>
               </div>
             )}
           </div>
-        </div>
-
-        {/* Grade de cards */}
-        <div className="xl:col-span-3 order-1 xl:order-2" ref={gridRef}>
-          {loading ? (
-            <div className="flex items-center justify-center h-40 text-slate-500">
-              <Loader2 className="w-6 h-6 animate-spin mr-3" /> Carregando solicitações...
-            </div>
-          ) : itens.length === 0 ? (
-            <div className="card text-center py-12 text-sm text-slate-500">Nenhuma solicitação nesta aba.</div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {itens.map((item) => {
-                const acoes = acoesDoCard(item)
-                return (
-                  <div
-                    key={item.id}
-                    onClick={() => setSelecionado(item)}
-                    className={clsx(
-                      'rounded-lg border bg-white dark:bg-slate-800 overflow-hidden cursor-pointer transition-all',
-                      selecionado?.id === item.id
-                        ? 'border-blue-500 ring-2 ring-blue-500/30'
-                        : 'border-slate-200 dark:border-slate-700 hover:border-slate-300 dark:hover:border-slate-600'
-                    )}
-                  >
-                    <div className="p-2.5">
-                      <div className="flex items-start justify-between gap-1">
-                        <p
-                          className="text-[11px] font-bold uppercase leading-tight line-clamp-2 flex-1"
-                          title={item.clienteNome}
-                        >
-                          <span className={item.atrasado ? 'text-red-600 dark:text-red-400' : 'text-blue-800 dark:text-blue-300'}>
-                            {item.clienteNome || 'SEM CLIENTE'}
-                          </span>
-                        </p>
-                        <div className="flex items-center gap-0.5 flex-shrink-0">
-                          {item.prioritario === 'S' && (
-                            <Star size={13} className="text-amber-400 fill-amber-400" aria-label="Prioritário" />
-                          )}
-                          <div className="relative">
-                            <button
-                              type="button"
-                              className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setMenuAberto(menuAberto === item.id ? null : item.id)
-                              }}
-                            >
-                              <MoreVertical size={13} className="text-slate-400" />
-                            </button>
-                            {menuAberto === item.id && (
-                              <div
-                                className="absolute right-0 top-6 z-30 w-56 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                {acoes.map((a) => (
-                                  <button
-                                    key={a.label}
-                                    type="button"
-                                    disabled={salvando}
-                                    onClick={() => { setMenuAberto(null); a.onClick() }}
-                                    className={clsx(
-                                      'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50',
-                                      (a as any).perigo ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'
-                                    )}
-                                  >
-                                    {a.icon} {a.label}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <p className={clsx(
-                        'text-center text-lg font-bold my-1',
-                        item.atrasado ? 'text-red-600 dark:text-red-400' : 'text-blue-700 dark:text-blue-400'
-                      )}>
-                        {item.id}
-                      </p>
-
-                      <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500">
-                        {item.clienteCurva && <span className="font-bold">{item.clienteCurva}</span>}
-                        {item.somenteOrientacao === 'S' && (
-                          <span className="text-amber-600 dark:text-amber-400 font-medium">Só orientação</span>
-                        )}
-                        {item.atrasado && (
-                          <span className="text-red-600 dark:text-red-400 font-medium">{item.diasParado}d parado</span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className={clsx(
-                      'px-2 py-1 flex items-center justify-between text-[10px] font-bold uppercase',
-                      CORES_RODAPE[item.status] ?? 'bg-slate-600 text-white'
-                    )}>
-                      <span className="truncate">
-                        {item.tecnicoNome ?? '—'}
-                        {item.desenvolvedorNome ? ` / ${item.desenvolvedorNome}` : ''}
-                      </span>
-                      <span className="flex-shrink-0 ml-1 opacity-90" title={statusAtendimentoLabel[item.status]}>
-                        {item.diasParado}
-                      </span>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+        )}
+      </Modal>
 
       {/* Notas de atualização */}
       <Modal isOpen={modalNotas} onClose={() => setModalNotas(false)} title="Notas de atualização" size="lg">
