@@ -30,7 +30,15 @@ export async function videosRoutes(app: FastifyInstance) {
     const where = {
       ...(categoriaId && { categoriaId: Number(categoriaId) }),
       ...(tipo !== undefined && { tipo: Number(tipo) }),
-      ...(search && { titulo: { contains: search, mode: 'insensitive' } }),
+      // MySQL já compara "contains" sem diferenciar maiúsculas/minúsculas (colação padrão do
+      // projeto) — "mode: insensitive" é exclusivo dos conectores Postgres/Mongo do Prisma e
+      // quebra a query inteira (PrismaClientValidationError) no MySQL, derrubando toda busca.
+      ...(search && {
+        OR: [
+          { titulo: { contains: search } },
+          { descricao: { contains: search } },
+        ],
+      }),
     }
 
     const [total, items] = await Promise.all([

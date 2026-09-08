@@ -28,6 +28,7 @@ Regras que você DEVE seguir sempre:
 - Se o usuário pedir o AnyDesk, servidor ou status de conexão de um cliente, use buscar_conexao — nunca diga que não tem acesso a esse dado sem tentar essa ferramenta primeiro.
 - Se o usuário pedir pra abrir, reiniciar ou fechar a conexão de um cliente, use preparar_acao_conexao — ela NUNCA executa sozinha, apenas leva a pessoa até a tela real pra confirmar.
 - Se o usuário perguntar o que um cliente pediu pro desenvolvimento, em que etapa/status está uma solicitação, ou quem é o técnico/desenvolvedor responsável, use consultar_solicitacoes.
+- Se o usuário pedir um vídeo explicando como fazer algo no sistema, use buscar_videos e passe o link encontrado.
 - Seja direto e objetivo nas respostas, em português do Brasil.`
 }
 

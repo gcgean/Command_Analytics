@@ -342,6 +342,52 @@ export const ferramentas: Ferramenta[] = [
     },
   },
   {
+    nome: 'buscar_videos',
+    descricao:
+      'Busca vídeos-tutorial da Biblioteca de Vídeos por assunto (título ou descrição). Use quando ' +
+      'o usuário pedir um vídeo explicando como fazer algo no sistema (ex.: "tem vídeo de como ' +
+      'configurar etiqueta?"). Retorna o link de cada vídeo encontrado.',
+    risco: 'consulta',
+    permissao: 'videos',
+    schemaParametros: {
+      type: 'object',
+      properties: {
+        busca: { type: 'string', description: 'Assunto ou palavra-chave do vídeo' },
+        limite: { type: 'integer', description: 'Quantos registros retornar (padrão 8, máx 15)' },
+      },
+      required: ['busca'],
+    },
+    async executar(args) {
+      const busca = String(args.busca ?? '').trim()
+      if (!busca) return { erro: 'Informe o assunto do vídeo.' }
+      const limite = Math.min(15, Math.max(1, Number(args.limite) || 8))
+
+      const videos = await prisma.video.findMany({
+        where: {
+          OR: [
+            { titulo: { contains: busca } },
+            { descricao: { contains: busca } },
+          ],
+        },
+        include: { categoria: { select: { descricao: true } } },
+        orderBy: { visualizacoes: 'desc' },
+        take: limite,
+      })
+
+      if (videos.length === 0) {
+        return { erro: `Nenhum vídeo encontrado sobre "${args.busca}".` }
+      }
+
+      return {
+        videos: videos.map((v) => ({
+          titulo: v.titulo,
+          categoria: v.categoria?.descricao ?? null,
+          url: v.url,
+        })),
+      }
+    },
+  },
+  {
     nome: 'buscar_conexao',
     descricao:
       'Busca a conexão de um cliente na tela de Conexões (infraestrutura) pelo nome. Use essa ' +
