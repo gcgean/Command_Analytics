@@ -101,7 +101,13 @@ async function pollUpdates(): Promise<void> {
       `https://api.telegram.org/bot${token}/getUpdates?offset=${offsetAtualizacoes}&timeout=0&allowed_updates=["message"]`
     )
     const data = await resp.json()
-    if (!data?.ok || !Array.isArray(data.result)) return
+    if (!data?.ok || !Array.isArray(data.result)) {
+      // Falha da API do Telegram (ex.: 409 "Conflict" quando um webhook está registrado nesse
+      // bot em paralelo) não lançava exceção — ficava completamente silenciosa, sem log nenhum,
+      // e o vínculo por código nunca funcionava sem ninguém perceber o motivo.
+      console.warn('⚠ Telegram getUpdates falhou:', data?.description || JSON.stringify(data))
+      return
+    }
 
     for (const update of data.result) {
       offsetAtualizacoes = Math.max(offsetAtualizacoes, Number(update.update_id) + 1)
