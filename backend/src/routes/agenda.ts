@@ -817,7 +817,10 @@ export async function agendaRoutes(app: FastifyInstance) {
     const whereA = condA.length > 0 ? Prisma.sql`WHERE ${Prisma.join(condA, ' AND ')}` : Prisma.empty
 
     // Build dynamic WHERE conditions for agendamento_programado table
-    const condP: Prisma.Sql[] = [Prisma.sql`p.status <> 3`]  // exclude cancelled
+    // Não existe status "cancelado" separado nessa tabela (só 1=Aguardando, 2=Efetuado,
+    // 3=Não efetuado, 4=Reagendado) — um "p.status <> 3" fixo aqui escondia todo agendamento
+    // "Não efetuado" da Agenda o tempo todo, filtrando ou não por status.
+    const condP: Prisma.Sql[] = []
     if (tecnicoId) condP.push(Prisma.sql`p.cod_tecnico = ${Number(tecnicoId)}`)
     if (clienteId) condP.push(Prisma.sql`p.cod_cli = ${Number(clienteId)}`)
     if (statusIsAguardando) condP.push(Prisma.sql`p.status = 1`)
@@ -828,7 +831,7 @@ export async function agendaRoutes(app: FastifyInstance) {
       if (dataInicio) condP.push(Prisma.sql`p.data_agendamento >= ${new Date(dataInicio + 'T00:00:00Z')}`)
       if (dataFim) condP.push(Prisma.sql`p.data_agendamento <= ${new Date(dataFim + 'T23:59:59Z')}`)
     }
-    const whereP = Prisma.sql`WHERE ${Prisma.join(condP, ' AND ')}`
+    const whereP = condP.length > 0 ? Prisma.sql`WHERE ${Prisma.join(condP, ' AND ')}` : Prisma.empty
 
     const agendaRows: any[] = await prisma.$queryRaw`
       SELECT a.cod_agenda AS id, a.cod_cli AS clienteId, a.cod_colaborador AS tecnicoId,
