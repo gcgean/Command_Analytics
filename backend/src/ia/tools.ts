@@ -319,6 +319,7 @@ export const ferramentas: Ferramenta[] = [
           cliente: { select: { nome: true } },
           tecnico: { select: { nomeUsu: true, nomeCompleto: true } },
           desenvolvedor: { select: { nomeUsu: true, nomeCompleto: true } },
+          projeto: { select: { nome: true } },
         },
         orderBy: { id: 'asc' },
         take: limite,
@@ -332,6 +333,7 @@ export const ferramentas: Ferramenta[] = [
         solicitacoes: itens.map((a) => ({
           id: a.id,
           cliente: a.cliente?.nome ?? null,
+          projeto: a.projeto?.nome ?? null,
           status: a.status,
           tecnico: a.tecnico?.nomeCompleto || a.tecnico?.nomeUsu || null,
           desenvolvedor: a.desenvolvedor?.nomeCompleto || a.desenvolvedor?.nomeUsu || null,

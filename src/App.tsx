@@ -89,6 +89,7 @@ import { HistoricoTreinamentos } from './pages/rh/HistoricoTreinamentos'
 import { Configuracoes } from './pages/configuracoes/Configuracoes'
 import { Usuarios } from './pages/configuracoes/Usuarios'
 import { CadastroEtapas } from './pages/configuracoes/CadastroEtapas'
+import { CadastroProjetos } from './pages/configuracoes/CadastroProjetos'
 import { CadastroChecklists } from './pages/configuracoes/CadastroChecklists'
 import { CadastroServicos } from './pages/configuracoes/CadastroServicos'
 import { CadastroProcedimentos } from './pages/configuracoes/CadastroProcedimentos'
@@ -244,6 +245,7 @@ export default function App() {
         <Route path="historico-treinamentos" element={<PermissionRoute recurso="historico-treinamentos"><HistoricoTreinamentos /></PermissionRoute>} />
         <Route path="configuracoes" element={<PermissionRoute recurso="configuracoes"><Configuracoes /></PermissionRoute>} />
         <Route path="cadastro-etapas" element={<PermissionRoute recurso="cadastro-etapas"><CadastroEtapas /></PermissionRoute>} />
+        <Route path="cadastro-projetos" element={<PermissionRoute recurso="cadastro-projetos"><CadastroProjetos /></PermissionRoute>} />
         <Route path="cadastro-procedimentos" element={<PermissionRoute recurso="cadastro-procedimentos"><CadastroProcedimentos /></PermissionRoute>} />
         <Route path="cadastro-checklists" element={<PermissionRoute recurso={['cadastro-checklists', 'cadastro-checklists-editar']}><CadastroChecklists /></PermissionRoute>} />
         <Route path="cadastro-servicos" element={<PermissionRoute recurso={['cadastro-servicos', 'cadastro-servicos-editar']}><CadastroServicos /></PermissionRoute>} />

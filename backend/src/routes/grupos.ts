@@ -34,6 +34,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'desenvolvimento',          label: 'Tarefas Dev',                     grupo: 'DESENVOLVIMENTO' },
   { id: 'solicitacoes',             label: 'Mapa de Solicitações',            grupo: 'DESENVOLVIMENTO' },
   { id: 'solicitacoes-acoes',       label: 'Solicitações — Alterar Etapa',    grupo: 'DESENVOLVIMENTO' },
+  { id: 'cadastro-projetos',        label: 'Cadastro de Projetos',            grupo: 'DESENVOLVIMENTO' },
   { id: 'versoes',                  label: 'Versões e Licenças',              grupo: 'DESENVOLVIMENTO' },
   // MARKETING
   { id: 'campanhas',                label: 'Campanhas',                       grupo: 'MARKETING' },

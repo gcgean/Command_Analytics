@@ -7,7 +7,7 @@ import {
   Code2, Tag, Video, Target, Server,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
-  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell, Cable
+  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell, Cable, FolderKanban
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '../../store/authStore'
@@ -87,6 +87,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
     group: 'DESENVOLVIMENTO',
     items: [
       { label: 'Mapa de Solicitações', icon: <ClipboardList className="w-4 h-4" />, to: '/atendimentos/solicitacoes', recurso: 'solicitacoes' },
+      { label: 'Cadastro de Projetos', icon: <FolderKanban className="w-4 h-4" />, to: '/cadastro-projetos', recurso: 'cadastro-projetos' },
       { label: 'Tarefas Dev',       icon: <Code2 className="w-4 h-4" />, to: '/desenvolvimento', recurso: 'desenvolvimento' },
       { label: 'Versões e Licenças',icon: <Tag className="w-4 h-4" />,   to: '/versoes',         recurso: 'versoes' },
     ]

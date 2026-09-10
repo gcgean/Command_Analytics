@@ -36,6 +36,8 @@ import { telegramRoutes } from './routes/telegram'
 import { etapasRoutes } from './routes/etapas'
 import { checklistsRoutes } from './routes/checklists'
 import { servicosRoutes } from './routes/servicos'
+import { projetosRoutes } from './routes/projetos'
+import { initProjetos } from './utils/projetos'
 import { procedimentosRoutes } from './routes/procedimentos'
 import { anexosRoutes } from './routes/anexos'
 import { notificacoesRoutes } from './routes/notificacoes'
@@ -174,6 +176,7 @@ app.register(async (api) => {
   api.register(etapasRoutes,       { prefix: '/etapas' })
   api.register(checklistsRoutes,   { prefix: '/checklists' })
   api.register(servicosRoutes,     { prefix: '/servicos' })
+  api.register(projetosRoutes,     { prefix: '/projetos' })
   api.register(procedimentosRoutes,{ prefix: '/procedimentos' })
   api.register(anexosRoutes,       { prefix: '/anexos' })
   api.register(notificacoesRoutes, { prefix: '/notificacoes' })
@@ -197,6 +200,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initAuditoria()
     .then(() => console.log('✓ Tabela de auditoria verificada'))
     .catch(e => console.warn('⚠ Auditoria init:', e.message))
+  initProjetos()
+    .then(() => console.log('✓ Tabela de cadastro de projetos verificada'))
+    .catch(e => console.warn('⚠ Projetos init:', e.message))
   initEtapas()
     .then(() => console.log('✓ Tabela de cadastro de etapas verificada'))
     .catch(e => console.warn('⚠ Etapas init:', e.message))

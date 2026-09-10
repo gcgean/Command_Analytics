@@ -11,7 +11,7 @@ import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { LancamentoSolicitacao } from './LancamentoSolicitacao'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
-import type { Solicitacao, Usuario } from '../../types'
+import type { Projeto, Solicitacao, Usuario } from '../../types'
 
 type Aba = 'suporte' | 'finalizadas'
 
@@ -102,6 +102,7 @@ function formatarDataHora(valor: string | null): string {
 const CHAVE_FILTRO_ETAPA = 'mapaSolicitacoes:filtroEtapa'
 const CHAVE_FILTRO_TECNICO = 'mapaSolicitacoes:filtroTecnicoId'
 const CHAVE_FILTRO_DEV = 'mapaSolicitacoes:filtroDesenvolvedorId'
+const CHAVE_FILTRO_PROJETO = 'mapaSolicitacoes:filtroProjetoId'
 
 function lerFiltroSalvo(chave: string): string[] {
   try {
@@ -201,6 +202,7 @@ export function MapaSolicitacoes() {
   const [filtroEtapa, setFiltroEtapaState] = useState<string[]>(() => lerFiltroSalvo(CHAVE_FILTRO_ETAPA))
   const [filtroTecnicoId, setFiltroTecnicoIdState] = useState<string[]>(() => lerFiltroSalvo(CHAVE_FILTRO_TECNICO))
   const [filtroDesenvolvedorId, setFiltroDesenvolvedorIdState] = useState<string[]>(() => lerFiltroSalvo(CHAVE_FILTRO_DEV))
+  const [filtroProjetoId, setFiltroProjetoIdState] = useState<string[]>(() => lerFiltroSalvo(CHAVE_FILTRO_PROJETO))
   const [filtroPrioritario, setFiltroPrioritario] = useState(false)
   const [modalDetalhes, setModalDetalhes] = useState<Solicitacao | null>(null)
   const [auditoriaItem, setAuditoriaItem] = useState<Solicitacao | null>(null)
@@ -210,6 +212,7 @@ export function MapaSolicitacoes() {
   const [dataFim, setDataFim] = useState(hojeISO())
 
   const [devs, setDevs] = useState<Usuario[]>([])
+  const [projetos, setProjetos] = useState<Projeto[]>([])
   const [modalLog, setModalLog] = useState<Solicitacao | null>(null)
   const [logLinhas, setLogLinhas] = useState<Array<{ obs: string; data: string; usuario: string | null }>>([])
   const [modalDev, setModalDev] = useState<Solicitacao | null>(null)
@@ -231,6 +234,7 @@ export function MapaSolicitacoes() {
             ...(filtroEtapa.length ? { status: filtroEtapa.map(Number) } : {}),
             ...(filtroTecnicoId.length ? { tecnicoId: filtroTecnicoId.map(Number) } : {}),
             ...(filtroDesenvolvedorId.length ? { desenvolvedorId: filtroDesenvolvedorId.map(Number) } : {}),
+            ...(filtroProjetoId.length ? { projetoId: filtroProjetoId.map(Number) } : {}),
             ...(filtroPrioritario ? { prioritario: true } : {}),
           })
         : api.getSolicitacoesFinalizadas(dataInicio, dataFim)
@@ -244,11 +248,12 @@ export function MapaSolicitacoes() {
         toast.error(e?.message || 'Falha ao carregar as solicitações.')
         setLoading(false)
       })
-  }, [aba, busca, filtroEtapa, filtroTecnicoId, filtroDesenvolvedorId, filtroPrioritario, dataInicio, dataFim, toast])
+  }, [aba, busca, filtroEtapa, filtroTecnicoId, filtroDesenvolvedorId, filtroProjetoId, filtroPrioritario, dataInicio, dataFim, toast])
 
   const setFiltroEtapa = (v: string[]) => { setFiltroEtapaState(v); salvarFiltro(CHAVE_FILTRO_ETAPA, v) }
   const setFiltroTecnico = (v: string[]) => { setFiltroTecnicoIdState(v); salvarFiltro(CHAVE_FILTRO_TECNICO, v) }
   const setFiltroDesenvolvedor = (v: string[]) => { setFiltroDesenvolvedorIdState(v); salvarFiltro(CHAVE_FILTRO_DEV, v) }
+  const setFiltroProjeto = (v: string[]) => { setFiltroProjetoIdState(v); salvarFiltro(CHAVE_FILTRO_PROJETO, v) }
 
   useEffect(() => {
     // Busca é digitada — espera o usuário parar antes de bater no servidor.
@@ -258,6 +263,7 @@ export function MapaSolicitacoes() {
 
   useEffect(() => {
     api.getUsuarios().then((u) => setDevs(Array.isArray(u) ? u : [])).catch(() => setDevs([]))
+    api.getProjetos().then(setProjetos).catch(() => setProjetos([]))
   }, [])
 
   // Fecha o menu de contexto ao clicar em qualquer lugar fora dele.
@@ -483,6 +489,14 @@ export function MapaSolicitacoes() {
                 options={devs.map((d) => ({ value: String(d.id), label: d.nome || d.nomeUsu || '' }))}
               />
             </div>
+            <div className="w-52">
+              <MultiSelectFiltro
+                placeholder="Todos os projetos"
+                selecionados={filtroProjetoId}
+                onChange={setFiltroProjeto}
+                options={projetos.map((p) => ({ value: String(p.id), label: p.nome }))}
+              />
+            </div>
             <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 px-1 h-[38px]">
               <input type="checkbox" checked={filtroPrioritario} onChange={(e) => setFiltroPrioritario(e.target.checked)} />
               Só prioritárias
@@ -570,6 +584,12 @@ export function MapaSolicitacoes() {
                         <span className="text-red-600 dark:text-red-400 font-medium">{item.diasParado}d</span>
                       )}
                     </div>
+                    {item.projetoNome && (
+                      <p className="flex items-center justify-center gap-1 text-[9px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.projetoCor || '#64748b' }} />
+                        {item.projetoNome}
+                      </p>
+                    )}
                   </div>
 
                   <div className={clsx(
@@ -623,6 +643,15 @@ export function MapaSolicitacoes() {
               <p className="text-slate-500">Cliente</p>
               <p className="font-semibold text-slate-800 dark:text-slate-200">{modalDetalhes.clienteNome}</p>
             </div>
+            {modalDetalhes.projetoNome && (
+              <div>
+                <p className="text-slate-500">Projeto</p>
+                <p className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: modalDetalhes.projetoCor || '#64748b' }} />
+                  {modalDetalhes.projetoNome}
+                </p>
+              </div>
+            )}
             <div className="flex gap-4">
               <div>
                 <p className="text-slate-500">Técnico</p>

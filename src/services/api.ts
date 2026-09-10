@@ -9,7 +9,7 @@ import type {
   DashboardMensalidadesEstatisticas, DashboardMensalidadesFaixa, DashboardMensalidadesFiltros,
   DashboardMensalidadesOpcoesFiltros, DashboardMensalidadesRanking, DashboardMensalidadesResumo,
   DesempenhoEquipe, Operadora, ClienteMaquininha, MaquininhasRelatorio, TipoMaquininha, StatusMaquininha,
-  ClientesSemMaquininhaResposta, LembretesFixosResposta, TipoRecorrenciaLembrete, Solicitacao
+  ClientesSemMaquininhaResposta, LembretesFixosResposta, TipoRecorrenciaLembrete, Solicitacao, Projeto, TipoProjeto
 } from '../types'
 
 // ============================================================
@@ -686,12 +686,13 @@ export const api = {
       `/connections/saude?servidorId=${servidorId}&connectionId=${encodeURIComponent(connectionId)}`
     ),
   // ─── Mapa de Solicitações (setor de desenvolvimento) ───
-  getSolicitacoesSuporte: (params?: { status?: number[]; tecnicoId?: number[]; desenvolvedorId?: number[]; busca?: string; prioritario?: boolean }) => {
+  getSolicitacoesSuporte: (params?: { status?: number[]; tecnicoId?: number[]; desenvolvedorId?: number[]; projetoId?: number[]; busca?: string; prioritario?: boolean }) => {
     const qs = params
       ? '?' + new URLSearchParams({
           ...(params.status?.length ? { status: params.status.join(',') } : {}),
           ...(params.tecnicoId?.length ? { tecnicoId: params.tecnicoId.join(',') } : {}),
           ...(params.desenvolvedorId?.length ? { desenvolvedorId: params.desenvolvedorId.join(',') } : {}),
+          ...(params.projetoId?.length ? { projetoId: params.projetoId.join(',') } : {}),
           ...(params.busca ? { busca: params.busca } : {}),
           ...(params.prioritario ? { prioritario: 'true' } : {}),
         }).toString()
@@ -722,7 +723,7 @@ export const api = {
     fetchApi<{ ok: boolean; somenteOrientacao: boolean }>(`/solicitacoes/${id}/orientacao`, { method: 'PATCH' }),
   criarSolicitacao: (data: {
     clienteId: number; observacoes: string; status: number; tipoContato?: number
-    tecnicoId?: number | null; desenvolvedorId?: number | null
+    tecnicoId?: number | null; desenvolvedorId?: number | null; projetoId?: number | null
     urgente?: boolean; foraHorario?: boolean; bugSistema?: boolean
   }) => fetchApi<{ ok: boolean; id: number }>('/solicitacoes', { method: 'POST', body: JSON.stringify(data) }),
   atualizarSolicitacao: (id: number, data: Record<string, unknown>) =>
@@ -731,6 +732,17 @@ export const api = {
     fetchApi<{ ok: boolean }>(`/solicitacoes/${id}/finalizar`, { method: 'POST', body: JSON.stringify({ solucao }) }),
   getCatalogoProcedimentos: () =>
     fetchApi<{ data: Array<{ id: number; descricao: string; pontuacao: number }> }>('/solicitacoes/procedimentos'),
+
+  // ─── Cadastro de Projetos (Mapa de Solicitações) ───
+  getProjetos: (ativo?: boolean) =>
+    fetchApi<Projeto[]>(`/projetos${ativo !== undefined ? `?ativo=${ativo}` : ''}`),
+  createProjeto: (data: { nome: string; cor?: string; tipo?: TipoProjeto }) =>
+    fetchApi<{ id: number }>('/projetos', { method: 'POST', body: JSON.stringify(data) }),
+  updateProjeto: (id: number, data: { nome: string; cor?: string; tipo?: TipoProjeto; ativo?: boolean }) =>
+    fetchApi<{ ok: boolean }>(`/projetos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  toggleProjeto: (id: number) =>
+    fetchApi<{ ok: boolean; ativo: boolean }>(`/projetos/${id}/toggle`, { method: 'PATCH' }),
+  deleteProjeto: (id: number) => fetchApi<void>(`/projetos/${id}`, { method: 'DELETE' }),
   getProcedimentosSolicitacao: (id: number) =>
     fetchApi<{ data: Array<{ id: number; descricao: string; pontuacao: number; data: string }> }>(`/solicitacoes/${id}/procedimentos`),
   addProcedimentoSolicitacao: (id: number, procedimentoId: number) =>

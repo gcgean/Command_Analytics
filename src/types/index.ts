@@ -50,12 +50,28 @@ export type StatusAtendimento =
   | 17 // Testado com Erro
 
 /** Card do Mapa de Solicitações — atendimento visto pela ótica do setor de desenvolvimento. */
+export type TipoProjeto = 'WEB' | 'DESKTOP' | 'MOBILE'
+
+/** Projeto ao qual uma solicitação pode pertencer — cadastro em Configurações → Projetos. */
+export interface Projeto {
+  id: number
+  nome: string
+  cor: string | null
+  tipo: TipoProjeto
+  ativo: boolean
+  criadoEm: string | null
+  atualizadoEm: string | null
+}
+
 export interface Solicitacao {
   id: number
   clienteId: number | null
   clienteNome: string
   clienteCurva: string | null
   clienteTelefone: string | null
+  projetoId: number | null
+  projetoNome: string | null
+  projetoCor: string | null
   tecnicoId: number | null
   tecnicoNome: string | null
   desenvolvedorId: number | null

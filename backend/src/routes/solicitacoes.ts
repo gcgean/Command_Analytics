@@ -44,10 +44,11 @@ const INCLUDE_CARD = {
   cliente: { select: { id: true, nome: true, curvaABC: true, telefone: true } },
   tecnico: { select: { id: true, nomeUsu: true, nomeCompleto: true } },
   desenvolvedor: { select: { id: true, nomeUsu: true, nomeCompleto: true } },
+  projeto: { select: { id: true, nome: true, cor: true } },
 } as const
 
 function paraCard(a: any) {
-  const { cliente, tecnico, desenvolvedor, ...rest } = a
+  const { cliente, tecnico, desenvolvedor, projeto, ...rest } = a
   const referencia = a.dataAtendimento ?? a.dataAbertura
   const diasParado = referencia
     ? Math.floor((Date.now() - new Date(referencia).getTime()) / 86_400_000)
@@ -57,6 +58,8 @@ function paraCard(a: any) {
     clienteNome: cliente?.nome ?? '',
     clienteCurva: cliente?.curvaABC ?? null,
     clienteTelefone: cliente?.telefone ?? null,
+    projetoNome: projeto?.nome ?? null,
+    projetoCor: projeto?.cor ?? null,
     tecnicoNome: nome(tecnico),
     desenvolvedorNome: nome(desenvolvedor),
     diasParado,
@@ -104,7 +107,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
   // GET /solicitacoes/suporte — cards da aba Suporte
   app.get('/suporte', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request) => {
-    const { tecnicoId, desenvolvedorId, clienteId, status, busca, prioritario } = request.query as Record<string, string>
+    const { tecnicoId, desenvolvedorId, clienteId, status, busca, prioritario, projetoId } = request.query as Record<string, string>
 
     // Cada filtro aceita uma lista separada por vírgula (multi-seleção na tela) ou um valor único.
     const paraLista = (v?: string) => v?.split(',').map(Number).filter((n) => !Number.isNaN(n)) ?? []
@@ -112,10 +115,12 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     const statusLista = paraLista(status)
     const tecnicoLista = paraLista(tecnicoId)
     const desenvolvedorLista = paraLista(desenvolvedorId)
+    const projetoLista = paraLista(projetoId)
 
     const where: Record<string, any> = { status: { in: statusLista.length ? statusLista : STATUS_BACKLOG } }
     if (tecnicoLista.length) where.tecnicoId = { in: tecnicoLista }
     if (desenvolvedorLista.length) where.desenvolvedorId = { in: desenvolvedorLista }
+    if (projetoLista.length) where.projetoId = { in: projetoLista }
     if (clienteId) where.clienteId = Number(clienteId)
     if (busca) where.cliente = { nome: { contains: busca } }
     if (prioritario === 'true') where.prioritario = 'S'
@@ -257,6 +262,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
         // Sem técnico escolhido o atendimento fica com quem lançou.
         tecnicoId: b.tecnicoId ? Number(b.tecnicoId) : usuarioId,
         desenvolvedorId: b.desenvolvedorId ? Number(b.desenvolvedorId) : null,
+        projetoId: b.projetoId ? Number(b.projetoId) : null,
       },
       select: { id: true },
     })
@@ -282,7 +288,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       where: { id: Number(id) },
       select: {
         clienteId: true, observacoes: true, solucao: true, tipoContato: true,
-        tecnicoId: true, desenvolvedorId: true, prioritario: true, foraHorario: true, bugSistema: true,
+        tecnicoId: true, desenvolvedorId: true, prioritario: true, foraHorario: true, bugSistema: true, projetoId: true,
       },
     })
     if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
@@ -294,6 +300,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     if (b.tipoContato !== undefined) dados.tipoContato = Number(b.tipoContato)
     if (b.tecnicoId !== undefined) dados.tecnicoId = b.tecnicoId ? Number(b.tecnicoId) : null
     if (b.desenvolvedorId !== undefined) dados.desenvolvedorId = b.desenvolvedorId ? Number(b.desenvolvedorId) : null
+    if (b.projetoId !== undefined) dados.projetoId = b.projetoId ? Number(b.projetoId) : null
     if (b.urgente !== undefined) dados.prioritario = b.urgente ? 'S' : ''
     if (b.foraHorario !== undefined) dados.foraHorario = b.foraHorario ? 'S' : ''
     if (b.bugSistema !== undefined) {

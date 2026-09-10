@@ -131,7 +131,26 @@ model Atendimento {
   usuarioCancelamentoId Int?     @map("cod_usu_cancelamento")
   dataCancelamento     DateTime? @map("data_hora_cancelamento")
 
+  projetoId        Int?     @map("cod_projeto")
+  projeto          Projeto? @relation(fields: [projetoId], references: [id])
+
   @@map("atendimentos")
+}
+
+// ============================================================
+// PROJETOS → tabela: cadastro_projetos (Mapa de Solicitações)
+// ============================================================
+model Projeto {
+  id           Int          @id @default(autoincrement())
+  nome         String       @db.VarChar(120)
+  cor          String?      @db.VarChar(20)
+  tipo         String       @default("WEB") @db.VarChar(10)
+  ativo        Boolean      @default(true)
+  criadoEm     DateTime     @default(now()) @map("criado_em")
+  atualizadoEm DateTime     @default(now()) @map("atualizado_em")
+  atendimentos Atendimento[]
+
+  @@map("cadastro_projetos")
 }
 
 // ============================================================

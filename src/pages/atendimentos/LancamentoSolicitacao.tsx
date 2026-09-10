@@ -8,7 +8,7 @@ import { Select } from '../../components/ui/Select'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
 import { Anexos } from '../../components/ui/Anexos'
 import { AnexosDraft } from '../../components/ui/AnexosDraft'
-import type { Solicitacao, Usuario } from '../../types'
+import type { Projeto, Solicitacao, Usuario } from '../../types'
 
 type AbaForm = 'atendimento' | 'procedimentos' | 'finalizacao'
 
@@ -46,10 +46,12 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
   const foraHorario = false
   const [tecnicoId, setTecnicoId] = useState('')
   const [desenvolvedorId, setDesenvolvedorId] = useState('')
+  const [projetoId, setProjetoId] = useState('')
   const [urgente, setUrgente] = useState(false)
   const [bugSistema, setBugSistema] = useState(false)
   const [solucao, setSolucao] = useState('')
 
+  const [projetos, setProjetos] = useState<Projeto[]>([])
   const [catalogo, setCatalogo] = useState<Array<{ id: number; descricao: string; pontuacao: number }>>([])
   const [efetuados, setEfetuados] = useState<Array<{ id: number; descricao: string; pontuacao: number; data: string }>>([])
   const [procSelecionado, setProcSelecionado] = useState('')
@@ -64,6 +66,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
     setStatus(solicitacao?.status ?? 2)
     setTecnicoId(solicitacao?.tecnicoId ? String(solicitacao.tecnicoId) : '')
     setDesenvolvedorId(solicitacao?.desenvolvedorId ? String(solicitacao.desenvolvedorId) : '')
+    setProjetoId(solicitacao?.projetoId ? String(solicitacao.projetoId) : '')
     setUrgente(solicitacao?.prioritario === 'S')
     setBugSistema(false)
     setSolucao(solicitacao?.solucao ?? '')
@@ -75,6 +78,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
   useEffect(() => {
     if (!aberto) return
     api.getCatalogoProcedimentos().then((r) => setCatalogo(r.data)).catch(() => setCatalogo([]))
+    api.getProjetos(true).then(setProjetos).catch(() => setProjetos([]))
   }, [aberto])
 
   const carregarEfetuados = () => {
@@ -101,6 +105,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
           tipoContato,
           tecnicoId: tecnicoId ? Number(tecnicoId) : null,
           desenvolvedorId: desenvolvedorId ? Number(desenvolvedorId) : null,
+          projetoId: projetoId ? Number(projetoId) : null,
           urgente,
           foraHorario,
           bugSistema,
@@ -114,6 +119,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
           tipoContato,
           tecnicoId: tecnicoId ? Number(tecnicoId) : null,
           desenvolvedorId: desenvolvedorId ? Number(desenvolvedorId) : null,
+          projetoId: projetoId ? Number(projetoId) : null,
           urgente,
           foraHorario,
           bugSistema,
@@ -188,6 +194,13 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 space-y-3">
               <ClienteSearch label="Cliente" value={clienteId} onChange={(id) => setClienteId(id)} required />
+              <Select
+                label="Projeto"
+                placeholder="(nenhum)"
+                value={projetoId}
+                onChange={(e) => setProjetoId(e.target.value)}
+                options={projetos.map((p) => ({ value: p.id, label: p.nome }))}
+              />
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Dados do Atendimento</label>
                 <textarea
