@@ -361,15 +361,6 @@ export function MapaSolicitacoes() {
             {loading ? 'Carregando...' : `${itens.length} solicitação(ões) — o que cada cliente pediu e em que etapa está`}
           </p>
         </div>
-        {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero */}
-        <div className="flex flex-wrap items-center gap-2">
-          {ORDEM_STATUS_RESUMO.map((st) => (
-            <span key={st} className="flex items-center gap-1.5 text-xs">
-              <EtapaBadge status={st} />
-              <span className="text-slate-500 font-medium">{contagens[st] ?? 0}</span>
-            </span>
-          ))}
-        </div>
         <div className="flex items-center gap-2">
           <button className="btn-secondary flex items-center gap-2" onClick={carregar} disabled={loading}>
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Atualizar
@@ -380,6 +371,31 @@ export function MapaSolicitacoes() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 gap-2">
+        {ORDEM_STATUS_RESUMO.map((st) => {
+          const qtd = contagens[st] ?? 0
+          const corFundo = (CORES_ETAPA[st] ?? 'bg-slate-500 text-white').split(' ')[0]
+          return (
+            <div
+              key={st}
+              className={clsx(
+                'relative overflow-hidden rounded-xl border bg-white dark:bg-slate-800 pl-3 pr-2 py-2 transition-opacity',
+                qtd === 0 ? 'border-slate-100 dark:border-slate-700/60 opacity-50' : 'border-slate-200 dark:border-slate-700 shadow-sm'
+              )}
+            >
+              <span className={clsx('absolute inset-y-0 left-0 w-1', corFundo)} />
+              <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400 truncate">
+                {ROTULO_STATUS[st]}
+              </p>
+              <p className={clsx('text-xl font-bold leading-tight', TEXTO_ETAPA[st] ?? 'text-slate-700 dark:text-slate-300')}>
+                {qtd}
+              </p>
+            </div>
+          )
+        })}
       </div>
 
       {/* Abas */}
