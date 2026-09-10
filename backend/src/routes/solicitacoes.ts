@@ -3,6 +3,7 @@ import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { getUserPermissions } from './grupos'
 import { registrarAuditoria } from '../utils/auditoria'
+import { notificarAtualizacaoSolicitacao } from '../utils/notificacoesSolicitacoes'
 
 // Códigos de Status_Atendimento — contrato com o sistema Delphi legado (UMapaAtendimentos.pas,
 // combo CbSituacao). Não existe status 15. Alterar esses números quebra o fluxo real de
@@ -319,6 +320,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       dadosAntes: atual,
       dadosDepois: { ...atual, ...dadosAuditados },
     })
+    void notificarAtualizacaoSolicitacao(Number(id), usuarioId, 'Atendimento alterado')
     return { ok: true }
   })
 
@@ -328,31 +330,31 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     const { solucao } = request.body as { solucao?: string }
     const usuarioId = Number((request.user as any)?.id || 0)
 
-    if (!solucao?.trim()) return reply.status(400).send({ error: 'Descreva a solução antes de finalizar.' })
-
     const atual = await prisma.atendimento.findUnique({ where: { id: Number(id) }, select: { id: true, status: true } })
     if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
     if (atual.status === STATUS.CONCLUIDO) return reply.status(400).send({ error: 'Essa solicitação já está concluída.' })
 
+    const solucaoTexto = solucao?.trim() ?? ''
     const agora = new Date()
     await prisma.atendimento.update({
       where: { id: Number(id) },
       data: {
         status: STATUS.CONCLUIDO,
-        solucao: solucao.trim().slice(0, 2000),
+        solucao: solucaoTexto.slice(0, 2000),
         dataFechamento: agora,
         dataUltAlteracao: agora,
       },
     })
-    await gravarLog(Number(id), usuarioId, `Atendimento finalizado: ${solucao.trim()}`)
+    await gravarLog(Number(id), usuarioId, solucaoTexto ? `Atendimento finalizado: ${solucaoTexto}` : 'Atendimento finalizado')
     await registrarAuditoria({
       tabela: 'atendimentos',
       registroId: Number(id),
       acao: 'STATUS',
       usuarioId,
       dadosAntes: { status: atual.status },
-      dadosDepois: { status: STATUS.CONCLUIDO, solucao: solucao.trim().slice(0, 500) },
+      dadosDepois: { status: STATUS.CONCLUIDO, solucao: solucaoTexto.slice(0, 500) },
     })
+    void notificarAtualizacaoSolicitacao(Number(id), usuarioId, solucaoTexto ? `Finalizada: ${solucaoTexto}` : 'Finalizada')
     return { ok: true }
   })
 
@@ -461,6 +463,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       dadosAntes: { status: atual.status },
       dadosDepois: { status: Number(status), observacao: observacao?.trim() || null },
     })
+    void notificarAtualizacaoSolicitacao(Number(id), usuarioId, texto)
     return { ok: true }
   })
 
@@ -493,6 +496,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
         dadosAntes: { desenvolvedorId: atual.desenvolvedorId },
         dadosDepois: { desenvolvedorId: dev.id },
       })
+      void notificarAtualizacaoSolicitacao(Number(id), usuarioId, `Desenvolvedor vinculado: ${nome(dev)}`)
       return { ok: true, desenvolvedorNome: nome(dev) }
     }
 
@@ -509,6 +513,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       dadosAntes: { desenvolvedorId: atual.desenvolvedorId },
       dadosDepois: { desenvolvedorId: null },
     })
+    void notificarAtualizacaoSolicitacao(Number(id), usuarioId, 'Desenvolvedor desvinculado')
     return { ok: true, desenvolvedorNome: null }
   })
 
@@ -537,6 +542,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       dadosAntes: { prioritario: atual.prioritario },
       dadosDepois: { prioritario: marcado ? 'N' : 'S' },
     })
+    void notificarAtualizacaoSolicitacao(Number(id), usuarioId, marcado ? 'Removido como prioritário' : 'Marcado como prioritário')
     return { ok: true, prioritario: !marcado }
   })
 
@@ -565,6 +571,11 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       dadosAntes: { somenteOrientacao: atual.somenteOrientacao },
       dadosDepois: { somenteOrientacao: marcado ? 'N' : 'S' },
     })
+    void notificarAtualizacaoSolicitacao(
+      Number(id),
+      usuarioId,
+      marcado ? 'Removido de Somente Orientação' : 'Marcado como Somente Orientação (não desenvolver)'
+    )
     return { ok: true, somenteOrientacao: !marcado }
   })
 
@@ -598,6 +609,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       dadosAntes: { status: atual.status },
       dadosDepois: { status: STATUS.CANCELADO, motivo: motivo.trim().slice(0, 300) },
     })
+    void notificarAtualizacaoSolicitacao(Number(id), usuarioId, `Cancelada: ${motivo.trim()}`)
     return { ok: true }
   })
 }

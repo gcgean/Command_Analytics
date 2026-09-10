@@ -862,7 +862,7 @@ export function MapaSolicitacoes() {
         <div className="space-y-3">
           <textarea
             className="input w-full h-28 resize-none"
-            placeholder="Descreva o que foi feito para resolver..."
+            placeholder="Descreva o que foi feito para resolver... (opcional)"
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
           />
@@ -873,7 +873,7 @@ export function MapaSolicitacoes() {
             <button className="btn-secondary" onClick={() => setModalFinalizar(null)}>Voltar</button>
             <button
               className="btn-primary !bg-emerald-600 hover:!bg-emerald-700"
-              disabled={!texto.trim() || salvando}
+              disabled={salvando}
               onClick={async () => {
                 const ok = await executar(
                   () => api.finalizarSolicitacao(modalFinalizar!.id, texto.trim()),
