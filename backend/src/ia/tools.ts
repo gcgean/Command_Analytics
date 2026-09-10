@@ -21,6 +21,16 @@ export interface Ferramenta {
 }
 
 const TIPOS_AGENDA_VALIDOS = ['Instalação', 'Treinamento', 'Retorno', 'Visita', 'Suporte']
+// Mesmas etapas de abertura que a tela de Nova Solicitação oferece (STATUS_ABERTURA lá no front)
+// e que o POST /solicitacoes aceita — qualquer outra é recusada pelo backend na hora de salvar.
+const STATUS_ABERTURA_IA: Array<[number, string]> = [
+  [1, 'Em Fila'],
+  [2, 'Aguardando Desenvolvimento'],
+  [3, 'Aguardando Cliente'],
+  [4, 'Aguardando Análise do Desenvolvimento'],
+  [6, 'Aguardando Procedimento do Suporte'],
+  [9, 'Aguardando Testes do desenvolvimento'],
+]
 const TIPOS_BANCO_HORAS_VALIDOS = ['Hora Extra', 'Horas por Km', 'Falta c/ Atestado', 'Falta s/ Atestado', 'Home Office', 'Desconto de Horas Padrão']
 
 function tipoParaMovFalta(tipo: string): { tipoMov: string; tipoFalta: number | null } {
@@ -344,6 +354,23 @@ export const ferramentas: Ferramenta[] = [
     },
   },
   {
+    nome: 'listar_projetos',
+    descricao:
+      'Lista os projetos ativos cadastrados (id, nome e tipo Web/Desktop/Mobile). Use pra descobrir ' +
+      'o id do projeto antes de preparar uma solicitação.',
+    risco: 'consulta',
+    permissao: 'solicitacoes',
+    schemaParametros: { type: 'object', properties: {} },
+    async executar() {
+      const projetos = await prisma.projeto.findMany({
+        where: { ativo: true },
+        select: { id: true, nome: true, tipo: true },
+        orderBy: { nome: 'asc' },
+      })
+      return { total: projetos.length, projetos }
+    },
+  },
+  {
     nome: 'buscar_videos',
     descricao:
       'Busca vídeos-tutorial da Biblioteca de Vídeos por assunto (título ou descrição). Use quando ' +
@@ -567,6 +594,94 @@ export const ferramentas: Ferramenta[] = [
           observacao: args.observacao,
         },
         mensagemParaUsuario: 'Preparei o lançamento — confira e salve na tela que vai abrir.',
+      }
+    },
+  },
+  {
+    nome: 'criar_solicitacao',
+    descricao:
+      'Prepara uma nova solicitação no Mapa de Solicitações com o id do cliente já resolvido (use ' +
+      'buscar_clientes antes). NÃO grava sozinho: gera um preview que abre o formulário real de ' +
+      'Nova Solicitação pra pessoa conferir e salvar. Em "descricao" você DEVE reescrever o que a ' +
+      'pessoa contou numa descrição clara pro desenvolvedor: diga o que é pra fazer, onde no ' +
+      'sistema (caminho de menu, ex: "Relatórios > Contas a Receber > Mapa Mensal") e um exemplo ' +
+      'concreto quando houver. NUNCA invente detalhe que a pessoa não falou — se faltar informação ' +
+      'essencial (qual tela, o que exatamente deve acontecer), pergunte antes de chamar esta ferramenta.',
+    risco: 'critica',
+    permissao: 'solicitacoes-acoes',
+    schemaParametros: {
+      type: 'object',
+      properties: {
+        clienteId: { type: 'integer' },
+        descricao: {
+          type: 'string',
+          description: 'Descrição JÁ REESCRITA de forma clara e organizada, pronta pro desenvolvedor ler.',
+        },
+        projetoId: { type: 'integer', description: 'Opcional. Use listar_projetos pra achar o id.' },
+        desenvolvedorId: { type: 'integer', description: 'Opcional. Use buscar_funcionarios pra achar o id.' },
+        status: {
+          type: 'integer',
+          enum: STATUS_ABERTURA_IA.map(([codigo]) => codigo),
+          description: `Etapa de abertura. Padrão 2 (Aguardando Desenvolvimento). Opções: ${STATUS_ABERTURA_IA.map(([c, r]) => `${c}=${r}`).join(', ')}.`,
+        },
+        urgente: { type: 'boolean', description: 'Marca a solicitação como prioritária.' },
+        bugSistema: { type: 'boolean', description: 'Marque true quando for um erro/bug do sistema, não uma melhoria.' },
+      },
+      required: ['clienteId', 'descricao'],
+    },
+    async executar(args, ctx) {
+      if (!possuiPermissao(ctx, 'solicitacoes-acoes')) {
+        return { erro: 'Você não tem permissão para lançar solicitações.' }
+      }
+      const descricao = String(args.descricao ?? '').trim()
+      if (!descricao) return { erro: 'Descreva a solicitação antes de lançar.' }
+
+      const cliente = await prisma.cliente.findUnique({
+        where: { id: Number(args.clienteId) },
+        select: { id: true, nome: true },
+      })
+      if (!cliente) return { erro: 'Cliente não encontrado. Use buscar_clientes pra achar o id certo.' }
+
+      const status = args.status === undefined ? 2 : Number(args.status)
+      if (!STATUS_ABERTURA_IA.some(([codigo]) => codigo === status)) {
+        return { erro: `Etapa de abertura inválida. Use uma de: ${STATUS_ABERTURA_IA.map(([c, r]) => `${c} (${r})`).join(', ')}.` }
+      }
+
+      let projeto: { id: number; nome: string } | null = null
+      if (args.projetoId) {
+        projeto = await prisma.projeto.findUnique({ where: { id: Number(args.projetoId) }, select: { id: true, nome: true } })
+        if (!projeto) return { erro: 'Projeto não encontrado. Use listar_projetos pra achar o id certo.' }
+      }
+
+      let desenvolvedor: { id: number; nomeUsu: string | null } | null = null
+      if (args.desenvolvedorId) {
+        desenvolvedor = await prisma.usuario.findUnique({
+          where: { id: Number(args.desenvolvedorId) },
+          select: { id: true, nomeUsu: true },
+        })
+        if (!desenvolvedor) return { erro: 'Desenvolvedor não encontrado. Use buscar_funcionarios pra achar o id certo.' }
+      }
+
+      // Mesma trava do POST /solicitacoes: sem dev vinculado ele recusa abrir aguardando testes.
+      if (status === 9 && !desenvolvedor) {
+        return { erro: 'Pra abrir aguardando testes é preciso vincular um desenvolvedor — informe desenvolvedorId (use buscar_funcionarios).' }
+      }
+
+      return {
+        proposta: 'criar_solicitacao',
+        dados: {
+          clienteId: cliente.id,
+          clienteNome: cliente.nome,
+          observacoes: descricao,
+          status,
+          projetoId: projeto?.id ?? null,
+          projetoNome: projeto?.nome ?? null,
+          desenvolvedorId: desenvolvedor?.id ?? null,
+          urgente: !!args.urgente,
+          bugSistema: !!args.bugSistema,
+        },
+        mensagemParaUsuario:
+          'Reescrevi a descrição e preparei a solicitação — confira o texto na tela que vai abrir e salve. Pode editar o que quiser antes de gravar.',
       }
     },
   },

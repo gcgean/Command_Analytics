@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   RefreshCw, Loader2, Star, Search, MoreVertical, AlertTriangle,
-  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText, CheckCheck,
+  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText, CheckCheck, Paperclip,
 } from 'lucide-react'
 import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import { useToast } from '../../components/ui/Toast'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
-import { LancamentoSolicitacao } from './LancamentoSolicitacao'
+import { LancamentoSolicitacao, type PrefillSolicitacao } from './LancamentoSolicitacao'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import type { Projeto, Solicitacao, Usuario } from '../../types'
 
@@ -192,6 +193,8 @@ export function MapaSolicitacoes() {
   const { can } = usePermissions()
   const podeAgir = can('solicitacoes-acoes')
   const { toast } = useToast()
+  const location = useLocation()
+  const navigate = useNavigate()
 
   const [aba, setAba] = useState<Aba>('suporte')
   const [itens, setItens] = useState<Solicitacao[]>([])
@@ -222,6 +225,7 @@ export function MapaSolicitacoes() {
   const [texto, setTexto] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [lancamento, setLancamento] = useState<{ aberto: boolean; item: Solicitacao | null }>({ aberto: false, item: null })
+  const [prefillIA, setPrefillIA] = useState<PrefillSolicitacao | null>(null)
   const [modalNotas, setModalNotas] = useState(false)
   const [notasTexto, setNotasTexto] = useState('')
   const [carregandoNotas, setCarregandoNotas] = useState(false)
@@ -265,6 +269,18 @@ export function MapaSolicitacoes() {
   useEffect(() => {
     api.getUsuarios().then((u) => setDevs(Array.isArray(u) ? u : [])).catch(() => setDevs([]))
     api.getProjetos().then(setProjetos).catch(() => setProjetos([]))
+  }, [])
+
+  // Chegando do assistente de IA com a solicitação já redigida: abre o formulário real com o
+  // texto reescrito, pra pessoa conferir e salvar. Nada é gravado sem essa confirmação.
+  useEffect(() => {
+    const prefill = (location.state as any)?.criarSolicitacaoPrefill as PrefillSolicitacao | undefined
+    if (prefill?.clienteId) {
+      setPrefillIA(prefill)
+      setLancamento({ aberto: true, item: null })
+      navigate(location.pathname + location.search, { replace: true, state: null })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Fecha o menu de contexto ao clicar em qualquer lugar fora dele.
@@ -556,6 +572,15 @@ export function MapaSolicitacoes() {
                         </span>
                       </p>
                       <div className="flex items-center gap-0.5 flex-shrink-0">
+                        {!!item.anexos && (
+                          <span
+                            className="flex items-center text-slate-400 dark:text-slate-500"
+                            title={`${item.anexos} anexo(s)`}
+                            aria-label={`${item.anexos} anexo(s)`}
+                          >
+                            <Paperclip size={11} />
+                          </span>
+                        )}
                         {item.prioritario === 'S' && (
                           <AlertTriangle size={12} className="text-red-600 fill-red-100 dark:fill-red-950" aria-label="Prioritário / urgente" />
                         )}
@@ -734,7 +759,11 @@ export function MapaSolicitacoes() {
         aberto={lancamento.aberto}
         solicitacao={lancamento.item}
         usuarios={devs}
-        onClose={() => setLancamento({ aberto: false, item: null })}
+        prefill={prefillIA}
+        onClose={() => {
+          setLancamento({ aberto: false, item: null })
+          setPrefillIA(null)
+        }}
         onSalvo={carregar}
       />
 

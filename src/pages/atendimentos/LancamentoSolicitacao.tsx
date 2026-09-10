@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import clsx from 'clsx'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { api } from '../../services/api'
+import { useAuthStore } from '../../store/authStore'
 import { useToast } from '../../components/ui/Toast'
 import { Modal } from '../../components/ui/Modal'
 import { Select } from '../../components/ui/Select'
@@ -22,17 +23,30 @@ const STATUS_ABERTURA: Array<[number, string]> = [
   [9, 'Aguardando Testes do desenvolvimento'],
 ]
 
+/** Rascunho vindo do assistente de IA — a pessoa ainda confere e edita tudo antes de salvar. */
+export interface PrefillSolicitacao {
+  clienteId?: number
+  observacoes?: string
+  status?: number
+  projetoId?: number | null
+  desenvolvedorId?: number | null
+  urgente?: boolean
+  bugSistema?: boolean
+}
+
 interface Props {
   aberto: boolean
   /** null = novo atendimento; preenchido = alterar. */
   solicitacao: Solicitacao | null
   usuarios: Usuario[]
+  prefill?: PrefillSolicitacao | null
   onClose: () => void
   onSalvo: () => void
 }
 
-export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, onSalvo }: Props) {
+export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, onClose, onSalvo }: Props) {
   const { toast } = useToast()
+  const { user: usuarioLogado } = useAuthStore()
   const editando = !!solicitacao
 
   const [aba, setAba] = useState<AbaForm>('atendimento')
@@ -63,20 +77,32 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
   useEffect(() => {
     if (!aberto) return
     setAba('atendimento')
-    setClienteId(solicitacao?.clienteId ? String(solicitacao.clienteId) : '')
-    setObservacoes(solicitacao?.observacoes ?? '')
-    setStatus(solicitacao?.status ?? 2)
-    setTecnicoId(solicitacao?.tecnicoId ? String(solicitacao.tecnicoId) : '')
-    setDesenvolvedorId(solicitacao?.desenvolvedorId ? String(solicitacao.desenvolvedorId) : '')
-    setProjetoId(solicitacao?.projetoId ? String(solicitacao.projetoId) : '')
-    setUrgente(solicitacao?.prioritario === 'S')
-    setBugSistema(false)
+    setClienteId(solicitacao?.clienteId ? String(solicitacao.clienteId) : prefill?.clienteId ? String(prefill.clienteId) : '')
+    setObservacoes(solicitacao?.observacoes ?? prefill?.observacoes ?? '')
+    setStatus(solicitacao?.status ?? prefill?.status ?? 2)
+    // Sem técnico gravado, assume quem está mexendo — assim o campo nunca sai em branco e a
+    // solicitação não perde o responsável numa alteração.
+    setTecnicoId(
+      solicitacao?.tecnicoId ? String(solicitacao.tecnicoId) : usuarioLogado?.id ? String(usuarioLogado.id) : ''
+    )
+    setDesenvolvedorId(
+      solicitacao?.desenvolvedorId
+        ? String(solicitacao.desenvolvedorId)
+        : prefill?.desenvolvedorId
+          ? String(prefill.desenvolvedorId)
+          : ''
+    )
+    setProjetoId(
+      solicitacao?.projetoId ? String(solicitacao.projetoId) : prefill?.projetoId ? String(prefill.projetoId) : ''
+    )
+    setUrgente(solicitacao ? solicitacao.prioritario === 'S' : !!prefill?.urgente)
+    setBugSistema(solicitacao ? false : !!prefill?.bugSistema)
     setSolucao(solicitacao?.solucao ?? '')
     setJaFinalizado(false)
     setProcSelecionado('')
     setEfetuados([])
     setAnexosNovos([])
-  }, [aberto, solicitacao])
+  }, [aberto, solicitacao, prefill, usuarioLogado?.id])
 
   useEffect(() => {
     if (!aberto) return

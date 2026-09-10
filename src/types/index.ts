@@ -89,6 +89,8 @@ export interface Solicitacao {
   diasParado: number
   /** Mais de 3 dias parado nos status 1, 4 ou 6 (mesma regra do Delphi). */
   atrasado: boolean
+  /** Quantos arquivos estão anexados à solicitação. */
+  anexos?: number
 }
 
 export type StatusPipeline =

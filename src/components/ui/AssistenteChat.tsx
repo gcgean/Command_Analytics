@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Sparkles, X, Send, Loader2, CalendarPlus, Clock3 } from 'lucide-react'
+import { Sparkles, X, Send, Loader2, CalendarPlus, Clock3, FilePlus2 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '../../services/api'
@@ -121,6 +121,20 @@ export function AssistenteChat() {
           },
         },
       })
+    } else if (proposta.ferramenta === 'criar_solicitacao') {
+      navigate('/atendimentos/solicitacoes', {
+        state: {
+          criarSolicitacaoPrefill: {
+            clienteId: proposta.dados.clienteId,
+            observacoes: proposta.dados.observacoes,
+            status: proposta.dados.status,
+            projetoId: proposta.dados.projetoId,
+            desenvolvedorId: proposta.dados.desenvolvedorId,
+            urgente: proposta.dados.urgente,
+            bugSistema: proposta.dados.bugSistema,
+          },
+        },
+      })
     } else if (proposta.ferramenta === 'acao_conexao') {
       navigate('/conexoes', {
         state: {
@@ -194,7 +208,13 @@ export function AssistenteChat() {
                       onClick={() => confirmarProposta(m.proposta!)}
                       className="mt-2 flex items-center gap-1.5 text-xs font-medium bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-300 px-2.5 py-1.5 rounded-lg border border-blue-200 dark:border-blue-500/30 hover:bg-blue-50 dark:hover:bg-slate-900"
                     >
-                      {m.proposta.ferramenta === 'lancar_horas' ? <Clock3 size={13} /> : <CalendarPlus size={13} />}
+                      {m.proposta.ferramenta === 'lancar_horas' ? (
+                        <Clock3 size={13} />
+                      ) : m.proposta.ferramenta === 'criar_solicitacao' ? (
+                        <FilePlus2 size={13} />
+                      ) : (
+                        <CalendarPlus size={13} />
+                      )}
                       Abrir e conferir
                     </button>
                   )}

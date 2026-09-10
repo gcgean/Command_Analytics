@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
+import { Prisma } from '@prisma/client'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { getUserPermissions } from './grupos'
@@ -69,6 +70,23 @@ function paraCard(a: any) {
 }
 
 /**
+ * Preenche quantos anexos cada card tem. A tabela agendamento_anexo é SQL puro (não é modelo
+ * Prisma), então não dá pra pedir _count no include — uma query agrupada só pelos ids da página
+ * resolve com um roundtrip, usando o índice (tabela, registro_id).
+ */
+async function comAnexos<T extends { id: number }>(cards: T[]): Promise<Array<T & { anexos: number }>> {
+  if (!cards.length) return []
+  const linhas = await prisma.$queryRaw<Array<{ registroId: number; total: bigint | number }>>`
+    SELECT registro_id AS registroId, COUNT(*) AS total
+      FROM agendamento_anexo
+     WHERE tabela = 'atendimentos' AND registro_id IN (${Prisma.join(cards.map((c) => Number(c.id)))})
+     GROUP BY registro_id
+  `
+  const porId = new Map(linhas.map((l) => [Number(l.registroId), Number(l.total)]))
+  return cards.map((c) => ({ ...c, anexos: porId.get(Number(c.id)) ?? 0 }))
+}
+
+/**
  * Equivalente ao dm.GravaLogdoATendimento do Delphi. A tabela log_atendimento não tem chave
  * primária, então não dá pra modelar no Prisma — vai em SQL puro mesmo.
  */
@@ -131,7 +149,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       include: INCLUDE_CARD,
       orderBy: { id: 'asc' },
     })
-    return { total: itens.length, data: itens.map(paraCard) }
+    return { total: itens.length, data: await comAnexos(itens.map(paraCard)) }
   })
 
   // GET /solicitacoes/finalizadas — aba Solicitações finalizadas (por período)
@@ -155,7 +173,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       orderBy: { dataFechamento: 'desc' },
       take: 500,
     })
-    return { total: itens.length, data: itens.map(paraCard) }
+    return { total: itens.length, data: await comAnexos(itens.map(paraCard)) }
   })
 
   // GET /solicitacoes/notas-atualizacao — botão "Notas de atualização" da aba Finalizadas:
@@ -299,7 +317,9 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     if (b.observacoes !== undefined) dados.observacoes = String(b.observacoes).slice(0, 5000)
     if (b.solucao !== undefined) dados.solucao = String(b.solucao).slice(0, 2000)
     if (b.tipoContato !== undefined) dados.tipoContato = Number(b.tipoContato)
-    if (b.tecnicoId !== undefined) dados.tecnicoId = b.tecnicoId ? Number(b.tecnicoId) : null
+    // O técnico responsável nunca é zerado: vindo vazio, mantém o que já estava gravado e, se nem
+    // isso existir, fica com quem está alterando (mesma regra do lançamento no POST).
+    if (b.tecnicoId !== undefined) dados.tecnicoId = Number(b.tecnicoId) || atual.tecnicoId || usuarioId
     if (b.desenvolvedorId !== undefined) dados.desenvolvedorId = b.desenvolvedorId ? Number(b.desenvolvedorId) : null
     if (b.projetoId !== undefined) dados.projetoId = b.projetoId ? Number(b.projetoId) : null
     if (b.urgente !== undefined) dados.prioritario = b.urgente ? 'S' : ''
