@@ -22,8 +22,11 @@ export async function notificarAtualizacaoSolicitacao(
       where: { id: atendimentoId },
       select: {
         usuarioLancId: true,
-        tecnico: { select: { id: true, idTelegram: true } },
-        desenvolvedor: { select: { id: true, idTelegram: true } },
+        observacoes: true,
+        tecnico: { select: { id: true, idTelegram: true, nomeUsu: true, nomeCompleto: true } },
+        desenvolvedor: { select: { id: true, idTelegram: true, nomeUsu: true, nomeCompleto: true } },
+        cliente: { select: { nome: true } },
+        projeto: { select: { nome: true } },
       },
     })
     if (!atendimento) return
@@ -52,9 +55,26 @@ export async function notificarAtualizacaoSolicitacao(
       where: { id: usuarioAtorId },
       select: { nomeCompleto: true, nomeUsu: true },
     })
-    const titulo = `Solicitação #${atendimentoId} atualizada`
-    const mensagemPlataforma = `${descricao}\n\nAlterado por: ${nome(ator)}`
-    const mensagemTelegram = `🔔 Solicitação #${atendimentoId}\n${descricao}\n\nAlterado por: ${nome(ator)}`
+    const clienteNome = atendimento.cliente?.nome?.trim() || null
+    const projetoNome = atendimento.projeto?.nome?.trim() || null
+    // A reclamação costuma ser longa e o Telegram corta em 4096 — 400 já dá pra saber do que se trata.
+    const reclamacao = atendimento.observacoes?.trim().replace(/\s+/g, ' ').slice(0, 400) || null
+
+    const detalhes = [
+      clienteNome ? `Cliente: ${clienteNome}` : null,
+      projetoNome ? `Projeto: ${projetoNome}` : null,
+      atendimento.tecnico ? `Técnico: ${nome(atendimento.tecnico)}` : null,
+      atendimento.desenvolvedor ? `Desenvolvedor: ${nome(atendimento.desenvolvedor)}` : null,
+      reclamacao ? `\nSolicitação:\n${reclamacao}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n')
+
+    const titulo = clienteNome
+      ? `Solicitação #${atendimentoId} — ${clienteNome}`
+      : `Solicitação #${atendimentoId} atualizada`
+    const mensagemPlataforma = `${descricao}\n\n${detalhes}\n\nAlterado por: ${nome(ator)}`
+    const mensagemTelegram = `🔔 Solicitação #${atendimentoId} — ${descricao}\n\n${detalhes}\n\nAlterado por: ${nome(ator)}`
 
     for (const destinatario of destinatarios) {
       // Sino da plataforma: sempre grava, não depende de Telegram estar linkado nem do relay externo.
