@@ -50,6 +50,8 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
   const [urgente, setUrgente] = useState(false)
   const [bugSistema, setBugSistema] = useState(false)
   const [solucao, setSolucao] = useState('')
+  // Pra quando a solicitação já foi resolvida e o lançamento é só pra deixar registrado.
+  const [jaFinalizado, setJaFinalizado] = useState(false)
 
   const [projetos, setProjetos] = useState<Projeto[]>([])
   const [catalogo, setCatalogo] = useState<Array<{ id: number; descricao: string; pontuacao: number }>>([])
@@ -70,6 +72,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
     setUrgente(solicitacao?.prioritario === 'S')
     setBugSistema(false)
     setSolucao(solicitacao?.solucao ?? '')
+    setJaFinalizado(false)
     setProcSelecionado('')
     setEfetuados([])
     setAnexosNovos([])
@@ -94,6 +97,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
   const salvar = async () => {
     if (!clienteId) return toast.error('Selecione o cliente.')
     if (!observacoes.trim()) return toast.error('Descreva os dados do atendimento.')
+    if (!editando && jaFinalizado && !solucao.trim()) return toast.error('Descreva a solução pra marcar como finalizado.')
 
     setSalvando(true)
     try {
@@ -130,6 +134,14 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
             await api.uploadAnexos({ tabela: 'atendimentos', registroId: r.id, files: anexosNovos })
           } catch (e: any) {
             toast.error(e?.message || 'Solicitação criada, mas falhou ao enviar os anexos.')
+          }
+        }
+        if (jaFinalizado) {
+          try {
+            await api.finalizarSolicitacao(r.id, solucao.trim())
+            toast.success(`Solicitação #${r.id} já entrou finalizada`)
+          } catch (e: any) {
+            toast.error(e?.message || 'Solicitação criada, mas falhou ao marcar como finalizada.')
           }
         }
       }
@@ -252,6 +264,23 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
                 <input type="checkbox" checked={bugSistema} onChange={(e) => setBugSistema(e.target.checked)} />
                 Bug do sistema <span className="text-slate-400">(entra como prioridade A)</span>
               </label>
+
+              {!editando && (
+                <div className="pt-2 border-t border-slate-100 dark:border-slate-700">
+                  <label className="flex items-center gap-2 text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                    <input type="checkbox" checked={jaFinalizado} onChange={(e) => setJaFinalizado(e.target.checked)} />
+                    Já foi resolvido — marcar como finalizado ao salvar
+                  </label>
+                  {jaFinalizado && (
+                    <textarea
+                      className="input w-full h-20 resize-none mt-2 text-xs"
+                      placeholder="Descreva a solução aplicada..."
+                      value={solucao}
+                      onChange={(e) => setSolucao(e.target.value)}
+                    />
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -344,7 +373,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
             <button className="btn-secondary" onClick={onClose} disabled={salvando}>Sair</button>
             <button className="btn-primary flex items-center gap-1" onClick={salvar} disabled={salvando}>
               {salvando ? <Loader2 size={14} className="animate-spin" /> : null}
-              {editando ? 'Salvar alterações' : 'Salvar solicitação'}
+              {editando ? 'Salvar alterações' : jaFinalizado ? 'Salvar já finalizado' : 'Salvar solicitação'}
             </button>
           </div>
         )}

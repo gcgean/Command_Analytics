@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
   RefreshCw, Loader2, Star, Search, MoreVertical, AlertTriangle,
-  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText,
+  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText, CheckCheck,
 } from 'lucide-react'
 import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -218,6 +218,7 @@ export function MapaSolicitacoes() {
   const [modalDev, setModalDev] = useState<Solicitacao | null>(null)
   const [modalJustificativa, setModalJustificativa] = useState<{ item: Solicitacao; status: number; titulo: string } | null>(null)
   const [modalCancelar, setModalCancelar] = useState<Solicitacao | null>(null)
+  const [modalFinalizar, setModalFinalizar] = useState<Solicitacao | null>(null)
   const [texto, setTexto] = useState('')
   const [salvando, setSalvando] = useState(false)
   const [lancamento, setLancamento] = useState<{ aberto: boolean; item: Solicitacao | null }>({ aberto: false, item: null })
@@ -333,6 +334,12 @@ export function MapaSolicitacoes() {
     if (!podeAgir) return base
 
     return [
+      {
+        label: 'Marcar como Finalizado',
+        icon: <CheckCheck size={13} />,
+        onClick: () => { setTexto(item.solucao ?? ''); setModalFinalizar(item) },
+        destaque: true,
+      },
       { label: 'Alterar / Finalizar', icon: <Pencil size={13} />, onClick: () => setLancamento({ aberto: true, item }) },
       { label: 'Vincular Dev', icon: <UserPlus size={13} />, onClick: () => setModalDev(item) },
       { label: 'Em Desenvolvimento', icon: <Code2 size={13} />, onClick: () => mudarStatus(item, S.EM_DESENVOLVIMENTO, 'Em Desenvolvimento') },
@@ -612,7 +619,7 @@ export function MapaSolicitacoes() {
                       className="absolute right-1 top-6 z-30 w-56 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {acoes.map((a) => (
+                      {acoes.map((a, i) => (
                         <button
                           key={a.label}
                           type="button"
@@ -620,7 +627,12 @@ export function MapaSolicitacoes() {
                           onClick={() => { setMenuAberto(null); a.onClick() }}
                           className={clsx(
                             'w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50',
-                            (a as any).perigo ? 'text-red-600 dark:text-red-400' : 'text-slate-700 dark:text-slate-300'
+                            (a as any).perigo
+                              ? 'text-red-600 dark:text-red-400'
+                              : (a as any).destaque
+                                ? 'text-emerald-600 dark:text-emerald-400 font-semibold'
+                                : 'text-slate-700 dark:text-slate-300',
+                            (a as any).destaque && i === 0 && 'border-b border-slate-100 dark:border-slate-700 mb-1 pb-2'
                           )}
                         >
                           {a.icon} {a.label}
@@ -840,6 +852,37 @@ export function MapaSolicitacoes() {
               }}
             >
               {salvando ? 'Cancelando...' : 'Confirmar cancelamento'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Marcar como Finalizado — atalho direto do menu do card */}
+      <Modal isOpen={!!modalFinalizar} onClose={() => setModalFinalizar(null)} title={`Marcar como Finalizado — #${modalFinalizar?.id ?? ''}`}>
+        <div className="space-y-3">
+          <textarea
+            className="input w-full h-28 resize-none"
+            placeholder="Descreva o que foi feito para resolver..."
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+          />
+          <p className="text-xs text-amber-600 dark:text-amber-400">
+            Marca a solicitação como concluída e carimba a data de finalização.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button className="btn-secondary" onClick={() => setModalFinalizar(null)}>Voltar</button>
+            <button
+              className="btn-primary !bg-emerald-600 hover:!bg-emerald-700"
+              disabled={!texto.trim() || salvando}
+              onClick={async () => {
+                const ok = await executar(
+                  () => api.finalizarSolicitacao(modalFinalizar!.id, texto.trim()),
+                  `Solicitação #${modalFinalizar!.id} finalizada`
+                )
+                if (ok) setModalFinalizar(null)
+              }}
+            >
+              {salvando ? 'Finalizando...' : 'Confirmar finalização'}
             </button>
           </div>
         </div>
