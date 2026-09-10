@@ -376,7 +376,7 @@ export function MapaSolicitacoes() {
           </button>
           {podeAgir && (
             <button className="btn-primary flex items-center gap-2" onClick={() => setLancamento({ aberto: true, item: null })}>
-              <Plus size={16} /> Novo Atendimento
+              <Plus size={16} /> Nova Solicitação
             </button>
           )}
         </div>

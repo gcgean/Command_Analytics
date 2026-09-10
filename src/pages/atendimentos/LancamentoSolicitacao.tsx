@@ -22,14 +22,6 @@ const STATUS_ABERTURA: Array<[number, string]> = [
   [9, 'Aguardando Testes do desenvolvimento'],
 ]
 
-const TIPOS_CONTATO: Array<[number, string]> = [
-  [0, 'WhatsApp'],
-  [1, 'Telefone'],
-  [2, 'E-mail'],
-  [3, 'Presencial'],
-  [4, 'Outras mídias'],
-]
-
 interface Props {
   aberto: boolean
   /** null = novo atendimento; preenchido = alterar. */
@@ -49,11 +41,12 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
   const [clienteId, setClienteId] = useState('')
   const [observacoes, setObservacoes] = useState('')
   const [status, setStatus] = useState(2)
-  const [tipoContato, setTipoContato] = useState(0)
+  // Removidos da UI, mas o backend ainda espera esses campos — mantidos com valor padrão fixo.
+  const tipoContato = 0
+  const foraHorario = false
   const [tecnicoId, setTecnicoId] = useState('')
   const [desenvolvedorId, setDesenvolvedorId] = useState('')
   const [urgente, setUrgente] = useState(false)
-  const [foraHorario, setForaHorario] = useState(false)
   const [bugSistema, setBugSistema] = useState(false)
   const [solucao, setSolucao] = useState('')
 
@@ -69,11 +62,9 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
     setClienteId(solicitacao?.clienteId ? String(solicitacao.clienteId) : '')
     setObservacoes(solicitacao?.observacoes ?? '')
     setStatus(solicitacao?.status ?? 2)
-    setTipoContato(0)
     setTecnicoId(solicitacao?.tecnicoId ? String(solicitacao.tecnicoId) : '')
     setDesenvolvedorId(solicitacao?.desenvolvedorId ? String(solicitacao.desenvolvedorId) : '')
     setUrgente(solicitacao?.prioritario === 'S')
-    setForaHorario(false)
     setBugSistema(false)
     setSolucao(solicitacao?.solucao ?? '')
     setProcSelecionado('')
@@ -160,43 +151,37 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
     }
   }
 
+  // Procedimentos e finalização só fazem sentido sobre um atendimento que já existe — em vez
+  // de mostrar desabilitadas no Novo Atendimento, nem aparecem até que exista o que editar.
   const abas: Array<[AbaForm, string]> = [
-    ['atendimento', editando ? 'Alterar atendimento' : 'Salvar atendimento'],
-    ['procedimentos', 'Procedimentos efetuados'],
-    ['finalizacao', 'Finalização'],
+    ['atendimento', editando ? 'Alterar solicitação' : 'Salvar solicitação'],
+    ...(editando ? ([['procedimentos', 'Procedimentos efetuados'], ['finalizacao', 'Finalização']] as Array<[AbaForm, string]>) : []),
   ]
 
   return (
     <Modal
       isOpen={aberto}
       onClose={onClose}
-      title={editando ? `Alterar atendimento #${solicitacao!.id}` : 'Novo atendimento'}
+      title={editando ? `Alterar solicitação #${solicitacao!.id}` : 'Nova Solicitação'}
       size="xl"
     >
       <div className="space-y-4">
         <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
-          {abas.map(([id, label]) => {
-            // Procedimentos e finalização só fazem sentido sobre um atendimento que já existe.
-            const bloqueada = !editando && id !== 'atendimento'
-            return (
-              <button
-                key={id}
-                type="button"
-                disabled={bloqueada}
-                title={bloqueada ? 'Salve o atendimento primeiro' : undefined}
-                onClick={() => setAba(id)}
-                className={clsx(
-                  'px-3 py-2 text-xs font-medium border-b-2 -mb-px',
-                  bloqueada && 'opacity-40 cursor-not-allowed',
-                  aba === id
-                    ? 'border-blue-500 text-blue-600 dark:text-blue-400'
-                    : 'border-transparent text-slate-500'
-                )}
-              >
-                {label}
-              </button>
-            )
-          })}
+          {abas.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setAba(id)}
+              className={clsx(
+                'px-3 py-2 text-xs font-medium border-b-2 -mb-px',
+                aba === id
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-slate-500'
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         {aba === 'atendimento' && (
@@ -232,12 +217,6 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
                 />
               )}
               <Select
-                label="Contato via"
-                value={tipoContato}
-                onChange={(e) => setTipoContato(Number(e.target.value))}
-                options={TIPOS_CONTATO.map(([v, l]) => ({ value: v, label: l }))}
-              />
-              <Select
                 label="Técnico"
                 placeholder="(quem está lançando)"
                 value={tecnicoId}
@@ -255,10 +234,6 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
               <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
                 <input type="checkbox" checked={urgente} onChange={(e) => setUrgente(e.target.checked)} />
                 Marcar como urgente
-              </label>
-              <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
-                <input type="checkbox" checked={foraHorario} onChange={(e) => setForaHorario(e.target.checked)} />
-                Atendimento fora do horário
               </label>
               <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
                 <input type="checkbox" checked={bugSistema} onChange={(e) => setBugSistema(e.target.checked)} />
@@ -356,7 +331,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, onClose, 
             <button className="btn-secondary" onClick={onClose} disabled={salvando}>Sair</button>
             <button className="btn-primary flex items-center gap-1" onClick={salvar} disabled={salvando}>
               {salvando ? <Loader2 size={14} className="animate-spin" /> : null}
-              {editando ? 'Salvar alterações' : 'Salvar atendimento'}
+              {editando ? 'Salvar alterações' : 'Salvar solicitação'}
             </button>
           </div>
         )}
