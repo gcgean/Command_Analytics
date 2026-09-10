@@ -12,7 +12,7 @@ export interface NotificacaoPlataformaItem {
   id: number
   titulo: string
   mensagem: string
-  tipo: 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio' | 'implantacao_processo'
+  tipo: 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio' | 'implantacao_processo' | 'solicitacao_atualizacao'
   lida: boolean
   criadoEm: string
   agendaOrigem?: 'agenda' | 'programado' | null
@@ -38,7 +38,7 @@ export interface StatusProcessamentoNotificacaoAgendamento {
 }
 
 type CanalNotificacao = 'plataforma' | 'telegram'
-type TipoNotificacao = 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio' | 'implantacao_processo'
+type TipoNotificacao = 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio' | 'implantacao_processo' | 'solicitacao_atualizacao'
 
 const JANELA_ALERTA_INICIO_MINUTOS = 5
 

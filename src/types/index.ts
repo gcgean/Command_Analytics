@@ -441,7 +441,7 @@ export interface NotificacaoPlataforma {
   id: number
   titulo: string
   mensagem: string
-  tipo: 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio' | 'implantacao_processo'
+  tipo: 'agenda_dia' | 'agenda_lembrete' | 'agenda_inicio' | 'implantacao_processo' | 'solicitacao_atualizacao'
   lida: boolean
   criadoEm: string
   agendaOrigem?: 'agenda' | 'programado' | null
