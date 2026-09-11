@@ -36,6 +36,18 @@ export async function initProjetos(): Promise<void> {
   // sob demanda na rota /projetos, e as duas podem disparar juntas na primeira inicialização.
   // Em vez de depender de uma única Promise compartilhada entre módulos, cada ALTER engole o
   // próprio erro de "já existe" (MySQL 1060 = coluna duplicada, 1061 = índice duplicado).
+  // Qual versão do cliente esse projeto acompanha — usado pela aba "Clientes a atualizar" pra
+  // saber com qual coluna de dados_gerais_clientes comparar. Vazio = projeto não acompanha versão.
+  const sistemaExiste = await prisma.$queryRawUnsafe<Array<{ n: bigint | number }>>(`
+    SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cadastro_projetos' AND COLUMN_NAME = 'sistema_versao'
+  `)
+  if (Number(sistemaExiste[0]?.n ?? 0) === 0) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE cadastro_projetos ADD COLUMN sistema_versao VARCHAR(20) NULL`).catch((e: any) => {
+      if (!String(e?.message ?? '').includes('1060')) throw e
+    })
+  }
+
   const colunaExiste = await prisma.$queryRawUnsafe<Array<{ n: bigint | number }>>(`
     SELECT COUNT(*) AS n FROM information_schema.COLUMNS
     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'atendimentos' AND COLUMN_NAME = 'cod_projeto'

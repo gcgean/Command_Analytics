@@ -7,7 +7,7 @@ import { Input } from '../../components/ui/Input'
 import { Select } from '../../components/ui/Select'
 import { api } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
-import type { Projeto, TipoProjeto } from '../../types'
+import type { Projeto, SistemaVersaoProjeto, TipoProjeto } from '../../types'
 
 const TIPOS: Array<{ value: TipoProjeto; label: string; icon: React.ReactNode }> = [
   { value: 'WEB', label: 'Web', icon: <Globe className="w-3.5 h-3.5" /> },
@@ -17,6 +17,15 @@ const TIPOS: Array<{ value: TipoProjeto; label: string; icon: React.ReactNode }>
 
 const TIPO_LABEL: Record<TipoProjeto, string> = { WEB: 'Web', DESKTOP: 'Desktop', MOBILE: 'Mobile' }
 
+// Define com qual versão instalada no cliente as solicitações desse projeto serão comparadas na
+// aba "Clientes a atualizar". Sem isso, o projeto não entra naquela verificação.
+const SISTEMAS: Array<{ value: string; label: string }> = [
+  { value: '', label: 'Não acompanha versão' },
+  { value: 'RETAGUARDA', label: 'Retaguarda (Command Server)' },
+  { value: 'PDV', label: 'PDV (CSPDV)' },
+  { value: 'CONNECTION', label: 'Connection' },
+]
+
 export function CadastroProjetos() {
   const { can } = usePermissions()
   const canAccess = can('cadastro-projetos')
@@ -25,7 +34,7 @@ export function CadastroProjetos() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [editId, setEditId] = useState<number | null>(null)
-  const [form, setForm] = useState({ nome: '', cor: '#3b82f6', tipo: 'WEB' as TipoProjeto, ativo: true })
+  const [form, setForm] = useState({ nome: '', cor: '#3b82f6', tipo: 'WEB' as TipoProjeto, sistemaVersao: '' as '' | SistemaVersaoProjeto, ativo: true })
 
   async function loadData() {
     setLoading(true)
@@ -44,7 +53,7 @@ export function CadastroProjetos() {
 
   function resetForm() {
     setEditId(null)
-    setForm({ nome: '', cor: '#3b82f6', tipo: 'WEB', ativo: true })
+    setForm({ nome: '', cor: '#3b82f6', tipo: 'WEB', sistemaVersao: '', ativo: true })
   }
 
   async function salvar() {
@@ -54,7 +63,7 @@ export function CadastroProjetos() {
     }
     setSaving(true)
     try {
-      const payload = { nome: form.nome.trim(), cor: form.cor || undefined, tipo: form.tipo, ativo: form.ativo }
+      const payload = { nome: form.nome.trim(), cor: form.cor || undefined, tipo: form.tipo, sistemaVersao: form.sistemaVersao || null, ativo: form.ativo }
       if (editId) {
         await api.updateProjeto(editId, payload)
       } else {
@@ -71,7 +80,7 @@ export function CadastroProjetos() {
 
   function editar(p: Projeto) {
     setEditId(p.id)
-    setForm({ nome: p.nome, cor: p.cor || '#3b82f6', tipo: p.tipo, ativo: p.ativo })
+    setForm({ nome: p.nome, cor: p.cor || '#3b82f6', tipo: p.tipo, sistemaVersao: p.sistemaVersao ?? '', ativo: p.ativo })
   }
 
   async function remover(p: Projeto) {
@@ -114,7 +123,7 @@ export function CadastroProjetos() {
       </div>
 
       <Card>
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           <Input
             label="Nome do projeto"
             placeholder="Ex: Command Analytics"
@@ -138,6 +147,12 @@ export function CadastroProjetos() {
             value={form.tipo}
             onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value as TipoProjeto }))}
             options={TIPOS.map((t) => ({ value: t.value, label: t.label }))}
+          />
+          <Select
+            label="Versão acompanhada"
+            value={form.sistemaVersao}
+            onChange={(e) => setForm((f) => ({ ...f, sistemaVersao: e.target.value as '' | SistemaVersaoProjeto }))}
+            options={SISTEMAS}
           />
           <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 mt-7">
             <input

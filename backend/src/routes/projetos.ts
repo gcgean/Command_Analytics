@@ -6,6 +6,20 @@ import { initProjetos } from '../utils/projetos'
 type TipoProjeto = 'WEB' | 'DESKTOP' | 'MOBILE'
 const TIPOS_PROJETO: TipoProjeto[] = ['WEB', 'DESKTOP', 'MOBILE']
 
+// Qual versão instalada no cliente esse projeto acompanha. Os ids de sistema vêm de
+// sistema_versoes: 1 = Command Server (retaguarda), 2 = CSPDV, 4 = Connection.
+export const SISTEMAS_VERSAO = {
+  RETAGUARDA: { sistemaId: 1, coluna: 'versao_exe_retaguarda', label: 'Retaguarda (Command Server)' },
+  PDV: { sistemaId: 2, coluna: 'versao_exe_pdv', label: 'PDV (CSPDV)' },
+  CONNECTION: { sistemaId: 4, coluna: 'versao_exe_connection', label: 'Connection' },
+} as const
+export type SistemaVersao = keyof typeof SISTEMAS_VERSAO
+
+function normalizarSistema(valor: unknown): SistemaVersao | null {
+  const v = String(valor ?? '').trim().toUpperCase()
+  return v in SISTEMAS_VERSAO ? (v as SistemaVersao) : null
+}
+
 function normalizarTipo(valor: unknown): TipoProjeto {
   const v = String(valor ?? '').toUpperCase()
   return (TIPOS_PROJETO as string[]).includes(v) ? (v as TipoProjeto) : 'WEB'
@@ -16,6 +30,7 @@ type ProjetoRow = {
   nome: string
   cor: string | null
   tipo: string
+  sistema_versao?: string | null
   ativo: number | boolean
   criado_em?: Date
   atualizado_em?: Date
@@ -61,6 +76,7 @@ function fmt(r: ProjetoRow) {
     nome: r.nome,
     cor: r.cor,
     tipo: normalizarTipo(r.tipo),
+    sistemaVersao: normalizarSistema(r.sistema_versao),
     ativo: Number(r.ativo) === 1,
     criadoEm: r.criado_em ?? null,
     atualizadoEm: r.atualizado_em ?? null,
@@ -72,7 +88,7 @@ export async function projetosRoutes(app: FastifyInstance) {
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Projetos'], summary: 'Listar projetos cadastrados' } }, async (request) => {
     const { ativo } = request.query as { ativo?: string }
     const rows = await withTabela(async () => prisma.$queryRaw<ProjetoRow[]>`
-      SELECT id, nome, cor, tipo, ativo, criado_em, atualizado_em
+      SELECT id, nome, cor, tipo, sistema_versao, ativo, criado_em, atualizado_em
       FROM cadastro_projetos
       ORDER BY nome ASC
     `)
@@ -83,13 +99,13 @@ export async function projetosRoutes(app: FastifyInstance) {
 
   // POST /projetos — criar
   app.post('/', { preHandler: authMiddleware, schema: { tags: ['Projetos'], summary: 'Criar projeto' } }, async (request, reply) => {
-    const { nome, cor, tipo } = request.body as { nome?: string; cor?: string; tipo?: string }
+    const { nome, cor, tipo, sistemaVersao } = request.body as { nome?: string; cor?: string; tipo?: string; sistemaVersao?: string }
     const nomeTrim = String(nome ?? '').trim()
     if (!nomeTrim) return reply.status(400).send({ error: 'Nome do projeto é obrigatório.' })
 
     await withTabela(async () => prisma.$executeRaw`
-      INSERT INTO cadastro_projetos (nome, cor, tipo, ativo, criado_em, atualizado_em)
-      VALUES (${nomeTrim}, ${cor?.trim() || null}, ${normalizarTipo(tipo)}, 1, NOW(), NOW())
+      INSERT INTO cadastro_projetos (nome, cor, tipo, sistema_versao, ativo, criado_em, atualizado_em)
+      VALUES (${nomeTrim}, ${cor?.trim() || null}, ${normalizarTipo(tipo)}, ${normalizarSistema(sistemaVersao)}, 1, NOW(), NOW())
     `)
     const inserted = await withTabela(async () => prisma.$queryRaw<{ id: number }[]>`SELECT id FROM cadastro_projetos ORDER BY id DESC LIMIT 1`)
     return reply.status(201).send({ id: Number(inserted[0]?.id ?? 0) })
@@ -101,13 +117,13 @@ export async function projetosRoutes(app: FastifyInstance) {
     const projetoId = Number(id)
     if (!Number.isFinite(projetoId) || projetoId <= 0) return reply.status(400).send({ error: 'ID inválido.' })
 
-    const { nome, cor, tipo, ativo } = request.body as { nome?: string; cor?: string; tipo?: string; ativo?: boolean }
+    const { nome, cor, tipo, ativo, sistemaVersao } = request.body as { nome?: string; cor?: string; tipo?: string; ativo?: boolean; sistemaVersao?: string }
     const nomeTrim = String(nome ?? '').trim()
     if (!nomeTrim) return reply.status(400).send({ error: 'Nome do projeto é obrigatório.' })
 
     await withTabela(async () => prisma.$executeRaw`
       UPDATE cadastro_projetos
-      SET nome = ${nomeTrim}, cor = ${cor?.trim() || null}, tipo = ${normalizarTipo(tipo)}, ativo = ${ativo === false ? 0 : 1}, atualizado_em = NOW()
+      SET nome = ${nomeTrim}, cor = ${cor?.trim() || null}, tipo = ${normalizarTipo(tipo)}, sistema_versao = ${normalizarSistema(sistemaVersao)}, ativo = ${ativo === false ? 0 : 1}, atualizado_em = NOW()
       WHERE id = ${projetoId}
     `)
     return { ok: true }

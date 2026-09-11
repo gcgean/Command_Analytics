@@ -12,9 +12,9 @@ import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { LancamentoSolicitacao, type PrefillSolicitacao } from './LancamentoSolicitacao'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
-import type { ClienteAnexo, Projeto, Solicitacao, Usuario } from '../../types'
+import type { ClienteAnexo, Projeto, Solicitacao, SolicitacaoPendenteAtualizacao, Usuario } from '../../types'
 
-type Aba = 'suporte' | 'finalizadas'
+type Aba = 'suporte' | 'finalizadas' | 'pendentes'
 
 // Mesmos códigos do Delphi (UMapaAtendimentos.pas). Não existe status 15.
 const S = {
@@ -336,12 +336,34 @@ export function MapaSolicitacoes() {
   const [salvando, setSalvando] = useState(false)
   const [lancamento, setLancamento] = useState<{ aberto: boolean; item: Solicitacao | null }>({ aberto: false, item: null })
   const [prefillIA, setPrefillIA] = useState<PrefillSolicitacao | null>(null)
+  const [pendentes, setPendentes] = useState<SolicitacaoPendenteAtualizacao[]>([])
   const [modalNotas, setModalNotas] = useState(false)
   const [notasTexto, setNotasTexto] = useState('')
   const [carregandoNotas, setCarregandoNotas] = useState(false)
 
   const carregar = useCallback(() => {
     setLoading(true)
+    if (aba === 'pendentes') {
+      api
+        .getPendentesAtualizacao({
+          ...(busca.trim() ? { busca: busca.trim() } : {}),
+          ...(filtroTecnicoId.length ? { tecnicoId: filtroTecnicoId.map(Number) } : {}),
+          ...(filtroDesenvolvedorId.length ? { desenvolvedorId: filtroDesenvolvedorId.map(Number) } : {}),
+          ...(filtroProjetoId.length ? { projetoId: filtroProjetoId.map(Number) } : {}),
+          ...(filtroPrioritario ? { prioritario: true } : {}),
+        })
+        .then((res) => {
+          setPendentes(res.data)
+          setItens([])
+          setLoading(false)
+        })
+        .catch((e: any) => {
+          toast.error(e?.message || 'Falha ao carregar os clientes pendentes de atualização.')
+          setLoading(false)
+        })
+      return
+    }
+
     const req =
       aba === 'suporte'
         ? api.getSolicitacoesSuporte({
@@ -354,7 +376,13 @@ export function MapaSolicitacoes() {
             ...(filtroProjetoId.length ? { projetoId: filtroProjetoId.map(Number) } : {}),
             ...(filtroPrioritario ? { prioritario: true } : {}),
           })
-        : api.getSolicitacoesFinalizadas(dataInicio, dataFim)
+        : api.getSolicitacoesFinalizadas(dataInicio, dataFim, {
+            ...(busca.trim() ? { busca: busca.trim() } : {}),
+            ...(filtroTecnicoId.length ? { tecnicoId: filtroTecnicoId.map(Number) } : {}),
+            ...(filtroDesenvolvedorId.length ? { desenvolvedorId: filtroDesenvolvedorId.map(Number) } : {}),
+            ...(filtroProjetoId.length ? { projetoId: filtroProjetoId.map(Number) } : {}),
+            ...(filtroPrioritario ? { prioritario: true } : {}),
+          })
 
     req
       .then((res) => {
@@ -586,8 +614,9 @@ export function MapaSolicitacoes() {
         </div>
       </div>
 
-      {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero. Clicar filtra. */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2">
+      {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero. Clicar filtra.
+          Escondido em "Clientes a atualizar": lá a lista não é por etapa. */}
+      <div hidden={aba === 'pendentes'} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2">
         <button
           type="button"
           onClick={() => setFiltroEtapa([])}
@@ -642,6 +671,7 @@ export function MapaSolicitacoes() {
         {([
           ['suporte', 'Backlog de Desenvolvimento'],
           ['finalizadas', 'Solicitações finalizadas'],
+          ['pendentes', 'Clientes a atualizar'],
         ] as Array<[Aba, string]>).map(([id, label]) => (
           <button
             key={id}
@@ -660,16 +690,14 @@ export function MapaSolicitacoes() {
 
       {/* Filtros da aba */}
       <div className="flex flex-wrap gap-3 items-end">
-        {aba === 'suporte' && (
-          <div className="w-72">
-            <Input
-              placeholder="Pesquisar por cliente..."
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              icon={<Search className="w-4 h-4" />}
-            />
-          </div>
-        )}
+        <div className="w-72">
+          <Input
+            placeholder="Pesquisar por cliente..."
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            icon={<Search className="w-4 h-4" />}
+          />
+        </div>
         {aba === 'finalizadas' && (
           <>
             <div>
@@ -685,8 +713,8 @@ export function MapaSolicitacoes() {
             </button>
           </>
         )}
+        {/* Etapa só faz sentido no backlog — na aba de finalizadas tudo é "Concluído". */}
         {aba === 'suporte' && (
-          <>
             <div className="w-52">
               <MultiSelectFiltro
                 placeholder="Todas as etapas"
@@ -706,6 +734,7 @@ export function MapaSolicitacoes() {
                 ]}
               />
             </div>
+          )}
             <div className="w-52">
               <MultiSelectFiltro
                 placeholder="Todos os técnicos"
@@ -734,12 +763,73 @@ export function MapaSolicitacoes() {
               <input type="checkbox" checked={filtroPrioritario} onChange={(e) => setFiltroPrioritario(e.target.checked)} />
               Só prioritárias
             </label>
-          </>
-        )}
       </div>
 
+      {/* Clientes a atualizar — tabela, porque o que importa aqui é comparar versões, não o kanban */}
+      {aba === 'pendentes' && (
+        <div>
+          {loading ? (
+            <div className="flex items-center justify-center h-40 text-slate-500">
+              <Loader2 className="w-6 h-6 animate-spin mr-3" /> Verificando versões...
+            </div>
+          ) : pendentes.length === 0 ? (
+            <div className="text-center py-12 text-slate-500">
+              <p className="font-medium">Nenhum cliente pendente de atualização.</p>
+              <p className="text-sm mt-1">
+                Aparecem aqui os clientes que pediram algo já entregue numa versão, mas que continuam
+                rodando uma versão anterior a ela.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-800/60 text-left">
+                  <tr className="text-xs uppercase text-slate-500">
+                    <th className="px-3 py-2">Cliente</th>
+                    <th className="px-3 py-2">Solicitação</th>
+                    <th className="px-3 py-2">Projeto</th>
+                    <th className="px-3 py-2">Quem lançou</th>
+                    <th className="px-3 py-2">Versão do cliente</th>
+                    <th className="px-3 py-2">Entregue na versão</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {pendentes.map((p) => (
+                    <tr
+                      key={`${p.id}-${p.sistema}`}
+                      className="hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer"
+                      onClick={() => setModalDetalhes(p)}
+                    >
+                      <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-200">{p.clienteNome}</td>
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400">#{p.id}</td>
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
+                        {p.projetoNome} <span className="text-slate-400">· {p.sistemaLabel}</span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-600 dark:text-slate-400">{p.tecnicoNome ?? '—'}</td>
+                      <td className="px-3 py-2">
+                        <span className="badge bg-red-500/15 text-red-600 dark:text-red-400">{p.versaoInstalada}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="badge bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                          {p.versaoEntrega}
+                        </span>
+                        {p.dataEntrega && (
+                          <span className="ml-2 text-xs text-slate-400">
+                            {new Date(p.dataEntrega).toLocaleDateString('pt-BR')}
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Grade de cards — largura cheia; detalhes agora vivem no menu de cada card */}
-      <div ref={gridRef}>
+      <div ref={gridRef} hidden={aba === 'pendentes'}>
         {loading ? (
           <div className="flex items-center justify-center h-40 text-slate-500">
             <Loader2 className="w-6 h-6 animate-spin mr-3" /> Carregando solicitações...

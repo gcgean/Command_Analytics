@@ -53,11 +53,23 @@ export type StatusAtendimento =
 export type TipoProjeto = 'WEB' | 'DESKTOP' | 'MOBILE'
 
 /** Projeto ao qual uma solicitação pode pertencer — cadastro em Configurações → Projetos. */
+export type SistemaVersaoProjeto = 'RETAGUARDA' | 'PDV' | 'CONNECTION'
+
+export interface SolicitacaoPendenteAtualizacao extends Solicitacao {
+  sistema: SistemaVersaoProjeto
+  sistemaLabel: string
+  versaoInstalada: string
+  versaoEntrega: string
+  dataEntrega: string | null
+}
+
 export interface Projeto {
   id: number
   nome: string
   cor: string | null
   tipo: TipoProjeto
+  /** Qual versão instalada no cliente esse projeto acompanha; null = não acompanha. */
+  sistemaVersao: SistemaVersaoProjeto | null
   ativo: boolean
   criadoEm: string | null
   atualizadoEm: string | null
@@ -327,6 +339,8 @@ export interface ClienteNuvemInfo {
   conexoesTravado?: number | null
   conexoesFechado?: number | null
   ultimaVerificacao?: string | null
+  /** false quando o vínculo está marcado como inativo no cadastro de nuvens. */
+  ativa?: boolean
 }
 
 export interface ClienteLegadoAgenda {

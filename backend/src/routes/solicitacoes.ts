@@ -5,6 +5,21 @@ import { authMiddleware } from '../middleware/auth'
 import { getUserPermissions } from './grupos'
 import { registrarAuditoria } from '../utils/auditoria'
 import { notificarAtualizacaoSolicitacao } from '../utils/notificacoesSolicitacoes'
+import { SISTEMAS_VERSAO, type SistemaVersao } from './projetos'
+
+/**
+ * Compara versões no formato "6.57.3.0". Comparar como texto erraria feio ("6.9" > "6.57"), então
+ * cada segmento vira número. Segmento faltando conta como zero.
+ */
+function compararVersao(a: string, b: string): number {
+  const pa = a.split('.').map((n) => Number(n) || 0)
+  const pb = b.split('.').map((n) => Number(n) || 0)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (diff !== 0) return diff < 0 ? -1 : 1
+  }
+  return 0
+}
 
 // Códigos de Status_Atendimento — contrato com o sistema Delphi legado (UMapaAtendimentos.pas,
 // combo CbSituacao). Não existe status 15. Alterar esses números quebra o fluxo real de
@@ -154,9 +169,21 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
   // GET /solicitacoes/finalizadas — aba Solicitações finalizadas (por período)
   app.get('/finalizadas', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request) => {
-    const { dataInicio, dataFim } = request.query as Record<string, string>
+    const { dataInicio, dataFim, tecnicoId, desenvolvedorId, projetoId, busca, prioritario } =
+      request.query as Record<string, string>
+
+    // Mesmos filtros da aba de backlog — a etapa não entra porque aqui tudo é Concluído.
+    const paraLista = (v?: string) => v?.split(',').map(Number).filter((n) => !Number.isNaN(n)) ?? []
+    const tecnicoLista = paraLista(tecnicoId)
+    const desenvolvedorLista = paraLista(desenvolvedorId)
+    const projetoLista = paraLista(projetoId)
 
     const where: Record<string, any> = { status: STATUS.CONCLUIDO }
+    if (tecnicoLista.length) where.tecnicoId = { in: tecnicoLista }
+    if (desenvolvedorLista.length) where.desenvolvedorId = { in: desenvolvedorLista }
+    if (projetoLista.length) where.projetoId = { in: projetoLista }
+    if (busca) where.cliente = { nome: { contains: busca } }
+    if (prioritario === 'true') where.prioritario = 'S'
     if (dataInicio || dataFim) {
       where.dataFechamento = {}
       if (dataInicio) where.dataFechamento.gte = new Date(`${dataInicio}T00:00:00`)
@@ -205,16 +232,13 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
         .trim()
 
     // Importações em lote gravam a mesma frase em centenas de registros ("LANCADO VIA EXCEL" e
-    // afins). Repetir isso na nota não informa nada, então cada texto entra uma vez só — a
-    // contagem de quantos registros vieram com aquele texto fica ao lado.
-    const vistos = new Map<string, { id: number; projeto: string | null; texto: string; repeticoes: number }>()
+    // afins). Repetir isso na nota não informa nada, então cada texto entra uma vez só.
+    const vistos = new Map<string, { projeto: string | null; texto: string }>()
     for (const a of itens) {
       const texto = limpar(a.observacoes ?? '')
       if (!texto) continue
       const chave = texto.toLowerCase()
-      const existente = vistos.get(chave)
-      if (existente) existente.repeticoes += 1
-      else vistos.set(chave, { id: a.id, projeto: a.projeto?.nome ?? null, texto, repeticoes: 1 })
+      if (!vistos.has(chave)) vistos.set(chave, { projeto: a.projeto?.nome ?? null, texto })
     }
     const comTexto = [...vistos.values()]
 
@@ -226,22 +250,108 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       '',
     ]
 
-    // Uma entrada numerada por solicitação, com as linhas seguintes recuadas — fica legível de
-    // bater o olho e continua sendo texto puro, pronto pra colar em qualquer lugar.
-    const blocos = comTexto.map((a, i) => {
-      const numero = `${i + 1}.`.padEnd(4)
-      const titulo =
-        `${numero}#${a.id}${a.projeto ? ` · ${a.projeto}` : ''}` +
-        (a.repeticoes > 1 ? ` (${a.repeticoes} solicitações com esta mesma descrição)` : '')
-      const corpo = a.texto
-        .split('\n')
-        .map((linha) => (linha ? `    ${linha}` : ''))
-        .join('\n')
-      return `${titulo}\n${corpo}`
+    // Sem número de item nem número do ticket: a nota vai pro cliente, e id interno não diz nada
+    // pra ele. Agrupa por projeto (na ordem em que apareceram) pra não repetir o nome do projeto
+    // linha a linha.
+    const porProjeto = new Map<string, typeof comTexto>()
+    for (const a of comTexto) {
+      const chave = a.projeto ?? ''
+      const grupo = porProjeto.get(chave)
+      if (grupo) grupo.push(a)
+      else porProjeto.set(chave, [a])
+    }
+
+    const blocos = [...porProjeto.entries()].map(([projeto, itensDoProjeto]) => {
+      const corpo = itensDoProjeto
+        .map((a) =>
+          a.texto
+            .split('\n')
+            .map((linha, i) => (linha ? (i === 0 ? `- ${linha}` : `  ${linha}`) : ''))
+            .join('\n')
+        )
+        .join('\n\n')
+      return projeto ? `${projeto.toUpperCase()}\n${corpo}` : corpo
     })
 
     const texto = comTexto.length ? [...cabecalho, blocos.join('\n\n')].join('\n') : ''
     return { total: itens.length, texto }
+  })
+
+  // GET /solicitacoes/pendentes-atualizacao — aba "Clientes a atualizar".
+  // Fecha o ciclo suporte → desenvolvimento → cliente: mostra quem pediu algo que já foi entregue
+  // numa versão, mas continua rodando uma versão anterior a ela.
+  app.get('/pendentes-atualizacao', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request) => {
+    const { tecnicoId, desenvolvedorId, projetoId, busca, prioritario } = request.query as Record<string, string>
+    const paraLista = (v?: string) => v?.split(',').map(Number).filter((n) => !Number.isNaN(n)) ?? []
+    const tecnicoLista = paraLista(tecnicoId)
+    const desenvolvedorLista = paraLista(desenvolvedorId)
+    const projetoLista = paraLista(projetoId)
+
+    const where: Record<string, any> = {
+      status: STATUS.CONCLUIDO,
+      dataFechamento: { not: null },
+      projeto: { sistemaVersao: { not: null } },
+    }
+    if (tecnicoLista.length) where.tecnicoId = { in: tecnicoLista }
+    if (desenvolvedorLista.length) where.desenvolvedorId = { in: desenvolvedorLista }
+    if (projetoLista.length) where.projetoId = { in: projetoLista }
+    if (busca) where.cliente = { nome: { contains: busca } }
+    if (prioritario === 'true') where.prioritario = 'S'
+
+    const concluidas = await prisma.atendimento.findMany({
+      where,
+      // Igual ao card, mas precisa também de qual versão o projeto acompanha.
+      include: { ...INCLUDE_CARD, projeto: { select: { id: true, nome: true, cor: true, sistemaVersao: true } } },
+      orderBy: { dataFechamento: 'desc' },
+      take: 1000,
+    })
+    if (!concluidas.length) return { total: 0, data: [] }
+
+    // Versões lançadas dos sistemas envolvidos, uma vez só — comparar em memória evita uma
+    // consulta por solicitação.
+    const sistemas = [...new Set(concluidas.map((a) => a.projeto?.sistemaVersao).filter(Boolean) as string[])]
+    const idsSistema = sistemas.map((s) => SISTEMAS_VERSAO[s as SistemaVersao].sistemaId)
+    const versoes = await prisma.versao.findMany({
+      where: { sistemaId: { in: idsSistema }, data: { not: null } },
+      select: { sistemaId: true, versao: true, data: true },
+      orderBy: { data: 'asc' },
+    })
+
+    // Versão instalada em cada cliente (tabela legada, sem modelo Prisma).
+    const clienteIds = [...new Set(concluidas.map((a) => a.clienteId).filter(Boolean) as number[])]
+    const instaladas = await prisma.$queryRawUnsafe<Array<Record<string, any>>>(
+      `SELECT cod_cli AS clienteId, versao_exe_retaguarda AS RETAGUARDA,
+              versao_exe_pdv AS PDV, versao_exe_connection AS CONNECTION
+         FROM dados_gerais_clientes WHERE cod_cli IN (${clienteIds.map(() => '?').join(',') || 'NULL'})`,
+      ...clienteIds,
+    )
+    const porCliente = new Map(instaladas.map((r) => [Number(r.clienteId), r]))
+
+    const pendentes = concluidas.flatMap((a) => {
+      const sistema = a.projeto?.sistemaVersao as SistemaVersao | null | undefined
+      if (!sistema || !a.clienteId || !a.dataFechamento) return []
+
+      // A entrega saiu na primeira versão publicada depois que a solicitação foi concluída.
+      const sistemaId = SISTEMAS_VERSAO[sistema].sistemaId
+      const entrega = versoes.find((v) => v.sistemaId === sistemaId && v.data! >= a.dataFechamento!)
+      if (!entrega) return []
+
+      const instalada = porCliente.get(a.clienteId)?.[sistema]
+      const instaladaTexto = instalada ? String(instalada).trim() : ''
+      if (!instaladaTexto) return []
+      if (compararVersao(instaladaTexto, entrega.versao) >= 0) return []
+
+      return [{
+        ...paraCard(a),
+        sistema,
+        sistemaLabel: SISTEMAS_VERSAO[sistema].label,
+        versaoInstalada: instaladaTexto,
+        versaoEntrega: entrega.versao,
+        dataEntrega: entrega.data,
+      }]
+    })
+
+    return { total: pendentes.length, data: pendentes }
   })
 
   // GET /solicitacoes/:id/log — "Consultar Log do Atendimento (F11)"
@@ -292,6 +402,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
     if (!b.clienteId) return reply.status(400).send({ error: 'Selecione o cliente.' })
     if (!b.observacoes?.trim()) return reply.status(400).send({ error: 'Descreva os dados do atendimento.' })
+    if (!b.desenvolvedorId) return reply.status(400).send({ error: 'Selecione o desenvolvedor responsável.' })
 
     // Mesmas opções de abertura que o Delphi oferece no lançamento.
     const statusAbertura: number[] = [1, 2, 3, 4, 6, 9]

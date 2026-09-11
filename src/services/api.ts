@@ -9,7 +9,7 @@ import type {
   DashboardMensalidadesEstatisticas, DashboardMensalidadesFaixa, DashboardMensalidadesFiltros,
   DashboardMensalidadesOpcoesFiltros, DashboardMensalidadesRanking, DashboardMensalidadesResumo,
   DesempenhoEquipe, Operadora, ClienteMaquininha, MaquininhasRelatorio, TipoMaquininha, StatusMaquininha,
-  ClientesSemMaquininhaResposta, LembretesFixosResposta, TipoRecorrenciaLembrete, Solicitacao, Projeto, TipoProjeto
+  ClientesSemMaquininhaResposta, LembretesFixosResposta, TipoRecorrenciaLembrete, Solicitacao, Projeto, TipoProjeto, SistemaVersaoProjeto, SolicitacaoPendenteAtualizacao
 } from '../types'
 
 // ============================================================
@@ -699,10 +699,31 @@ export const api = {
       : ''
     return fetchApi<{ total: number; data: Solicitacao[] }>(`/solicitacoes/suporte${qs}`)
   },
-  getSolicitacoesFinalizadas: (dataInicio: string, dataFim: string) =>
-    fetchApi<{ total: number; data: Solicitacao[] }>(
-      `/solicitacoes/finalizadas?dataInicio=${dataInicio}&dataFim=${dataFim}`
-    ),
+  getSolicitacoesFinalizadas: (
+    dataInicio: string,
+    dataFim: string,
+    filtros?: { tecnicoId?: number[]; desenvolvedorId?: number[]; projetoId?: number[]; busca?: string; prioritario?: boolean }
+  ) => {
+    const qs = new URLSearchParams({ dataInicio, dataFim })
+    if (filtros?.tecnicoId?.length) qs.set('tecnicoId', filtros.tecnicoId.join(','))
+    if (filtros?.desenvolvedorId?.length) qs.set('desenvolvedorId', filtros.desenvolvedorId.join(','))
+    if (filtros?.projetoId?.length) qs.set('projetoId', filtros.projetoId.join(','))
+    if (filtros?.busca) qs.set('busca', filtros.busca)
+    if (filtros?.prioritario) qs.set('prioritario', 'true')
+    return fetchApi<{ total: number; data: Solicitacao[] }>(`/solicitacoes/finalizadas?${qs.toString()}`)
+  },
+  getPendentesAtualizacao: (filtros?: { tecnicoId?: number[]; desenvolvedorId?: number[]; projetoId?: number[]; busca?: string; prioritario?: boolean }) => {
+    const qs = new URLSearchParams()
+    if (filtros?.tecnicoId?.length) qs.set('tecnicoId', filtros.tecnicoId.join(','))
+    if (filtros?.desenvolvedorId?.length) qs.set('desenvolvedorId', filtros.desenvolvedorId.join(','))
+    if (filtros?.projetoId?.length) qs.set('projetoId', filtros.projetoId.join(','))
+    if (filtros?.busca) qs.set('busca', filtros.busca)
+    if (filtros?.prioritario) qs.set('prioritario', 'true')
+    const q = qs.toString()
+    return fetchApi<{ total: number; data: SolicitacaoPendenteAtualizacao[] }>(
+      `/solicitacoes/pendentes-atualizacao${q ? `?${q}` : ''}`
+    )
+  },
   getNotasAtualizacao: (dataInicio: string, dataFim: string) =>
     fetchApi<{ total: number; texto: string }>(`/solicitacoes/notas-atualizacao?dataInicio=${dataInicio}&dataFim=${dataFim}`),
   getSolicitacaoLog: (id: number) =>
@@ -736,9 +757,9 @@ export const api = {
   // ─── Cadastro de Projetos (Mapa de Solicitações) ───
   getProjetos: (ativo?: boolean) =>
     fetchApi<Projeto[]>(`/projetos${ativo !== undefined ? `?ativo=${ativo}` : ''}`),
-  createProjeto: (data: { nome: string; cor?: string; tipo?: TipoProjeto }) =>
+  createProjeto: (data: { nome: string; cor?: string; tipo?: TipoProjeto; sistemaVersao?: SistemaVersaoProjeto | null }) =>
     fetchApi<{ id: number }>('/projetos', { method: 'POST', body: JSON.stringify(data) }),
-  updateProjeto: (id: number, data: { nome: string; cor?: string; tipo?: TipoProjeto; ativo?: boolean }) =>
+  updateProjeto: (id: number, data: { nome: string; cor?: string; tipo?: TipoProjeto; ativo?: boolean; sistemaVersao?: SistemaVersaoProjeto | null }) =>
     fetchApi<{ ok: boolean }>(`/projetos/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleProjeto: (id: number) =>
     fetchApi<{ ok: boolean; ativo: boolean }>(`/projetos/${id}/toggle`, { method: 'PATCH' }),

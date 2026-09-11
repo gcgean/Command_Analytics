@@ -805,14 +805,31 @@ export function DetalheCliente() {
             </h3>
             {cliente.nuvens && cliente.nuvens.length > 0 ? (
               <div className="space-y-4">
+                {cliente.nuvens.length > 1 && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-300">
+                    <p className="font-semibold">
+                      Este cliente está vinculado a {cliente.nuvens.length} nuvens.
+                    </p>
+                    <p className="mt-1">
+                      Confira se todas são mesmo dele — vínculo errado faz aparecer aqui a nuvem e as
+                      portas de outra empresa. Corrija no cadastro de nuvens.
+                    </p>
+                  </div>
+                )}
                 {cliente.nuvens.map((nuvem, index) => (
                   <div
                     key={`${nuvem.idGrupo ?? 'grupo'}-${nuvem.idServerNuvem ?? 'server'}-${index}`}
                     className={clsx(
-                      'space-y-3 rounded-xl border border-slate-200 p-3 dark:border-slate-700',
+                      'space-y-3 rounded-xl border p-3',
+                      nuvem.ativa === false
+                        ? 'border-dashed border-slate-300 dark:border-slate-600 opacity-70'
+                        : 'border-slate-200 dark:border-slate-700',
                       index > 0 && 'mt-4',
                     )}
                   >
+                    {nuvem.ativa === false && (
+                      <span className="badge bg-slate-500/20 text-slate-500 text-xs">Vínculo inativo</span>
+                    )}
                     {nuvem.idServerNuvem && (
                       <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
                         <div className="flex items-center gap-2">

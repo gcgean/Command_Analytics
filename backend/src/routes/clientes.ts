@@ -51,6 +51,7 @@ type ClienteNuvemRow = {
   conexoesTravado?: number | null
   conexoesFechado?: number | null
   ultimaVerificacao?: Date | string | null
+  ativo?: string | null
 }
 
 function toTimeText(value: Date | string | null | undefined) {
@@ -190,6 +191,7 @@ async function getClienteNuvemData(clienteId: number) {
         gu.id_grupo AS idGrupo,
         gu.descricao AS descricaoNuvemCliente,
         p.descricao AS descPlanoNuvem,
+        gu.ativo AS ativo,
         gu.porta_principal AS portaPrincipal,
         gu.porta_arquivos AS portaArquivos,
         gu.porta_aplicativos AS portaAplicativos,
@@ -226,8 +228,10 @@ async function getClienteNuvemData(clienteId: number) {
         )
       WHERE c.cod_cli = ?
         AND c.ativo = 'S'
-        AND COALESCE(gu.ativo, '') <> 'N'
-      ORDER BY sn.numero_servidor, sn.nome_servidor, gu.id_grupo`,
+      -- Traz também as nuvens marcadas como inativas: quando um cliente aparece ligado a mais de
+      -- uma, a tela precisa mostrar isso em vez de escolher uma em silêncio (houve caso de cliente
+      -- exibindo a nuvem e a porta de outra empresa porque o vínculo alheio era o único ativo).
+      ORDER BY COALESCE(gu.ativo, '') = 'N', sn.numero_servidor, sn.nome_servidor, gu.id_grupo`,
       clienteId,
     )
 
@@ -251,6 +255,7 @@ async function getClienteNuvemData(clienteId: number) {
       conexoesTravado: row.conexoesTravado != null ? Number(row.conexoesTravado) : null,
       conexoesFechado: row.conexoesFechado != null ? Number(row.conexoesFechado) : null,
       ultimaVerificacao: row.ultimaVerificacao ?? null,
+      ativa: String(row.ativo ?? '').toUpperCase() !== 'N',
     }))
   } catch {
     return []

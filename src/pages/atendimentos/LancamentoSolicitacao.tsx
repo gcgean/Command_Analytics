@@ -157,6 +157,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
   const salvar = async () => {
     if (!clienteId) return toast.error('Selecione o cliente.')
     if (!observacoes.trim()) return toast.error('Descreva os dados do atendimento.')
+    if (!editando && !desenvolvedorId) return toast.error('Selecione o desenvolvedor responsável.')
     if (!editando && jaFinalizado && !solucao.trim()) return toast.error('Descreva a solução pra marcar como finalizado.')
 
     setSalvando(true)
@@ -309,7 +310,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
                 options={usuarios.map((u) => ({ value: u.id, label: u.nome || u.nomeUsu || '' }))}
               />
               <Select
-                label="Desenvolvedor"
+                label={editando ? 'Desenvolvedor' : 'Desenvolvedor *'}
                 placeholder="(nenhum)"
                 value={desenvolvedorId}
                 onChange={(e) => setDesenvolvedorId(e.target.value)}
