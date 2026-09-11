@@ -12,7 +12,7 @@ import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { LancamentoSolicitacao, type PrefillSolicitacao } from './LancamentoSolicitacao'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
-import type { Projeto, Solicitacao, Usuario } from '../../types'
+import type { ClienteAnexo, Projeto, Solicitacao, Usuario } from '../../types'
 
 type Aba = 'suporte' | 'finalizadas'
 
@@ -122,6 +122,116 @@ function salvarFiltro(chave: string, valores: string[]): void {
   } catch {
     /* ignora — filtro só deixa de persistir, tela continua funcionando */
   }
+}
+
+/**
+ * Miniaturas dos anexos da solicitação, com ampliação ao clicar. O download exige token, então
+ * cada arquivo vira um object URL — revogados ao desmontar pra não vazar memória.
+ */
+function GaleriaAnexos({ registroId }: { registroId: number }) {
+  const [itens, setItens] = useState<ClienteAnexo[]>([])
+  const [carregando, setCarregando] = useState(true)
+  const [urls, setUrls] = useState<Record<number, string>>({})
+  const [ampliado, setAmpliado] = useState<ClienteAnexo | null>(null)
+  const criadas = useRef<string[]>([])
+
+  useEffect(() => {
+    let ativo = true
+    setCarregando(true)
+    api
+      .listAnexos({ tabela: 'atendimentos', registroId })
+      .then((lista) => {
+        if (!ativo) return
+        setItens(lista)
+        setCarregando(false)
+        // Baixa só o que dá pra exibir embutido; o resto fica como chip de download.
+        for (const anexo of lista) {
+          if (!/^(image|video|audio)\//.test(anexo.mimeType) && anexo.mimeType !== 'application/pdf') continue
+          api
+            .getAnexoBlob(anexo.id, { download: false })
+            .then((blob) => {
+              if (!ativo) return
+              const url = URL.createObjectURL(blob)
+              criadas.current.push(url)
+              setUrls((u) => ({ ...u, [anexo.id]: url }))
+            })
+            .catch(() => {})
+        }
+      })
+      .catch(() => {
+        if (!ativo) return
+        setItens([])
+        setCarregando(false)
+      })
+    return () => {
+      ativo = false
+    }
+  }, [registroId])
+
+  useEffect(
+    () => () => {
+      for (const url of criadas.current) URL.revokeObjectURL(url)
+      criadas.current = []
+    },
+    []
+  )
+
+  if (carregando) return <p className="text-slate-500">Carregando anexos...</p>
+  if (!itens.length) return null
+
+  const conteudoAmpliado = (anexo: ClienteAnexo) => {
+    const url = urls[anexo.id]
+    if (!url) return <p className="text-slate-500 text-sm">Carregando arquivo...</p>
+    if (anexo.mimeType.startsWith('image/')) {
+      return <img src={url} alt={anexo.originalName} className="max-w-full max-h-[75vh] mx-auto rounded-lg" />
+    }
+    if (anexo.mimeType.startsWith('video/')) {
+      return <video src={url} controls className="max-w-full max-h-[75vh] mx-auto rounded-lg" />
+    }
+    if (anexo.mimeType.startsWith('audio/')) return <audio src={url} controls className="w-full" />
+    return <iframe title={anexo.originalName} src={url} className="w-full h-[75vh] rounded-lg border border-slate-200 dark:border-slate-700" />
+  }
+
+  return (
+    <div>
+      <p className="text-slate-500 mb-1.5">Anexos ({itens.length})</p>
+      <div className="flex flex-wrap gap-2">
+        {itens.map((anexo) => {
+          const url = urls[anexo.id]
+          const ehImagem = anexo.mimeType.startsWith('image/')
+          return (
+            <button
+              key={anexo.id}
+              type="button"
+              onClick={() => setAmpliado(anexo)}
+              title={anexo.originalName}
+              className="w-24 h-24 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden bg-slate-50 dark:bg-slate-900 hover:border-blue-500 hover:shadow-md transition-all flex flex-col items-center justify-center gap-1 p-1"
+            >
+              {ehImagem && url ? (
+                <img src={url} alt={anexo.originalName} className="w-full h-full object-cover" />
+              ) : (
+                <>
+                  <Paperclip size={18} className="text-slate-400" />
+                  <span className="text-[9px] text-slate-500 line-clamp-2 text-center leading-tight px-0.5">
+                    {anexo.originalName}
+                  </span>
+                </>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      <Modal
+        isOpen={!!ampliado}
+        onClose={() => setAmpliado(null)}
+        title={ampliado?.originalName || 'Anexo'}
+        size="xl"
+      >
+        {ampliado && conteudoAmpliado(ampliado)}
+      </Modal>
+    </div>
+  )
 }
 
 /** Dropdown com checkboxes — mesmo visual do Select do projeto, mas permite marcar mais de uma opção. */
@@ -376,6 +486,39 @@ export function MapaSolicitacoes() {
     setMenuAberto(id)
   }
 
+  // 1 clique abre os detalhes, 2 cliques abrem a edição. O clique simples espera um pouco pra
+  // não disparar junto com o duplo.
+  const cliqueCard = useRef<number | null>(null)
+
+  useEffect(
+    () => () => {
+      if (cliqueCard.current) window.clearTimeout(cliqueCard.current)
+    },
+    []
+  )
+
+  const aoClicarCard = (item: Solicitacao) => {
+    if (cliqueCard.current) window.clearTimeout(cliqueCard.current)
+    cliqueCard.current = window.setTimeout(() => {
+      cliqueCard.current = null
+      setModalDetalhes(item)
+    }, 220)
+  }
+
+  const aoClicarDuasVezes = (item: Solicitacao) => {
+    if (cliqueCard.current) {
+      window.clearTimeout(cliqueCard.current)
+      cliqueCard.current = null
+    }
+    // Sem permissão de ação não há o que editar — mostra os detalhes em vez de não fazer nada.
+    if (!podeAgir) {
+      setModalDetalhes(item)
+      return
+    }
+    setModalDetalhes(null)
+    setLancamento({ aberto: true, item })
+  }
+
   const alternarEtapa = (st: number) => {
     const valor = String(st)
     // Clicar na etapa já selecionada sozinha volta pra "todos".
@@ -627,7 +770,15 @@ export function MapaSolicitacoes() {
                     </div>
                   )}
 
-                  <div className="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden group-hover:border-slate-300 dark:group-hover:border-slate-600 transition-colors">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => aoClicarCard(item)}
+                    onDoubleClick={() => aoClicarDuasVezes(item)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') setModalDetalhes(item) }}
+                    title="1 clique: detalhes · 2 cliques: editar"
+                    className="cursor-pointer rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden group-hover:border-slate-300 dark:group-hover:border-slate-600 transition-colors"
+                  >
                   <div className="p-1.5">
                     <div className="flex items-start justify-between gap-1">
                       <p
@@ -749,7 +900,7 @@ export function MapaSolicitacoes() {
       </div>
 
       {/* Exibir Detalhes */}
-      <Modal isOpen={!!modalDetalhes} onClose={() => setModalDetalhes(null)} title={`Solicitação #${modalDetalhes?.id ?? ''}`}>
+      <Modal isOpen={!!modalDetalhes} onClose={() => setModalDetalhes(null)} title={`Solicitação #${modalDetalhes?.id ?? ''}`} size="xl">
         {modalDetalhes && (
           <div className="space-y-3 text-xs">
             <div>
@@ -788,10 +939,12 @@ export function MapaSolicitacoes() {
             </div>
             <div>
               <p className="text-slate-500 mb-1">Reclamação</p>
-              <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-300 max-h-72 overflow-y-auto leading-relaxed">
+              <p className="whitespace-pre-wrap text-slate-700 dark:text-slate-300 leading-relaxed">
                 {modalDetalhes.observacoes?.trim() || '—'}
               </p>
             </div>
+
+            <GaleriaAnexos registroId={modalDetalhes.id} />
             {modalDetalhes.solucao?.trim() && (
               <div>
                 <p className="text-slate-500 mb-1">Solução</p>
