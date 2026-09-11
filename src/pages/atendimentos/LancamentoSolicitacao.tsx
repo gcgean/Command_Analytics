@@ -66,6 +66,10 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
   const [solucao, setSolucao] = useState('')
   // Pra quando a solicitação já foi resolvida e o lançamento é só pra deixar registrado.
   const [jaFinalizado, setJaFinalizado] = useState(false)
+  // Texto reescrito pela IA — guarda o original pra desmarcar poder desfazer.
+  const [melhorarIA, setMelhorarIA] = useState(false)
+  const [melhorandoIA, setMelhorandoIA] = useState(false)
+  const [textoOriginal, setTextoOriginal] = useState('')
 
   const [projetos, setProjetos] = useState<Projeto[]>([])
   const [catalogo, setCatalogo] = useState<Array<{ id: number; descricao: string; pontuacao: number }>>([])
@@ -99,6 +103,9 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
     setBugSistema(solicitacao ? false : !!prefill?.bugSistema)
     setSolucao(solicitacao?.solucao ?? '')
     setJaFinalizado(false)
+    setMelhorarIA(false)
+    setMelhorandoIA(false)
+    setTextoOriginal('')
     setProcSelecionado('')
     setEfetuados([])
     setAnexosNovos([])
@@ -119,6 +126,33 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
     if (aberto && solicitacao && aba === 'procedimentos') carregarEfetuados()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aberto, solicitacao, aba])
+
+  const alternarMelhoriaIA = async (marcado: boolean) => {
+    if (!marcado) {
+      // Desmarcar desfaz: volta exatamente o que a pessoa tinha escrito.
+      setObservacoes(textoOriginal)
+      setMelhorarIA(false)
+      return
+    }
+    if (!observacoes.trim()) {
+      toast.error('Escreva a solicitação antes de melhorar com IA.')
+      return
+    }
+
+    setMelhorandoIA(true)
+    try {
+      const original = observacoes
+      const r = await api.melhorarDescricaoIA(original)
+      setTextoOriginal(original)
+      setObservacoes(r.texto)
+      setMelhorarIA(true)
+      toast.success('Descrição reescrita — confira antes de salvar.')
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível melhorar a descrição.')
+    } finally {
+      setMelhorandoIA(false)
+    }
+  }
 
   const salvar = async () => {
     if (!clienteId) return toast.error('Selecione o cliente.')
@@ -289,6 +323,22 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
               <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300">
                 <input type="checkbox" checked={bugSistema} onChange={(e) => setBugSistema(e.target.checked)} />
                 Bug do sistema <span className="text-slate-400">(entra como prioridade A)</span>
+              </label>
+              <label className="flex items-start gap-2 text-xs text-blue-700 dark:text-blue-400 font-medium">
+                <input
+                  type="checkbox"
+                  checked={melhorarIA}
+                  disabled={melhorandoIA}
+                  onChange={(e) => alternarMelhoriaIA(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  {melhorandoIA ? 'Melhorando descrição com IA...' : 'Melhorar descrição com IA'}
+                  <span className="block text-slate-400 font-normal">
+                    Reescreve como problema + solução sugerida. Desmarque para voltar ao texto original.
+                  </span>
+                </span>
+                {melhorandoIA && <Loader2 size={13} className="animate-spin mt-0.5 flex-shrink-0" />}
               </label>
 
               {!editando && (

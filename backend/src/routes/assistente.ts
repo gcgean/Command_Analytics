@@ -79,6 +79,49 @@ export async function assistenteRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
+  // Reescreve o relato cru de uma solicitação em algo que o desenvolvedor entenda: problema +
+  // solução sugerida. Só transforma texto — não enxerga nem grava nada no banco.
+  app.post('/melhorar-descricao', { preHandler: authMiddleware, schema: { tags: ['Assistente IA'] } }, async (request, reply) => {
+    const config = await obterConfigIA()
+    if (!config.ativo || !config.apiKey) return reply.status(503).send({ error: 'Assistente de IA não configurado.' })
+
+    const usuarioId = Number((request.user as any)?.id || 0)
+    if (!usuarioId) return reply.status(401).send({ error: 'Sessão inválida.' })
+    if (excedeuLimite(usuarioId)) {
+      return reply.status(429).send({ error: 'Limite diário de uso do assistente atingido. Tente novamente amanhã.' })
+    }
+
+    const { texto } = request.body as { texto?: string }
+    if (!texto?.trim()) return reply.status(400).send({ error: 'Escreva a solicitação antes de melhorar com IA.' })
+
+    const instrucao = `Você organiza solicitações de clientes para a equipe de desenvolvimento do Cilos Sistema (ERP).
+Reescreva o relato abaixo em português do Brasil, nesse formato exato:
+
+PROBLEMA:
+<o que está acontecendo ou o que o cliente quer, de forma objetiva. Inclua o caminho de menu do sistema e o exemplo que a pessoa deu, quando houver.>
+
+SOLUÇÃO SUGERIDA:
+<uma proposta objetiva de como resolver, coerente com o que foi relatado.>
+
+Regras:
+- NUNCA invente tela, campo, menu, regra de negócio ou detalhe que não esteja no relato. Se algo essencial não foi dito, escreva "não informado" em vez de supor.
+- A solução é uma sugestão baseada só no que foi relatado — não afirme como o sistema funciona por dentro.
+- Sem saudação, sem comentário seu, sem markdown. Responda só o texto nesse formato.
+
+Relato: ${texto.trim().slice(0, 4000)}`
+
+    try {
+      const provedor = new ProvedorDeepSeek(config.apiKey, config.modelo)
+      const resposta = await provedor.conversar([{ papel: 'user', conteudo: instrucao }], [])
+      const melhorado = resposta.texto?.trim()
+      if (!melhorado) return reply.status(502).send({ error: 'A IA não devolveu um texto. Tente novamente.' })
+      return { texto: melhorado }
+    } catch (e: any) {
+      request.log.error(e)
+      return reply.status(502).send({ error: 'Falha ao consultar a IA. Tente novamente.' })
+    }
+  })
+
   app.post('/conversar', { preHandler: authMiddleware, schema: { tags: ['Assistente IA'] } }, async (request, reply) => {
     const config = await obterConfigIA()
     if (!config.ativo || !config.apiKey) return reply.status(503).send({ error: 'Assistente de IA não configurado.' })

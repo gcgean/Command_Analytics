@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   RefreshCw, Loader2, Star, Search, MoreVertical, AlertTriangle,
-  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText, CheckCheck, Paperclip,
+  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText, CheckCheck, Paperclip, Bug,
 } from 'lucide-react'
 import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -236,7 +236,9 @@ export function MapaSolicitacoes() {
       aba === 'suporte'
         ? api.getSolicitacoesSuporte({
             ...(busca.trim() ? { busca: busca.trim() } : {}),
-            ...(filtroEtapa.length ? { status: filtroEtapa.map(Number) } : {}),
+            // A etapa NÃO entra aqui de propósito: os totalizadores contam em cima desta lista,
+            // e filtrar no servidor zeraria todos os outros, impedindo de clicar de um pro outro.
+            // Com o backlog em ~200 registros, filtrar por etapa no cliente sai de graça.
             ...(filtroTecnicoId.length ? { tecnicoId: filtroTecnicoId.map(Number) } : {}),
             ...(filtroDesenvolvedorId.length ? { desenvolvedorId: filtroDesenvolvedorId.map(Number) } : {}),
             ...(filtroProjetoId.length ? { projetoId: filtroProjetoId.map(Number) } : {}),
@@ -253,7 +255,7 @@ export function MapaSolicitacoes() {
         toast.error(e?.message || 'Falha ao carregar as solicitações.')
         setLoading(false)
       })
-  }, [aba, busca, filtroEtapa, filtroTecnicoId, filtroDesenvolvedorId, filtroProjetoId, filtroPrioritario, dataInicio, dataFim, toast])
+  }, [aba, busca, filtroTecnicoId, filtroDesenvolvedorId, filtroProjetoId, filtroPrioritario, dataInicio, dataFim, toast])
 
   const setFiltroEtapa = (v: string[]) => { setFiltroEtapaState(v); salvarFiltro(CHAVE_FILTRO_ETAPA, v) }
   const setFiltroTecnico = (v: string[]) => { setFiltroTecnicoIdState(v); salvarFiltro(CHAVE_FILTRO_TECNICO, v) }
@@ -335,11 +337,50 @@ export function MapaSolicitacoes() {
     }
   }
 
+  // Contam sempre a lista inteira (sem a etapa), pra os totalizadores continuarem mostrando o
+  // panorama mesmo com uma etapa selecionada.
   const contagens = useMemo(() => {
     const porStatus: Record<number, number> = {}
     for (const i of itens) porStatus[i.status] = (porStatus[i.status] || 0) + 1
     return porStatus
   }, [itens])
+
+  const itensVisiveis = useMemo(
+    () =>
+      aba === 'suporte' && filtroEtapa.length
+        ? itens.filter((i) => filtroEtapa.includes(String(i.status)))
+        : itens,
+    [itens, filtroEtapa, aba]
+  )
+
+  // O menu é alto (~15 itens): abrindo pra baixo ele cobre os cards de baixo. Abre ao lado do
+  // card e vira pro outro lado / pra cima quando não couber na janela.
+  const [menuPos, setMenuPos] = useState<{ lado: 'esq' | 'dir'; ancorarEmbaixo: boolean }>({
+    lado: 'dir',
+    ancorarEmbaixo: false,
+  })
+
+  const abrirMenu = (e: React.MouseEvent<HTMLButtonElement>, id: number) => {
+    e.stopPropagation()
+    if (menuAberto === id) {
+      setMenuAberto(null)
+      return
+    }
+    const LARGURA_MENU = 224 // w-56
+    const ALTURA_MENU = 470 // altura do menu cheio, com todas as ações
+    const r = e.currentTarget.getBoundingClientRect()
+    setMenuPos({
+      lado: r.right + 8 + LARGURA_MENU <= window.innerWidth ? 'dir' : 'esq',
+      ancorarEmbaixo: r.top + ALTURA_MENU > window.innerHeight,
+    })
+    setMenuAberto(id)
+  }
+
+  const alternarEtapa = (st: number) => {
+    const valor = String(st)
+    // Clicar na etapa já selecionada sozinha volta pra "todos".
+    setFiltroEtapa(filtroEtapa.length === 1 && filtroEtapa[0] === valor ? [] : [valor])
+  }
 
   const acoesDoCard = (item: Solicitacao) => {
     const base = [
@@ -387,7 +428,7 @@ export function MapaSolicitacoes() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Mapa de Solicitações</h1>
           <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
-            {loading ? 'Carregando...' : `${itens.length} solicitação(ões) — o que cada cliente pediu e em que etapa está`}
+            {loading ? 'Carregando...' : `${itensVisiveis.length} solicitação(ões) — o que cada cliente pediu e em que etapa está`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -402,17 +443,43 @@ export function MapaSolicitacoes() {
         </div>
       </div>
 
-      {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-11 gap-2">
+      {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero. Clicar filtra. */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2">
+        <button
+          type="button"
+          onClick={() => setFiltroEtapa([])}
+          title="Mostrar todas as etapas"
+          className={clsx(
+            'relative overflow-hidden rounded-xl border bg-white dark:bg-slate-800 pl-3 pr-2 py-2 text-left transition-all hover:shadow-md',
+            filtroEtapa.length === 0
+              ? 'border-blue-500 dark:border-blue-400 ring-1 ring-blue-500 dark:ring-blue-400 shadow-sm'
+              : 'border-slate-200 dark:border-slate-700'
+          )}
+        >
+          <span className="absolute inset-y-0 left-0 w-1 bg-blue-600" />
+          <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400 truncate">
+            Todos
+          </p>
+          <p className="text-xl font-bold leading-tight text-blue-600 dark:text-blue-400">{itens.length}</p>
+        </button>
+
         {ORDEM_STATUS_RESUMO.map((st) => {
           const qtd = contagens[st] ?? 0
           const corFundo = (CORES_ETAPA[st] ?? 'bg-slate-500 text-white').split(' ')[0]
+          const ativo = filtroEtapa.includes(String(st))
           return (
-            <div
+            <button
               key={st}
+              type="button"
+              onClick={() => alternarEtapa(st)}
+              title={ativo ? `Remover filtro: ${ROTULO_STATUS[st]}` : `Filtrar por ${ROTULO_STATUS[st]}`}
               className={clsx(
-                'relative overflow-hidden rounded-xl border bg-white dark:bg-slate-800 pl-3 pr-2 py-2 transition-opacity',
-                qtd === 0 ? 'border-slate-100 dark:border-slate-700/60 opacity-50' : 'border-slate-200 dark:border-slate-700 shadow-sm'
+                'relative overflow-hidden rounded-xl border bg-white dark:bg-slate-800 pl-3 pr-2 py-2 text-left transition-all hover:shadow-md hover:opacity-100',
+                ativo
+                  ? 'border-blue-500 dark:border-blue-400 ring-1 ring-blue-500 dark:ring-blue-400 shadow-sm'
+                  : qtd === 0
+                    ? 'border-slate-100 dark:border-slate-700/60 opacity-50'
+                    : 'border-slate-200 dark:border-slate-700 shadow-sm'
               )}
             >
               <span className={clsx('absolute inset-y-0 left-0 w-1', corFundo)} />
@@ -422,7 +489,7 @@ export function MapaSolicitacoes() {
               <p className={clsx('text-xl font-bold leading-tight', TEXTO_ETAPA[st] ?? 'text-slate-700 dark:text-slate-300')}>
                 {qtd}
               </p>
-            </div>
+            </button>
           )
         })}
       </div>
@@ -534,11 +601,11 @@ export function MapaSolicitacoes() {
           <div className="flex items-center justify-center h-40 text-slate-500">
             <Loader2 className="w-6 h-6 animate-spin mr-3" /> Carregando solicitações...
           </div>
-        ) : itens.length === 0 ? (
+        ) : itensVisiveis.length === 0 ? (
           <div className="card text-center py-12 text-sm text-slate-500">Nenhuma solicitação nesta aba.</div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2">
-            {itens.map((item) => {
+            {itensVisiveis.map((item) => {
               const acoes = acoesDoCard(item)
               return (
                 <div
@@ -548,7 +615,7 @@ export function MapaSolicitacoes() {
                   {/* Tooltip com a reclamação — mesma informação do "Exibir Detalhes", só que ao passar o mouse.
                       Escondido enquanto o menu de ações deste card está aberto, pra não sobrepor os itens. */}
                   {menuAberto !== item.id && (
-                    <div className="pointer-events-none absolute left-0 top-full z-20 mt-1 w-64 max-h-56 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-2.5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity">
+                    <div className="pointer-events-none absolute left-0 bottom-full z-20 mb-1 w-64 max-h-56 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-2.5 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-opacity">
                       <p className="text-[10px] text-slate-500 mb-1">
                         Início: {formatarDataHora(item.dataAtendimento ?? item.dataAbertura)}
                         {item.diasParado > 0 && ` · ${item.diasParado} dia(s)`}
@@ -581,13 +648,18 @@ export function MapaSolicitacoes() {
                             <Paperclip size={11} />
                           </span>
                         )}
+                        {item.bugSistema === 'S' && (
+                          <span className="flex items-center text-red-500" title="Bug do sistema" aria-label="Bug do sistema">
+                            <Bug size={12} />
+                          </span>
+                        )}
                         {item.prioritario === 'S' && (
                           <AlertTriangle size={12} className="text-red-600 fill-red-100 dark:fill-red-950" aria-label="Prioritário / urgente" />
                         )}
                         <button
                           type="button"
                           className="p-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-700"
-                          onClick={(e) => { e.stopPropagation(); setMenuAberto(menuAberto === item.id ? null : item.id) }}
+                          onClick={(e) => abrirMenu(e, item.id)}
                         >
                           <MoreVertical size={12} className="text-slate-400" />
                         </button>
@@ -641,7 +713,11 @@ export function MapaSolicitacoes() {
                   {/* Fora do card visual (que tem overflow-hidden pros cantos arredondados) pra não ser clipado */}
                   {menuAberto === item.id && (
                     <div
-                      className="absolute right-1 top-6 z-30 w-56 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1"
+                      className={clsx(
+                        'absolute z-30 w-56 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1',
+                        menuPos.lado === 'dir' ? 'left-full ml-1' : 'right-full mr-1',
+                        menuPos.ancorarEmbaixo ? 'bottom-0' : 'top-0'
+                      )}
                       onClick={(e) => e.stopPropagation()}
                     >
                       {acoes.map((a, i) => (

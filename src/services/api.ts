@@ -812,6 +812,11 @@ export const api = {
       '/assistente/conversar',
       { method: 'POST', body: JSON.stringify({ historico }) }
     ),
+  melhorarDescricaoIA: (texto: string) =>
+    fetchApi<{ texto: string }>('/assistente/melhorar-descricao', {
+      method: 'POST',
+      body: JSON.stringify({ texto }),
+    }),
   getAssistenteConfig: () =>
     fetchApi<{ ativo: boolean; modelo: string; temApiKey: boolean; modelosDisponiveis: string[] }>('/assistente/config'),
   updateAssistenteConfig: (data: { ativo?: boolean; modelo?: string; apiKey?: string }) =>

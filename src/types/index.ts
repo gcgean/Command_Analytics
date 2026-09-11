@@ -91,6 +91,8 @@ export interface Solicitacao {
   atrasado: boolean
   /** Quantos arquivos estão anexados à solicitação. */
   anexos?: number
+  /** 'S' quando foi lançada como bug do sistema (entra como prioridade A). */
+  bugSistema?: string | null
 }
 
 export type StatusPipeline =
