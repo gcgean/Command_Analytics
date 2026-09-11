@@ -245,12 +245,22 @@ function MultiSelectFiltro({
   onChange: (valores: string[]) => void
 }) {
   const [aberto, setAberto] = useState(false)
+  const [busca, setBusca] = useState('')
   const ref = useRef<HTMLDivElement | null>(null)
+
+  // Sem acento e sem caixa: quem digita "tecnico" precisa achar "Técnico".
+  const normalizar = (v: string) => v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  const filtradas = busca.trim()
+    ? options.filter((o) => normalizar(o.label).includes(normalizar(busca.trim())))
+    : options
 
   useEffect(() => {
     if (!aberto) return
     const fechar = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setAberto(false)
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setAberto(false)
+        setBusca('')
+      }
     }
     document.addEventListener('click', fechar)
     return () => document.removeEventListener('click', fechar)
@@ -271,29 +281,45 @@ function MultiSelectFiltro({
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setAberto((a) => !a)}
+        onClick={() => { setAberto((a) => !a); setBusca('') }}
         className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg px-3 py-2 text-sm w-full text-left flex items-center justify-between gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
       >
         <span className={clsx('truncate', selecionados.length === 0 && 'text-slate-500')}>{resumo}</span>
         <span className="text-slate-400 flex-shrink-0">▾</span>
       </button>
       {aberto && (
-        <div className="absolute z-40 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1">
-          {selecionados.length > 0 && (
-            <button
-              type="button"
-              className="w-full text-left px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700"
-              onClick={() => onChange([])}
-            >
-              Limpar seleção
-            </button>
-          )}
-          {options.map((opt) => (
-            <label key={opt.value} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
-              <input type="checkbox" checked={selecionados.includes(opt.value)} onChange={() => toggle(opt.value)} />
-              <span className="text-slate-700 dark:text-slate-300">{opt.label}</span>
-            </label>
-          ))}
+        <div className="absolute z-40 mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg py-1">
+          {/* A busca fica fora da área rolável pra não sumir ao descer a lista. */}
+          <div className="px-2 pb-1">
+            <input
+              autoFocus
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Pesquisar..."
+              className="w-full rounded border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-2 py-1 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto">
+            {selecionados.length > 0 && (
+              <button
+                type="button"
+                className="w-full text-left px-3 py-1.5 text-xs text-blue-600 dark:text-blue-400 hover:bg-slate-100 dark:hover:bg-slate-700"
+                onClick={() => onChange([])}
+              >
+                Limpar seleção
+              </button>
+            )}
+            {filtradas.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-slate-500">Nada encontrado.</p>
+            ) : (
+              filtradas.map((opt) => (
+                <label key={opt.value} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer">
+                  <input type="checkbox" checked={selecionados.includes(opt.value)} onChange={() => toggle(opt.value)} />
+                  <span className="text-slate-700 dark:text-slate-300">{opt.label}</span>
+                </label>
+              ))
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -620,9 +646,65 @@ export function MapaSolicitacoes() {
         </div>
       </div>
 
+      {/* Em Finalizadas tudo é "Concluído", então contar por etapa daria só zeros — ali o resumo é
+          por projeto, que é a dimensão que informa algo. Clicar filtra, igual ao de etapas. */}
+      {aba === 'finalizadas' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
+          <button
+            type="button"
+            onClick={() => setFiltroProjeto([])}
+            title="Mostrar todos os projetos"
+            className={clsx(
+              'relative overflow-hidden rounded-xl border bg-white dark:bg-slate-800 pl-3 pr-2 py-2 text-left transition-all hover:shadow-md',
+              filtroProjetoId.length === 0
+                ? 'border-blue-500 dark:border-blue-400 ring-1 ring-blue-500 dark:ring-blue-400 shadow-sm'
+                : 'border-slate-200 dark:border-slate-700'
+            )}
+          >
+            <span className="absolute inset-y-0 left-0 w-1 bg-blue-600" />
+            <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400 truncate">Todos</p>
+            <p className="text-xl font-bold leading-tight text-blue-600 dark:text-blue-400">{itens.length}</p>
+          </button>
+
+          {projetos.map((proj) => {
+            const qtd = itens.filter((i) => i.projetoId === proj.id).length
+            const ativo = filtroProjetoId.includes(String(proj.id))
+            return (
+              <button
+                key={proj.id}
+                type="button"
+                onClick={() =>
+                  setFiltroProjeto(
+                    filtroProjetoId.length === 1 && filtroProjetoId[0] === String(proj.id) ? [] : [String(proj.id)]
+                  )
+                }
+                title={ativo ? `Remover filtro: ${proj.nome}` : `Filtrar por ${proj.nome}`}
+                className={clsx(
+                  'relative overflow-hidden rounded-xl border bg-white dark:bg-slate-800 pl-3 pr-2 py-2 text-left transition-all hover:shadow-md hover:opacity-100',
+                  ativo
+                    ? 'border-blue-500 dark:border-blue-400 ring-1 ring-blue-500 dark:ring-blue-400 shadow-sm'
+                    : qtd === 0
+                      ? 'border-slate-100 dark:border-slate-700/60 opacity-50'
+                      : 'border-slate-200 dark:border-slate-700 shadow-sm'
+                )}
+              >
+                <span className="absolute inset-y-0 left-0 w-1" style={{ backgroundColor: proj.cor || '#64748b' }} />
+                <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400 truncate">
+                  {proj.nome}
+                </p>
+                <p className="text-xl font-bold leading-tight text-slate-700 dark:text-slate-300">{qtd}</p>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero. Clicar filtra.
           Escondido em "Clientes a atualizar": lá a lista não é por etapa. */}
-      <div hidden={aba === 'pendentes' || aba === 'desempenho'} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2">
+      <div
+        hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'finalizadas'}
+        className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2"
+      >
         <button
           type="button"
           onClick={() => setFiltroEtapa([])}

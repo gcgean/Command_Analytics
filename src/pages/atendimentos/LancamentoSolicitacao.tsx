@@ -76,6 +76,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
   const [efetuados, setEfetuados] = useState<Array<{ id: number; descricao: string; pontuacao: number; data: string }>>([])
   const [procSelecionado, setProcSelecionado] = useState('')
   const [anexosNovos, setAnexosNovos] = useState<File[]>([])
+  const [recarregarAnexos, setRecarregarAnexos] = useState(0)
 
   // Recarrega o formulário toda vez que abre, pra não vazar dados do registro anterior.
   useEffect(() => {
@@ -151,6 +152,44 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
       toast.error(e?.message || 'Não foi possível melhorar a descrição.')
     } finally {
       setMelhorandoIA(false)
+    }
+  }
+
+  /**
+   * Colar print (Ctrl+V) vira anexo. A área de transferência entrega a imagem como blob sem nome,
+   * então batiza com a hora — senão todos os prints chegariam como "image.png" e ficaria impossível
+   * distinguir um do outro na lista.
+   */
+  const aoColar = async (e: React.ClipboardEvent) => {
+    const imagens = Array.from(e.clipboardData?.items ?? []).filter((i) => i.type.startsWith('image/'))
+    if (!imagens.length) return
+    e.preventDefault()
+
+    const agora = new Date()
+    const carimbo = `${agora.getHours()}${String(agora.getMinutes()).padStart(2, '0')}${String(agora.getSeconds()).padStart(2, '0')}`
+    const arquivos = imagens
+      .map((item, i) => {
+        const blob = item.getAsFile()
+        if (!blob) return null
+        const ext = (blob.type.split('/')[1] || 'png').replace('jpeg', 'jpg')
+        return new File([blob], `print-${carimbo}${imagens.length > 1 ? `-${i + 1}` : ''}.${ext}`, { type: blob.type })
+      })
+      .filter((f): f is File => !!f)
+    if (!arquivos.length) return
+
+    if (!editando) {
+      setAnexosNovos((atuais) => [...atuais, ...arquivos])
+      toast.success(`${arquivos.length} print anexado — será enviado ao salvar.`)
+      return
+    }
+
+    // Alterando um registro que já existe: sobe na hora, igual ao botão Selecionar faz.
+    try {
+      await api.uploadAnexos({ tabela: 'atendimentos', registroId: solicitacao!.id, files: arquivos })
+      setRecarregarAnexos((n) => n + 1)
+      toast.success(`${arquivos.length} print anexado.`)
+    } catch (err: any) {
+      toast.error(err?.message || 'Não foi possível anexar o print.')
     }
   }
 
@@ -245,7 +284,9 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
       title={editando ? `Alterar solicitação #${solicitacao!.id}` : 'Nova Solicitação'}
       size="xl"
     >
-      <div className="space-y-4">
+      {/* onPaste no formulário inteiro: o print cola estando o cursor na descrição ou em qualquer
+          outro campo, sem exigir clicar na caixa de anexos antes. */}
+      <div className="space-y-4" onPaste={aoColar}>
         <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
           {abas.map(([id, label]) => (
             <button
@@ -285,9 +326,9 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
                 />
               </div>
               <div>
-                <label className="block text-xs text-slate-500 mb-1">Anexos (fotos, vídeos, áudios)</label>
+                <label className="block text-xs text-slate-500 mb-1">Anexos (fotos, vídeos, áudios) <span className="text-slate-400">— ou cole um print com Ctrl+V</span></label>
                 {editando ? (
-                  <Anexos tabela="atendimentos" registroId={solicitacao!.id} emptyLabel="Nenhum anexo ainda." />
+                  <Anexos key={recarregarAnexos} tabela="atendimentos" registroId={solicitacao!.id} emptyLabel="Nenhum anexo ainda." />
                 ) : (
                   <AnexosDraft files={anexosNovos} onChange={setAnexosNovos} />
                 )}

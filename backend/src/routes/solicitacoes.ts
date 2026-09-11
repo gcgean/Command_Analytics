@@ -180,7 +180,10 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     const desenvolvedorLista = paraLista(desenvolvedorId)
     const projetoLista = paraLista(projetoId)
 
-    const where: Record<string, any> = { status: STATUS.CONCLUIDO }
+    // Só o que passou pelo desenvolvimento. Sem isso a aba mistura todo atendimento de suporte
+    // concluído no período (812 contra 45 num intervalo real) e deixa de ser o mapa de
+    // desenvolvimento que o Delphi mostra.
+    const where: Record<string, any> = { status: STATUS.CONCLUIDO, desenvolvedorId: { not: null } }
     if (tecnicoLista.length) where.tecnicoId = { in: tecnicoLista }
     if (desenvolvedorLista.length) where.desenvolvedorId = { in: desenvolvedorLista }
     if (projetoLista.length) where.projetoId = { in: projetoLista }
@@ -217,6 +220,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     const itens = await prisma.atendimento.findMany({
       where: {
         status: STATUS.CONCLUIDO,
+        desenvolvedorId: { not: null },
         dataFechamento: { gte: new Date(`${dataInicio}T00:00:00`), lt: fim },
       },
       select: { id: true, observacoes: true, projeto: { select: { nome: true } } },
