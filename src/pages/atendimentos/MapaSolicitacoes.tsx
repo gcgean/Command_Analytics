@@ -11,10 +11,11 @@ import { useToast } from '../../components/ui/Toast'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { LancamentoSolicitacao, type PrefillSolicitacao } from './LancamentoSolicitacao'
+import { PainelDesempenhoDev } from './PainelDesempenhoDev'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import type { ClienteAnexo, Projeto, Solicitacao, SolicitacaoPendenteAtualizacao, Usuario } from '../../types'
 
-type Aba = 'suporte' | 'finalizadas' | 'pendentes'
+type Aba = 'suporte' | 'finalizadas' | 'pendentes' | 'desempenho'
 
 // Mesmos códigos do Delphi (UMapaAtendimentos.pas). Não existe status 15.
 const S = {
@@ -343,6 +344,11 @@ export function MapaSolicitacoes() {
 
   const carregar = useCallback(() => {
     setLoading(true)
+    if (aba === 'desempenho') {
+      setLoading(false)
+      return
+    }
+
     if (aba === 'pendentes') {
       api
         .getPendentesAtualizacao({
@@ -616,7 +622,7 @@ export function MapaSolicitacoes() {
 
       {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero. Clicar filtra.
           Escondido em "Clientes a atualizar": lá a lista não é por etapa. */}
-      <div hidden={aba === 'pendentes'} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2">
+      <div hidden={aba === 'pendentes' || aba === 'desempenho'} className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2">
         <button
           type="button"
           onClick={() => setFiltroEtapa([])}
@@ -672,6 +678,7 @@ export function MapaSolicitacoes() {
           ['suporte', 'Backlog de Desenvolvimento'],
           ['finalizadas', 'Solicitações finalizadas'],
           ['pendentes', 'Clientes a atualizar'],
+          ['desempenho', 'Desempenho do Dev'],
         ] as Array<[Aba, string]>).map(([id, label]) => (
           <button
             key={id}
@@ -765,6 +772,8 @@ export function MapaSolicitacoes() {
             </label>
       </div>
 
+      {aba === 'desempenho' && <PainelDesempenhoDev rotuloStatus={ROTULO_STATUS} />}
+
       {/* Clientes a atualizar — tabela, porque o que importa aqui é comparar versões, não o kanban */}
       {aba === 'pendentes' && (
         <div>
@@ -829,7 +838,7 @@ export function MapaSolicitacoes() {
       )}
 
       {/* Grade de cards — largura cheia; detalhes agora vivem no menu de cada card */}
-      <div ref={gridRef} hidden={aba === 'pendentes'}>
+      <div ref={gridRef} hidden={aba === 'pendentes' || aba === 'desempenho'}>
         {loading ? (
           <div className="flex items-center justify-center h-40 text-slate-500">
             <Loader2 className="w-6 h-6 animate-spin mr-3" /> Carregando solicitações...

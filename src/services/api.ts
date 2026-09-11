@@ -9,7 +9,7 @@ import type {
   DashboardMensalidadesEstatisticas, DashboardMensalidadesFaixa, DashboardMensalidadesFiltros,
   DashboardMensalidadesOpcoesFiltros, DashboardMensalidadesRanking, DashboardMensalidadesResumo,
   DesempenhoEquipe, Operadora, ClienteMaquininha, MaquininhasRelatorio, TipoMaquininha, StatusMaquininha,
-  ClientesSemMaquininhaResposta, LembretesFixosResposta, TipoRecorrenciaLembrete, Solicitacao, Projeto, TipoProjeto, SistemaVersaoProjeto, SolicitacaoPendenteAtualizacao
+  ClientesSemMaquininhaResposta, LembretesFixosResposta, TipoRecorrenciaLembrete, Solicitacao, Projeto, TipoProjeto, SistemaVersaoProjeto, SolicitacaoPendenteAtualizacao, DashboardDev
 } from '../types'
 
 // ============================================================
@@ -724,6 +724,13 @@ export const api = {
       `/solicitacoes/pendentes-atualizacao${q ? `?${q}` : ''}`
     )
   },
+  getDashboardDev: (dataInicio: string, dataFim: string) =>
+    fetchApi<DashboardDev>(`/solicitacoes/dashboard-dev?dataInicio=${dataInicio}&dataFim=${dataFim}`),
+  gerarAnaliseDev: (dataInicio: string, dataFim: string, desenvolvedorId?: number | null) =>
+    fetchApi<{ texto: string; analisadas: number }>('/solicitacoes/dashboard-dev/analise', {
+      method: 'POST',
+      body: JSON.stringify({ dataInicio, dataFim, desenvolvedorId: desenvolvedorId ?? null }),
+    }),
   getNotasAtualizacao: (dataInicio: string, dataFim: string) =>
     fetchApi<{ total: number; texto: string }>(`/solicitacoes/notas-atualizacao?dataInicio=${dataInicio}&dataFim=${dataFim}`),
   getSolicitacaoLog: (id: number) =>

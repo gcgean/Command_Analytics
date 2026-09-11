@@ -63,6 +63,25 @@ export interface SolicitacaoPendenteAtualizacao extends Solicitacao {
   dataEntrega: string | null
 }
 
+export interface DashboardDevLinha {
+  desenvolvedorId: number | null
+  desenvolvedorNome: string
+  lancadas: number
+  finalizadas: number
+  atrasadas30: number
+  diasMedioConclusao: number | null
+  taxaConclusao: number
+}
+
+export interface DashboardDev {
+  periodo: { dataInicio: string; dataFim: string }
+  totais: { lancadas: number; finalizadas: number; atrasadas30: number; taxaConclusao: number }
+  desenvolvedores: DashboardDevLinha[]
+  porStatusPeriodo: Array<{ status: number; total: number }>
+  porStatusGeral: Array<{ status: number; total: number }>
+  porProjeto: Array<{ projeto: string; total: number }>
+}
+
 export interface Projeto {
   id: number
   nome: string

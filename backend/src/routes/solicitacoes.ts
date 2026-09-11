@@ -6,6 +6,8 @@ import { getUserPermissions } from './grupos'
 import { registrarAuditoria } from '../utils/auditoria'
 import { notificarAtualizacaoSolicitacao } from '../utils/notificacoesSolicitacoes'
 import { SISTEMAS_VERSAO, type SistemaVersao } from './projetos'
+import { ProvedorDeepSeek } from '../ia/deepseek'
+import { obterConfigIA } from '../ia/config'
 
 /**
  * Compara versões no formato "6.57.3.0". Comparar como texto erraria feio ("6.9" > "6.57"), então
@@ -785,4 +787,200 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     void notificarAtualizacaoSolicitacao(Number(id), usuarioId, `Cancelada: ${motivo.trim()}`)
     return { ok: true }
   })
+
+  // GET /solicitacoes/dashboard-dev — números do painel de desempenho do desenvolvimento.
+  // Sem IA aqui de propósito: os números precisam aparecer na hora; a leitura da IA é um passo
+  // separado e opcional (POST .../analise), pra IA lenta ou indisponível não derrubar o painel.
+  app.get('/dashboard-dev', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request, reply) => {
+    const { dataInicio, dataFim } = request.query as Record<string, string>
+    if (!dataInicio || !dataFim) return reply.status(400).send({ error: 'Informe dataInicio e dataFim.' })
+
+    const inicio = new Date(`${dataInicio}T00:00:00`)
+    const fim = new Date(`${dataFim}T00:00:00`)
+    fim.setDate(fim.getDate() + 1)
+    const limiteAtraso = new Date()
+    limiteAtraso.setDate(limiteAtraso.getDate() - 30)
+
+    const selecao = {
+      id: true, status: true, desenvolvedorId: true, projetoId: true,
+      dataAbertura: true, dataAtendimento: true, dataFechamento: true,
+      desenvolvedor: { select: { id: true, nomeUsu: true, nomeCompleto: true } },
+      projeto: { select: { id: true, nome: true } },
+    } as const
+
+    // Só o que é trabalho de desenvolvimento. Sem isso o painel afoga: a esmagadora maioria dos
+    // atendimentos é suporte comum, sem desenvolvedor, e entraria como "Sem desenvolvedor".
+    const ehDesenvolvimento = { desenvolvedorId: { not: null } }
+
+    const [lancadas, finalizadas, abertasAntigas, geralPorStatus] = await Promise.all([
+      // Lançadas no período (independente de já terem sido concluídas).
+      prisma.atendimento.findMany({ where: { ...ehDesenvolvimento, dataAbertura: { gte: inicio, lt: fim } }, select: selecao }),
+      // Concluídas no período — é a entrega efetiva.
+      prisma.atendimento.findMany({
+        where: { ...ehDesenvolvimento, status: STATUS.CONCLUIDO, dataFechamento: { gte: inicio, lt: fim } },
+        select: selecao,
+      }),
+      // Em aberto há mais de 30 dias: o acúmulo importa mesmo fora do período escolhido.
+      prisma.atendimento.findMany({
+        where: {
+          ...ehDesenvolvimento,
+          status: { notIn: [STATUS.CONCLUIDO, STATUS.CANCELADO, STATUS.ARQUIVADO] },
+          dataAbertura: { lt: limiteAtraso },
+        },
+        select: selecao,
+      }),
+      prisma.atendimento.groupBy({ by: ['status'], where: ehDesenvolvimento, _count: { _all: true } }),
+    ])
+
+    const dias = (a: Date | null, b: Date | null) =>
+      a && b ? Math.max(0, Math.round((b.getTime() - a.getTime()) / 86_400_000)) : null
+
+    type Linha = {
+      desenvolvedorId: number | null; desenvolvedorNome: string
+      lancadas: number; finalizadas: number; atrasadas30: number
+      diasMedioConclusao: number | null; taxaConclusao: number
+    }
+    const porDev = new Map<number, Linha>()
+    const linha = (id: number | null, nomeDev: string | null): Linha => {
+      const chave = id ?? 0
+      if (!porDev.has(chave)) {
+        porDev.set(chave, {
+          desenvolvedorId: id, desenvolvedorNome: nomeDev || 'Sem desenvolvedor',
+          lancadas: 0, finalizadas: 0, atrasadas30: 0, diasMedioConclusao: null, taxaConclusao: 0,
+        })
+      }
+      return porDev.get(chave)!
+    }
+
+    for (const a of lancadas) linha(a.desenvolvedorId, nome(a.desenvolvedor)).lancadas += 1
+    for (const a of abertasAntigas) linha(a.desenvolvedorId, nome(a.desenvolvedor)).atrasadas30 += 1
+
+    const duracoes = new Map<number, number[]>()
+    for (const a of finalizadas) {
+      const l = linha(a.desenvolvedorId, nome(a.desenvolvedor))
+      l.finalizadas += 1
+      const d = dias(a.dataAtendimento ?? a.dataAbertura, a.dataFechamento)
+      if (d !== null) {
+        const chave = a.desenvolvedorId ?? 0
+        duracoes.set(chave, [...(duracoes.get(chave) ?? []), d])
+      }
+    }
+    for (const [chave, valores] of duracoes) {
+      const l = porDev.get(chave)
+      if (l && valores.length) l.diasMedioConclusao = Math.round(valores.reduce((x, y) => x + y, 0) / valores.length)
+    }
+    // Entregou / recebeu no mesmo período. Passa de 100% quando zera pendência antiga — o que é
+    // informação, não erro: mostra quem está reduzindo fila além do que entrou.
+    for (const l of porDev.values()) {
+      l.taxaConclusao = l.lancadas > 0 ? Math.round((l.finalizadas / l.lancadas) * 100) : 0
+    }
+
+    const contar = <T>(itens: T[], chave: (i: T) => string | number | null) => {
+      const m = new Map<string | number, number>()
+      for (const i of itens) {
+        const k = chave(i) ?? '—'
+        m.set(k, (m.get(k) ?? 0) + 1)
+      }
+      return m
+    }
+
+    const statusPeriodo = contar([...lancadas], (a) => a.status)
+    const porProjeto = contar([...finalizadas], (a) => a.projeto?.nome ?? 'Sem projeto')
+
+    return {
+      periodo: { dataInicio, dataFim },
+      totais: {
+        lancadas: lancadas.length,
+        finalizadas: finalizadas.length,
+        atrasadas30: abertasAntigas.length,
+        taxaConclusao: lancadas.length ? Math.round((finalizadas.length / lancadas.length) * 100) : 0,
+      },
+      desenvolvedores: [...porDev.values()].sort((a, b) => b.finalizadas - a.finalizadas),
+      porStatusPeriodo: [...statusPeriodo.entries()].map(([status, total]) => ({ status: Number(status), total })),
+      porStatusGeral: geralPorStatus.map((g) => ({ status: Number(g.status), total: g._count._all })),
+      porProjeto: [...porProjeto.entries()].map(([projeto, total]) => ({ projeto: String(projeto), total })),
+    }
+  })
+
+
+  // POST /solicitacoes/dashboard-dev/analise — leitura da IA sobre o período.
+  // Recebe os números já calculados e uma amostra do que foi entregue, e devolve texto corrido.
+  // Passo separado porque custa crédito de API e leva segundos; o painel já funciona sem ele.
+  app.post('/dashboard-dev/analise', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request, reply) => {
+    const config = await obterConfigIA()
+    if (!config.ativo || !config.apiKey) return reply.status(503).send({ error: 'Assistente de IA não configurado.' })
+
+    const { dataInicio, dataFim, desenvolvedorId } = request.body as {
+      dataInicio?: string; dataFim?: string; desenvolvedorId?: number | null
+    }
+    if (!dataInicio || !dataFim) return reply.status(400).send({ error: 'Informe dataInicio e dataFim.' })
+
+    const inicio = new Date(`${dataInicio}T00:00:00`)
+    const fim = new Date(`${dataFim}T00:00:00`)
+    fim.setDate(fim.getDate() + 1)
+
+    const where: Record<string, any> = {
+      status: STATUS.CONCLUIDO,
+      dataFechamento: { gte: inicio, lt: fim },
+      desenvolvedorId: desenvolvedorId ? Number(desenvolvedorId) : { not: null },
+    }
+
+    const entregues = await prisma.atendimento.findMany({
+      where,
+      select: {
+        id: true, observacoes: true, dataAbertura: true, dataAtendimento: true, dataFechamento: true,
+        desenvolvedor: { select: { nomeUsu: true, nomeCompleto: true } },
+        projeto: { select: { nome: true } },
+      },
+      orderBy: { dataFechamento: 'desc' },
+      take: 60,
+    })
+    if (!entregues.length) {
+      return reply.status(400).send({ error: 'Nenhuma solicitação concluída no período para analisar.' })
+    }
+
+    const linhas = entregues.map((a) => {
+      const ini = a.dataAtendimento ?? a.dataAbertura
+      const dias = ini && a.dataFechamento
+        ? Math.max(0, Math.round((a.dataFechamento.getTime() - ini.getTime()) / 86_400_000))
+        : null
+      const texto = (a.observacoes ?? '').replace(/\s+/g, ' ').trim().slice(0, 220)
+      return `- [${a.projeto?.nome ?? 'sem projeto'}] ${nome(a.desenvolvedor) ?? 'sem dev'} · ${dias ?? '?'} dia(s): ${texto}`
+    })
+
+    const escopo = desenvolvedorId
+      ? `do desenvolvedor ${nome(entregues[0].desenvolvedor) ?? ''}`
+      : 'de toda a equipe de desenvolvimento'
+
+    const instrucao = `Você analisa o desempenho ${escopo} do Cilos Sistema (ERP) para um gestor, no período de ${dataInicio} a ${dataFim}.
+
+Abaixo está o que foi CONCLUÍDO no período: projeto, responsável, dias entre início e conclusão, e a descrição da solicitação.
+
+${linhas.join('\n')}
+
+Escreva uma análise objetiva em português do Brasil, em texto corrido com subtítulos, cobrindo:
+1. Para onde o desenvolvimento está indo: que tipo de trabalho predominou (correção de bug, melhoria, relatório, ajuste fiscal...) e o que isso indica sobre o rumo do produto.
+2. Onde está acertando e onde está errando, com base no que foi entregue.
+3. Ritmo: itens que levaram muito mais tempo que a média e o que eles têm em comum (complexidade real, espera por terceiros, ou item que ficou parado).
+4. Se o trabalho parece assertivo — resolve a causa ou fica em paliativo, entrega valor ao cliente ou é retrabalho.
+5. Recomendações práticas ao gestor.
+
+Regras:
+- Baseie CADA afirmação nos itens listados. Não invente número, cliente, prazo ou fato que não esteja acima.
+- Estes dados mostram o QUE foi entregue e em quantos dias — não mostram esforço, dificuldade real, nem o que a pessoa fez fora daqui. Não conclua que alguém é lento ou improdutivo a partir disso; aponte padrões e diga explicitamente o que precisaria ser verificado antes de virar conclusão sobre uma pessoa.
+- Se a amostra for pequena demais para sustentar alguma conclusão, diga isso em vez de forçar.
+- Sem saudação e sem markdown de tabela. Texto direto.`
+
+    try {
+      const provedor = new ProvedorDeepSeek(config.apiKey, config.modelo)
+      const resposta = await provedor.conversar([{ papel: 'user', conteudo: instrucao }], [])
+      const texto = resposta.texto?.trim()
+      if (!texto) return reply.status(502).send({ error: 'A IA não devolveu uma análise. Tente novamente.' })
+      return { texto, analisadas: entregues.length }
+    } catch (e: any) {
+      request.log.error(e)
+      return reply.status(502).send({ error: 'Falha ao consultar a IA. Tente novamente.' })
+    }
+  })
+
 }
