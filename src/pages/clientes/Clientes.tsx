@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useFiltroPersistente } from '../../hooks/useFiltroPersistente'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { Search, Plus, RefreshCw, MoreVertical, SlidersHorizontal } from 'lucide-react'
 import { Button } from '../../components/ui/Button'
@@ -37,13 +38,13 @@ export function Clientes() {
   const [loading, setLoading] = useState(true)
   const [loadingPage, setLoadingPage] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('Ativo')
+  const [search, setSearch] = useFiltroPersistente('clientes:busca', '')
+  const [filterStatus, setFilterStatus] = useFiltroPersistente('clientes:status', 'Ativo')
   const [classificacoes, setClassificacoes] = useState<Array<{ id: number; nome: string | null }>>([])
-  const [filterClassificacao, setFilterClassificacao] = useState('')
-  const [filterCurva, setFilterCurva] = useState('')
-  const [filterSemMaquininha, setFilterSemMaquininha] = useState(false)
-  const [filterSomenteBeta, setFilterSomenteBeta] = useState(false)
+  const [filterClassificacao, setFilterClassificacao] = useFiltroPersistente('clientes:classificacao', '')
+  const [filterCurva, setFilterCurva] = useFiltroPersistente('clientes:curva', '')
+  const [filterSemMaquininha, setFilterSemMaquininha] = useFiltroPersistente('clientes:semMaquininha', false)
+  const [filterSomenteBeta, setFilterSomenteBeta] = useFiltroPersistente('clientes:somenteBeta', false)
   const [menuAbertoId, setMenuAbertoId] = useState<number | null>(null)
   const [maisFiltrosAberto, setMaisFiltrosAberto] = useState(false)
   const LIMIT = 30

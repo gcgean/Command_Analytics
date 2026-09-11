@@ -190,15 +190,57 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
         status: STATUS.CONCLUIDO,
         dataFechamento: { gte: new Date(`${dataInicio}T00:00:00`), lt: fim },
       },
-      select: { observacoes: true },
+      select: { id: true, observacoes: true, projeto: { select: { nome: true } } },
       orderBy: { dataFechamento: 'asc' },
     })
 
-    const texto = itens
-      .map((a) => a.observacoes?.trim())
-      .filter((obs): obs is string => !!obs)
-      .join('\n')
+    // O que o pessoal digita vem cheio de linha em branco, espaço no fim e indentação solta.
+    // Limpa cada linha e derruba sequências de linhas vazias, senão a lista sai esparramada.
+    const limpar = (texto: string) =>
+      texto
+        .split('\n')
+        .map((linha) => linha.trim())
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
 
+    // Importações em lote gravam a mesma frase em centenas de registros ("LANCADO VIA EXCEL" e
+    // afins). Repetir isso na nota não informa nada, então cada texto entra uma vez só — a
+    // contagem de quantos registros vieram com aquele texto fica ao lado.
+    const vistos = new Map<string, { id: number; projeto: string | null; texto: string; repeticoes: number }>()
+    for (const a of itens) {
+      const texto = limpar(a.observacoes ?? '')
+      if (!texto) continue
+      const chave = texto.toLowerCase()
+      const existente = vistos.get(chave)
+      if (existente) existente.repeticoes += 1
+      else vistos.set(chave, { id: a.id, projeto: a.projeto?.nome ?? null, texto, repeticoes: 1 })
+    }
+    const comTexto = [...vistos.values()]
+
+    const dataBR = (iso: string) => iso.split('-').reverse().join('/')
+    const cabecalho = [
+      `NOTAS DE ATUALIZAÇÃO — ${dataBR(dataInicio)} a ${dataBR(dataFim)}`,
+      `${itens.length} ${itens.length === 1 ? 'solicitação concluída' : 'solicitações concluídas'}` +
+        (comTexto.length !== itens.length ? ` · ${comTexto.length} descrição(ões) distinta(s)` : ''),
+      '',
+    ]
+
+    // Uma entrada numerada por solicitação, com as linhas seguintes recuadas — fica legível de
+    // bater o olho e continua sendo texto puro, pronto pra colar em qualquer lugar.
+    const blocos = comTexto.map((a, i) => {
+      const numero = `${i + 1}.`.padEnd(4)
+      const titulo =
+        `${numero}#${a.id}${a.projeto ? ` · ${a.projeto}` : ''}` +
+        (a.repeticoes > 1 ? ` (${a.repeticoes} solicitações com esta mesma descrição)` : '')
+      const corpo = a.texto
+        .split('\n')
+        .map((linha) => (linha ? `    ${linha}` : ''))
+        .join('\n')
+      return `${titulo}\n${corpo}`
+    })
+
+    const texto = comTexto.length ? [...cabecalho, blocos.join('\n\n')].join('\n') : ''
     return { total: itens.length, texto }
   })
 

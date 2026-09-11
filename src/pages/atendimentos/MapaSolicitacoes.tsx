@@ -965,7 +965,11 @@ export function MapaSolicitacoes() {
           </div>
         ) : (
           <div className="space-y-3">
-            <textarea readOnly className="input w-full h-72 resize-none font-mono text-xs" value={notasTexto} />
+            <textarea
+              readOnly
+              className="input w-full h-[60vh] resize-none font-mono text-[13px] leading-relaxed"
+              value={notasTexto || 'Nenhuma solicitação concluída no período.'}
+            />
             <div className="flex justify-end gap-2">
               <button className="btn-secondary" onClick={() => setModalNotas(false)}>Fechar</button>
               <button
