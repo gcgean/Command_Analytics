@@ -69,13 +69,22 @@ export interface DashboardDevLinha {
   lancadas: number
   finalizadas: number
   atrasadas30: number
+  emTeste: number
+  testadoComErro: number
   diasMedioConclusao: number | null
   taxaConclusao: number
 }
 
 export interface DashboardDev {
   periodo: { dataInicio: string; dataFim: string }
-  totais: { lancadas: number; finalizadas: number; atrasadas30: number; taxaConclusao: number }
+  totais: {
+    lancadas: number
+    finalizadas: number
+    atrasadas30: number
+    emTeste: number
+    testadoComErro: number
+    taxaConclusao: number
+  }
   desenvolvedores: DashboardDevLinha[]
   porStatusPeriodo: Array<{ status: number; total: number }>
   porStatusGeral: Array<{ status: number; total: number }>

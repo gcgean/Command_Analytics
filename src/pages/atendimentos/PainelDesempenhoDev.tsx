@@ -57,7 +57,9 @@ export function PainelDesempenhoDev({ rotuloStatus }: { rotuloStatus: Record<num
     ? [
         { rotulo: 'Recebidas no período', valor: String(painel.totais.lancadas), cor: 'text-slate-700 dark:text-slate-300' },
         { rotulo: 'Finalizadas no período', valor: String(painel.totais.finalizadas), cor: 'text-emerald-600 dark:text-emerald-400' },
-        { rotulo: 'Taxa de conclusão', valor: `${painel.totais.taxaConclusao}%`, cor: 'text-blue-600 dark:text-blue-400' },
+        { rotulo: 'Em teste agora', valor: String(painel.totais.emTeste), cor: 'text-cyan-600 dark:text-cyan-400' },
+        { rotulo: 'Taxa de entrega', valor: `${painel.totais.taxaConclusao}%`, cor: 'text-blue-600 dark:text-blue-400' },
+        { rotulo: 'Voltou com erro', valor: String(painel.totais.testadoComErro), cor: 'text-amber-600 dark:text-amber-400' },
         { rotulo: 'Abertas há +30 dias', valor: String(painel.totais.atrasadas30), cor: 'text-red-600 dark:text-red-400' },
       ]
     : []
@@ -83,14 +85,16 @@ export function PainelDesempenhoDev({ rotuloStatus }: { rotuloStatus: Record<num
         <div className="text-center py-12 text-slate-500">
           <p className="font-medium">Escolha o período e clique em "Gerar dashboard".</p>
           <p className="text-sm mt-1">
-            Considera apenas solicitações com desenvolvedor vinculado — atendimento de suporte comum fica de fora.
+            Considera apenas solicitações com desenvolvedor vinculado. "Em teste" e "voltou com erro"
+            são o estado atual da esteira, não recorte do período — a taxa de entrega soma concluídas
+            e em teste, para não penalizar quem entregou perto do fim do período.
           </p>
         </div>
       )}
 
       {painel && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {kpis.map((k) => (
               <div key={k.rotulo} className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3">
                 <p className="text-[11px] uppercase tracking-wide text-slate-500">{k.rotulo}</p>
@@ -106,6 +110,8 @@ export function PainelDesempenhoDev({ rotuloStatus }: { rotuloStatus: Record<num
                   <th className="px-3 py-2">Desenvolvedor</th>
                   <th className="px-3 py-2 text-right">Recebidas</th>
                   <th className="px-3 py-2 text-right">Finalizadas</th>
+                  <th className="px-3 py-2 text-right">Em teste</th>
+                  <th className="px-3 py-2 text-right">C/ erro</th>
                   <th className="px-3 py-2 text-right">Taxa</th>
                   <th className="px-3 py-2 text-right">Dias médios</th>
                   <th className="px-3 py-2 text-right">Abertas +30d</th>
@@ -118,6 +124,10 @@ export function PainelDesempenhoDev({ rotuloStatus }: { rotuloStatus: Record<num
                     <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-200">{d.desenvolvedorNome}</td>
                     <td className="px-3 py-2 text-right">{d.lancadas}</td>
                     <td className="px-3 py-2 text-right font-semibold text-emerald-600 dark:text-emerald-400">{d.finalizadas}</td>
+                    <td className="px-3 py-2 text-right text-cyan-600 dark:text-cyan-400">{d.emTeste}</td>
+                    <td className={clsx('px-3 py-2 text-right', d.testadoComErro > 0 && 'text-amber-600 dark:text-amber-400 font-semibold')}>
+                      {d.testadoComErro}
+                    </td>
                     <td className="px-3 py-2 text-right">{d.taxaConclusao}%</td>
                     <td className="px-3 py-2 text-right">{d.diasMedioConclusao ?? '—'}</td>
                     <td className={clsx('px-3 py-2 text-right', d.atrasadas30 > 0 && 'text-red-600 dark:text-red-400 font-semibold')}>

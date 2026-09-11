@@ -944,6 +944,11 @@ export function MapaSolicitacoes() {
                         {item.projetoNome}
                       </p>
                     )}
+                    {(item.dataAtendimento ?? item.dataAbertura) && (
+                      <p className="text-center text-[9px] text-slate-400 dark:text-slate-500 mt-0.5">
+                        {new Date(item.dataAtendimento ?? item.dataAbertura!).toLocaleDateString('pt-BR')}
+                      </p>
+                    )}
                   </div>
 
                   <div className={clsx(

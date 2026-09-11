@@ -61,6 +61,7 @@ import { ensureVisibilidadeTables } from './utils/visibilidade'
 import { startNotificacoesVencimentoScheduler } from './utils/notificacoesVencimento'
 import { initNotificacoesAgendamento, startNotificacoesAgendamentoScheduler } from './utils/notificacoesAgendamento'
 import { startTelegramPollingScheduler } from './utils/telegramBot'
+import { startClientesDesatualizadosScheduler } from './utils/notificacaoClientesDesatualizados'
 import { ensureConfiguracaoIA } from './ia/config'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
@@ -239,6 +240,7 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
     .catch(e => console.warn('⚠ Visibilidade init:', e.message))
   startNotificacoesVencimentoScheduler()
   startTelegramPollingScheduler()
+  startClientesDesatualizadosScheduler()
   ensureConfiguracaoIA()
     .then(() => console.log('✓ Tabela de configuração da IA verificada'))
     .catch(e => console.warn('⚠ Configuração da IA init:', e.message))

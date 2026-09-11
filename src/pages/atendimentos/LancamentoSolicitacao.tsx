@@ -158,6 +158,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
     if (!clienteId) return toast.error('Selecione o cliente.')
     if (!observacoes.trim()) return toast.error('Descreva os dados do atendimento.')
     if (!editando && !desenvolvedorId) return toast.error('Selecione o desenvolvedor responsável.')
+    if (!projetoId) return toast.error('Informe o projeto da solicitação.')
     if (!editando && jaFinalizado && !solucao.trim()) return toast.error('Descreva a solução pra marcar como finalizado.')
 
     setSalvando(true)
@@ -268,7 +269,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
             <div className="lg:col-span-2 space-y-3">
               <ClienteSearch label="Cliente" value={clienteId} onChange={(id) => setClienteId(id)} required />
               <Select
-                label="Projeto"
+                label="Projeto *"
                 placeholder="(nenhum)"
                 value={projetoId}
                 onChange={(e) => setProjetoId(e.target.value)}

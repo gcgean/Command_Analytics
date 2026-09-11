@@ -405,6 +405,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     if (!b.clienteId) return reply.status(400).send({ error: 'Selecione o cliente.' })
     if (!b.observacoes?.trim()) return reply.status(400).send({ error: 'Descreva os dados do atendimento.' })
     if (!b.desenvolvedorId) return reply.status(400).send({ error: 'Selecione o desenvolvedor responsável.' })
+    if (!b.projetoId) return reply.status(400).send({ error: 'Informe o projeto da solicitação.' })
 
     // Mesmas opções de abertura que o Delphi oferece no lançamento.
     const statusAbertura: number[] = [1, 2, 3, 4, 6, 9]
@@ -598,9 +599,17 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
     const atual = await prisma.atendimento.findUnique({
       where: { id: Number(id) },
-      select: { id: true, status: true, desenvolvedorId: true },
+      select: { id: true, status: true, desenvolvedorId: true, projetoId: true },
     })
     if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
+
+    // Sem projeto a solicitação não entra no painel de desempenho nem na verificação de versão dos
+    // clientes — então a etapa não anda até alguém informar qual é.
+    if (!atual.projetoId) {
+      return reply.status(400).send({
+        error: 'Informe o projeto desta solicitação antes de mudar a etapa (use Alterar / Finalizar).',
+      })
+    }
 
     // Mesma trava do Delphi: sem desenvolvedor vinculado não vai pra desenvolvimento.
     if (Number(status) === STATUS.EM_DESENVOLVIMENTO && !atual.desenvolvedorId) {
@@ -811,8 +820,12 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     // Só o que é trabalho de desenvolvimento. Sem isso o painel afoga: a esmagadora maioria dos
     // atendimentos é suporte comum, sem desenvolvedor, e entraria como "Sem desenvolvedor".
     const ehDesenvolvimento = { desenvolvedorId: { not: null } }
+    // Trabalho que o dev já produziu mas ainda não virou "Concluído": está na esteira de teste.
+    // O 17 (Testado com Erro) fica FORA daqui de propósito — voltou com problema é retrabalho,
+    // não entrega, e é contado à parte como sinal de qualidade.
+    const STATUS_EM_TESTE = [STATUS.AGUARDANDO_TESTES, STATUS.EM_TESTES, STATUS.TESTADO_OK, STATUS.CORRIGIDO_DEV]
 
-    const [lancadas, finalizadas, abertasAntigas, geralPorStatus] = await Promise.all([
+    const [lancadas, finalizadas, abertasAntigas, geralPorStatus, emTeste, comErro] = await Promise.all([
       // Lançadas no período (independente de já terem sido concluídas).
       prisma.atendimento.findMany({ where: { ...ehDesenvolvimento, dataAbertura: { gte: inicio, lt: fim } }, select: selecao }),
       // Concluídas no período — é a entrega efetiva.
@@ -830,6 +843,9 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
         select: selecao,
       }),
       prisma.atendimento.groupBy({ by: ['status'], where: ehDesenvolvimento, _count: { _all: true } }),
+      // Estado atual, não recorte do período: o gestor quer saber o que está parado na esteira agora.
+      prisma.atendimento.findMany({ where: { ...ehDesenvolvimento, status: { in: STATUS_EM_TESTE } }, select: selecao }),
+      prisma.atendimento.findMany({ where: { ...ehDesenvolvimento, status: STATUS.TESTADO_COM_ERRO }, select: selecao }),
     ])
 
     const dias = (a: Date | null, b: Date | null) =>
@@ -838,6 +854,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     type Linha = {
       desenvolvedorId: number | null; desenvolvedorNome: string
       lancadas: number; finalizadas: number; atrasadas30: number
+      emTeste: number; testadoComErro: number
       diasMedioConclusao: number | null; taxaConclusao: number
     }
     const porDev = new Map<number, Linha>()
@@ -846,7 +863,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       if (!porDev.has(chave)) {
         porDev.set(chave, {
           desenvolvedorId: id, desenvolvedorNome: nomeDev || 'Sem desenvolvedor',
-          lancadas: 0, finalizadas: 0, atrasadas30: 0, diasMedioConclusao: null, taxaConclusao: 0,
+          lancadas: 0, finalizadas: 0, atrasadas30: 0, emTeste: 0, testadoComErro: 0,
+          diasMedioConclusao: null, taxaConclusao: 0,
         })
       }
       return porDev.get(chave)!
@@ -854,6 +872,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
     for (const a of lancadas) linha(a.desenvolvedorId, nome(a.desenvolvedor)).lancadas += 1
     for (const a of abertasAntigas) linha(a.desenvolvedorId, nome(a.desenvolvedor)).atrasadas30 += 1
+    for (const a of emTeste) linha(a.desenvolvedorId, nome(a.desenvolvedor)).emTeste += 1
+    for (const a of comErro) linha(a.desenvolvedorId, nome(a.desenvolvedor)).testadoComErro += 1
 
     const duracoes = new Map<number, number[]>()
     for (const a of finalizadas) {
@@ -869,10 +889,11 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       const l = porDev.get(chave)
       if (l && valores.length) l.diasMedioConclusao = Math.round(valores.reduce((x, y) => x + y, 0) / valores.length)
     }
-    // Entregou / recebeu no mesmo período. Passa de 100% quando zera pendência antiga — o que é
-    // informação, não erro: mostra quem está reduzindo fila além do que entrou.
+    // Entregou / recebeu no mesmo período, contando também o que já saiu do dev e está na esteira
+    // de teste — senão quem entregou muito no fim do período aparece como improdutivo. Passa de
+    // 100% quando zera pendência antiga: é informação, não erro.
     for (const l of porDev.values()) {
-      l.taxaConclusao = l.lancadas > 0 ? Math.round((l.finalizadas / l.lancadas) * 100) : 0
+      l.taxaConclusao = l.lancadas > 0 ? Math.round(((l.finalizadas + l.emTeste) / l.lancadas) * 100) : 0
     }
 
     const contar = <T>(itens: T[], chave: (i: T) => string | number | null) => {
@@ -893,7 +914,11 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
         lancadas: lancadas.length,
         finalizadas: finalizadas.length,
         atrasadas30: abertasAntigas.length,
-        taxaConclusao: lancadas.length ? Math.round((finalizadas.length / lancadas.length) * 100) : 0,
+        emTeste: emTeste.length,
+        testadoComErro: comErro.length,
+        taxaConclusao: lancadas.length
+          ? Math.round(((finalizadas.length + emTeste.length) / lancadas.length) * 100)
+          : 0,
       },
       desenvolvedores: [...porDev.values()].sort((a, b) => b.finalizadas - a.finalizadas),
       porStatusPeriodo: [...statusPeriodo.entries()].map(([status, total]) => ({ status: Number(status), total })),
@@ -935,9 +960,36 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       orderBy: { dataFechamento: 'desc' },
       take: 60,
     })
-    if (!entregues.length) {
-      return reply.status(400).send({ error: 'Nenhuma solicitação concluída no período para analisar.' })
+    // Estado atual da esteira. Sem isso a leitura fica torta: quem entregou perto do fim do
+    // período pareceria parado, e retrabalho não apareceria em lugar nenhum.
+    const ondeDev: Record<string, any> = desenvolvedorId
+      ? { desenvolvedorId: Number(desenvolvedorId) }
+      : { desenvolvedorId: { not: null } }
+    const selecaoCurta = {
+      observacoes: true,
+      desenvolvedor: { select: { nomeUsu: true, nomeCompleto: true } },
+      projeto: { select: { nome: true } },
+    } as const
+    const [emTeste, comErro] = await Promise.all([
+      prisma.atendimento.findMany({
+        where: {
+          ...ondeDev,
+          status: { in: [STATUS.AGUARDANDO_TESTES, STATUS.EM_TESTES, STATUS.TESTADO_OK, STATUS.CORRIGIDO_DEV] },
+        },
+        select: selecaoCurta,
+        take: 40,
+      }),
+      prisma.atendimento.findMany({ where: { ...ondeDev, status: STATUS.TESTADO_COM_ERRO }, select: selecaoCurta, take: 30 }),
+    ])
+
+    if (!entregues.length && !emTeste.length && !comErro.length) {
+      return reply.status(400).send({ error: 'Nada concluído nem em teste para analisar.' })
     }
+
+    const resumir = (itens: typeof emTeste) =>
+      itens
+        .map((i) => `- [${i.projeto?.nome ?? 'sem projeto'}] ${nome(i.desenvolvedor) ?? 'sem dev'}: ${(i.observacoes ?? '').replace(/\s+/g, ' ').trim().slice(0, 180)}`)
+        .join('\n') || '- nenhum'
 
     const linhas = entregues.map((a) => {
       const ini = a.dataAtendimento ?? a.dataAbertura
@@ -958,17 +1010,25 @@ Abaixo está o que foi CONCLUÍDO no período: projeto, responsável, dias entre
 
 ${linhas.join('\n')}
 
+JÁ PRODUZIDO PELO DEV, AGUARDANDO OU EM TESTE AGORA (${emTeste.length}) — trabalho feito, ainda não concluído:
+${resumir(emTeste)}
+
+VOLTOU COM ERRO NO TESTE AGORA (${comErro.length}) — sinal de retrabalho:
+${resumir(comErro)}
+
 Escreva uma análise objetiva em português do Brasil, em texto corrido com subtítulos, cobrindo:
 1. Para onde o desenvolvimento está indo: que tipo de trabalho predominou (correção de bug, melhoria, relatório, ajuste fiscal...) e o que isso indica sobre o rumo do produto.
 2. Onde está acertando e onde está errando, com base no que foi entregue.
 3. Ritmo: itens que levaram muito mais tempo que a média e o que eles têm em comum (complexidade real, espera por terceiros, ou item que ficou parado).
 4. Se o trabalho parece assertivo — resolve a causa ou fica em paliativo, entrega valor ao cliente ou é retrabalho.
-5. Recomendações práticas ao gestor.
+5. Assertividade: compare o volume concluído com o que voltou com erro no teste. Muito retrabalho sugere entrega apressada ou requisito mal entendido; pouco retrabalho com volume alto em teste sugere fluxo saudável.
+6. Recomendações práticas ao gestor.
 
 Regras:
 - Baseie CADA afirmação nos itens listados. Não invente número, cliente, prazo ou fato que não esteja acima.
 - Estes dados mostram o QUE foi entregue e em quantos dias — não mostram esforço, dificuldade real, nem o que a pessoa fez fora daqui. Não conclua que alguém é lento ou improdutivo a partir disso; aponte padrões e diga explicitamente o que precisaria ser verificado antes de virar conclusão sobre uma pessoa.
 - Se a amostra for pequena demais para sustentar alguma conclusão, diga isso em vez de forçar.
+- Os blocos "em teste" e "voltou com erro" são o estado ATUAL da esteira, não um recorte do período — não os trate como se tivessem ocorrido dentro das datas.
 - Sem saudação e sem markdown de tabela. Texto direto.`
 
     try {
@@ -976,7 +1036,7 @@ Regras:
       const resposta = await provedor.conversar([{ papel: 'user', conteudo: instrucao }], [])
       const texto = resposta.texto?.trim()
       if (!texto) return reply.status(502).send({ error: 'A IA não devolveu uma análise. Tente novamente.' })
-      return { texto, analisadas: entregues.length }
+      return { texto, analisadas: entregues.length, emTeste: emTeste.length, comErro: comErro.length }
     } catch (e: any) {
       request.log.error(e)
       return reply.status(502).send({ error: 'Falha ao consultar a IA. Tente novamente.' })
