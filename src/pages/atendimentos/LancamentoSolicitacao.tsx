@@ -13,6 +13,27 @@ import type { Projeto, Solicitacao, Usuario } from '../../types'
 
 type AbaForm = 'atendimento' | 'procedimentos' | 'finalizacao'
 
+// Quem lança costuma abrir várias solicitações seguidas para o mesmo desenvolvedor — guardar a
+// última escolha evita reselecionar a cada lançamento. Vale só como sugestão inicial: a pessoa
+// troca no campo normalmente, e alterar registro existente nunca usa isso.
+const CHAVE_ULTIMO_DEV = 'lancamentoSolicitacao:ultimoDesenvolvedor'
+
+function lerUltimoDesenvolvedor(): string {
+  try {
+    return localStorage.getItem(CHAVE_ULTIMO_DEV) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function guardarUltimoDesenvolvedor(valor: string): void {
+  try {
+    valor ? localStorage.setItem(CHAVE_ULTIMO_DEV, valor) : localStorage.removeItem(CHAVE_ULTIMO_DEV)
+  } catch {
+    /* ignora — só deixa de lembrar */
+  }
+}
+
 // Status oferecidos na abertura, iguais aos radios do lançamento legado.
 const STATUS_ABERTURA: Array<[number, string]> = [
   [1, 'Em Fila'],
@@ -40,11 +61,13 @@ interface Props {
   solicitacao: Solicitacao | null
   usuarios: Usuario[]
   prefill?: PrefillSolicitacao | null
+  /** Abre com o foco no Projeto — usado quando a etapa foi barrada por falta dele. */
+  focarProjeto?: boolean
   onClose: () => void
   onSalvo: () => void
 }
 
-export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, onClose, onSalvo }: Props) {
+export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, focarProjeto, onClose, onSalvo }: Props) {
   const { toast } = useToast()
   const { user: usuarioLogado } = useAuthStore()
   const editando = !!solicitacao
@@ -95,7 +118,9 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
         ? String(solicitacao.desenvolvedorId)
         : prefill?.desenvolvedorId
           ? String(prefill.desenvolvedorId)
-          : ''
+          : solicitacao
+            ? ''
+            : lerUltimoDesenvolvedor()
     )
     setProjetoId(
       solicitacao?.projetoId ? String(solicitacao.projetoId) : prefill?.projetoId ? String(prefill.projetoId) : ''
@@ -229,6 +254,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
           foraHorario,
           bugSistema,
         })
+        guardarUltimoDesenvolvedor(desenvolvedorId)
         toast.success(`Solicitação #${r.id} criada`)
         if (anexosNovos.length) {
           try {
@@ -315,6 +341,8 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
                 value={projetoId}
                 onChange={(e) => setProjetoId(e.target.value)}
                 options={projetos.map((p) => ({ value: p.id, label: p.nome }))}
+                autoFocus={focarProjeto && !projetoId}
+                className={clsx(focarProjeto && !projetoId && 'ring-2 ring-amber-400 border-amber-400')}
               />
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Dados do Atendimento</label>

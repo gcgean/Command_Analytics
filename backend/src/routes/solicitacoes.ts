@@ -893,11 +893,12 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       const l = porDev.get(chave)
       if (l && valores.length) l.diasMedioConclusao = Math.round(valores.reduce((x, y) => x + y, 0) / valores.length)
     }
-    // Entregou / recebeu no mesmo período, contando também o que já saiu do dev e está na esteira
-    // de teste — senão quem entregou muito no fim do período aparece como improdutivo. Passa de
-    // 100% quando zera pendência antiga: é informação, não erro.
+    // Taxa compara SÓ grandezas do mesmo período: finalizadas no período sobre recebidas no
+    // período. "Em teste" é estado atual (inclui item aberto muito antes), e somá-lo aqui gerava
+    // porcentagem sem sentido — um dev com 6 recebidas e 10 em teste antigos aparecia com 200%.
+    // Pode passar de 100% legitimamente, quando o período fecha mais do que recebeu.
     for (const l of porDev.values()) {
-      l.taxaConclusao = l.lancadas > 0 ? Math.round(((l.finalizadas + l.emTeste) / l.lancadas) * 100) : 0
+      l.taxaConclusao = l.lancadas > 0 ? Math.round((l.finalizadas / l.lancadas) * 100) : 0
     }
 
     const contar = <T>(itens: T[], chave: (i: T) => string | number | null) => {
@@ -909,6 +910,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       return m
     }
 
+    // Atenção ao significado: é o que foi LANÇADO no período, agrupado pela etapa em que está
+    // agora — não "quantas chegaram nessa etapa durante o período", que exigiria histórico.
     const statusPeriodo = contar([...lancadas], (a) => a.status)
     const porProjeto = contar([...finalizadas], (a) => a.projeto?.nome ?? 'Sem projeto')
 
@@ -920,9 +923,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
         atrasadas30: abertasAntigas.length,
         emTeste: emTeste.length,
         testadoComErro: comErro.length,
-        taxaConclusao: lancadas.length
-          ? Math.round(((finalizadas.length + emTeste.length) / lancadas.length) * 100)
-          : 0,
+        taxaConclusao: lancadas.length ? Math.round((finalizadas.length / lancadas.length) * 100) : 0,
       },
       desenvolvedores: [...porDev.values()].sort((a, b) => b.finalizadas - a.finalizadas),
       porStatusPeriodo: [...statusPeriodo.entries()].map(([status, total]) => ({ status: Number(status), total })),

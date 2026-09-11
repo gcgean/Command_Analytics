@@ -363,6 +363,7 @@ export function MapaSolicitacoes() {
   const [salvando, setSalvando] = useState(false)
   const [lancamento, setLancamento] = useState<{ aberto: boolean; item: Solicitacao | null }>({ aberto: false, item: null })
   const [prefillIA, setPrefillIA] = useState<PrefillSolicitacao | null>(null)
+  const [abriuPorFaltaDeProjeto, setAbriuPorFaltaDeProjeto] = useState(false)
   const [pendentes, setPendentes] = useState<SolicitacaoPendenteAtualizacao[]>([])
   const [modalNotas, setModalNotas] = useState(false)
   const [notasTexto, setNotasTexto] = useState('')
@@ -479,8 +480,28 @@ export function MapaSolicitacoes() {
     }
   }
 
-  const mudarStatus = (item: Solicitacao, status: number, rotulo: string) =>
-    executar(() => api.alterarStatusSolicitacao(item.id, status), `${rotulo} — #${item.id}`)
+  /**
+   * Etapa não anda sem projeto (regra do backend). Em vez de deixar a chamada falhar e largar a
+   * pessoa com um aviso pedindo pra abrir outra tela, já abre a solicitação no campo que falta.
+   */
+  const exigirProjeto = (item: Solicitacao): boolean => {
+    if (item.projetoId) return true
+    if (!podeAgir) {
+      toast.error('Esta solicitação está sem projeto e você não tem permissão para informá-lo.')
+      return false
+    }
+    toast.error('Informe o projeto desta solicitação para mudar a etapa.')
+    setModalDetalhes(null)
+    setMenuAberto(null)
+    setAbriuPorFaltaDeProjeto(true)
+    setLancamento({ aberto: true, item })
+    return false
+  }
+
+  const mudarStatus = (item: Solicitacao, status: number, rotulo: string) => {
+    if (!exigirProjeto(item)) return Promise.resolve(false)
+    return executar(() => api.alterarStatusSolicitacao(item.id, status), `${rotulo} — #${item.id}`)
+  }
 
   const abrirNotasAtualizacao = async () => {
     setModalNotas(true)
@@ -565,6 +586,11 @@ export function MapaSolicitacoes() {
     }, 220)
   }
 
+  const abrirEdicao = (item: Solicitacao) => {
+    setAbriuPorFaltaDeProjeto(false)
+    setLancamento({ aberto: true, item })
+  }
+
   const aoClicarDuasVezes = (item: Solicitacao) => {
     if (cliqueCard.current) {
       window.clearTimeout(cliqueCard.current)
@@ -576,7 +602,7 @@ export function MapaSolicitacoes() {
       return
     }
     setModalDetalhes(null)
-    setLancamento({ aberto: true, item })
+    abrirEdicao(item)
   }
 
   const alternarEtapa = (st: number) => {
@@ -600,14 +626,14 @@ export function MapaSolicitacoes() {
         onClick: () => { setTexto(item.solucao ?? ''); setModalFinalizar(item) },
         destaque: true,
       },
-      { label: 'Alterar / Finalizar', icon: <Pencil size={13} />, onClick: () => setLancamento({ aberto: true, item }) },
+      { label: 'Alterar / Finalizar', icon: <Pencil size={13} />, onClick: () => abrirEdicao(item) },
       { label: 'Vincular Dev', icon: <UserPlus size={13} />, onClick: () => setModalDev(item) },
       { label: 'Em Desenvolvimento', icon: <Code2 size={13} />, onClick: () => mudarStatus(item, S.EM_DESENVOLVIMENTO, 'Em Desenvolvimento') },
       { label: 'Aguardando Testes', icon: <FlaskConical size={13} />, onClick: () => mudarStatus(item, S.AGUARDANDO_TESTES, 'Aguardando Testes') },
       { label: 'Aguardando Análise Dev', icon: <AlertTriangle size={13} />, onClick: () => mudarStatus(item, S.AGUARDANDO_ANALISE_DEV, 'Aguardando Análise do Dev') },
       { label: 'Em Testes', icon: <FlaskConical size={13} />, onClick: () => mudarStatus(item, S.EM_TESTES, 'Em Testes') },
-      { label: 'Testado com Erro', icon: <XCircle size={13} />, onClick: () => { setTexto(''); setModalJustificativa({ item, status: S.TESTADO_COM_ERRO, titulo: 'Motivo do erro' }) } },
-      { label: 'Corrigido pelo Dev', icon: <Code2 size={13} />, onClick: () => { setTexto(''); setModalJustificativa({ item, status: S.CORRIGIDO_DEV, titulo: 'Observação da correção' }) } },
+      { label: 'Testado com Erro', icon: <XCircle size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.TESTADO_COM_ERRO, titulo: 'Motivo do erro' }) } },
+      { label: 'Corrigido pelo Dev', icon: <Code2 size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.CORRIGIDO_DEV, titulo: 'Observação da correção' }) } },
       { label: 'Testado OK', icon: <CheckCircle2 size={13} />, onClick: () => mudarStatus(item, S.TESTADO_OK, 'Testado OK') },
       { label: 'Voltar p/ Aguardando Desenvolvimento', icon: <RefreshCw size={13} />, onClick: () => mudarStatus(item, S.EM_ATENDIMENTO, 'Voltou para Em Atendimento') },
       {
@@ -1179,9 +1205,11 @@ export function MapaSolicitacoes() {
         solicitacao={lancamento.item}
         usuarios={devs}
         prefill={prefillIA}
+        focarProjeto={abriuPorFaltaDeProjeto}
         onClose={() => {
           setLancamento({ aberto: false, item: null })
           setPrefillIA(null)
+          setAbriuPorFaltaDeProjeto(false)
         }}
         onSalvo={carregar}
       />

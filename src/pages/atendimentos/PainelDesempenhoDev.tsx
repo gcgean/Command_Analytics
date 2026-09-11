@@ -58,7 +58,7 @@ export function PainelDesempenhoDev({ rotuloStatus }: { rotuloStatus: Record<num
         { rotulo: 'Recebidas no período', valor: String(painel.totais.lancadas), cor: 'text-slate-700 dark:text-slate-300' },
         { rotulo: 'Finalizadas no período', valor: String(painel.totais.finalizadas), cor: 'text-emerald-600 dark:text-emerald-400' },
         { rotulo: 'Em teste agora', valor: String(painel.totais.emTeste), cor: 'text-cyan-600 dark:text-cyan-400' },
-        { rotulo: 'Taxa de entrega', valor: `${painel.totais.taxaConclusao}%`, cor: 'text-blue-600 dark:text-blue-400' },
+        { rotulo: 'Taxa de conclusão', valor: `${painel.totais.taxaConclusao}%`, cor: 'text-blue-600 dark:text-blue-400' },
         { rotulo: 'Voltou com erro', valor: String(painel.totais.testadoComErro), cor: 'text-amber-600 dark:text-amber-400' },
         { rotulo: 'Abertas há +30 dias', valor: String(painel.totais.atrasadas30), cor: 'text-red-600 dark:text-red-400' },
       ]
@@ -85,9 +85,10 @@ export function PainelDesempenhoDev({ rotuloStatus }: { rotuloStatus: Record<num
         <div className="text-center py-12 text-slate-500">
           <p className="font-medium">Escolha o período e clique em "Gerar dashboard".</p>
           <p className="text-sm mt-1">
-            Considera apenas solicitações com desenvolvedor vinculado. "Em teste" e "voltou com erro"
-            são o estado atual da esteira, não recorte do período — a taxa de entrega soma concluídas
-            e em teste, para não penalizar quem entregou perto do fim do período.
+            Considera apenas solicitações com desenvolvedor vinculado. A taxa é finalizadas sobre
+            recebidas, ambas dentro do período — pode passar de 100% quando se fecha mais do que
+            entrou. "Em teste", "voltou com erro" e "abertas há +30 dias" são o estado atual da
+            esteira, não recorte do período.
           </p>
         </div>
       )}
@@ -167,7 +168,8 @@ export function PainelDesempenhoDev({ rotuloStatus }: { rotuloStatus: Record<num
 
             <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
               <h3 className="text-sm font-semibold mb-2 text-slate-800 dark:text-slate-200">
-                Por etapa <span className="font-normal text-slate-400">— no período / no geral</span>
+                Por etapa{' '}
+                <span className="font-normal text-slate-400">— lançadas no período / total geral</span>
               </h3>
               {[...painel.porStatusGeral]
                 .sort((a, b) => b.total - a.total)
