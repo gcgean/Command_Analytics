@@ -51,7 +51,7 @@ const CORES_ETAPA: Record<number, string> = {
   4: 'bg-orange-600 text-white', // Aguardando Análise Dev
   6: 'bg-yellow-500 text-slate-900', // Aguardando Procedimento
   // Paleta customizada pedida pelo usuário (nomes das cores conforme o próprio pediu):
-  2: 'bg-[#A7AF52] text-white', // Aguardando Desenvolvimento — verde menta
+  2: 'bg-[#707070] text-white', // Aguardando Desenvolvimento — cinza
   13: 'bg-[#292566] text-white', // Em Desenvolvimento — azul mar
   9: 'bg-[#3E97AF] text-white', // Aguardando Testes — azul ciano
   10: 'bg-[#2E4053] text-white', // Em Testes — azul mediterrâneo
@@ -68,7 +68,7 @@ const TEXTO_ETAPA: Record<number, string> = {
   3: 'text-cyan-700 dark:text-cyan-400',
   4: 'text-orange-700 dark:text-orange-400',
   6: 'text-yellow-700 dark:text-yellow-500',
-  2: 'text-[#7d8340] dark:text-[#c3ca8c]', // verde menta
+  2: 'text-[#707070] dark:text-[#b0b0b0]', // cinza
   13: 'text-[#292566] dark:text-[#8886c4]', // azul mar
   9: 'text-[#2f7488] dark:text-[#7fc3d6]', // azul ciano
   10: 'text-[#2E4053] dark:text-[#96a5b2]', // azul mediterrâneo
@@ -364,6 +364,19 @@ export function MapaSolicitacoes() {
   const [lancamento, setLancamento] = useState<{ aberto: boolean; item: Solicitacao | null }>({ aberto: false, item: null })
   const [prefillIA, setPrefillIA] = useState<PrefillSolicitacao | null>(null)
   const [abriuPorFaltaDeProjeto, setAbriuPorFaltaDeProjeto] = useState(false)
+
+  // Botão flutuante de Nova Solicitação: aparece só quando o botão do cabeçalho sai da tela.
+  // Observa o próprio botão em vez do scroll, porque a rolagem acontece dentro do layout e não
+  // na janela — ouvir window.scroll nunca dispararia.
+  const botaoNovaRef = useRef<HTMLButtonElement | null>(null)
+  const [mostrarNovaFlutuante, setMostrarNovaFlutuante] = useState(false)
+  useEffect(() => {
+    const alvo = botaoNovaRef.current
+    if (!alvo) return
+    const obs = new IntersectionObserver(([e]) => setMostrarNovaFlutuante(!e.isIntersecting))
+    obs.observe(alvo)
+    return () => obs.disconnect()
+  }, [podeAgir])
   const [pendentes, setPendentes] = useState<SolicitacaoPendenteAtualizacao[]>([])
   const [modalNotas, setModalNotas] = useState(false)
   const [notasTexto, setNotasTexto] = useState('')
@@ -665,7 +678,7 @@ export function MapaSolicitacoes() {
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Atualizar
           </button>
           {podeAgir && (
-            <button className="btn-primary flex items-center gap-2" onClick={() => setLancamento({ aberto: true, item: null })}>
+            <button ref={botaoNovaRef} className="btn-primary flex items-center gap-2" onClick={() => setLancamento({ aberto: true, item: null })}>
               <Plus size={16} /> Nova Solicitação
             </button>
           )}
@@ -1198,6 +1211,17 @@ export function MapaSolicitacoes() {
           </div>
         )}
       </Modal>
+
+      {podeAgir && mostrarNovaFlutuante && !lancamento.aberto && (
+        <button
+          type="button"
+          onClick={() => setLancamento({ aberto: true, item: null })}
+          className="fixed bottom-5 right-[92px] z-40 h-14 px-5 rounded-full shadow-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium flex items-center gap-2 transition-transform hover:scale-105"
+          title="Nova Solicitação"
+        >
+          <Plus size={18} /> Nova Solicitação
+        </button>
+      )}
 
       {/* Lançamento — Novo / Alterar / Finalizar */}
       <LancamentoSolicitacao
