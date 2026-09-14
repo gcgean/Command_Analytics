@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { getUserPermissions } from './grupos'
-import { ProvedorDeepSeek } from '../ia/deepseek'
+import { ProvedorDeepSeek, MSG_IA_LENTA } from '../ia/deepseek'
 import { conversarComAssistente } from '../ia/assistente'
 import { ensureConfiguracaoIA, obterConfigIA, MODELOS_DEEPSEEK } from '../ia/config'
 
@@ -118,6 +118,7 @@ Relato: ${texto.trim().slice(0, 4000)}`
       return { texto: melhorado }
     } catch (e: any) {
       request.log.error(e)
+      if (e?.message === MSG_IA_LENTA) return reply.status(504).send({ error: MSG_IA_LENTA })
       return reply.status(502).send({ error: 'Falha ao consultar a IA. Tente novamente.' })
     }
   })
@@ -151,6 +152,7 @@ Relato: ${texto.trim().slice(0, 4000)}`
       return resultado
     } catch (e: any) {
       request.log.error(e)
+      if (e?.message === MSG_IA_LENTA) return reply.status(504).send({ error: MSG_IA_LENTA })
       return reply.status(502).send({ error: 'Falha ao consultar o assistente de IA. Tente novamente.' })
     }
   })

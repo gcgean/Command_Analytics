@@ -137,7 +137,11 @@ async function fetchWithTimeout(input: string, init: RequestInit, timeoutMs = DE
   }
 }
 
-async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> {
+// Chamadas de IA esperam o provedor (até 90s no backend). O limite padrão de 20s abortava antes,
+// e a pessoa via "tempo limite ao conectar na API" como se o sistema tivesse caído.
+const TIMEOUT_IA_MS = 100_000
+
+async function fetchApi<T>(path: string, options: RequestInit = {}, timeoutMs?: number): Promise<T> {
   const token = getToken()
   const baseHeaders: Record<string, string> = {
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -153,7 +157,7 @@ async function fetchApi<T>(path: string, options: RequestInit = {}): Promise<T> 
         ...baseHeaders,
         ...options.headers,
       },
-    })
+    }, timeoutMs)
   } catch (err: any) {
     if (String(err?.message ?? '').toLowerCase().includes('tempo limite')) {
       throw err
@@ -730,7 +734,7 @@ export const api = {
     fetchApi<{ texto: string; analisadas: number }>('/solicitacoes/dashboard-dev/analise', {
       method: 'POST',
       body: JSON.stringify({ dataInicio, dataFim, desenvolvedorId: desenvolvedorId ?? null }),
-    }),
+    }, TIMEOUT_IA_MS),
   getNotasAtualizacao: (dataInicio: string, dataFim: string) =>
     fetchApi<{ total: number; texto: string }>(`/solicitacoes/notas-atualizacao?dataInicio=${dataInicio}&dataFim=${dataFim}`),
   getSolicitacaoLog: (id: number) =>
@@ -838,13 +842,14 @@ export const api = {
   conversarAssistente: (historico: Array<{ papel: 'user' | 'assistant'; conteudo: string }>) =>
     fetchApi<{ texto: string; proposta: { ferramenta: string; dados: Record<string, any> } | null }>(
       '/assistente/conversar',
-      { method: 'POST', body: JSON.stringify({ historico }) }
+      { method: 'POST', body: JSON.stringify({ historico }) },
+      TIMEOUT_IA_MS
     ),
   melhorarDescricaoIA: (texto: string) =>
     fetchApi<{ texto: string }>('/assistente/melhorar-descricao', {
       method: 'POST',
       body: JSON.stringify({ texto }),
-    }),
+    }, TIMEOUT_IA_MS),
   getAssistenteConfig: () =>
     fetchApi<{ ativo: boolean; modelo: string; temApiKey: boolean; modelosDisponiveis: string[] }>('/assistente/config'),
   updateAssistenteConfig: (data: { ativo?: boolean; modelo?: string; apiKey?: string }) =>

@@ -218,6 +218,33 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
     }
   }
 
+  // Tem algo digitado que se perderia ao fechar? No novo, qualquer dado preenchido; na alteração,
+  // só o que difere do registro. Técnico fica de fora: ele vem preenchido sozinho.
+  const temAlteracaoNaoSalva = editando
+    ? observacoes !== (solicitacao!.observacoes ?? '') ||
+      solucao !== (solicitacao!.solucao ?? '') ||
+      clienteId !== String(solicitacao!.clienteId ?? '') ||
+      projetoId !== String(solicitacao!.projetoId ?? '') ||
+      desenvolvedorId !== String(solicitacao!.desenvolvedorId ?? '')
+    : !!clienteId || !!observacoes.trim() || !!solucao.trim() || anexosNovos.length > 0
+
+  const tentarFechar = () => {
+    if (salvando) return
+    if (temAlteracaoNaoSalva && !window.confirm('Você tem informações não salvas. Sair e descartar?')) return
+    onClose()
+  }
+
+  // Fechar/recarregar a aba do navegador com o lançamento pela metade também pede confirmação.
+  useEffect(() => {
+    if (!aberto || !temAlteracaoNaoSalva) return
+    const avisar = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', avisar)
+    return () => window.removeEventListener('beforeunload', avisar)
+  }, [aberto, temAlteracaoNaoSalva])
+
   const salvar = async () => {
     if (!clienteId) return toast.error('Selecione o cliente.')
     if (!observacoes.trim()) return toast.error('Descreva os dados do atendimento.')
@@ -304,7 +331,8 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
   return (
     <Modal
       isOpen={aberto}
-      onClose={onClose}
+      onClose={tentarFechar}
+      fechavelPorFora={false}
       title={editando ? `Alterar solicitação #${solicitacao!.id}` : 'Nova Solicitação'}
       size="xl"
     >
@@ -515,7 +543,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
 
         {aba === 'atendimento' && (
           <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
-            <button className="btn-secondary" onClick={onClose} disabled={salvando}>Sair</button>
+            <button className="btn-secondary" onClick={tentarFechar} disabled={salvando}>Sair</button>
             <button className="btn-primary flex items-center gap-1" onClick={salvar} disabled={salvando}>
               {salvando ? <Loader2 size={14} className="animate-spin" /> : null}
               {editando ? 'Salvar alterações' : jaFinalizado ? 'Salvar já finalizado' : 'Salvar solicitação'}

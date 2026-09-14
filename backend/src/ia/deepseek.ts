@@ -1,7 +1,11 @@
 import type { ProvedorIA, MensagemIA, FerramentaDeclarada, RespostaIA, ChamadaFerramenta } from './provider'
 
 const MODELO_PADRAO = 'deepseek-chat'
-const TIMEOUT_MS = 30_000
+// O DeepSeek, em horário de pico, segura a requisição na fila mandando só keep-alive — já foi
+// medido passar de 2 minutos até pra uma resposta de uma palavra. 90s cobre a lentidão normal
+// sem deixar a tela pendurada indefinidamente quando o serviço está travado.
+const TIMEOUT_MS = 90_000
+export const MSG_IA_LENTA = 'A IA (DeepSeek) está sobrecarregada e não respondeu a tempo. Tente de novo em alguns minutos.'
 
 function paraFormatoOpenAI(mensagens: MensagemIA[]): any[] {
   return mensagens.map((m) => {
@@ -73,6 +77,11 @@ export class ProvedorDeepSeek implements ProvedorIA {
         : []
 
       return { texto: escolha.content || '', chamadas }
+    } catch (e: any) {
+      if (e?.name === 'AbortError' || String(e?.message ?? '').toLowerCase().includes('aborted')) {
+        throw new Error(MSG_IA_LENTA)
+      }
+      throw e
     } finally {
       clearTimeout(timer)
     }

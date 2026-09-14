@@ -6,7 +6,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      // 'prompt' e não 'autoUpdate': com autoUpdate, todo deploy recarregava sozinho as abas abertas
+      // (checagem a cada 5 min) e fechava o formulário no meio do lançamento. Agora aparece o aviso
+      // "Nova versão disponível" e a pessoa atualiza quando terminar o que está fazendo.
+      registerType: 'prompt',
       includeAssets: ['icon.svg'],
       devOptions: { enabled: true },
       manifest: {
@@ -38,8 +41,10 @@ export default defineConfig({
       },
       workbox: {
         cleanupOutdatedCaches: true,
-        skipWaiting: true,
-        clientsClaim: true,
+        // A versão nova só assume quando a pessoa clica em "Atualizar agora" (o botão manda o
+        // SKIP_WAITING). Assumir sozinha trocaria os arquivos por baixo de uma página já aberta.
+        skipWaiting: false,
+        clientsClaim: false,
         globPatterns: ['**/*.{js,css,html,svg,ico}'],
         navigateFallback: 'index.html',
         runtimeCaching: [

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
 import { CheckCircle, XCircle, AlertTriangle, Info, X } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -108,15 +108,23 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => dismiss(id), 4000)
   }, [dismiss])
 
-  const toast = {
-    success: (message: string) => addToast('success', message),
-    error: (message: string) => addToast('error', message),
-    warning: (message: string) => addToast('warning', message),
-    info: (message: string) => addToast('info', message),
-  }
+  // Precisa ser o MESMO objeto entre renders. Recriado a cada render, qualquer aviso aparecendo
+  // ou sumindo mudava a identidade de `toast` — e telas que o usam como dependência de useCallback
+  // (o carregar() do Mapa de Solicitações) recarregavam a lista inteira sozinhas, de novo a cada
+  // aviso que expirava.
+  const toast = useMemo(
+    () => ({
+      success: (message: string) => addToast('success', message),
+      error: (message: string) => addToast('error', message),
+      warning: (message: string) => addToast('warning', message),
+      info: (message: string) => addToast('info', message),
+    }),
+    [addToast]
+  )
+  const valor = useMemo(() => ({ toast }), [toast])
 
   return (
-    <ToastContext.Provider value={{ toast }}>
+    <ToastContext.Provider value={valor}>
       {children}
       {/* Toast container — bottom-right */}
       <div className="fixed bottom-6 right-6 z-[9999] flex flex-col gap-2 pointer-events-none">

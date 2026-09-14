@@ -15,7 +15,10 @@ const nome = (u: { nomeCompleto?: string | null; nomeUsu?: string | null } | nul
 export async function notificarAtualizacaoSolicitacao(
   atendimentoId: number,
   usuarioAtorId: number,
-  descricao: string
+  descricao: string,
+  // No lançamento só o desenvolvedor precisa saber: quem lançou é o próprio autor, e o técnico
+  // costuma ser ele também.
+  opcoes: { apenasDesenvolvedor?: boolean; rotuloAutor?: string } = {}
 ): Promise<void> {
   try {
     const atendimento = await prisma.atendimento.findUnique({
@@ -32,7 +35,7 @@ export async function notificarAtualizacaoSolicitacao(
     if (!atendimento) return
 
     const candidatos: Array<{ id: number; idTelegram: string | null }> = []
-    if (atendimento.tecnico) candidatos.push(atendimento.tecnico)
+    if (atendimento.tecnico && !opcoes.apenasDesenvolvedor) candidatos.push(atendimento.tecnico)
     if (atendimento.desenvolvedor) candidatos.push(atendimento.desenvolvedor)
     // O formulário externo de demandas cria a solicitação carimbando o usuário 1 como lançador,
     // mesmo sem ninguém ter lançado de fato (65 de 67 registros dele no histórico). Tratar esse
@@ -41,6 +44,7 @@ export async function notificarAtualizacaoSolicitacao(
     const criadoPeloFormulario = (atendimento.observacoes ?? '').includes('DADOS DO SOLICITANTE')
 
     if (
+      !opcoes.apenasDesenvolvedor &&
       !criadoPeloFormulario &&
       atendimento.usuarioLancId &&
       atendimento.usuarioLancId !== atendimento.tecnico?.id &&
@@ -80,8 +84,9 @@ export async function notificarAtualizacaoSolicitacao(
     const titulo = clienteNome
       ? `Solicitação #${atendimentoId} — ${clienteNome}`
       : `Solicitação #${atendimentoId} atualizada`
-    const mensagemPlataforma = `${descricao}\n\n${detalhes}\n\nAlterado por: ${nome(ator)}`
-    const mensagemTelegram = `🔔 Solicitação #${atendimentoId} — ${descricao}\n\n${detalhes}\n\nAlterado por: ${nome(ator)}`
+    const autor = `${opcoes.rotuloAutor ?? 'Alterado por'}: ${nome(ator)}`
+    const mensagemPlataforma = `${descricao}\n\n${detalhes}\n\n${autor}`
+    const mensagemTelegram = `🔔 Solicitação #${atendimentoId} — ${descricao}\n\n${detalhes}\n\n${autor}`
 
     for (const destinatario of destinatarios) {
       // Sino da plataforma: sempre grava, não depende de Telegram estar linkado nem do relay externo.

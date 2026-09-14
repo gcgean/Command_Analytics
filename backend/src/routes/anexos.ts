@@ -6,6 +6,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
+import { registrarAuditoria } from '../utils/auditoria'
 
 type TabelaAnexo = 'agenda' | 'agendamento_programado' | 'cliente_prontuario' | 'banco_de_horas' | 'atendimentos'
 
@@ -145,6 +146,7 @@ export async function anexosRoutes(app: FastifyInstance) {
 
     const uploadsDir = await ensureUploadsDir(tabela)
     let uploadedCount = 0
+    const nomesEnviados: string[] = []
     const existingRows: any[] = await prisma.$queryRaw`
       SELECT COUNT(*) AS c FROM agendamento_anexo WHERE tabela = ${tabela} AND registro_id = ${id}
     `
@@ -193,6 +195,7 @@ export async function anexosRoutes(app: FastifyInstance) {
         `
 
         uploadedCount += 1
+        nomesEnviados.push(originalName)
         totalAfter += 1
       }
     } catch (e: any) {
@@ -206,6 +209,15 @@ export async function anexosRoutes(app: FastifyInstance) {
     if (uploadedCount === 0) {
       return reply.status(400).send({ error: 'Nenhum arquivo enviado (ou tipos não permitidos).' })
     }
+
+    // Registrado na tabela dona do anexo, pra aparecer no Histórico de Auditoria do próprio registro.
+    await registrarAuditoria({
+      tabela,
+      registroId: id,
+      acao: 'ALTERACAO',
+      usuarioId: (request as any).user?.id ? Number((request as any).user.id) : null,
+      dadosDepois: { anexosAdicionados: nomesEnviados.join(', ') },
+    }).catch(() => {})
 
     const rows: any[] = await prisma.$queryRaw`
       SELECT id, tabela, registro_id AS registroId, original_name AS originalName, mime_type AS mimeType, size_bytes AS sizeBytes, created_at AS createdAt
@@ -259,7 +271,7 @@ export async function anexosRoutes(app: FastifyInstance) {
     if (!anexoId) return reply.status(400).send({ error: 'id inválido.' })
 
     const rows: any[] = await prisma.$queryRaw`
-      SELECT id, tabela, stored_name AS storedName
+      SELECT id, tabela, registro_id AS registroId, original_name AS originalName, stored_name AS storedName
       FROM agendamento_anexo
       WHERE id = ${anexoId}
       LIMIT 1
@@ -274,6 +286,13 @@ export async function anexosRoutes(app: FastifyInstance) {
     }
 
     await prisma.$executeRaw`DELETE FROM agendamento_anexo WHERE id = ${anexoId}`
+    await registrarAuditoria({
+      tabela: String(row.tabela),
+      registroId: Number(row.registroId),
+      acao: 'ALTERACAO',
+      usuarioId: (request as any).user?.id ? Number((request as any).user.id) : null,
+      dadosAntes: { anexoRemovido: String(row.originalName) },
+    }).catch(() => {})
     return reply.status(204).send()
   })
 }

@@ -6,7 +6,7 @@ import { getUserPermissions } from './grupos'
 import { registrarAuditoria } from '../utils/auditoria'
 import { notificarAtualizacaoSolicitacao } from '../utils/notificacoesSolicitacoes'
 import { SISTEMAS_VERSAO, type SistemaVersao } from './projetos'
-import { ProvedorDeepSeek } from '../ia/deepseek'
+import { ProvedorDeepSeek, MSG_IA_LENTA } from '../ia/deepseek'
 import { obterConfigIA } from '../ia/config'
 
 /**
@@ -103,6 +103,51 @@ async function comAnexos<T extends { id: number }>(cards: T[]): Promise<Array<T 
   return cards.map((c) => ({ ...c, anexos: porId.get(Number(c.id)) ?? 0 }))
 }
 
+/** Lista legível das diferenças entre o registro antes e os dados gravados na alteração. */
+async function descreverMudancas(antes: Record<string, any>, depois: Record<string, any>): Promise<string[]> {
+  const mudou = (campo: string) =>
+    depois[campo] !== undefined && String(antes[campo] ?? '').trim() !== String(depois[campo] ?? '').trim()
+  const trecho = (t: unknown) => String(t ?? '').replace(/\s+/g, ' ').trim().slice(0, 150) || '(vazio)'
+  const simNao = (v: unknown) => (v === 'S' ? 'sim' : 'não')
+
+  const idsUsuario = ['tecnicoId', 'desenvolvedorId']
+    .flatMap((c) => (mudou(c) ? [antes[c], depois[c]] : []))
+    .filter(Boolean)
+    .map(Number)
+  const idsCliente = mudou('clienteId') ? [antes.clienteId, depois.clienteId].filter(Boolean).map(Number) : []
+  const idsProjeto = mudou('projetoId') ? [antes.projetoId, depois.projetoId].filter(Boolean).map(Number) : []
+
+  const [usuarios, clientes, projetos] = await Promise.all([
+    idsUsuario.length
+      ? prisma.usuario.findMany({ where: { id: { in: idsUsuario } }, select: { id: true, nomeUsu: true, nomeCompleto: true } })
+      : Promise.resolve([]),
+    idsCliente.length
+      ? prisma.cliente.findMany({ where: { id: { in: idsCliente } }, select: { id: true, nome: true } })
+      : Promise.resolve([]),
+    idsProjeto.length
+      ? prisma.projeto.findMany({ where: { id: { in: idsProjeto } }, select: { id: true, nome: true } })
+      : Promise.resolve([]),
+  ])
+  const nomeUsuario = (uid: unknown) =>
+    uid ? nome(usuarios.find((u) => u.id === Number(uid))) ?? `#${uid}` : 'ninguém'
+  const nomeCliente = (cid: unknown) => (cid ? clientes.find((c) => c.id === Number(cid))?.nome ?? `#${cid}` : 'nenhum')
+  const nomeProjeto = (pid: unknown) => (pid ? projetos.find((p) => p.id === Number(pid))?.nome ?? `#${pid}` : 'nenhum')
+
+  const linhas: string[] = []
+  if (mudou('clienteId')) linhas.push(`Cliente: ${nomeCliente(antes.clienteId)} → ${nomeCliente(depois.clienteId)}`)
+  if (mudou('projetoId')) linhas.push(`Projeto: ${nomeProjeto(antes.projetoId)} → ${nomeProjeto(depois.projetoId)}`)
+  if (mudou('tecnicoId')) linhas.push(`Técnico: ${nomeUsuario(antes.tecnicoId)} → ${nomeUsuario(depois.tecnicoId)}`)
+  if (mudou('desenvolvedorId'))
+    linhas.push(`Desenvolvedor: ${nomeUsuario(antes.desenvolvedorId)} → ${nomeUsuario(depois.desenvolvedorId)}`)
+  // 'N' e vazio significam a mesma coisa nesses campos (o Delphi grava um, a tela grava o outro).
+  const mudouFlag = (campo: string) => depois[campo] !== undefined && simNao(antes[campo]) !== simNao(depois[campo])
+  if (mudouFlag('prioritario')) linhas.push(`Urgente: ${simNao(antes.prioritario)} → ${simNao(depois.prioritario)}`)
+  if (mudouFlag('bugSistema')) linhas.push(`Bug do sistema: ${simNao(antes.bugSistema)} → ${simNao(depois.bugSistema)}`)
+  if (mudou('observacoes')) linhas.push(`Descrição alterada. Antes: "${trecho(antes.observacoes)}"`)
+  if (mudou('solucao')) linhas.push(`Solução: "${trecho(depois.solucao)}"`)
+  return linhas
+}
+
 /**
  * Equivalente ao dm.GravaLogdoATendimento do Delphi. A tabela log_atendimento não tem chave
  * primária, então não dá pra modelar no Prisma — vai em SQL puro mesmo.
@@ -159,7 +204,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     if (projetoLista.length) where.projetoId = { in: projetoLista }
     if (clienteId) where.clienteId = Number(clienteId)
     if (busca) where.cliente = { nome: { contains: busca } }
-    if (prioritario === 'true') where.prioritario = 'S'
+    // Bug do sistema também é prioridade (já entra como prioridade A no lançamento).
+    if (prioritario === 'true') where.OR = [{ prioritario: 'S' }, { bugSistema: 'S' }]
 
     const itens = await prisma.atendimento.findMany({
       where,
@@ -188,7 +234,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     if (desenvolvedorLista.length) where.desenvolvedorId = { in: desenvolvedorLista }
     if (projetoLista.length) where.projetoId = { in: projetoLista }
     if (busca) where.cliente = { nome: { contains: busca } }
-    if (prioritario === 'true') where.prioritario = 'S'
+    // Bug do sistema também é prioridade (já entra como prioridade A no lançamento).
+    if (prioritario === 'true') where.OR = [{ prioritario: 'S' }, { bugSistema: 'S' }]
     if (dataInicio || dataFim) {
       where.dataFechamento = {}
       if (dataInicio) where.dataFechamento.gte = new Date(`${dataInicio}T00:00:00`)
@@ -302,7 +349,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     if (desenvolvedorLista.length) where.desenvolvedorId = { in: desenvolvedorLista }
     if (projetoLista.length) where.projetoId = { in: projetoLista }
     if (busca) where.cliente = { nome: { contains: busca } }
-    if (prioritario === 'true') where.prioritario = 'S'
+    // Bug do sistema também é prioridade (já entra como prioridade A no lançamento).
+    if (prioritario === 'true') where.OR = [{ prioritario: 'S' }, { bugSistema: 'S' }]
 
     const concluidas = await prisma.atendimento.findMany({
       where,
@@ -454,6 +502,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       usuarioId,
       dadosDepois: { clienteId: Number(b.clienteId), status, observacoes: String(b.observacoes).slice(0, 500) },
     })
+    void notificarAtualizacaoSolicitacao(criado.id, usuarioId, 'Nova solicitação para você', { apenasDesenvolvedor: true, rotuloAutor: 'Lançado por' })
     return reply.status(201).send({ ok: true, id: criado.id })
   })
 
@@ -490,7 +539,14 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     }
 
     await prisma.atendimento.update({ where: { id: Number(id) }, data: dados })
-    await gravarLog(Number(id), usuarioId, 'Atendimento alterado')
+
+    // O que de fato mudou, em linguagem de gente — vai no log e na notificação. Sem isso quem
+    // recebe só lê "Atendimento alterado" e precisa abrir a tela pra descobrir o quê.
+    const mudancas = await descreverMudancas(atual, dados)
+    const resumo = mudancas.length
+      ? `Atendimento alterado:\n${mudancas.map((m) => `• ${m}`).join('\n')}`
+      : 'Atendimento alterado'
+    await gravarLog(Number(id), usuarioId, resumo.replace(/\n/g, ' '))
     const { dataUltAlteracao, ...dadosAuditados } = dados
     await registrarAuditoria({
       tabela: 'atendimentos',
@@ -500,7 +556,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       dadosAntes: atual,
       dadosDepois: { ...atual, ...dadosAuditados },
     })
-    void notificarAtualizacaoSolicitacao(Number(id), usuarioId, 'Atendimento alterado')
+    // Salvar sem mudar nada não gera aviso.
+    if (mudancas.length) void notificarAtualizacaoSolicitacao(Number(id), usuarioId, resumo)
     return { ok: true }
   })
 
@@ -557,11 +614,13 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     `
     await gravarLog(Number(id), usuarioId, `Procedimento efetuado: ${proc.descricao}`)
     await registrarAuditoria({
-      tabela: 'procedimentos_atendimentos',
+      // Mesmo 'atendimentos' do card: o Histórico de Auditoria filtra por tabela, e com outro nome
+      // o procedimento ficava gravado mas nunca aparecia na timeline da solicitação.
+      tabela: 'atendimentos',
       registroId: Number(id),
-      acao: 'CRIACAO',
+      acao: 'ALTERACAO',
       usuarioId,
-      dadosDepois: { procedimentoId: Number(procedimentoId), descricao: proc.descricao },
+      dadosDepois: { procedimentoAdicionado: proc.descricao },
     })
     return reply.status(201).send({ ok: true })
   })
@@ -577,11 +636,11 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     `
     await gravarLog(Number(id), usuarioId, 'Procedimento removido')
     await registrarAuditoria({
-      tabela: 'procedimentos_atendimentos',
+      tabela: 'atendimentos',
       registroId: Number(id),
-      acao: 'EXCLUSAO',
+      acao: 'ALTERACAO',
       usuarioId,
-      dadosAntes: { procedimentoId: Number(procedimentoId) },
+      dadosAntes: { procedimentoRemovido: Number(procedimentoId) },
     })
     return { ok: true }
   })
@@ -621,13 +680,14 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     }
 
     // Justificativa é o que aparece no log — o Delphi pede ela nesses dois passos.
-    const exigeJustificativa: number[] = [STATUS.TESTADO_COM_ERRO, STATUS.CORRIGIDO_DEV]
+    // Voltar pro desenvolvimento também exige o porquê: é o registro de por que o item regrediu.
+    const exigeJustificativa: number[] = [STATUS.TESTADO_COM_ERRO, STATUS.CORRIGIDO_DEV, STATUS.EM_ATENDIMENTO]
     if (exigeJustificativa.includes(Number(status)) && !observacao?.trim()) {
       return reply.status(400).send({ error: 'Informe a justificativa para essa alteração.' })
     }
 
     const rotulos: Record<number, string> = {
-      [STATUS.EM_ATENDIMENTO]: 'Voltou para Em Atendimento',
+      [STATUS.EM_ATENDIMENTO]: 'Voltou para Aguardando Desenvolvimento',
       [STATUS.AGUARDANDO_ANALISE_DEV]: 'Aguardando Análise do Desenvolvimento',
       [STATUS.EM_ANALISE_DEV]: 'Em Análise pelo Desenvolvimento',
       [STATUS.APROVADO_DEV]: 'Aprovado pelo Desenvolvimento',
@@ -1044,6 +1104,7 @@ Regras:
       return { texto, analisadas: entregues.length, emTeste: emTeste.length, comErro: comErro.length }
     } catch (e: any) {
       request.log.error(e)
+      if (e?.message === MSG_IA_LENTA) return reply.status(504).send({ error: MSG_IA_LENTA })
       return reply.status(502).send({ error: 'Falha ao consultar a IA. Tente novamente.' })
     }
   })

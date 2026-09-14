@@ -356,7 +356,8 @@ export function MapaSolicitacoes() {
   const [modalLog, setModalLog] = useState<Solicitacao | null>(null)
   const [logLinhas, setLogLinhas] = useState<Array<{ obs: string; data: string; usuario: string | null }>>([])
   const [modalDev, setModalDev] = useState<Solicitacao | null>(null)
-  const [modalJustificativa, setModalJustificativa] = useState<{ item: Solicitacao; status: number; titulo: string } | null>(null)
+  // opcional: o campo pode ir vazio (mandar pra teste). Nos demais o motivo é obrigatório.
+  const [modalJustificativa, setModalJustificativa] = useState<{ item: Solicitacao; status: number; titulo: string; opcional?: boolean } | null>(null)
   const [modalCancelar, setModalCancelar] = useState<Solicitacao | null>(null)
   const [modalFinalizar, setModalFinalizar] = useState<Solicitacao | null>(null)
   const [texto, setTexto] = useState('')
@@ -382,8 +383,11 @@ export function MapaSolicitacoes() {
   const [notasTexto, setNotasTexto] = useState('')
   const [carregandoNotas, setCarregandoNotas] = useState(false)
 
-  const carregar = useCallback(() => {
-    setLoading(true)
+  // emSegundoPlano: depois de uma ação num card, busca de novo sem tirar a grade da tela. Os cards
+  // são reconciliados por id, então só o que mudou é redesenhado — a rolagem e o resto ficam onde
+  // estão. O spinner de tela cheia fica só pra troca de aba/filtro, quando a lista é outra mesmo.
+  const carregar = useCallback((opcoes?: { emSegundoPlano?: boolean }) => {
+    if (!opcoes?.emSegundoPlano) setLoading(true)
     if (aba === 'desempenho') {
       setLoading(false)
       return
@@ -483,7 +487,7 @@ export function MapaSolicitacoes() {
     try {
       await fn()
       toast.success(sucesso)
-      carregar()
+      carregar({ emSegundoPlano: true })
       return true
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível concluir a ação.')
@@ -642,13 +646,13 @@ export function MapaSolicitacoes() {
       { label: 'Alterar / Finalizar', icon: <Pencil size={13} />, onClick: () => abrirEdicao(item) },
       { label: 'Vincular Dev', icon: <UserPlus size={13} />, onClick: () => setModalDev(item) },
       { label: 'Em Desenvolvimento', icon: <Code2 size={13} />, onClick: () => mudarStatus(item, S.EM_DESENVOLVIMENTO, 'Em Desenvolvimento') },
-      { label: 'Aguardando Testes', icon: <FlaskConical size={13} />, onClick: () => mudarStatus(item, S.AGUARDANDO_TESTES, 'Aguardando Testes') },
+      { label: 'Aguardando Testes', icon: <FlaskConical size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.AGUARDANDO_TESTES, titulo: 'Enviar para testes — observação para o teste', opcional: true }) } },
       { label: 'Aguardando Análise Dev', icon: <AlertTriangle size={13} />, onClick: () => mudarStatus(item, S.AGUARDANDO_ANALISE_DEV, 'Aguardando Análise do Dev') },
       { label: 'Em Testes', icon: <FlaskConical size={13} />, onClick: () => mudarStatus(item, S.EM_TESTES, 'Em Testes') },
       { label: 'Testado com Erro', icon: <XCircle size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.TESTADO_COM_ERRO, titulo: 'Motivo do erro' }) } },
       { label: 'Corrigido pelo Dev', icon: <Code2 size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.CORRIGIDO_DEV, titulo: 'Observação da correção' }) } },
       { label: 'Testado OK', icon: <CheckCircle2 size={13} />, onClick: () => mudarStatus(item, S.TESTADO_OK, 'Testado OK') },
-      { label: 'Voltar p/ Aguardando Desenvolvimento', icon: <RefreshCw size={13} />, onClick: () => mudarStatus(item, S.EM_ATENDIMENTO, 'Voltou para Em Atendimento') },
+      { label: 'Voltar p/ Aguardando Desenvolvimento', icon: <RefreshCw size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.EM_ATENDIMENTO, titulo: 'Voltar para o desenvolvimento — por que está voltando?' }) } },
       {
         label: item.prioritario === 'S' ? 'Remover Prioritário' : 'Marcar como Prioritário',
         icon: <Star size={13} />,
@@ -674,7 +678,7 @@ export function MapaSolicitacoes() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="btn-secondary flex items-center gap-2" onClick={carregar} disabled={loading}>
+          <button className="btn-secondary flex items-center gap-2" onClick={() => carregar()} disabled={loading}>
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Atualizar
           </button>
           {podeAgir && (
@@ -889,7 +893,7 @@ export function MapaSolicitacoes() {
             </div>
             <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 px-1 h-[38px]">
               <input type="checkbox" checked={filtroPrioritario} onChange={(e) => setFiltroPrioritario(e.target.checked)} />
-              Só prioritárias
+              Só prioritárias e bugs
             </label>
       </div>
 
@@ -973,7 +977,7 @@ export function MapaSolicitacoes() {
               return (
                 <div
                   key={item.id}
-                  className="group relative"
+                  className="group relative h-full"
                 >
                   {/* Tooltip com a reclamação — mesma informação do "Exibir Detalhes", só que ao passar o mouse.
                       Escondido enquanto o menu de ações deste card está aberto, pra não sobrepor os itens. */}
@@ -997,12 +1001,14 @@ export function MapaSolicitacoes() {
                     onDoubleClick={() => aoClicarDuasVezes(item)}
                     onKeyDown={(e) => { if (e.key === 'Enter') setModalDetalhes(item) }}
                     title="1 clique: detalhes · 2 cliques: editar"
-                    className="cursor-pointer rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden group-hover:border-slate-300 dark:group-hover:border-slate-600 transition-colors"
+                    className="h-full flex flex-col cursor-pointer rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 overflow-hidden group-hover:border-slate-300 dark:group-hover:border-slate-600 transition-colors"
                   >
-                  <div className="p-1.5">
+                  {/* Todas as linhas abaixo reservam espaço mesmo vazias: sem isso cada card tinha a
+                      altura do que tinha preenchido (projeto, curva, nome em 2 linhas) e a grade ficava torta. */}
+                  <div className="p-1.5 flex-1">
                     <div className="flex items-start justify-between gap-1">
                       <p
-                        className="text-[10px] font-bold uppercase leading-tight line-clamp-2 flex-1"
+                        className="text-[10px] font-bold uppercase leading-tight line-clamp-2 flex-1 min-h-[2.5em]"
                         title={item.clienteNome}
                       >
                         <span className={item.atrasado ? 'text-red-600 dark:text-red-400' : (TEXTO_ETAPA[item.status] ?? 'text-slate-700 dark:text-slate-300')}>
@@ -1061,7 +1067,7 @@ export function MapaSolicitacoes() {
                       {ROTULO_STATUS[item.status]}
                     </p>
 
-                    <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-500">
+                    <div className="flex items-center justify-center gap-1.5 text-[9px] text-slate-500 h-3.5">
                       {item.clienteCurva && <span className="font-bold">{item.clienteCurva}</span>}
                       {item.somenteOrientacao === 'S' && (
                         <span className="text-amber-600 dark:text-amber-400 font-medium">orientação</span>
@@ -1070,17 +1076,18 @@ export function MapaSolicitacoes() {
                         <span className="text-red-600 dark:text-red-400 font-medium">{item.diasParado}d</span>
                       )}
                     </div>
-                    {item.projetoNome && (
-                      <p className="flex items-center justify-center gap-1 text-[9px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
-                        <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.projetoCor || '#64748b' }} />
-                        {item.projetoNome}
-                      </p>
-                    )}
-                    {(item.dataAtendimento ?? item.dataAbertura) && (
-                      <p className="text-center text-[9px] text-slate-400 dark:text-slate-500 mt-0.5">
-                        {new Date(item.dataAtendimento ?? item.dataAbertura!).toLocaleDateString('pt-BR')}
-                      </p>
-                    )}
+                    <p className="flex items-center justify-center gap-1 text-[9px] text-slate-400 dark:text-slate-500 truncate mt-0.5 h-3.5">
+                      {item.projetoNome && (
+                        <>
+                          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.projetoCor || '#64748b' }} />
+                          {item.projetoNome}
+                        </>
+                      )}
+                    </p>
+                    <p className="text-center text-[9px] text-slate-400 dark:text-slate-500 mt-0.5 h-3.5">
+                      {(item.dataAtendimento ?? item.dataAbertura) &&
+                        new Date(item.dataAtendimento ?? item.dataAbertura!).toLocaleDateString('pt-BR')}
+                    </p>
                   </div>
 
                   <div className={clsx(
@@ -1246,7 +1253,7 @@ export function MapaSolicitacoes() {
           setPrefillIA(null)
           setAbriuPorFaltaDeProjeto(false)
         }}
-        onSalvo={carregar}
+        onSalvo={() => carregar({ emSegundoPlano: true })}
       />
 
       {/* Histórico de auditoria — mesmo componente padrão usado em Agenda/Pipeline */}
@@ -1304,7 +1311,8 @@ export function MapaSolicitacoes() {
         </div>
       </Modal>
 
-      {/* Justificativa (Testado com Erro / Corrigido pelo Dev) */}
+      {/* Observação da troca de etapa: obrigatória em Testado com Erro, Corrigido pelo Dev e ao voltar
+          pro desenvolvimento; opcional ao mandar pra teste. Vai pro log e pra notificação. */}
       <Modal
         isOpen={!!modalJustificativa}
         onClose={() => setModalJustificativa(null)}
@@ -1313,7 +1321,8 @@ export function MapaSolicitacoes() {
         <div className="space-y-3">
           <textarea
             className="input w-full h-32 resize-none"
-            placeholder="Descreva..."
+            placeholder={modalJustificativa?.opcional ? 'Observação para quem vai testar (opcional)' : 'Descreva o motivo...'}
+            autoFocus
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
           />
@@ -1321,7 +1330,7 @@ export function MapaSolicitacoes() {
             <button className="btn-secondary" onClick={() => setModalJustificativa(null)}>Cancelar</button>
             <button
               className="btn-primary"
-              disabled={!texto.trim() || salvando}
+              disabled={(!modalJustificativa?.opcional && !texto.trim()) || salvando}
               onClick={async () => {
                 const m = modalJustificativa!
                 const ok = await executar(
