@@ -223,7 +223,6 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
     if (!observacoes.trim()) return toast.error('Descreva os dados do atendimento.')
     if (!editando && !desenvolvedorId) return toast.error('Selecione o desenvolvedor responsável.')
     if (!projetoId) return toast.error('Informe o projeto da solicitação.')
-    if (!editando && jaFinalizado && !solucao.trim()) return toast.error('Descreva a solução pra marcar como finalizado.')
 
     setSalvando(true)
     try {
@@ -282,7 +281,6 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
   }
 
   const finalizar = async () => {
-    if (!solucao.trim()) return toast.error('Descreva a solução antes de finalizar.')
     setSalvando(true)
     try {
       await api.finalizarSolicitacao(solicitacao!.id, solucao)
@@ -421,7 +419,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
                   {jaFinalizado && (
                     <textarea
                       className="input w-full h-20 resize-none mt-2 text-xs"
-                      placeholder="Descreva a solução aplicada..."
+                      placeholder="Descreva a solução aplicada... (opcional)"
                       value={solucao}
                       onChange={(e) => setSolucao(e.target.value)}
                     />
@@ -508,7 +506,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
               Finalizar marca a solicitação como concluída e carimba a data de finalização.
             </p>
             <div className="flex justify-end">
-              <button className="btn-primary" disabled={!solucao.trim() || salvando} onClick={finalizar}>
+              <button className="btn-primary" disabled={salvando} onClick={finalizar}>
                 {salvando ? <Loader2 size={14} className="animate-spin" /> : null} Finalizar atendimento
               </button>
             </div>

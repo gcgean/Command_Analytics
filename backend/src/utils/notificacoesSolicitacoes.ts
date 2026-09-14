@@ -34,7 +34,14 @@ export async function notificarAtualizacaoSolicitacao(
     const candidatos: Array<{ id: number; idTelegram: string | null }> = []
     if (atendimento.tecnico) candidatos.push(atendimento.tecnico)
     if (atendimento.desenvolvedor) candidatos.push(atendimento.desenvolvedor)
+    // O formulário externo de demandas cria a solicitação carimbando o usuário 1 como lançador,
+    // mesmo sem ninguém ter lançado de fato (65 de 67 registros dele no histórico). Tratar esse
+    // carimbo como "quem lançou" fazia o dono do usuário 1 receber aviso de tudo que o técnico
+    // mexia. Nesses registros, só técnico e desenvolvedor são avisados.
+    const criadoPeloFormulario = (atendimento.observacoes ?? '').includes('DADOS DO SOLICITANTE')
+
     if (
+      !criadoPeloFormulario &&
       atendimento.usuarioLancId &&
       atendimento.usuarioLancId !== atendimento.tecnico?.id &&
       atendimento.usuarioLancId !== atendimento.desenvolvedor?.id
