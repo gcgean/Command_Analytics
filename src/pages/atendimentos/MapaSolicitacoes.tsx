@@ -1012,20 +1012,31 @@ export function MapaSolicitacoes() {
                       <div className="flex items-center gap-0.5 flex-shrink-0">
                         {!!item.anexos && (
                           <span
-                            className="flex items-center text-slate-400 dark:text-slate-500"
+                            className="flex items-center gap-0.5 rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 px-1 py-0.5 text-[10px] font-bold"
                             title={`${item.anexos} anexo(s)`}
                             aria-label={`${item.anexos} anexo(s)`}
                           >
-                            <Paperclip size={11} />
+                            <Paperclip size={14} strokeWidth={2.5} />
+                            {item.anexos > 1 && item.anexos}
                           </span>
                         )}
                         {item.bugSistema === 'S' && (
-                          <span className="flex items-center text-red-500" title="Bug do sistema" aria-label="Bug do sistema">
-                            <Bug size={12} />
+                          <span
+                            className="flex items-center rounded-md bg-red-100 dark:bg-red-500/20 text-red-600 dark:text-red-400 p-0.5"
+                            title="Bug do sistema"
+                            aria-label="Bug do sistema"
+                          >
+                            <Bug size={15} strokeWidth={2.5} />
                           </span>
                         )}
                         {item.prioritario === 'S' && (
-                          <AlertTriangle size={12} className="text-red-600 fill-red-100 dark:fill-red-950" aria-label="Prioritário / urgente" />
+                          <span
+                            className="flex items-center rounded-md bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400 p-0.5"
+                            title="Prioritário / urgente"
+                            aria-label="Prioritário / urgente"
+                          >
+                            <AlertTriangle size={15} strokeWidth={2.5} />
+                          </span>
                         )}
                         <button
                           type="button"

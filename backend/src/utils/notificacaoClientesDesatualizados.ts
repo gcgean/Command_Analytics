@@ -1,13 +1,31 @@
 import { prisma } from '../database/client'
 import { TelegramService } from '../services/telegram'
 import { SISTEMAS_VERSAO, type SistemaVersao } from '../routes/projetos'
+import { registrarNotificacao } from './notificacoesAgendamento'
 
 const HORARIO_ENVIO = '08:00'
 const INTERVALO_MS = 10 * 60 * 1000
 const STATUS_CONCLUIDO = 7
 
 let handle: ReturnType<typeof setInterval> | null = null
-let ultimoEnvio: string | null = null
+let rodando = false
+
+function hojeLocal(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Chave por técnico e por dia, gravada no banco. Assim reiniciar o backend não reenvia, e se o
+// envio falhar pra um técnico só ele é tentado de novo — quem já recebeu não recebe duas vezes.
+const chaveDoDia = (tecnicoId: number, dia: string) => `clientes_desatualizados:telegram:usuario-${tecnicoId}:${dia}`
+
+async function jaEnviadoHoje(chave: string, tecnicoId: number): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ total: bigint | number }>>`
+    SELECT COUNT(*) AS total FROM notificacao_agendamento
+     WHERE chave_evento = ${chave} AND canal = 'telegram' AND usuario_id = ${tecnicoId}
+  `
+  return Number(rows[0]?.total ?? 0) > 0
+}
 
 /** Compara "6.57.3.0" numericamente — como texto, "6.9" sairia maior que "6.57". */
 function compararVersao(a: string, b: string): number {
@@ -103,11 +121,14 @@ export async function enviarResumoClientesDesatualizados(): Promise<{ tecnicos: 
     select: { id: true, idTelegram: true, nomeCompleto: true, nomeUsu: true },
   })
 
+  const dia = hojeLocal()
   let enviados = 0
   for (const tecnico of tecnicos) {
     if (!tecnico.idTelegram) continue
     const pendencias = porTecnico.get(tecnico.id) ?? []
     if (!pendencias.length) continue
+    const chave = chaveDoDia(tecnico.id, dia)
+    if (await jaEnviadoHoje(chave, tecnico.id)) continue
 
     // Telegram corta em 4096 caracteres — lista longa vira "e mais N".
     const linhas = pendencias.slice(0, 25).map(
@@ -121,31 +142,42 @@ export async function enviarResumoClientesDesatualizados(): Promise<{ tecnicos: 
       (restante > 0 ? `\n\n…e mais ${restante}. Veja a lista completa em Mapa de Solicitações › Clientes a atualizar.` : '')
 
     const envio = await TelegramService.enviar({ userId: tecnico.idTelegram, mensagem })
-    if (envio.success) enviados += 1
-    else console.warn(`⚠ Falha ao enviar resumo de atualizações para ${tecnico.id}:`, envio.error)
+    if (!envio.success) {
+      console.warn(`⚠ Falha ao enviar resumo de atualizações para ${tecnico.id}:`, envio.error)
+      continue
+    }
+    await registrarNotificacao({
+      usuarioId: tecnico.id,
+      canal: 'telegram',
+      tipo: 'clientes_desatualizados',
+      chaveEvento: chave,
+      titulo: `Clientes a atualizar (${pendencias.length})`,
+      mensagem: mensagem.slice(0, 1000),
+    })
+    enviados += 1
   }
   return { tecnicos: porTecnico.size, enviados }
 }
 
 /**
- * Verifica a cada 10 minutos se já passou do horário de envio e se ainda não enviou hoje. O
- * controle é em memória (reseta em restart), mesmo padrão dos outros agendadores do projeto —
- * o pior caso de um restart no horário é um resumo repetido, não um resumo perdido.
+ * Verifica a cada 10 minutos se já passou do horário de envio. Quem já recebeu hoje é checado no
+ * banco (chaveDoDia), então reinício do backend não dispara de novo.
  */
 export function startClientesDesatualizadosScheduler(): void {
   if (handle) return
   const tick = async () => {
     const agora = new Date()
-    const hoje = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`
     const horaAtual = `${String(agora.getHours()).padStart(2, '0')}:${String(agora.getMinutes()).padStart(2, '0')}`
-    if (ultimoEnvio === hoje || horaAtual < HORARIO_ENVIO) return
+    if (rodando || horaAtual < HORARIO_ENVIO) return
 
-    ultimoEnvio = hoje
+    rodando = true
     try {
       const r = await enviarResumoClientesDesatualizados()
       if (r.enviados) console.log(`✓ Resumo de clientes a atualizar enviado para ${r.enviados} técnico(s)`)
     } catch (e) {
       console.warn('⚠ Falha ao enviar resumo de clientes a atualizar:', e)
+    } finally {
+      rodando = false
     }
   }
   handle = setInterval(() => void tick(), INTERVALO_MS)
