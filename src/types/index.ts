@@ -61,6 +61,9 @@ export interface SolicitacaoPendenteAtualizacao extends Solicitacao {
   versaoInstalada: string
   versaoEntrega: string
   dataEntrega: string | null
+  clienteCnpj: string | null
+  /** Pasta de onde veio a versão comparada (a de versão mais nova do cliente). */
+  pastaCliente: string | null
 }
 
 export interface DashboardDevLinha {

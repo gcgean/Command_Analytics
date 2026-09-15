@@ -348,7 +348,11 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     const concluidas = await prisma.atendimento.findMany({
       where,
       // Igual ao card, mas precisa também de qual versão o projeto acompanha.
-      include: { ...INCLUDE_CARD, projeto: { select: { id: true, nome: true, cor: true, sistemaVersao: true } } },
+      include: {
+        ...INCLUDE_CARD,
+        cliente: { select: { id: true, nome: true, curvaABC: true, telefone: true, cnpj: true } },
+        projeto: { select: { id: true, nome: true, cor: true, sistemaVersao: true } },
+      },
       orderBy: { dataFechamento: 'desc' },
       take: 1000,
     })
@@ -379,7 +383,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       if (!entrega) return []
 
       const instalada = porCliente.get(a.clienteId)?.[sistema]
-      const instaladaTexto = instalada ? String(instalada).trim() : ''
+      const instaladaTexto = instalada?.versao ?? ''
       if (!instaladaTexto) return []
       if (compararVersao(instaladaTexto, entrega.versao) >= 0) return []
 
@@ -388,6 +392,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
         sistema,
         sistemaLabel: SISTEMAS_VERSAO[sistema].label,
         versaoInstalada: instaladaTexto,
+        clienteCnpj: a.cliente?.cnpj ?? null,
+        pastaCliente: instalada?.pasta || null,
         versaoEntrega: entrega.versao,
         dataEntrega: entrega.data,
       }]

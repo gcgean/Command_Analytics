@@ -953,7 +953,15 @@ export function MapaSolicitacoes() {
                       className="hover:bg-slate-50 dark:hover:bg-slate-800/40 cursor-pointer"
                       onClick={() => setModalDetalhes(p)}
                     >
-                      <td className="px-3 py-2 font-medium text-slate-800 dark:text-slate-200">{p.clienteNome}</td>
+                      <td className="px-3 py-2">
+                        <p className="font-medium text-slate-800 dark:text-slate-200">{p.clienteNome}</p>
+                        {p.clienteCnpj && <p className="text-xs text-slate-500">CNPJ {p.clienteCnpj}</p>}
+                        {p.pastaCliente && (
+                          <p className="text-[11px] text-slate-400 break-all" title="Pasta de onde veio a versão comparada">
+                            📁 {p.pastaCliente}
+                          </p>
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-slate-600 dark:text-slate-400">#{p.id}</td>
                       <td className="px-3 py-2 text-slate-600 dark:text-slate-400">
                         {p.projetoNome} <span className="text-slate-400">· {p.sistemaLabel}</span>

@@ -35,6 +35,8 @@ interface Pendencia {
   projetoNome: string
   versaoInstalada: string
   versaoEntrega: string
+  cnpj: string | null
+  pasta: string | null
 }
 
 /**
@@ -52,7 +54,7 @@ export async function levantarPendenciasPorTecnico(): Promise<Map<number, Penden
     },
     select: {
       id: true, clienteId: true, tecnicoId: true, dataFechamento: true,
-      cliente: { select: { nome: true } },
+      cliente: { select: { nome: true, cnpj: true } },
       projeto: { select: { nome: true, sistemaVersao: true } },
     },
     orderBy: { dataFechamento: 'desc' },
@@ -80,7 +82,8 @@ export async function levantarPendenciasPorTecnico(): Promise<Map<number, Penden
     )
     if (!entrega) continue
 
-    const instalada = String(porCliente.get(a.clienteId)?.[sistema] ?? '').trim()
+    const infoCliente = porCliente.get(a.clienteId)?.[sistema]
+    const instalada = infoCliente?.versao ?? ''
     if (!instalada || compararVersao(instalada, entrega.versao) >= 0) continue
 
     const lista = porTecnico.get(a.tecnicoId) ?? []
@@ -89,6 +92,8 @@ export async function levantarPendenciasPorTecnico(): Promise<Map<number, Penden
       clienteNome: a.cliente?.nome?.trim() || `cliente #${a.clienteId}`,
       projetoNome: a.projeto?.nome ?? 'sem projeto',
       versaoInstalada: instalada,
+      cnpj: a.cliente?.cnpj ?? null,
+      pasta: infoCliente?.pasta || null,
       versaoEntrega: entrega.versao,
     })
     porTecnico.set(a.tecnicoId, lista)
@@ -117,7 +122,10 @@ export async function enviarResumoClientesDesatualizados(): Promise<{ tecnicos: 
 
     // Telegram corta em 4096 caracteres — lista longa vira "e mais N".
     const linhas = pendencias.slice(0, 25).map(
-      (p) => `• ${p.clienteNome} (#${p.atendimentoId})\n   ${p.projetoNome}: tem ${p.versaoInstalada}, precisa ${p.versaoEntrega}`,
+      (p) =>
+        `• ${p.clienteNome} (#${p.atendimentoId})${p.cnpj ? ` · CNPJ ${p.cnpj}` : ''}\n` +
+        `   ${p.projetoNome}: tem ${p.versaoInstalada}, precisa ${p.versaoEntrega}` +
+        (p.pasta ? `\n   Pasta: ${p.pasta}` : ''),
     )
     const restante = pendencias.length - linhas.length
     const mensagem =

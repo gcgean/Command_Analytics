@@ -1,6 +1,7 @@
 import { prisma } from '../database/client'
 
-export type VersoesInstaladas = { RETAGUARDA: string; PDV: string; CONNECTION: string }
+export type InfoSistemaCliente = { versao: string; pasta: string }
+export type VersoesInstaladas = Record<'RETAGUARDA' | 'PDV' | 'CONNECTION', InfoSistemaCliente>
 
 /**
  * Versão instalada de cada cliente: em cada sistema, a MAIOR versão entre todas as pastas dele.
@@ -15,9 +16,9 @@ export async function versoesMaisNovasDoCliente(clienteIds: number[]): Promise<M
   if (!clienteIds.length) return resultado
 
   const linhas = await prisma.$queryRawUnsafe<
-    Array<{ clienteId: number; RETAGUARDA: string | null; PDV: string | null; CONNECTION: string | null }>
+    Array<{ clienteId: number; pasta: string | null; RETAGUARDA: string | null; PDV: string | null; CONNECTION: string | null }>
   >(
-    `SELECT cod_cli AS clienteId,
+    `SELECT cod_cli AS clienteId, PASTA_BACKUP_FTP AS pasta,
             versao_exe_retaguarda AS RETAGUARDA, versao_exe_pdv AS PDV, versao_exe_connection AS CONNECTION
        FROM dados_gerais_clientes
       WHERE cod_cli IN (${clienteIds.map(() => '?').join(',')})`,
@@ -26,10 +27,14 @@ export async function versoesMaisNovasDoCliente(clienteIds: number[]): Promise<M
 
   for (const l of linhas) {
     const id = Number(l.clienteId)
-    const atual = resultado.get(id) ?? { RETAGUARDA: '', PDV: '', CONNECTION: '' }
+    const vazio = () => ({ versao: '', pasta: '' })
+    const atual = resultado.get(id) ?? { RETAGUARDA: vazio(), PDV: vazio(), CONNECTION: vazio() }
     for (const sistema of ['RETAGUARDA', 'PDV', 'CONNECTION'] as const) {
       const v = String(l[sistema] ?? '').trim()
-      if (v && (!atual[sistema] || compararVersao(v, atual[sistema]) > 0)) atual[sistema] = v
+      // A pasta vai junto da versão escolhida, pra tela mostrar exatamente de onde veio o número.
+      if (v && (!atual[sistema].versao || compararVersao(v, atual[sistema].versao) > 0)) {
+        atual[sistema] = { versao: v, pasta: String(l.pasta ?? '').trim() }
+      }
     }
     resultado.set(id, atual)
   }
