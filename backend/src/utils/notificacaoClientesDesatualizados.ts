@@ -2,6 +2,7 @@ import { prisma } from '../database/client'
 import { TelegramService } from '../services/telegram'
 import { SISTEMAS_VERSAO, type SistemaVersao } from '../routes/projetos'
 import { registrarNotificacao } from './notificacoesAgendamento'
+import { compararVersao, versoesMaisNovasDoCliente } from './versaoInstaladaCliente'
 
 const HORARIO_ENVIO = '08:00'
 const INTERVALO_MS = 10 * 60 * 1000
@@ -27,16 +28,6 @@ async function jaEnviadoHoje(chave: string, tecnicoId: number): Promise<boolean>
   return Number(rows[0]?.total ?? 0) > 0
 }
 
-/** Compara "6.57.3.0" numericamente — como texto, "6.9" sairia maior que "6.57". */
-function compararVersao(a: string, b: string): number {
-  const pa = a.split('.').map((n) => Number(n) || 0)
-  const pb = b.split('.').map((n) => Number(n) || 0)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
-    if (diff !== 0) return diff < 0 ? -1 : 1
-  }
-  return 0
-}
 
 interface Pendencia {
   atendimentoId: number
@@ -77,13 +68,7 @@ export async function levantarPendenciasPorTecnico(): Promise<Map<number, Penden
 
   const clienteIds = [...new Set(concluidas.map((a) => a.clienteId).filter(Boolean) as number[])]
   if (!clienteIds.length) return new Map()
-  const instaladas = await prisma.$queryRawUnsafe<Array<Record<string, any>>>(
-    `SELECT cod_cli AS clienteId, versao_exe_retaguarda AS RETAGUARDA,
-            versao_exe_pdv AS PDV, versao_exe_connection AS CONNECTION
-       FROM dados_gerais_clientes WHERE cod_cli IN (${clienteIds.map(() => '?').join(',')})`,
-    ...clienteIds,
-  )
-  const porCliente = new Map(instaladas.map((r) => [Number(r.clienteId), r]))
+  const porCliente = await versoesMaisNovasDoCliente(clienteIds)
 
   const porTecnico = new Map<number, Pendencia[]>()
   for (const a of concluidas) {

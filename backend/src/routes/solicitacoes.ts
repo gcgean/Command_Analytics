@@ -6,22 +6,11 @@ import { getUserPermissions } from './grupos'
 import { registrarAuditoria } from '../utils/auditoria'
 import { notificarAtualizacaoSolicitacao } from '../utils/notificacoesSolicitacoes'
 import { SISTEMAS_VERSAO, type SistemaVersao } from './projetos'
+import { compararVersao, versoesMaisNovasDoCliente } from '../utils/versaoInstaladaCliente'
 import { ProvedorDeepSeek, MSG_IA_LENTA } from '../ia/deepseek'
 import { obterConfigIA } from '../ia/config'
 
-/**
- * Compara versões no formato "6.57.3.0". Comparar como texto erraria feio ("6.9" > "6.57"), então
- * cada segmento vira número. Segmento faltando conta como zero.
- */
-function compararVersao(a: string, b: string): number {
-  const pa = a.split('.').map((n) => Number(n) || 0)
-  const pb = b.split('.').map((n) => Number(n) || 0)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const diff = (pa[i] ?? 0) - (pb[i] ?? 0)
-    if (diff !== 0) return diff < 0 ? -1 : 1
-  }
-  return 0
-}
+
 
 // Códigos de Status_Atendimento — contrato com o sistema Delphi legado (UMapaAtendimentos.pas,
 // combo CbSituacao). Não existe status 15. Alterar esses números quebra o fluxo real de
@@ -377,13 +366,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
     // Versão instalada em cada cliente (tabela legada, sem modelo Prisma).
     const clienteIds = [...new Set(concluidas.map((a) => a.clienteId).filter(Boolean) as number[])]
-    const instaladas = await prisma.$queryRawUnsafe<Array<Record<string, any>>>(
-      `SELECT cod_cli AS clienteId, versao_exe_retaguarda AS RETAGUARDA,
-              versao_exe_pdv AS PDV, versao_exe_connection AS CONNECTION
-         FROM dados_gerais_clientes WHERE cod_cli IN (${clienteIds.map(() => '?').join(',') || 'NULL'})`,
-      ...clienteIds,
-    )
-    const porCliente = new Map(instaladas.map((r) => [Number(r.clienteId), r]))
+    // Maior versão entre as pastas de cada cliente — ver versaoInstaladaCliente.ts.
+    const porCliente = await versoesMaisNovasDoCliente(clienteIds)
 
     const pendentes = concluidas.flatMap((a) => {
       const sistema = a.projeto?.sistemaVersao as SistemaVersao | null | undefined
