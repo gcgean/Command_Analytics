@@ -34,14 +34,20 @@ function guardarUltimoDesenvolvedor(valor: string): void {
   }
 }
 
-// Status oferecidos na abertura, iguais aos radios do lançamento legado.
+// Status oferecidos na abertura: as mesmas etapas do filtro do Mapa, pra dar pra lançar direto em
+// qualquer ponto do fluxo (ex.: algo que já está em desenvolvimento ou em teste).
 const STATUS_ABERTURA: Array<[number, string]> = [
   [1, 'Em Fila'],
   [2, 'Aguardando Desenvolvimento'],
   [3, 'Aguardando Cliente'],
-  [4, 'Aguardando Análise do Desenvolvimento'],
   [6, 'Aguardando Procedimento do Suporte'],
-  [9, 'Aguardando Testes do desenvolvimento'],
+  [4, 'Aguardando Análise do Desenvolvimento'],
+  [13, 'Em Desenvolvimento'],
+  [9, 'Aguardando Testes'],
+  [10, 'Em Testes'],
+  [17, 'Testado com Erro'],
+  [16, 'Corrigido pelo Dev'],
+  [11, 'Testado OK'],
 ]
 
 /** Rascunho vindo do assistente de IA — a pessoa ainda confere e edita tudo antes de salvar. */

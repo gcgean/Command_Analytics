@@ -51,6 +51,10 @@ export const STATUS_TESTES = [9, 10, 11, 16, 17]
 // Aba única "Backlog de Desenvolvimento" — os filtros da tela substituem a antiga aba separada
 // de testes, então por padrão mostra as duas frentes juntas.
 const STATUS_BACKLOG = Array.from(new Set([...STATUS_SUPORTE, ...STATUS_TESTES]))
+// "Aguardando Análise Dev" vem junto na carga pra poder ser filtrada, contada e achada na busca —
+// mas a tela esconde essa etapa na visão "Todas as etapas": são quase 200 cards herdados do Delphi,
+// abertos há mais de um ano, que entupiriam o Backlog. Sem isso, card movido pra ela sumia de vez.
+const STATUS_MAPA = [...STATUS_BACKLOG, STATUS.AGUARDANDO_ANALISE_DEV]
 
 // Status em que o atendimento fica "parado esperando alguém" — passando de 3 dias nesse
 // estado o Delphi pinta o card de vermelho.
@@ -198,7 +202,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     const desenvolvedorLista = paraLista(desenvolvedorId)
     const projetoLista = paraLista(projetoId)
 
-    const where: Record<string, any> = { status: { in: statusLista.length ? statusLista : STATUS_BACKLOG } }
+    const where: Record<string, any> = { status: { in: statusLista.length ? statusLista : STATUS_MAPA } }
     if (tecnicoLista.length) where.tecnicoId = { in: tecnicoLista }
     if (desenvolvedorLista.length) where.desenvolvedorId = { in: desenvolvedorLista }
     if (projetoLista.length) where.projetoId = { in: projetoLista }
@@ -459,8 +463,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     if (!b.desenvolvedorId) return reply.status(400).send({ error: 'Selecione o desenvolvedor responsável.' })
     if (!b.projetoId) return reply.status(400).send({ error: 'Informe o projeto da solicitação.' })
 
-    // Mesmas opções de abertura que o Delphi oferece no lançamento.
-    const statusAbertura: number[] = [1, 2, 3, 4, 6, 9]
+    // Todas as etapas do fluxo de desenvolvimento — dá pra lançar direto no ponto em que o item está.
+    const statusAbertura: number[] = [1, 2, 3, 4, 6, 9, 10, 11, 13, 16, 17]
     const status = Number(b.status ?? STATUS.EM_ATENDIMENTO)
     if (!statusAbertura.includes(status)) {
       return reply.status(400).send({ error: 'Status de abertura inválido.' })
@@ -652,6 +656,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     const usuarioId = Number((request.user as any)?.id || 0)
 
     const permitidos: number[] = [
+      STATUS.EM_FILA, STATUS.AGUARDANDO_CLIENTE, STATUS.AGUARDANDO_PROCEDIMENTO_SUPORTE,
       STATUS.EM_ATENDIMENTO, STATUS.AGUARDANDO_ANALISE_DEV, STATUS.EM_ANALISE_DEV,
       STATUS.APROVADO_DEV, STATUS.EM_DESENVOLVIMENTO, STATUS.AGUARDANDO_TESTES,
       STATUS.EM_TESTES, STATUS.TESTADO_OK, STATUS.CORRIGIDO_DEV, STATUS.TESTADO_COM_ERRO,
@@ -687,6 +692,9 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     }
 
     const rotulos: Record<number, string> = {
+      [STATUS.EM_FILA]: 'Em Fila',
+      [STATUS.AGUARDANDO_CLIENTE]: 'Aguardando Cliente',
+      [STATUS.AGUARDANDO_PROCEDIMENTO_SUPORTE]: 'Aguardando Procedimento do Suporte',
       [STATUS.EM_ATENDIMENTO]: 'Voltou para Aguardando Desenvolvimento',
       [STATUS.AGUARDANDO_ANALISE_DEV]: 'Aguardando Análise do Desenvolvimento',
       [STATUS.EM_ANALISE_DEV]: 'Em Análise pelo Desenvolvimento',

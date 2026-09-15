@@ -29,7 +29,12 @@ const STATUS_ABERTURA_IA: Array<[number, string]> = [
   [3, 'Aguardando Cliente'],
   [4, 'Aguardando Análise do Desenvolvimento'],
   [6, 'Aguardando Procedimento do Suporte'],
+  [13, 'Em Desenvolvimento'],
   [9, 'Aguardando Testes do desenvolvimento'],
+  [10, 'Em Testes'],
+  [17, 'Testado com Erro'],
+  [16, 'Corrigido pelo Dev'],
+  [11, 'Testado OK'],
 ]
 const TIPOS_BANCO_HORAS_VALIDOS = ['Hora Extra', 'Horas por Km', 'Falta c/ Atestado', 'Falta s/ Atestado', 'Home Office', 'Desconto de Horas Padrão']
 

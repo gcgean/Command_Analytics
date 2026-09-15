@@ -553,12 +553,23 @@ export function MapaSolicitacoes() {
     return porStatus
   }, [itens])
 
-  const itensVisiveis = useMemo(
-    () =>
-      aba === 'suporte' && filtroEtapa.length
-        ? itens.filter((i) => filtroEtapa.includes(String(i.status)))
-        : itens,
-    [itens, filtroEtapa, aba]
+  // Etapas que só aparecem quando pedidas (filtro de etapa, totalizador ou busca por cliente). Hoje:
+  // Aguardando Análise Dev, cheia de card antigo do Delphi que entupiria "Todas as etapas".
+  const ETAPAS_SO_SOB_DEMANDA = [S.AGUARDANDO_ANALISE_DEV] as number[]
+
+  const itensVisiveis = useMemo(() => {
+    if (aba !== 'suporte') return itens
+    if (filtroEtapa.length) return itens.filter((i) => filtroEtapa.includes(String(i.status)))
+    if (busca.trim()) return itens
+    return itens.filter((i) => !ETAPAS_SO_SOB_DEMANDA.includes(Number(i.status)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itens, filtroEtapa, aba, busca])
+
+  // "Todos" conta o que aparece sem filtro de etapa, não a carga inteira.
+  const totalTodos = useMemo(
+    () => (busca.trim() ? itens.length : itens.filter((i) => !ETAPAS_SO_SOB_DEMANDA.includes(Number(i.status))).length),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [itens, busca]
   )
 
   // O menu é alto (~15 itens): abrindo pra baixo ele cobre os cards de baixo. Abre ao lado do
@@ -645,14 +656,21 @@ export function MapaSolicitacoes() {
       },
       { label: 'Alterar / Finalizar', icon: <Pencil size={13} />, onClick: () => abrirEdicao(item) },
       { label: 'Vincular Dev', icon: <UserPlus size={13} />, onClick: () => setModalDev(item) },
-      { label: 'Em Desenvolvimento', icon: <Code2 size={13} />, onClick: () => mudarStatus(item, S.EM_DESENVOLVIMENTO, 'Em Desenvolvimento') },
-      { label: 'Aguardando Testes', icon: <FlaskConical size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.AGUARDANDO_TESTES, titulo: 'Enviar para testes — observação para o teste', opcional: true }) } },
-      { label: 'Aguardando Análise Dev', icon: <AlertTriangle size={13} />, onClick: () => mudarStatus(item, S.AGUARDANDO_ANALISE_DEV, 'Aguardando Análise do Dev') },
-      { label: 'Em Testes', icon: <FlaskConical size={13} />, onClick: () => mudarStatus(item, S.EM_TESTES, 'Em Testes') },
-      { label: 'Testado com Erro', icon: <XCircle size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.TESTADO_COM_ERRO, titulo: 'Motivo do erro' }) } },
-      { label: 'Corrigido pelo Dev', icon: <Code2 size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.CORRIGIDO_DEV, titulo: 'Observação da correção' }) } },
-      { label: 'Testado OK', icon: <CheckCircle2 size={13} />, onClick: () => mudarStatus(item, S.TESTADO_OK, 'Testado OK') },
-      { label: 'Voltar p/ Aguardando Desenvolvimento', icon: <RefreshCw size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.EM_ATENDIMENTO, titulo: 'Voltar para o desenvolvimento — por que está voltando?' }) } },
+      // Destinos de etapa: todos disponíveis a partir de qualquer etapa (avançar ou voltar), menos a
+      // atual. Os que pedem texto abrem a janela de observação antes de gravar.
+      ...([
+        { status: 1, label: 'Em Fila', icon: <History size={13} />, onClick: () => mudarStatus(item, 1, 'Em Fila') },
+        { status: 3, label: 'Aguardando Cliente', icon: <Info size={13} />, onClick: () => mudarStatus(item, 3, 'Aguardando Cliente') },
+        { status: 6, label: 'Aguardando Procedimento', icon: <ScrollText size={13} />, onClick: () => mudarStatus(item, 6, 'Aguardando Procedimento do Suporte') },
+        { status: S.EM_DESENVOLVIMENTO, label: 'Em Desenvolvimento', icon: <Code2 size={13} />, onClick: () => mudarStatus(item, S.EM_DESENVOLVIMENTO, 'Em Desenvolvimento') },
+      ] as const).filter((acao) => acao.status !== Number(item.status)),
+      ...(Number(item.status) !== S.AGUARDANDO_TESTES ? [{ label: 'Aguardando Testes', icon: <FlaskConical size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.AGUARDANDO_TESTES, titulo: 'Enviar para testes — observação para o teste', opcional: true }) } }] : []),
+      ...(Number(item.status) !== S.AGUARDANDO_ANALISE_DEV ? [{ label: 'Aguardando Análise Dev', icon: <AlertTriangle size={13} />, onClick: () => mudarStatus(item, S.AGUARDANDO_ANALISE_DEV, 'Aguardando Análise do Dev') }] : []),
+      ...(Number(item.status) !== S.EM_TESTES ? [{ label: 'Em Testes', icon: <FlaskConical size={13} />, onClick: () => mudarStatus(item, S.EM_TESTES, 'Em Testes') }] : []),
+      ...(Number(item.status) !== S.TESTADO_COM_ERRO ? [{ label: 'Testado com Erro', icon: <XCircle size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.TESTADO_COM_ERRO, titulo: 'Motivo do erro' }) } }] : []),
+      ...(Number(item.status) !== S.CORRIGIDO_DEV ? [{ label: 'Corrigido pelo Dev', icon: <Code2 size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.CORRIGIDO_DEV, titulo: 'Observação da correção' }) } }] : []),
+      ...(Number(item.status) !== S.TESTADO_OK ? [{ label: 'Testado OK', icon: <CheckCircle2 size={13} />, onClick: () => mudarStatus(item, S.TESTADO_OK, 'Testado OK') }] : []),
+      ...(Number(item.status) !== S.EM_ATENDIMENTO ? [{ label: 'Voltar p/ Aguardando Desenvolvimento', icon: <RefreshCw size={13} />, onClick: () => { if (!exigirProjeto(item)) return; setTexto(''); setModalJustificativa({ item, status: S.EM_ATENDIMENTO, titulo: 'Voltar para o desenvolvimento — por que está voltando?' }) } }] : []),
       {
         label: item.prioritario === 'S' ? 'Remover Prioritário' : 'Marcar como Prioritário',
         icon: <Star size={13} />,
@@ -763,7 +781,7 @@ export function MapaSolicitacoes() {
           <p className="text-[10px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400 truncate">
             Todos
           </p>
-          <p className="text-xl font-bold leading-tight text-blue-600 dark:text-blue-400">{itens.length}</p>
+          <p className="text-xl font-bold leading-tight text-blue-600 dark:text-blue-400">{totalTodos}</p>
         </button>
 
         {ORDEM_STATUS_RESUMO.map((st) => {
@@ -863,6 +881,7 @@ export function MapaSolicitacoes() {
                   { value: String(S.TESTADO_OK), label: 'Testado OK' },
                   { value: String(S.CORRIGIDO_DEV), label: 'Corrigido pelo Dev' },
                   { value: String(S.TESTADO_COM_ERRO), label: 'Testado com Erro' },
+                  { value: String(S.AGUARDANDO_ANALISE_DEV), label: 'Aguardando Análise Dev' },
                 ]}
               />
             </div>
