@@ -62,6 +62,7 @@ import { startNotificacoesVencimentoScheduler } from './utils/notificacoesVencim
 import { initNotificacoesAgendamento, startNotificacoesAgendamentoScheduler } from './utils/notificacoesAgendamento'
 import { startTelegramPollingScheduler } from './utils/telegramBot'
 import { startClientesDesatualizadosScheduler } from './utils/notificacaoClientesDesatualizados'
+import { initAlertasServidor } from './utils/alertasServidor'
 import { ensureConfiguracaoIA } from './ia/config'
 
 const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
@@ -216,6 +217,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initAnexos()
     .then(() => console.log('✓ Tabela de anexos verificada'))
     .catch(e => console.warn('⚠ Anexos init:', e.message))
+  initAlertasServidor()
+    .then(() => console.log('✓ Tabelas de alertas de servidor verificadas'))
+    .catch(e => console.warn('⚠ Alertas de servidor init:', e.message))
   initMetasCadastro()
     .then(() => console.log('✓ Tabelas de cadastro de metas verificadas'))
     .catch(e => console.warn('⚠ Metas cadastro init:', e.message))

@@ -672,6 +672,10 @@ export const api = {
   getServidor: (id: number) => fetchApi<Servidor>(`/servidores/${id}`),
   verificarServidorAgora: (id: number) => fetchApi<Servidor>(`/servidores/${id}/verificar-agora`, { method: 'POST' }),
   toggleServidorSomenteAdmin: (id: number) => fetchApi<Servidor>(`/servidores/${id}/somente-admin`, { method: 'PATCH' }),
+  getAlertasServidor: (id: number) =>
+    fetchApi<Array<{ usuarioId: number; nome: string; temTelegram: boolean; queda: boolean; ram: boolean }>>(`/servidores/${id}/alertas`),
+  salvarAlertasServidor: (id: number, usuarios: Array<{ usuarioId: number; queda: boolean; ram: boolean }>) =>
+    fetchApi<{ ok: boolean }>(`/servidores/${id}/alertas`, { method: 'PUT', body: JSON.stringify({ usuarios }) }),
 
   // ─── Conexões ──────────────────────────────────────────────
   getConexoes: (params?: { servidorId?: number; search?: string; status?: string; force?: boolean }) => {

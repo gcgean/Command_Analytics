@@ -1,4 +1,5 @@
 import { prisma } from '../database/client'
+import { avaliarAlertasServidor } from './alertasServidor'
 
 const REQUEST_TIMEOUT_MS = 6000
 const POLL_INTERVAL_MS = 5 * 60 * 1000
@@ -139,6 +140,13 @@ export async function pollServidor(servidorId: number): Promise<void> {
       conexoesFechado: resultado.conexoesFechado ?? undefined,
     } as never,
   })
+
+  // Servidor desativado ainda pode ser checado na mão pela tela — esse não deve gerar alerta.
+  if (!servidor.desativado) {
+    await avaliarAlertasServidor(servidor, resultado).catch((e) =>
+      console.warn(`⚠ Falha ao avaliar alertas do servidor ${servidorId}:`, e?.message),
+    )
+  }
 }
 
 export async function pollAllServidores(): Promise<void> {

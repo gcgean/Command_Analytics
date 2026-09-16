@@ -3,6 +3,7 @@ import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { pollServidor } from '../utils/servidorMonitor'
 import { usuarioEhAdmin } from '../utils/visibilidade'
+import { lerAlertasDoServidor, salvarAlertasDoServidor } from '../utils/alertasServidor'
 
 // Histórico das últimas 24h (a cada 5min ≈ até 288 pontos), usado nos gráficos de CPU/RAM.
 function historico24h() {
@@ -195,6 +196,47 @@ export async function servidoresRoutes(app: FastifyInstance) {
       return fmt(updated)
     }
   )
+
+  // GET /servidores/:id/alertas — usuários ativos e o que cada um recebe desse servidor (só admin)
+  app.get('/:id/alertas', { preHandler: authMiddleware, schema: { tags: ['Servidores'], summary: 'Quem recebe alertas do servidor' } }, async (request, reply) => {
+    if (!(await usuarioEhAdmin(Number((request.user as any)?.id)))) {
+      return reply.status(403).send({ error: 'Apenas administradores podem configurar alertas.' })
+    }
+    const { id } = request.params as { id: string }
+    const [usuarios, alertas] = await Promise.all([
+      prisma.usuario.findMany({
+        where: { OR: [{ ativo: 'S' }, { ativo: null }] },
+        select: { id: true, nomeCompleto: true, nomeUsu: true, idTelegram: true },
+      }),
+      lerAlertasDoServidor(Number(id)),
+    ])
+    const porUsuario = new Map(alertas.map((a) => [a.usuarioId, a]))
+    return usuarios
+      .map((u) => ({
+        usuarioId: u.id,
+        nome: u.nomeCompleto?.trim() || u.nomeUsu?.trim() || `Usuário ${u.id}`,
+        temTelegram: !!u.idTelegram,
+        queda: porUsuario.get(u.id)?.queda ?? false,
+        ram: porUsuario.get(u.id)?.ram ?? false,
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+  })
+
+  // PUT /servidores/:id/alertas — { usuarios: [{ usuarioId, queda, ram }] }
+  app.put('/:id/alertas', { preHandler: authMiddleware, schema: { tags: ['Servidores'] } }, async (request, reply) => {
+    if (!(await usuarioEhAdmin(Number((request.user as any)?.id)))) {
+      return reply.status(403).send({ error: 'Apenas administradores podem configurar alertas.' })
+    }
+    const { id } = request.params as { id: string }
+    const servidor = await prisma.servidor.findUnique({ where: { id: Number(id) }, select: { id: true } })
+    if (!servidor) return reply.status(404).send({ error: 'Servidor não encontrado.' })
+    const body = request.body as { usuarios?: Array<{ usuarioId: number; queda?: boolean; ram?: boolean }> }
+    const lista = (body?.usuarios ?? [])
+      .filter((u) => Number.isInteger(Number(u.usuarioId)))
+      .map((u) => ({ usuarioId: Number(u.usuarioId), queda: !!u.queda, ram: !!u.ram }))
+    await salvarAlertasDoServidor(servidor.id, lista)
+    return { ok: true }
+  })
 
   // PATCH /servidores/:id/toggle — ativar/desativar servidor
   app.patch(

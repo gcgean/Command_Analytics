@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
-import { Server, Wifi, WifiOff, HardDrive, Cpu, MemoryStick, RefreshCw, Loader2, Lock, Unlock } from 'lucide-react'
+import { Server, Wifi, WifiOff, HardDrive, Cpu, MemoryStick, RefreshCw, Loader2, Lock, Unlock, Bell, Search } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
+import { Modal } from '../../components/ui/Modal'
 
 interface HistoricoEntry {
   id: number
@@ -175,6 +176,87 @@ function RankingConsumo({ servidores }: { servidores: ServidorMysql[] }) {
   )
 }
 
+type AlertaUsuario = { usuarioId: number; nome: string; temTelegram: boolean; queda: boolean; ram: boolean }
+
+function ModalAlertasServidor({ servidor, onClose }: { servidor: ServidorMysql; onClose: () => void }) {
+  const [lista, setLista] = useState<AlertaUsuario[]>([])
+  const [carregando, setCarregando] = useState(true)
+  const [salvando, setSalvando] = useState(false)
+  const [busca, setBusca] = useState('')
+  const [erro, setErro] = useState('')
+
+  useEffect(() => {
+    api.getAlertasServidor(servidor.id)
+      .then(setLista)
+      .catch((e: any) => setErro(e?.message || 'Falha ao carregar usuários.'))
+      .finally(() => setCarregando(false))
+  }, [servidor.id])
+
+  const marcar = (usuarioId: number, campo: 'queda' | 'ram', valor: boolean) =>
+    setLista(l => l.map(u => (u.usuarioId === usuarioId ? { ...u, [campo]: valor } : u)))
+
+  const salvar = async () => {
+    setSalvando(true)
+    setErro('')
+    try {
+      await api.salvarAlertasServidor(servidor.id, lista.map(({ usuarioId, queda, ram }) => ({ usuarioId, queda, ram })))
+      onClose()
+    } catch (e: any) {
+      setErro(e?.message || 'Falha ao salvar.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  const termo = busca.trim().toLowerCase()
+  // Marcados primeiro, pra ver de cara quem já recebe sem rolar a lista toda.
+  const visiveis = lista
+    .filter(u => !termo || u.nome.toLowerCase().includes(termo))
+    .sort((a, b) => Number(b.queda || b.ram) - Number(a.queda || a.ram))
+
+  return (
+    <Modal isOpen onClose={onClose} title={`Alertas no Telegram — ${servidor.nome ?? 'Servidor'}`} size="lg">
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">
+          Queda: avisa quando o servidor fica sem responder em 2 verificações seguidas (~10 min) e quando volta.
+          RAM: avisa quando a memória passa de 90% em 2 verificações seguidas e quando normaliza (abaixo de 85%).
+        </p>
+        <div className="relative">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input className="input-field pl-9" placeholder="Buscar usuário..." value={busca} onChange={e => setBusca(e.target.value)} />
+        </div>
+        {carregando ? (
+          <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 text-blue-500 animate-spin" /></div>
+        ) : (
+          <div className="max-h-[50vh] overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg divide-y divide-slate-200 dark:divide-slate-700">
+            <div className="grid grid-cols-[1fr_80px_80px] px-3 py-2 text-xs font-semibold text-slate-500 sticky top-0 bg-white dark:bg-slate-800">
+              <span>Usuário</span><span className="text-center">Queda</span><span className="text-center">RAM</span>
+            </div>
+            {visiveis.map(u => (
+              <div key={u.usuarioId} className="grid grid-cols-[1fr_80px_80px] items-center px-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <p className="truncate text-slate-800 dark:text-slate-200">{u.nome}</p>
+                  {!u.temTelegram && <p className="text-xs text-amber-500">Sem Telegram conectado — não vai receber</p>}
+                </div>
+                <input type="checkbox" className="accent-blue-600 justify-self-center w-4 h-4" checked={u.queda} onChange={e => marcar(u.usuarioId, 'queda', e.target.checked)} />
+                <input type="checkbox" className="accent-blue-600 justify-self-center w-4 h-4" checked={u.ram} onChange={e => marcar(u.usuarioId, 'ram', e.target.checked)} />
+              </div>
+            ))}
+            {visiveis.length === 0 && <p className="text-center text-sm text-slate-500 py-6">Nenhum usuário encontrado.</p>}
+          </div>
+        )}
+        {erro && <p className="text-sm text-red-500">{erro}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" className="btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn-primary flex items-center gap-2" onClick={salvar} disabled={salvando || carregando}>
+            {salvando && <Loader2 size={14} className="animate-spin" />} Salvar
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 export function Servidores() {
   const { isSuperUser } = usePermissions()
   const [servidores, setServidores] = useState<ServidorMysql[]>([])
@@ -182,6 +264,7 @@ export function Servidores() {
   const [somenteAtivos, setSomenteAtivos] = useState(true)
   const [alternandoVisibilidade, setAlternandoVisibilidade] = useState<number | null>(null)
   const [aba, setAba] = useState<'cards' | 'ranking'>('cards')
+  const [alertasDe, setAlertasDe] = useState<ServidorMysql | null>(null)
 
   const carregar = () => {
     setLoading(true)
@@ -328,6 +411,15 @@ export function Servidores() {
                     <button
                       type="button"
                       className="btn-secondary flex items-center gap-1 !py-1 !px-2 text-xs"
+                      onClick={() => setAlertasDe(s)}
+                    >
+                      <Bell size={11} /> Alertas
+                    </button>
+                  )}
+                  {isSuperUser && (
+                    <button
+                      type="button"
+                      className="btn-secondary flex items-center gap-1 !py-1 !px-2 text-xs"
                       onClick={() => handleToggleSomenteAdmin(s)}
                       disabled={alternandoVisibilidade === s.id}
                     >
@@ -437,6 +529,8 @@ export function Servidores() {
         })}
       </div>
       )}
+
+      {alertasDe && <ModalAlertasServidor servidor={alertasDe} onClose={() => setAlertasDe(null)} />}
     </div>
   )
 }
