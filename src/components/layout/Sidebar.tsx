@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Headphones, Calendar, Monitor,
   Users, BarChart3, GitBranch, Briefcase, BookUser,
   DollarSign, Award, Package,
   Code2, Tag, Video, Target, Server,
-  ChevronDown, ChevronRight, LogOut, Command, Menu, X,
+  ChevronDown, ChevronRight, LogOut, Command, Menu, X, Star,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
   ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell, Cable, FolderKanban
 } from 'lucide-react'
@@ -151,16 +151,46 @@ function filterGroups(groups: typeof navGroups, can: (r: string) => boolean) {
     .filter(g => g.items.length > 0)
 }
 
+// Favoritos ficam por usuário e por navegador. Guarda só o endereço da tela: o que aparece vem do
+// menu já filtrado por permissão, então favorito de tela que a pessoa perdeu acesso some sozinho.
+const chaveFavoritos = (usuarioId: number | string | undefined) => `sidebar:favoritos:${usuarioId ?? 'anonimo'}`
+
+function lerFavoritos(chave: string): string[] {
+  try {
+    const salvo = JSON.parse(localStorage.getItem(chave) ?? '[]')
+    return Array.isArray(salvo) ? salvo.filter((v) => typeof v === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+/** Todos os itens clicáveis do menu, com o nome do grupo pai quando for submenu. */
+function itensFolha(items: NavItem[], pai?: string): Array<NavItem & { rotulo: string }> {
+  return items.flatMap((item) =>
+    item.children
+      ? itensFolha(item.children, item.label)
+      : item.to
+        ? [{ ...item, rotulo: pai ? `${pai} › ${item.label}` : item.label }]
+        : []
+  )
+}
+
 function NavItemComponent({
   item,
   depth = 0,
   collapsed,
   onNavigate,
+  favoritos,
+  alternarFavorito,
+  rotulo,
 }: {
   item: NavItem
   depth?: number
   collapsed: boolean
   onNavigate: () => void
+  favoritos: string[]
+  alternarFavorito: (to: string) => void
+  rotulo?: string
 }) {
   const [open, setOpen] = useState(false)
 
@@ -185,6 +215,8 @@ function NavItemComponent({
                 depth={depth + 1}
                 collapsed={collapsed}
                 onNavigate={onNavigate}
+                favoritos={favoritos}
+                alternarFavorito={alternarFavorito}
               />
             ))}
           </div>
@@ -211,17 +243,35 @@ function NavItemComponent({
     )
   }
 
+  const favorito = favoritos.includes(item.to!)
   return (
-    <NavLink
-      to={item.to!}
-      onClick={onNavigate}
-      className={({ isActive }) =>
-        clsx('sidebar-link', isActive && 'active', depth > 0 && 'text-xs py-2')
-      }
-    >
-      {item.icon}
-      <span>{item.label}</span>
-    </NavLink>
+    <div className="group relative">
+      <NavLink
+        to={item.to!}
+        onClick={onNavigate}
+        className={({ isActive }) =>
+          clsx('sidebar-link pr-8', isActive && 'active', depth > 0 && 'text-xs py-2')
+        }
+      >
+        {item.icon}
+        <span className="truncate">{rotulo ?? item.label}</span>
+      </NavLink>
+      {/* Fora do link: clicar na estrela não pode navegar. */}
+      <button
+        type="button"
+        onClick={() => alternarFavorito(item.to!)}
+        title={favorito ? 'Remover dos favoritos' : 'Fixar nos favoritos'}
+        aria-label={favorito ? 'Remover dos favoritos' : 'Fixar nos favoritos'}
+        className={clsx(
+          'absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded transition-opacity',
+          favorito
+            ? 'text-amber-500 opacity-100'
+            : 'text-slate-400 hover:text-amber-500 opacity-0 group-hover:opacity-100 focus:opacity-100'
+        )}
+      >
+        <Star className={clsx('w-3.5 h-3.5', favorito && 'fill-amber-400')} />
+      </button>
+    </div>
   )
 }
 
@@ -242,6 +292,26 @@ export function Sidebar({ open, onToggle, onNavigate }: SidebarProps) {
   const collapsed = !open
 
   const visibleGroups = filterGroups(navGroups, can)
+
+  const chave = chaveFavoritos(user?.id)
+  const [favoritos, setFavoritos] = useState<string[]>(() => lerFavoritos(chave))
+  useEffect(() => setFavoritos(lerFavoritos(chave)), [chave])
+
+  const alternarFavorito = (to: string) => {
+    setFavoritos((atuais) => {
+      const novos = atuais.includes(to) ? atuais.filter((f) => f !== to) : [...atuais, to]
+      try {
+        localStorage.setItem(chave, JSON.stringify(novos))
+      } catch {
+        /* sem storage: continua valendo só nesta sessão */
+      }
+      return novos
+    })
+  }
+
+  // Na ordem em que foram fixados; só telas que a pessoa ainda pode abrir.
+  const disponiveis = visibleGroups.flatMap((g) => itensFolha(g.items))
+  const itensFavoritos = favoritos.flatMap((to) => disponiveis.filter((i) => i.to === to).slice(0, 1))
 
   const handleLogout = () => {
     logout()
@@ -294,6 +364,28 @@ export function Sidebar({ open, onToggle, onNavigate }: SidebarProps) {
 
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-4">
+          {itensFavoritos.length > 0 && (
+            <div>
+              {!collapsed && (
+                <p className="px-3 mb-1 text-xs font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-widest flex items-center gap-1">
+                  <Star className="w-3 h-3 fill-amber-400" /> Favoritos
+                </p>
+              )}
+              <div className={clsx('space-y-0.5', !collapsed && 'pb-3 border-b border-slate-200 dark:border-slate-800')}>
+                {itensFavoritos.map(item => (
+                  <NavItemComponent
+                    key={`fav-${item.to}`}
+                    item={item}
+                    rotulo={item.rotulo}
+                    collapsed={collapsed}
+                    onNavigate={onNavigate}
+                    favoritos={favoritos}
+                    alternarFavorito={alternarFavorito}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
           {visibleGroups.map(group => (
             <div key={group.group}>
               {!collapsed && (
@@ -308,6 +400,8 @@ export function Sidebar({ open, onToggle, onNavigate }: SidebarProps) {
                     item={item}
                     collapsed={collapsed}
                     onNavigate={onNavigate}
+                    favoritos={favoritos}
+                    alternarFavorito={alternarFavorito}
                   />
                 ))}
               </div>
