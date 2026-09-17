@@ -687,7 +687,9 @@ export function MapaSolicitacoes() {
   }
 
   return (
-    <div className="space-y-5">
+    // pb-24: espaço no fim da página do tamanho dos botões flutuantes (Nova Solicitação e IA),
+    // pra eles não ficarem por cima dos últimos cards quando a lista chega no fim.
+    <div className="space-y-5 pb-24">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Mapa de Solicitações</h1>
