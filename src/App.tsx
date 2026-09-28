@@ -8,6 +8,7 @@ import type { Usuario } from './types'
 // Auth
 import { Login } from './pages/auth/Login'
 import { SolicitacaoDemanda } from './pages/publico/SolicitacaoDemanda'
+import { MetasPeriodo } from './pages/metas/MetasPeriodo'
 import { AlterarSenha } from './pages/auth/AlterarSenha'
 
 // Dashboard
@@ -208,6 +209,7 @@ export default function App() {
         <Route path="atendimentos/historico" element={<HistoricoAtendimentos />} />
         <Route path="atendimentos/mapa" element={<MapaAtendimentos />} />
         <Route path="atendimentos/solicitacoes" element={<PermissionRoute recurso="solicitacoes"><MapaSolicitacoes /></PermissionRoute>} />
+        <Route path="metas/periodo" element={<PermissionRoute recurso="metas-periodo"><MetasPeriodo /></PermissionRoute>} />
 
         <Route path="agenda" element={<PermissionRoute recurso="agenda"><Agenda /></PermissionRoute>} />
         <Route path="agenda/agendamentos" element={<PermissionRoute recurso="agenda-agendamentos"><AgendamentoProgramado /></PermissionRoute>} />

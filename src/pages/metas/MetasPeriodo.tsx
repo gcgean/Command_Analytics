@@ -22,12 +22,14 @@ type Form = {
 }
 
 /**
- * Metas do período do desenvolvimento. A lista é só uma checklist com prazo — o valor está no
- * percentual do período: no fim do mês dá pra dizer, em um número, se os objetivos de longo prazo
- * andaram ou se o mês inteiro foi apagar incêndio.
+ * Metas do período — de qualquer setor, não só do desenvolvimento. A lista é uma checklist com
+ * prazo, e o valor está no percentual: no fim do mês dá pra dizer, em um número, se os objetivos
+ * de longo prazo andaram ou se o mês inteiro foi apagar incêndio.
  */
-export function PainelMetasDev({ devs, projetos }: { devs: Usuario[]; projetos: Projeto[] }) {
+export function MetasPeriodo() {
   const { toast } = useToast()
+  const [usuarios, setUsuarios] = useState<Usuario[]>([])
+  const [projetos, setProjetos] = useState<Projeto[]>([])
   const hoje = new Date()
   const primeiroDia = new Date(hoje.getFullYear(), hoje.getMonth(), 1)
   const ultimoDia = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)
@@ -63,6 +65,13 @@ export function PainelMetasDev({ devs, projetos }: { devs: Usuario[]; projetos: 
   }, [inicio, fim, filtroDev, filtroProjeto, toast])
 
   useEffect(() => { void carregar() }, [carregar])
+
+  // Responsáveis e projetos são as mesmas listas do resto do sistema; projeto é opcional porque
+  // meta de outro setor (financeiro, suporte, marketing) não tem projeto nenhum.
+  useEffect(() => {
+    api.getUsuarios().then(setUsuarios).catch(() => setUsuarios([]))
+    api.getProjetos().then(setProjetos).catch(() => setProjetos([]))
+  }, [])
 
   const abrirNova = () =>
     setForm({ id: null, titulo: '', detalhe: '', desenvolvedorId: filtroDev, projetoId: filtroProjeto, periodoInicio: inicio, periodoFim: fim })
@@ -131,6 +140,13 @@ export function PainelMetasDev({ devs, projetos }: { devs: Usuario[]; projetos: 
 
   return (
     <div className="space-y-4">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Metas do Período</h1>
+        <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
+          Os objetivos que não podem se perder no dia a dia — e quanto deles foi cumprido no período.
+        </p>
+      </div>
+
       <div className="flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-xs text-slate-500 mb-1">De</label>
@@ -141,10 +157,10 @@ export function PainelMetasDev({ devs, projetos }: { devs: Usuario[]; projetos: 
           <input type="date" className="input-field" value={fim} onChange={(e) => setFim(e.target.value)} />
         </div>
         <div>
-          <label className="block text-xs text-slate-500 mb-1">Desenvolvedor</label>
+          <label className="block text-xs text-slate-500 mb-1">Responsável</label>
           <select className="input-field w-52" value={filtroDev} onChange={(e) => setFiltroDev(e.target.value)}>
             <option value="">Todos</option>
-            {devs.map(d => <option key={d.id} value={d.id}>{d.nome || d.nomeUsu}</option>)}
+            {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome || u.nomeUsu}</option>)}
           </select>
         </div>
         <div>
@@ -268,10 +284,10 @@ export function PainelMetasDev({ devs, projetos }: { devs: Usuario[]; projetos: 
                 <input type="date" className="input-field" value={form.periodoFim} onChange={(e) => setForm({ ...form, periodoFim: e.target.value })} />
               </div>
               <div>
-                <label className="block text-sm text-slate-700 dark:text-slate-300 mb-1">Desenvolvedor</label>
+                <label className="block text-sm text-slate-700 dark:text-slate-300 mb-1">Responsável</label>
                 <select className="input-field" value={form.desenvolvedorId} onChange={(e) => setForm({ ...form, desenvolvedorId: e.target.value })}>
-                  <option value="">Equipe toda</option>
-                  {devs.map(d => <option key={d.id} value={d.id}>{d.nome || d.nomeUsu}</option>)}
+                  <option value="">Todos / equipe</option>
+                  {usuarios.map(u => <option key={u.id} value={u.id}>{u.nome || u.nomeUsu}</option>)}
                 </select>
               </div>
               <div>

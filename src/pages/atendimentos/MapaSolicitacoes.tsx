@@ -12,11 +12,10 @@ import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { LancamentoSolicitacao, type PrefillSolicitacao } from './LancamentoSolicitacao'
 import { PainelDesempenhoDev } from './PainelDesempenhoDev'
-import { PainelMetasDev } from './PainelMetasDev'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import type { ClienteAnexo, Projeto, Solicitacao, SolicitacaoPendenteAtualizacao, Usuario } from '../../types'
 
-type Aba = 'suporte' | 'finalizadas' | 'pendentes' | 'desempenho' | 'arquivadas' | 'metas'
+type Aba = 'suporte' | 'finalizadas' | 'pendentes' | 'desempenho' | 'arquivadas'
 
 // Mesmos códigos do Delphi (UMapaAtendimentos.pas). Não existe status 15.
 const S = {
@@ -399,7 +398,7 @@ export function MapaSolicitacoes() {
   // estão. O spinner de tela cheia fica só pra troca de aba/filtro, quando a lista é outra mesmo.
   const carregar = useCallback((opcoes?: { emSegundoPlano?: boolean }) => {
     if (!opcoes?.emSegundoPlano) setLoading(true)
-    if (aba === 'desempenho' || aba === 'metas') {
+    if (aba === 'desempenho') {
       setLoading(false)
       return
     }
@@ -811,7 +810,7 @@ export function MapaSolicitacoes() {
       {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero. Clicar filtra.
           Escondido em "Clientes a atualizar": lá a lista não é por etapa. */}
       <div
-        hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'finalizadas' || aba === 'arquivadas' || aba === 'metas'}
+        hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'finalizadas' || aba === 'arquivadas'}
         className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2"
       >
         <button
@@ -871,7 +870,6 @@ export function MapaSolicitacoes() {
           ['pendentes', 'Clientes a atualizar'],
           ['arquivadas', 'Arquivadas'],
           ['desempenho', 'Desempenho do Dev'],
-          ['metas', 'Metas do período'],
         ] as Array<[Aba, string]>).map(([id, label]) => (
           <button
             key={id}
@@ -889,7 +887,7 @@ export function MapaSolicitacoes() {
       </div>
 
       {/* Filtros da aba — Metas tem os próprios (período, dev, projeto), então some aqui. */}
-      <div className="flex flex-wrap gap-3 items-end" hidden={aba === 'metas'}>
+      <div className="flex flex-wrap gap-3 items-end">
         <div className="w-72">
           <Input
             placeholder="Pesquisar por cliente..."
@@ -968,8 +966,6 @@ export function MapaSolicitacoes() {
 
       {aba === 'desempenho' && <PainelDesempenhoDev rotuloStatus={ROTULO_STATUS} />}
 
-      {aba === 'metas' && <PainelMetasDev devs={devs} projetos={projetos} />}
-
       {/* Clientes a atualizar — tabela, porque o que importa aqui é comparar versões, não o kanban */}
       {aba === 'pendentes' && (
         <div>
@@ -1042,7 +1038,7 @@ export function MapaSolicitacoes() {
       )}
 
       {/* Grade de cards — largura cheia; detalhes agora vivem no menu de cada card */}
-      <div ref={gridRef} hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'metas'}>
+      <div ref={gridRef} hidden={aba === 'pendentes' || aba === 'desempenho'}>
         {loading ? (
           <div className="flex items-center justify-center h-40 text-slate-500">
             <Loader2 className="w-6 h-6 animate-spin mr-3" /> Carregando solicitações...
