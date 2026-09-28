@@ -69,6 +69,7 @@ import { ensureConfiguracaoEmail } from './utils/email'
 import { publicoRoutes } from './routes/publico'
 import { emailRoutes } from './routes/email'
 import { metasDevRoutes, initMetasDev } from './routes/metasDev'
+import { initNotasGeradas } from './routes/solicitacoes'
 import { ensureConfiguracaoIA } from './ia/config'
 
 // Em produção o logger ficava desligado, então erro nenhum era gravado — quando algo falhava na
@@ -255,6 +256,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initAnexos()
     .then(() => console.log('✓ Tabela de anexos verificada'))
     .catch(e => console.warn('⚠ Anexos init:', e.message))
+  initNotasGeradas()
+    .then(() => console.log('✓ Tabela de notas de atualização verificada'))
+    .catch(e => console.warn('⚠ Notas de atualização init:', e.message))
   initMetasDev()
     .then(() => console.log('✓ Tabela de metas do desenvolvimento verificada'))
     .catch(e => console.warn('⚠ Metas do dev init:', e.message))

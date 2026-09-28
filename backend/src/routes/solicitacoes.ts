@@ -60,6 +60,20 @@ const INCLUDE_CARD = {
   projeto: { select: { id: true, nome: true, cor: true } },
 } as const
 
+/**
+ * Marca quais solicitações já entraram numa nota de atualização. Fica em tabela à parte: é
+ * informação da nossa rotina de release, não do atendimento em si, e `atendimentos` é do Delphi.
+ */
+export async function initNotasGeradas(): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS solicitacao_nota_gerada (
+      atendimento_id INT PRIMARY KEY,
+      gerada_em      DATETIME NOT NULL DEFAULT NOW(),
+      usuario_id     INT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+}
+
 function paraCard(a: any) {
   const { cliente, tecnico, desenvolvedor, projeto, ...rest } = a
   const referencia = a.dataAtendimento ?? a.dataAbertura
@@ -85,16 +99,31 @@ function paraCard(a: any) {
  * Prisma), então não dá pra pedir _count no include — uma query agrupada só pelos ids da página
  * resolve com um roundtrip, usando o índice (tabela, registro_id).
  */
-async function comAnexos<T extends { id: number }>(cards: T[]): Promise<Array<T & { anexos: number }>> {
+async function comAnexos<T extends { id: number }>(
+  cards: T[],
+): Promise<Array<T & { anexos: number; notaGeradaEm: Date | null }>> {
   if (!cards.length) return []
+  const ids = Prisma.join(cards.map((c) => Number(c.id)))
   const linhas = await prisma.$queryRaw<Array<{ registroId: number; total: bigint | number }>>`
     SELECT registro_id AS registroId, COUNT(*) AS total
       FROM agendamento_anexo
-     WHERE tabela = 'atendimentos' AND registro_id IN (${Prisma.join(cards.map((c) => Number(c.id)))})
+     WHERE tabela = 'atendimentos' AND registro_id IN (${ids})
      GROUP BY registro_id
   `
   const porId = new Map(linhas.map((l) => [Number(l.registroId), Number(l.total)]))
-  return cards.map((c) => ({ ...c, anexos: porId.get(Number(c.id)) ?? 0 }))
+
+  // Marca de "já saiu em nota de atualização" — vem junto pra o card mostrar o ícone sem uma
+  // segunda chamada por cartão.
+  const notas = await prisma.$queryRaw<Array<{ atendimento_id: number; gerada_em: Date }>>`
+    SELECT atendimento_id, gerada_em FROM solicitacao_nota_gerada WHERE atendimento_id IN (${ids})
+  `
+  const notaPorId = new Map(notas.map((n) => [Number(n.atendimento_id), n.gerada_em]))
+
+  return cards.map((c) => ({
+    ...c,
+    anexos: porId.get(Number(c.id)) ?? 0,
+    notaGeradaEm: notaPorId.get(Number(c.id)) ?? null,
+  }))
 }
 
 /** Lista legível das diferenças entre o registro antes e os dados gravados na alteração. */
@@ -281,22 +310,21 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
   // GET /solicitacoes/notas-atualizacao — botão "Notas de atualização" da aba Finalizadas:
   // junta o Obs_Atendimento de tudo que foi concluído no período, pronto pra virar release notes.
-  app.get('/notas-atualizacao', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request, reply) => {
-    const { dataInicio, dataFim } = request.query as Record<string, string>
-    if (!dataInicio || !dataFim) return reply.status(400).send({ error: 'Informe dataInicio e dataFim.' })
+  // POST /solicitacoes/notas-atualizacao — gera a nota apenas das solicitações escolhidas na tela
+  // e marca cada uma como "já saiu em nota". Antes era por período, o que arrastava tudo que
+  // fechou no intervalo: quem monta a nota quer escolher o que vai pro cliente.
+  app.post('/notas-atualizacao', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request, reply) => {
+    const { ids } = request.body as { ids?: number[] }
+    const lista = (ids ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0)
+    if (!lista.length) return reply.status(400).send({ error: 'Selecione ao menos uma solicitação.' })
 
-    const fim = new Date(`${dataFim}T00:00:00`)
-    fim.setDate(fim.getDate() + 1)
-
+    const usuarioId = Number((request.user as any)?.id || 0)
     const itens = await prisma.atendimento.findMany({
-      where: {
-        status: STATUS.CONCLUIDO,
-        desenvolvedorId: { not: null },
-        dataFechamento: { gte: new Date(`${dataInicio}T00:00:00`), lt: fim },
-      },
-      select: { id: true, observacoes: true, projeto: { select: { nome: true } } },
+      where: { id: { in: lista } },
+      select: { id: true, observacoes: true, solucao: true, projeto: { select: { nome: true } } },
       orderBy: { dataFechamento: 'asc' },
     })
+    if (!itens.length) return reply.status(404).send({ error: 'Nenhuma das solicitações foi encontrada.' })
 
     // O que o pessoal digita vem cheio de linha em branco, espaço no fim e indentação solta.
     // Limpa cada linha e derruba sequências de linhas vazias, senão a lista sai esparramada.
@@ -308,8 +336,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
         .replace(/\n{3,}/g, '\n\n')
         .trim()
 
-    // Importações em lote gravam a mesma frase em centenas de registros ("LANCADO VIA EXCEL" e
-    // afins). Repetir isso na nota não informa nada, então cada texto entra uma vez só.
+    // Duas solicitações do mesmo pedido (cliente diferente, mesmo texto) viram uma linha só.
     const vistos = new Map<string, { projeto: string | null; texto: string }>()
     for (const a of itens) {
       const texto = limpar(a.observacoes ?? '')
@@ -319,10 +346,9 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     }
     const comTexto = [...vistos.values()]
 
-    const dataBR = (iso: string) => iso.split('-').reverse().join('/')
     const cabecalho = [
-      `NOTAS DE ATUALIZAÇÃO — ${dataBR(dataInicio)} a ${dataBR(dataFim)}`,
-      `${itens.length} ${itens.length === 1 ? 'solicitação concluída' : 'solicitações concluídas'}` +
+      `NOTAS DE ATUALIZAÇÃO — ${new Date().toLocaleDateString('pt-BR')}`,
+      `${itens.length} ${itens.length === 1 ? 'solicitação' : 'solicitações'}` +
         (comTexto.length !== itens.length ? ` · ${comTexto.length} descrição(ões) distinta(s)` : ''),
       '',
     ]
@@ -350,8 +376,25 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       return projeto ? `${projeto.toUpperCase()}\n${corpo}` : corpo
     })
 
-    const texto = comTexto.length ? [...cabecalho, blocos.join('\n\n')].join('\n') : ''
-    return { total: itens.length, texto }
+    // A marca vai em todas as selecionadas, inclusive nas sem texto: elas foram consideradas
+    // nesta rodada, e reaparecer como "ainda não saiu em nota" faria o pessoal gerar de novo.
+    for (const a of itens) {
+      await prisma.$executeRaw`
+        INSERT INTO solicitacao_nota_gerada (atendimento_id, gerada_em, usuario_id)
+        VALUES (${a.id}, NOW(), ${usuarioId || null})
+        ON DUPLICATE KEY UPDATE gerada_em = NOW(), usuario_id = VALUES(usuario_id)
+      `
+      await gravarLog(a.id, usuarioId, 'Incluída na nota de atualização')
+    }
+
+    return { total: itens.length, texto: comTexto.length ? [...cabecalho, blocos.join('\n\n')].join('\n') : '' }
+  })
+
+  // DELETE /solicitacoes/:id/nota-atualizacao — desfaz a marca (gerou por engano)
+  app.delete('/:id/nota-atualizacao', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request) => {
+    const { id } = request.params as { id: string }
+    await prisma.$executeRaw`DELETE FROM solicitacao_nota_gerada WHERE atendimento_id = ${Number(id)}`
+    return { ok: true }
   })
 
   // GET /solicitacoes/pendentes-atualizacao — aba "Clientes a atualizar".

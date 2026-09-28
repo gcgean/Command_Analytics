@@ -804,8 +804,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ dataInicio, dataFim, desenvolvedorId: desenvolvedorId ?? null }),
     }, TIMEOUT_IA_MS),
-  getNotasAtualizacao: (dataInicio: string, dataFim: string) =>
-    fetchApi<{ total: number; texto: string }>(`/solicitacoes/notas-atualizacao?dataInicio=${dataInicio}&dataFim=${dataFim}`),
+  // Notas saem das solicitações escolhidas na tela, não de um período inteiro.
+  gerarNotasAtualizacao: (ids: number[]) =>
+    fetchApi<{ total: number; texto: string }>('/solicitacoes/notas-atualizacao', {
+      method: 'POST',
+      body: JSON.stringify({ ids }),
+    }),
+  desfazerNotaAtualizacao: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/solicitacoes/${id}/nota-atualizacao`, { method: 'DELETE' }),
   getSolicitacaoLog: (id: number) =>
     fetchApi<{ data: Array<{ obs: string; data: string; usuario: string | null }> }>(`/solicitacoes/${id}/log`),
   alterarStatusSolicitacao: (id: number, status: number, observacao?: string) =>

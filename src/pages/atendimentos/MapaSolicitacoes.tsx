@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   RefreshCw, Loader2, Star, Search, MoreVertical, AlertTriangle,
-  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText, CheckCheck, Paperclip, Bug, Archive, ArchiveRestore, Link2, ExternalLink,
+  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText, CheckCheck, Paperclip, Bug, Archive, ArchiveRestore, Link2, ExternalLink, FileCheck2,
 } from 'lucide-react'
 import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -366,6 +366,9 @@ export function MapaSolicitacoes() {
   const [modalCancelar, setModalCancelar] = useState<Solicitacao | null>(null)
   const [modalArquivar, setModalArquivar] = useState<Solicitacao | null>(null)
   const [modalLinkPublico, setModalLinkPublico] = useState(false)
+  // Seleção pra montar a nota de atualização. Vale em qualquer aba: o que vai pro cliente pode
+  // misturar o que foi concluído agora com algo que já estava fechado antes.
+  const [selecionados, setSelecionados] = useState<number[]>([])
   // Mesmo domínio de onde a tela está aberta: em produção vira controle.cilos.com.br/demanda, e
   // em teste local continua apontando pro ambiente certo sem precisar de configuração.
   const linkPublico = `${window.location.origin}/demanda`
@@ -540,12 +543,26 @@ export function MapaSolicitacoes() {
     return executar(() => api.alterarStatusSolicitacao(item.id, status), `${rotulo} — #${item.id}`)
   }
 
-  const abrirNotasAtualizacao = async () => {
+  const alternarSelecao = (id: number) =>
+    setSelecionados((atual) => (atual.includes(id) ? atual.filter((x) => x !== id) : [...atual, id]))
+
+  const gerarNotasDaSelecao = async () => {
+    if (!selecionados.length) return
+    if (!window.confirm(
+      `Gerar as notas de atualização de ${selecionados.length} solicitação(ões)?
+
+` +
+      'Elas ficam marcadas como já incluídas em nota.'
+    )) return
+
     setModalNotas(true)
     setCarregandoNotas(true)
     try {
-      const res = await api.getNotasAtualizacao(dataInicio, dataFim)
+      const res = await api.gerarNotasAtualizacao(selecionados)
       setNotasTexto(res.texto)
+      setSelecionados([])
+      // Recarrega em segundo plano pro ícone de "nota gerada" aparecer nos cards.
+      carregar({ emSegundoPlano: true })
     } catch (e: any) {
       toast.error(e?.message || 'Falha ao gerar as notas.')
       setNotasTexto('')
@@ -718,6 +735,13 @@ export function MapaSolicitacoes() {
         icon: <Lightbulb size={13} />,
         onClick: () => executar(() => api.toggleOrientacaoSolicitacao(item.id), 'Orientação atualizada'),
       },
+      ...(item.notaGeradaEm
+        ? [{
+            label: 'Desfazer nota de atualização',
+            icon: <FileCheck2 size={13} />,
+            onClick: () => executar(() => api.desfazerNotaAtualizacao(item.id), `#${item.id} liberada para entrar em nota de novo`),
+          }]
+        : []),
       { label: 'Arquivar', icon: <Archive size={13} />, onClick: () => { setTexto(''); setModalArquivar(item) } },
       { label: 'Cancelar Atendimento', icon: <XCircle size={13} />, onClick: () => { setTexto(''); setModalCancelar(item) }, perigo: true },
       ...base,
@@ -906,9 +930,7 @@ export function MapaSolicitacoes() {
               <label className="block text-xs text-slate-500 mb-1">Até</label>
               <input type="date" className="input" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
             </div>
-            <button className="btn-secondary flex items-center gap-2" onClick={abrirNotasAtualizacao}>
-              <FileText size={14} /> Notas de atualização
-            </button>
+
           </>
         )}
         {/* Etapa só faz sentido no backlog — na aba de finalizadas tudo é "Concluído". */}
@@ -1037,6 +1059,21 @@ export function MapaSolicitacoes() {
         </div>
       )}
 
+      {/* Barra da seleção — só aparece quando há algo marcado, pra não ocupar espaço à toa. */}
+      {selecionados.length > 0 && aba !== 'pendentes' && aba !== 'desempenho' && (
+        <div className="sticky top-2 z-30 flex flex-wrap items-center gap-3 rounded-xl border border-blue-200 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/10 px-4 py-2.5 shadow-sm">
+          <span className="text-sm font-medium text-blue-800 dark:text-blue-300">
+            {selecionados.length} solicitação(ões) selecionada(s)
+          </span>
+          <button className="btn-primary flex items-center gap-2 !py-1.5" onClick={gerarNotasDaSelecao}>
+            <FileText size={14} /> Gerar notas de atualização
+          </button>
+          <button className="text-sm text-slate-600 dark:text-slate-400 hover:underline" onClick={() => setSelecionados([])}>
+            Limpar seleção
+          </button>
+        </div>
+      )}
+
       {/* Grade de cards — largura cheia; detalhes agora vivem no menu de cada card */}
       <div ref={gridRef} hidden={aba === 'pendentes' || aba === 'desempenho'}>
         {loading ? (
@@ -1052,8 +1089,30 @@ export function MapaSolicitacoes() {
               return (
                 <div
                   key={item.id}
-                  className="group relative h-full"
+                  className={clsx(
+                    'group relative h-full rounded-lg',
+                    selecionados.includes(item.id) && 'ring-2 ring-blue-500 ring-offset-1 dark:ring-offset-slate-900'
+                  )}
                 >
+                  {/* Fora do card clicável: marcar não pode abrir os detalhes. Fica escondido até
+                      passar o mouse, a menos que já haja seleção — aí some a caça ao checkbox. */}
+                  <label
+                    className={clsx(
+                      'absolute -top-1.5 -left-1.5 z-20 w-5 h-5 rounded-md border bg-white dark:bg-slate-800 flex items-center justify-center cursor-pointer shadow-sm transition-opacity',
+                      selecionados.includes(item.id) || selecionados.length > 0
+                        ? 'opacity-100 border-blue-500'
+                        : 'opacity-0 group-hover:opacity-100 border-slate-300 dark:border-slate-600'
+                    )}
+                    title="Selecionar para a nota de atualização"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      className="accent-blue-600 w-3.5 h-3.5 cursor-pointer"
+                      checked={selecionados.includes(item.id)}
+                      onChange={() => alternarSelecao(item.id)}
+                    />
+                  </label>
                   {/* Tooltip com a reclamação — mesma informação do "Exibir Detalhes", só que ao passar o mouse.
                       Escondido enquanto o menu de ações deste card está aberto, pra não sobrepor os itens. */}
                   {menuAberto !== item.id && (
@@ -1099,6 +1158,15 @@ export function MapaSolicitacoes() {
                           >
                             <Paperclip size={14} strokeWidth={2.5} />
                             {item.anexos > 1 && item.anexos}
+                          </span>
+                        )}
+                        {item.notaGeradaEm && (
+                          <span
+                            className="flex items-center rounded-md bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 p-0.5"
+                            title={`Nota de atualização gerada em ${new Date(item.notaGeradaEm).toLocaleString('pt-BR')}`}
+                            aria-label="Nota de atualização já gerada"
+                          >
+                            <FileCheck2 size={15} strokeWidth={2.5} />
                           </span>
                         )}
                         {item.bugSistema === 'S' && (

@@ -108,6 +108,8 @@ export interface Projeto {
 
 export interface Solicitacao {
   id: number
+  // Data em que a solicitação entrou numa nota de atualização (null = ainda não saiu em nota).
+  notaGeradaEm?: string | null
   // Só vêm preenchidos na aba Arquivadas.
   motivoArquivamento?: string | null
   arquivadoEm?: string | null
