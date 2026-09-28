@@ -16,9 +16,18 @@ export async function initDemandaPublica(): Promise<void> {
       documento      VARCHAR(20) NULL,
       cliente_id     INT NULL,
       avisar         TINYINT(1) NOT NULL DEFAULT 1,
+      token          VARCHAR(64) NULL,
       criado_em      DATETIME NOT NULL DEFAULT NOW()
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+  // A tabela pode já existir sem a coluna (criada antes dos anexos), então acrescenta se faltar.
+  const temToken = await prisma.$queryRaw<Array<{ c: bigint | number }>>`
+    SELECT COUNT(*) AS c FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'solicitacao_publica' AND COLUMN_NAME = 'token'
+  `
+  if (Number(temToken[0]?.c ?? 0) === 0) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE solicitacao_publica ADD COLUMN token VARCHAR(64) NULL`)
+  }
   // Quem recebe no Telegram o aviso de demanda nova vinda do link público.
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS usuario_alerta_demanda (
@@ -38,13 +47,30 @@ export interface Solicitante {
 
 export async function registrarSolicitante(
   atendimentoId: number,
-  dados: { nome: string | null; email: string; whatsapp: string | null; documento: string | null; clienteId: number | null },
+  dados: { nome: string | null; email: string; whatsapp: string | null; documento: string | null; clienteId: number | null; token: string },
 ): Promise<void> {
   await prisma.$executeRaw`
-    INSERT INTO solicitacao_publica (atendimento_id, nome, email, whatsapp, documento, cliente_id)
-    VALUES (${atendimentoId}, ${dados.nome}, ${dados.email}, ${dados.whatsapp}, ${dados.documento}, ${dados.clienteId})
+    INSERT INTO solicitacao_publica (atendimento_id, nome, email, whatsapp, documento, cliente_id, token)
+    VALUES (${atendimentoId}, ${dados.nome}, ${dados.email}, ${dados.whatsapp}, ${dados.documento}, ${dados.clienteId}, ${dados.token})
     ON DUPLICATE KEY UPDATE nome = VALUES(nome), email = VALUES(email), whatsapp = VALUES(whatsapp)
   `
+}
+
+/**
+ * O envio de anexo vem depois do envio do formulário, numa segunda requisição — e essa rota é
+ * pública. O token é de uso único por solicitação e vale por pouco tempo: sem ele, qualquer um
+ * poderia pendurar arquivo em qualquer solicitação só chutando o número.
+ */
+const VALIDADE_TOKEN_MS = 30 * 60 * 1000
+
+export async function tokenValido(atendimentoId: number, token: string): Promise<boolean> {
+  if (!token) return false
+  const rows = await prisma.$queryRaw<Array<{ token: string | null; criado_em: Date }>>`
+    SELECT token, criado_em FROM solicitacao_publica WHERE atendimento_id = ${atendimentoId}
+  `
+  const r = rows[0]
+  if (!r?.token || r.token !== token) return false
+  return Date.now() - new Date(r.criado_em).getTime() <= VALIDADE_TOKEN_MS
 }
 
 export async function obterSolicitante(atendimentoId: number): Promise<Solicitante | null> {

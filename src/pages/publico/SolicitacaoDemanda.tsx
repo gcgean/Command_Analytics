@@ -1,8 +1,13 @@
 import { useState } from 'react'
-import { CheckCircle2, Loader2, Mail, Search, AlertTriangle } from 'lucide-react'
+import { CheckCircle2, Loader2, Mail, Search, AlertTriangle, Paperclip, X, Upload } from 'lucide-react'
 import { api } from '../../services/api'
 
 const soDigitos = (v: string) => v.replace(/\D/g, '')
+
+// Mesmos limites da rota pública no servidor — o servidor recusa de qualquer jeito, mas avisar
+// aqui evita a pessoa esperar o upload de um arquivo que não vai ser aceito.
+const MAX_ARQUIVOS = 5
+const MAX_TAMANHO = 25 * 1024 * 1024
 
 function mascararDocumento(v: string): string {
   const d = soDigitos(v).slice(0, 14)
@@ -26,9 +31,11 @@ type Cliente = { estado: 'vazio' | 'buscando' | 'achado' | 'novo'; nome: string 
 export function SolicitacaoDemanda() {
   const [form, setForm] = useState({ nome: '', documento: '', email: '', whatsapp: '', descricao: '' })
   const [cliente, setCliente] = useState<Cliente>({ estado: 'vazio', nome: '' })
+  const [arquivos, setArquivos] = useState<File[]>([])
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
   const [enviado, setEnviado] = useState<{ id: number } | null>(null)
+  const [avisoAnexos, setAvisoAnexos] = useState('')
 
   const alterar = (campo: keyof typeof form, valor: string) => setForm(f => ({ ...f, [campo]: valor }))
 
@@ -49,6 +56,16 @@ export function SolicitacaoDemanda() {
     }
   }
 
+  const adicionarArquivos = (lista: FileList | null) => {
+    if (!lista) return
+    const novos = Array.from(lista)
+    const grandes = novos.filter(a => a.size > MAX_TAMANHO)
+    if (grandes.length) {
+      setErro(`Arquivo muito grande: ${grandes.map(a => a.name).join(', ')}. O limite é 25MB por arquivo.`)
+    }
+    setArquivos(atual => [...atual, ...novos.filter(a => a.size <= MAX_TAMANHO)].slice(0, MAX_ARQUIVOS))
+  }
+
   const enviar = async () => {
     setErro('')
     setEnviando(true)
@@ -60,6 +77,17 @@ export function SolicitacaoDemanda() {
         documento: soDigitos(form.documento),
         descricao: form.descricao.trim(),
       })
+      // A solicitação já está registrada neste ponto: se o anexo falhar, o pedido não se perde —
+      // a pessoa é avisada de que só os arquivos não subiram.
+      let avisoAnexo = ''
+      if (arquivos.length) {
+        try {
+          await api.enviarAnexosDemandaPublica(r.id, r.token, arquivos)
+        } catch {
+          avisoAnexo = 'Sua solicitação foi registrada, mas não conseguimos enviar os arquivos. Responda o e-mail de confirmação com eles em anexo.'
+        }
+      }
+      setAvisoAnexos(avisoAnexo)
       setEnviado({ id: r.id })
     } catch (e: any) {
       setErro(e?.message || 'Não foi possível enviar sua solicitação. Tente novamente em instantes.')
@@ -92,10 +120,17 @@ export function SolicitacaoDemanda() {
               mensagens, confira a caixa de spam.
             </p>
           </div>
+          {avisoAnexos && (
+            <p className="mt-4 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg p-3 text-left">
+              {avisoAnexos}
+            </p>
+          )}
           <button
             className="btn-secondary mt-6"
             onClick={() => {
               setEnviado(null)
+              setArquivos([])
+              setAvisoAnexos('')
               setForm({ nome: '', documento: '', email: '', whatsapp: '', descricao: '' })
               setCliente({ estado: 'vazio', nome: '' })
             }}
@@ -192,6 +227,36 @@ export function SolicitacaoDemanda() {
           </p>
         </div>
 
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Anexos (opcional)</p>
+          <label className="flex flex-col items-center justify-center gap-1 border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-xl py-6 cursor-pointer hover:border-blue-400 transition-colors">
+            <Upload size={22} className="text-slate-400" />
+            <span className="text-sm text-slate-600 dark:text-slate-400">Clique para selecionar arquivos</span>
+            <span className="text-xs text-slate-400">Fotos, vídeos, áudios e PDF — até {MAX_ARQUIVOS} arquivos de 25MB</span>
+            <input
+              type="file"
+              className="hidden"
+              multiple
+              accept="image/*,video/*,audio/*,application/pdf"
+              onChange={(e) => { adicionarArquivos(e.target.files); e.target.value = '' }}
+            />
+          </label>
+          {arquivos.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {arquivos.map((a, i) => (
+                <li key={`${a.name}-${i}`} className="flex items-center gap-2 text-sm bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2">
+                  <Paperclip size={14} className="text-slate-400 flex-shrink-0" />
+                  <span className="flex-1 truncate text-slate-700 dark:text-slate-300">{a.name}</span>
+                  <span className="text-xs text-slate-400 flex-shrink-0">{(a.size / 1024 / 1024).toFixed(1)}MB</span>
+                  <button type="button" className="text-slate-400 hover:text-red-500" onClick={() => setArquivos(l => l.filter((_, j) => j !== i))}>
+                    <X size={14} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         {erro && (
           <div className="flex gap-2 items-start text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 rounded-lg p-3">
             <AlertTriangle size={16} className="flex-shrink-0 mt-0.5" /> {erro}
@@ -199,7 +264,9 @@ export function SolicitacaoDemanda() {
         )}
 
         <button className="btn-primary w-full justify-center py-3" disabled={!podeEnviar || enviando} onClick={enviar}>
-          {enviando ? <><Loader2 size={16} className="animate-spin" /> Enviando...</> : 'Enviar solicitação'}
+          {enviando
+            ? <><Loader2 size={16} className="animate-spin" /> {arquivos.length ? 'Enviando arquivos...' : 'Enviando...'}</>
+            : 'Enviar solicitação'}
         </button>
         <p className="text-xs text-center text-slate-500">
           Ao enviar, você receberá atualizações por e-mail até a conclusão ou recusa da solicitação.

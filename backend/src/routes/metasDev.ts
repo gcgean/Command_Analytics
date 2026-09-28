@@ -4,7 +4,7 @@ import { authMiddleware } from '../middleware/auth'
 import { registrarAuditoria } from '../utils/auditoria'
 
 /**
- * Metas do período do desenvolvimento — o objetivo de longo prazo que o dia a dia de solicitação
+ * Metas de tarefas por período — o objetivo de longo prazo que o dia a dia de solicitação
  * urgente faz esquecer. É uma lista de itens marcáveis com data de início e fim, separada das
  * solicitações de propósito: meta não é chamado, não tem cliente e não pode competir com a fila.
  */

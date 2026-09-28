@@ -758,10 +758,20 @@ export const api = {
   buscarClientePublico: (documento: string) =>
     fetchApi<{ encontrado: boolean; nome: string }>(`/publico/cliente?documento=${encodeURIComponent(documento)}`),
   enviarDemandaPublica: (dados: { nome: string; email: string; whatsapp: string; documento: string; descricao: string }) =>
-    fetchApi<{ ok: boolean; id: number; clienteEncontrado: boolean; clienteNome: string | null }>('/publico/solicitacoes', {
+    fetchApi<{ ok: boolean; id: number; token: string; clienteEncontrado: boolean; clienteNome: string | null }>('/publico/solicitacoes', {
       method: 'POST',
       body: JSON.stringify(dados),
     }),
+  // Anexos vão numa segunda chamada, já com o número da solicitação criada e o token devolvido.
+  enviarAnexosDemandaPublica: (id: number, token: string, arquivos: File[]) => {
+    const form = new FormData()
+    arquivos.forEach((a) => form.append('arquivos', a))
+    return fetchApi<{ ok: boolean; enviados: number }>(
+      `/publico/anexos?id=${id}&token=${encodeURIComponent(token)}`,
+      { method: 'POST', body: form },
+      120_000,
+    )
+  },
 
   // ─── Configuração de e-mail (SMTP) ─────────────────────────
   getConfigEmail: () =>

@@ -1,9 +1,15 @@
 import type { FastifyInstance } from 'fastify'
+import type { MultipartFile } from '@fastify/multipart'
+import { pipeline } from 'node:stream/promises'
+import { createWriteStream, promises as fs } from 'node:fs'
+import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { prisma } from '../database/client'
 import { TelegramService } from '../services/telegram'
 import { registrarAuditoria } from '../utils/auditoria'
 import {
   registrarSolicitante,
+  tokenValido,
   destinatariosNovaDemanda,
   avisarSolicitante,
   escapar,
@@ -14,6 +20,17 @@ import {
 const STATUS_TRIAGEM = 4
 // Mesmo usuário que o formulário externo antigo já usa como lançador.
 const USUARIO_FORMULARIO = 1
+
+// Limites menores que os internos: é uma porta aberta na internet, e 5 arquivos de 25MB já cobrem
+// print, vídeo curto de tela e PDF, que é o que o cliente costuma mandar.
+const MAX_ANEXOS_PUBLICO = 5
+const MAX_TAMANHO_PUBLICO = 25 * 1024 * 1024
+const MIME_PUBLICO = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'application/pdf',
+  'video/mp4', 'video/webm', 'video/quicktime',
+  'audio/mpeg', 'audio/mp4', 'audio/ogg', 'audio/webm',
+])
 
 const soDigitos = (v: string) => String(v ?? '').replace(/\D/g, '')
 
@@ -133,12 +150,15 @@ export async function publicoRoutes(app: FastifyInstance) {
       dadosDepois: { origem: 'link público', nome, email, documento: documentoFormatado, clienteId: cliente?.cod_cli ?? null },
     })
 
+    // Token de uso curto devolvido junto: é com ele que a tela envia os anexos logo em seguida.
+    const token = randomUUID()
     await registrarSolicitante(criado.id, {
       nome,
       email,
       whatsapp: whatsapp || null,
       documento: documentoFormatado,
       clienteId: cliente?.cod_cli ?? null,
+      token,
     })
 
     // Avisa quem marcou no cadastro que quer saber de demanda nova.
@@ -170,8 +190,67 @@ export async function publicoRoutes(app: FastifyInstance) {
     return reply.status(201).send({
       ok: true,
       id: criado.id,
+      token,
       clienteEncontrado: !!cliente,
       clienteNome: cliente?.nome ?? null,
     })
+  })
+
+  // POST /publico/anexos?id=&token= — arquivos e vídeos do formulário público
+  app.post('/anexos', { schema: { tags: ['Público'], summary: 'Anexos da demanda enviada pelo cliente' } }, async (request, reply) => {
+    const { id, token } = request.query as { id?: string; token?: string }
+    const atendimentoId = Number(id)
+    if (!Number.isInteger(atendimentoId) || atendimentoId <= 0) {
+      return reply.status(400).send({ error: 'Solicitação inválida.' })
+    }
+    if (!(await tokenValido(atendimentoId, String(token ?? '')))) {
+      return reply.status(403).send({ error: 'Envio de anexos expirado. Fale com o suporte informando o número da solicitação.' })
+    }
+
+    // Mesma pasta e mesma tabela dos anexos internos: assim o arquivo aparece direto no card do
+    // Mapa de Solicitações, sem uma segunda galeria só pra demanda pública.
+    const uploadsDir = path.resolve(process.cwd(), 'uploads', 'atendimentos')
+    await fs.mkdir(uploadsDir, { recursive: true })
+
+    let enviados = 0
+    try {
+      for await (const part of request.parts()) {
+        if ((part as any).type !== 'file') continue
+        const filePart = part as MultipartFile
+        if (enviados >= MAX_ANEXOS_PUBLICO) {
+          for await (const _c of filePart.file as any) void _c
+          continue
+        }
+
+        const mimeType = String((filePart as any).mimetype || '')
+        if (!MIME_PUBLICO.has(mimeType)) {
+          for await (const _c of filePart.file as any) void _c
+          continue
+        }
+
+        const originalName = String((filePart as any).filename || 'arquivo')
+          .replace(/[^a-zA-Z0-9._\-\s]/g, '').trim().replace(/\s+/g, ' ').slice(0, 180) || 'arquivo'
+        const storedName = `${randomUUID()}${path.extname(originalName).slice(0, 10)}`
+        const fullPath = path.join(uploadsDir, storedName)
+        await pipeline(filePart.file, createWriteStream(fullPath))
+
+        const stat = await fs.stat(fullPath)
+        if (stat.size > MAX_TAMANHO_PUBLICO) {
+          await fs.unlink(fullPath).catch(() => {})
+          continue
+        }
+
+        await prisma.$executeRaw`
+          INSERT INTO agendamento_anexo (tabela, registro_id, original_name, stored_name, mime_type, size_bytes, created_by, created_at)
+          VALUES ('atendimentos', ${atendimentoId}, ${originalName}, ${storedName}, ${mimeType}, ${Number(stat.size)}, ${USUARIO_FORMULARIO}, NOW())
+        `
+        enviados += 1
+      }
+    } catch {
+      return reply.status(400).send({ error: 'Falha ao enviar os arquivos.' })
+    }
+
+    if (enviados === 0) return reply.status(400).send({ error: 'Nenhum arquivo aceito (verifique o tipo e o tamanho).' })
+    return { ok: true, enviados }
   })
 }

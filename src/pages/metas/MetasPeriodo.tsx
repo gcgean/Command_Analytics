@@ -22,7 +22,7 @@ type Form = {
 }
 
 /**
- * Metas do período — de qualquer setor, não só do desenvolvimento. A lista é uma checklist com
+ * Metas de tarefas por período — de qualquer setor, não só do desenvolvimento. A lista é uma checklist com
  * prazo, e o valor está no percentual: no fim do mês dá pra dizer, em um número, se os objetivos
  * de longo prazo andaram ou se o mês inteiro foi apagar incêndio.
  */
@@ -141,7 +141,7 @@ export function MetasPeriodo() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Metas do Período</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Metas de Tarefas por Período</h1>
         <p className="text-slate-600 dark:text-slate-400 text-sm mt-1">
           Os objetivos que não podem se perder no dia a dia — e quanto deles foi cumprido no período.
         </p>
