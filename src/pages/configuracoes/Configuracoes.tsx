@@ -419,7 +419,7 @@ export function Configuracoes() {
                   value={email.porta}
                   onChange={(e) => setEmail(v => ({ ...v, porta: Number(e.target.value) }))}
                 />
-                <p className="text-[11px] text-slate-500 mt-1">587 com STARTTLS, ou 465 com SSL.</p>
+                <p className="text-[11px] text-slate-500 mt-1">587 com STARTTLS, ou 465/2465 com SSL (o sistema já reconhece essas portas).</p>
               </div>
               <div>
                 <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Usuário</label>
@@ -470,7 +470,7 @@ export function Configuracoes() {
                 checked={email.seguro}
                 onChange={(e) => setEmail(v => ({ ...v, seguro: e.target.checked }))}
               />
-              Conexão SSL direta (marque só se usar a porta 465)
+              Forçar conexão SSL direta (só para servidor fora do padrão — 465 e 2465 já usam SSL sozinhas)
             </label>
 
             <button onClick={handleSalvarEmail} disabled={salvandoEmail} className="btn-primary disabled:opacity-60">

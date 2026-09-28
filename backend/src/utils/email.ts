@@ -113,8 +113,10 @@ export async function enviarEmail(opcoes: {
     const transporte = nodemailer.createTransport({
       host: config.host,
       port: config.porta,
-      // 465 é SSL direto; 587 começa em texto e sobe pra TLS com STARTTLS.
-      secure: config.seguro || config.porta === 465,
+      // 465 (e a 2465 do Resend) são SSL direto; 587/2587 começam em texto e sobem pra TLS com
+      // STARTTLS. Marcar isso errado dá erro de conexão, então as portas conhecidas decidem
+      // sozinhas e o checkbox da tela só serve pra casos fora do padrão.
+      secure: config.seguro || config.porta === 465 || config.porta === 2465,
       ...(config.usuario ? { auth: { user: config.usuario, pass: config.senha } } : {}),
     })
 
