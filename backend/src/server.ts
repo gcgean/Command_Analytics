@@ -68,6 +68,7 @@ import { initDemandaPublica } from './utils/demandaPublica'
 import { ensureConfiguracaoEmail } from './utils/email'
 import { publicoRoutes } from './routes/publico'
 import { emailRoutes } from './routes/email'
+import { metasDevRoutes, initMetasDev } from './routes/metasDev'
 import { ensureConfiguracaoIA } from './ia/config'
 
 // Em produção o logger ficava desligado, então erro nenhum era gravado — quando algo falhava na
@@ -221,6 +222,7 @@ app.register(async (api) => {
   api.register(bancoHorasRoutes,   { prefix: '/banco-horas' })
   api.register(assistenteRoutes,   { prefix: '/assistente' })
   api.register(emailRoutes,        { prefix: '/email' })
+  api.register(metasDevRoutes,     { prefix: '/metas-dev' })
   // Sem authMiddleware de propósito: é o formulário que o cliente abre pelo link público.
   api.register(publicoRoutes,      { prefix: '/publico' })
 }, { prefix: '/api' })
@@ -253,6 +255,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initAnexos()
     .then(() => console.log('✓ Tabela de anexos verificada'))
     .catch(e => console.warn('⚠ Anexos init:', e.message))
+  initMetasDev()
+    .then(() => console.log('✓ Tabela de metas do desenvolvimento verificada'))
+    .catch(e => console.warn('⚠ Metas do dev init:', e.message))
   initDemandaPublica()
     .then(() => console.log('✓ Tabelas de demanda pública verificadas'))
     .catch(e => console.warn('⚠ Demanda pública init:', e.message))

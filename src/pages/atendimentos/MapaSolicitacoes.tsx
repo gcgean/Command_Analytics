@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   RefreshCw, Loader2, Star, Search, MoreVertical, AlertTriangle,
-  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText, CheckCheck, Paperclip, Bug, Archive, ArchiveRestore,
+  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText, CheckCheck, Paperclip, Bug, Archive, ArchiveRestore, Link2, ExternalLink,
 } from 'lucide-react'
 import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -12,10 +12,11 @@ import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { LancamentoSolicitacao, type PrefillSolicitacao } from './LancamentoSolicitacao'
 import { PainelDesempenhoDev } from './PainelDesempenhoDev'
+import { PainelMetasDev } from './PainelMetasDev'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import type { ClienteAnexo, Projeto, Solicitacao, SolicitacaoPendenteAtualizacao, Usuario } from '../../types'
 
-type Aba = 'suporte' | 'finalizadas' | 'pendentes' | 'desempenho' | 'arquivadas'
+type Aba = 'suporte' | 'finalizadas' | 'pendentes' | 'desempenho' | 'arquivadas' | 'metas'
 
 // Mesmos códigos do Delphi (UMapaAtendimentos.pas). Não existe status 15.
 const S = {
@@ -365,6 +366,10 @@ export function MapaSolicitacoes() {
   const [modalJustificativa, setModalJustificativa] = useState<{ item: Solicitacao; status: number; titulo: string; opcional?: boolean } | null>(null)
   const [modalCancelar, setModalCancelar] = useState<Solicitacao | null>(null)
   const [modalArquivar, setModalArquivar] = useState<Solicitacao | null>(null)
+  const [modalLinkPublico, setModalLinkPublico] = useState(false)
+  // Mesmo domínio de onde a tela está aberta: em produção vira controle.cilos.com.br/demanda, e
+  // em teste local continua apontando pro ambiente certo sem precisar de configuração.
+  const linkPublico = `${window.location.origin}/demanda`
   const [modalFinalizar, setModalFinalizar] = useState<Solicitacao | null>(null)
   const [texto, setTexto] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -394,7 +399,7 @@ export function MapaSolicitacoes() {
   // estão. O spinner de tela cheia fica só pra troca de aba/filtro, quando a lista é outra mesmo.
   const carregar = useCallback((opcoes?: { emSegundoPlano?: boolean }) => {
     if (!opcoes?.emSegundoPlano) setLoading(true)
-    if (aba === 'desempenho') {
+    if (aba === 'desempenho' || aba === 'metas') {
       setLoading(false)
       return
     }
@@ -732,6 +737,13 @@ export function MapaSolicitacoes() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            className="btn-secondary flex items-center gap-2"
+            onClick={() => setModalLinkPublico(true)}
+            title="Link para o cliente enviar demandas"
+          >
+            <Link2 size={16} /> Link do cliente
+          </button>
           <button className="btn-secondary flex items-center gap-2" onClick={() => carregar()} disabled={loading}>
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} /> Atualizar
           </button>
@@ -799,7 +811,7 @@ export function MapaSolicitacoes() {
       {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero. Clicar filtra.
           Escondido em "Clientes a atualizar": lá a lista não é por etapa. */}
       <div
-        hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'finalizadas' || aba === 'arquivadas'}
+        hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'finalizadas' || aba === 'arquivadas' || aba === 'metas'}
         className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2"
       >
         <button
@@ -859,6 +871,7 @@ export function MapaSolicitacoes() {
           ['pendentes', 'Clientes a atualizar'],
           ['arquivadas', 'Arquivadas'],
           ['desempenho', 'Desempenho do Dev'],
+          ['metas', 'Metas do período'],
         ] as Array<[Aba, string]>).map(([id, label]) => (
           <button
             key={id}
@@ -875,8 +888,8 @@ export function MapaSolicitacoes() {
         ))}
       </div>
 
-      {/* Filtros da aba */}
-      <div className="flex flex-wrap gap-3 items-end">
+      {/* Filtros da aba — Metas tem os próprios (período, dev, projeto), então some aqui. */}
+      <div className="flex flex-wrap gap-3 items-end" hidden={aba === 'metas'}>
         <div className="w-72">
           <Input
             placeholder="Pesquisar por cliente..."
@@ -955,6 +968,8 @@ export function MapaSolicitacoes() {
 
       {aba === 'desempenho' && <PainelDesempenhoDev rotuloStatus={ROTULO_STATUS} />}
 
+      {aba === 'metas' && <PainelMetasDev devs={devs} projetos={projetos} />}
+
       {/* Clientes a atualizar — tabela, porque o que importa aqui é comparar versões, não o kanban */}
       {aba === 'pendentes' && (
         <div>
@@ -1027,7 +1042,7 @@ export function MapaSolicitacoes() {
       )}
 
       {/* Grade de cards — largura cheia; detalhes agora vivem no menu de cada card */}
-      <div ref={gridRef} hidden={aba === 'pendentes' || aba === 'desempenho'}>
+      <div ref={gridRef} hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'metas'}>
         {loading ? (
           <div className="flex items-center justify-center h-40 text-slate-500">
             <Loader2 className="w-6 h-6 animate-spin mr-3" /> Carregando solicitações...
@@ -1423,6 +1438,40 @@ export function MapaSolicitacoes() {
       </Modal>
 
       {/* Cancelamento */}
+      {/* Link público — o endereço é fixo, mas fica aqui pra ninguém precisar decorar nem
+          procurar no chat quando for mandar pro cliente. */}
+      <Modal isOpen={modalLinkPublico} onClose={() => setModalLinkPublico(false)} title="Link para o cliente enviar demandas">
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600 dark:text-slate-400">
+            Mande este endereço para o cliente. Ele preenche o formulário e a demanda cai aqui no Mapa, na etapa
+            <strong> Aguardando Análise Dev</strong>. O cliente recebe as atualizações por e-mail até a solicitação
+            ser concluída ou recusada.
+          </p>
+          <div className="flex gap-2">
+            <input className="input-field flex-1 font-mono text-sm" readOnly value={linkPublico} onFocus={(e) => e.target.select()} />
+            <button
+              className="btn-primary flex items-center gap-2 whitespace-nowrap"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(linkPublico)
+                  toast.success('Link copiado!')
+                } catch {
+                  toast.error('Não foi possível copiar. Selecione o texto e copie com Ctrl+C.')
+                }
+              }}
+            >
+              <Copy size={15} /> Copiar
+            </button>
+          </div>
+          <div className="flex justify-between items-center">
+            <a href={linkPublico} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 dark:text-blue-400 flex items-center gap-1 hover:underline">
+              <ExternalLink size={14} /> Abrir o formulário
+            </a>
+            <button className="btn-secondary" onClick={() => setModalLinkPublico(false)}>Fechar</button>
+          </div>
+        </div>
+      </Modal>
+
       {/* Arquivar — motivo opcional: muita coisa é engavetada só por falta de prioridade. */}
       <Modal isOpen={!!modalArquivar} onClose={() => setModalArquivar(null)} title={`Arquivar solicitação #${modalArquivar?.id ?? ''}`}>
         <div className="space-y-3">

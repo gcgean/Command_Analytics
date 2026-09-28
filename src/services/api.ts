@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  MetaDev, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
@@ -737,6 +737,22 @@ export const api = {
     fetchApi<{ ok: boolean }>(`/solicitacoes/${id}/arquivar`, { method: 'POST', body: JSON.stringify({ motivo: motivo ?? '' }) }),
   desarquivarSolicitacao: (id: number) =>
     fetchApi<{ ok: boolean; status: number }>(`/solicitacoes/${id}/desarquivar`, { method: 'POST' }),
+
+  // ─── Metas do desenvolvimento (checklist por período) ──────
+  getMetasDev: (filtros: { inicio: string; fim: string; desenvolvedorId?: number | null; projetoId?: number | null }) => {
+    const qs = new URLSearchParams({ inicio: filtros.inicio, fim: filtros.fim })
+    if (filtros.desenvolvedorId) qs.set('desenvolvedorId', String(filtros.desenvolvedorId))
+    if (filtros.projetoId) qs.set('projetoId', String(filtros.projetoId))
+    return fetchApi<{ data: MetaDev[]; resumo: { total: number; concluidas: number; pendentes: number; percentual: number | null } }>(
+      `/metas-dev?${qs.toString()}`)
+  },
+  criarMetaDev: (dados: Partial<MetaDev> & { periodoInicio: string; periodoFim: string; titulo: string }) =>
+    fetchApi<{ ok: boolean; id: number }>('/metas-dev', { method: 'POST', body: JSON.stringify(dados) }),
+  atualizarMetaDev: (id: number, dados: Partial<MetaDev>) =>
+    fetchApi<{ ok: boolean }>(`/metas-dev/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
+  concluirMetaDev: (id: number, concluida: boolean) =>
+    fetchApi<{ ok: boolean }>(`/metas-dev/${id}/concluir`, { method: 'PATCH', body: JSON.stringify({ concluida }) }),
+  excluirMetaDev: (id: number) => fetchApi<{ ok: boolean }>(`/metas-dev/${id}`, { method: 'DELETE' }),
 
   // ─── Link público de demandas (sem login) ──────────────────
   buscarClientePublico: (documento: string) =>

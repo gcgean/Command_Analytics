@@ -1228,3 +1228,19 @@ export interface ProcedimentoCadastro {
   criadoEm?: string | null
   atualizadoEm?: string | null
 }
+
+/** Meta de período do desenvolvimento — item de checklist com prazo, dono e projeto. */
+export interface MetaDev {
+  id: number
+  titulo: string
+  detalhe: string | null
+  desenvolvedorId: number | null
+  desenvolvedorNome: string | null
+  projetoId: number | null
+  projetoNome: string | null
+  periodoInicio: string
+  periodoFim: string
+  concluida: boolean
+  concluidaEm: string | null
+  concluidaPorNome: string | null
+}
