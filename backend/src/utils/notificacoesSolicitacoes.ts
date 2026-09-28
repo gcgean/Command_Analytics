@@ -1,6 +1,7 @@
 import { prisma } from '../database/client'
 import { TelegramService } from '../services/telegram'
 import { registrarNotificacao } from './notificacoesAgendamento'
+import { avisarSolicitanteDaMudanca } from './demandaPublica'
 
 const nome = (u: { nomeCompleto?: string | null; nomeUsu?: string | null } | null) =>
   u?.nomeCompleto || u?.nomeUsu || 'alguém'
@@ -109,6 +110,10 @@ export async function notificarAtualizacaoSolicitacao(
         console.warn(`⚠ Falha ao notificar usuário ${destinatario.id} no Telegram sobre solicitação #${atendimentoId}:`, envio.error)
       }
     }
+    // Demanda que veio do link público: o cliente que enviou também é avisado, por e-mail, até
+    // ela ser concluída ou recusada. Fica aqui porque todas as rotas que mexem na solicitação já
+    // passam por esta função — pendurar em cada uma delas acabaria esquecendo alguma.
+    await avisarSolicitanteDaMudanca(atendimentoId, descricao)
   } catch (e) {
     console.warn(`⚠ Erro ao notificar atualização da solicitação #${atendimentoId}:`, e)
   }

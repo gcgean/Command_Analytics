@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { gerarCodigoVinculo } from '../utils/telegramBot'
+import { preferenciaDemanda, salvarPreferenciaDemanda } from '../utils/demandaPublica'
 
 const nome = (u: any) => u?.nomeCompleto || u?.nomeUsu || 'Usuário'
 
@@ -135,6 +136,21 @@ export async function usuariosRoutes(app: FastifyInstance) {
     if (!botUsername) return reply.status(503).send({ error: 'Bot do Telegram não configurado (verifique o token em Configurações > Telegram).' })
 
     return { codigo, botUsername, expiraEm }
+  })
+
+  // Avisos de demanda nova vinda do link público — por usuário, escolhido no cadastro dele
+  app.get('/:id/alerta-demanda', { preHandler: authMiddleware, schema: { tags: ['Usuários'] } }, async (request) => {
+    const { id } = request.params as { id: string }
+    return { novaDemanda: await preferenciaDemanda(Number(id)) }
+  })
+
+  app.put('/:id/alerta-demanda', { preHandler: authMiddleware, schema: { tags: ['Usuários'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { novaDemanda } = request.body as { novaDemanda?: boolean }
+    const usuario = await prisma.usuario.findUnique({ where: { id: Number(id) }, select: { id: true } })
+    if (!usuario) return reply.status(404).send({ error: 'Usuário não encontrado.' })
+    await salvarPreferenciaDemanda(usuario.id, !!novaDemanda)
+    return { novaDemanda: !!novaDemanda }
   })
 
   app.get('/:id/telegram/status', { preHandler: authMiddleware, schema: { tags: ['Usuários'], summary: 'Status do vínculo do Telegram' } }, async (request, reply) => {

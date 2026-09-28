@@ -738,6 +738,27 @@ export const api = {
   desarquivarSolicitacao: (id: number) =>
     fetchApi<{ ok: boolean; status: number }>(`/solicitacoes/${id}/desarquivar`, { method: 'POST' }),
 
+  // ─── Link público de demandas (sem login) ──────────────────
+  buscarClientePublico: (documento: string) =>
+    fetchApi<{ encontrado: boolean; nome: string }>(`/publico/cliente?documento=${encodeURIComponent(documento)}`),
+  enviarDemandaPublica: (dados: { nome: string; email: string; whatsapp: string; documento: string; descricao: string }) =>
+    fetchApi<{ ok: boolean; id: number; clienteEncontrado: boolean; clienteNome: string | null }>('/publico/solicitacoes', {
+      method: 'POST',
+      body: JSON.stringify(dados),
+    }),
+
+  // ─── Configuração de e-mail (SMTP) ─────────────────────────
+  getConfigEmail: () =>
+    fetchApi<{ ativo: boolean; host: string; porta: number; seguro: boolean; usuario: string; remetenteNome: string; remetenteEmail: string; temSenha: boolean }>('/email/config'),
+  salvarConfigEmail: (dados: { ativo: boolean; host: string; porta: number; seguro: boolean; usuario: string; senha?: string; remetenteNome: string; remetenteEmail: string }) =>
+    fetchApi<{ temSenha: boolean }>('/email/config', { method: 'PUT', body: JSON.stringify(dados) }),
+  testarEmail: (para: string) =>
+    fetchApi<{ ok: boolean }>('/email/testar', { method: 'POST', body: JSON.stringify({ para }) }),
+
+  getAlertaDemandaUsuario: (id: number) => fetchApi<{ novaDemanda: boolean }>(`/usuarios/${id}/alerta-demanda`),
+  salvarAlertaDemandaUsuario: (id: number, novaDemanda: boolean) =>
+    fetchApi<{ novaDemanda: boolean }>(`/usuarios/${id}/alerta-demanda`, { method: 'PUT', body: JSON.stringify({ novaDemanda }) }),
+
   getPendentesAtualizacao: (filtros?: { tecnicoId?: number[]; desenvolvedorId?: number[]; projetoId?: number[]; busca?: string; prioritario?: boolean }) => {
     const qs = new URLSearchParams()
     if (filtros?.tecnicoId?.length) qs.set('tecnicoId', filtros.tecnicoId.join(','))

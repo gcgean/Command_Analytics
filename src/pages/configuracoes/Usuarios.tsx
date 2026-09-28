@@ -143,6 +143,49 @@ function TelegramVinculo({ usuarioId, idTelegram, onChange }: { usuarioId: numbe
   )
 }
 
+/**
+ * Aviso no Telegram de demanda nova vinda do link público. Salva sozinho ao marcar — é uma opção
+ * só, e ficar refém do "Salvar" do cadastro atrapalharia mais do que ajudaria.
+ */
+function AlertaDemanda({ usuarioId, temTelegram }: { usuarioId: number; temTelegram: boolean }) {
+  const [marcado, setMarcado] = useState(false)
+  const [salvando, setSalvando] = useState(false)
+  const [erro, setErro] = useState('')
+
+  useEffect(() => {
+    api.getAlertaDemandaUsuario(usuarioId)
+      .then((r) => setMarcado(r.novaDemanda))
+      .catch(() => setErro('Não foi possível carregar essa preferência.'))
+  }, [usuarioId])
+
+  const alternar = async (valor: boolean) => {
+    setMarcado(valor)
+    setSalvando(true)
+    setErro('')
+    try {
+      await api.salvarAlertaDemandaUsuario(usuarioId, valor)
+    } catch (e: any) {
+      setMarcado(!valor)
+      setErro(e?.message || 'Não foi possível salvar.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
+  return (
+    <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+      <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+        <input type="checkbox" className="accent-blue-600 mt-0.5" checked={marcado} disabled={salvando} onChange={(e) => alternar(e.target.checked)} />
+        <span>
+          Avisar no Telegram quando um cliente enviar uma nova demanda pelo link público
+          {!temTelegram && <span className="block text-xs text-amber-500">Conecte o Telegram acima para receber.</span>}
+        </span>
+      </label>
+      {erro && <p className="text-xs text-red-500 mt-1">{erro}</p>}
+    </div>
+  )
+}
+
 export function Usuarios() {
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [loading, setLoading] = useState(true)
@@ -439,6 +482,7 @@ export function Usuarios() {
                 ) : (
                   <p className="text-xs text-slate-500">Salve o usuário primeiro pra poder conectar o Telegram.</p>
                 )}
+                {editId && <AlertaDemanda usuarioId={editId} temTelegram={!!form.idTelegram} />}
               </div>
 
               <div className="pt-4 flex justify-end gap-3 border-t border-slate-100 dark:border-slate-800 mt-6">

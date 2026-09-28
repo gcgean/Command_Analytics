@@ -935,6 +935,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
         dataUltAlteracao: new Date(),
       },
     })
+    // Cancelou uma arquivada: o registro de "de onde ela veio" não serve mais pra nada.
+    if (atual.status === STATUS.ARQUIVADO) await consumirArquivamento(Number(id))
     await gravarLog(Number(id), usuarioId, `Atendimento cancelado: ${motivo.trim()}`)
     await registrarAuditoria({
       tabela: 'atendimentos',

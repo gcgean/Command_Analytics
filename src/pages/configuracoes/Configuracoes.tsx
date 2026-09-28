@@ -14,29 +14,15 @@ interface TokenWhats {
   ativo: boolean
 }
 
-interface ContaEmail {
-  id: number
-  host: string
-  porta: string
-  email: string
-  nomeRemetente: string
-  tls: boolean
-}
-
 const mockTokens: TokenWhats[] = [
   { id: 1, descricao: 'Suporte Principal', token: 'whatsapp_tok_abc123...', ativo: true },
   { id: 2, descricao: 'Comercial', token: 'whatsapp_tok_xyz789...', ativo: false },
-]
-
-const mockContas: ContaEmail[] = [
-  { id: 1, host: 'smtp.gmail.com', porta: '587', email: 'suporte@cilos.com.br', nomeRemetente: 'Cilos Suporte', tls: true },
 ]
 
 export function Configuracoes() {
   const { toast } = useToast()
   const [aba, setAba] = useState<Aba>('geral')
   const [loading, setLoading] = useState(false)
-  const [testando, setTestando] = useState<number | null>(null)
 
   // Geral
   const [geral, setGeral] = useState({
@@ -53,8 +39,15 @@ export function Configuracoes() {
   const [tokenNotif, setTokenNotif] = useState('notif_sk_live_...')
   const [tokens, setTokens] = useState<TokenWhats[]>(mockTokens)
 
-  // Email
-  const [contas, setContas] = useState<ContaEmail[]>(mockContas)
+  // Email (SMTP real, gravado no banco — a senha nunca volta do servidor)
+  const [email, setEmail] = useState({
+    ativo: false, host: '', porta: 587, seguro: false, usuario: '',
+    remetenteNome: '', remetenteEmail: '', temSenha: false,
+  })
+  const [novaSenhaEmail, setNovaSenhaEmail] = useState('')
+  const [emailTeste, setEmailTeste] = useState('')
+  const [salvandoEmail, setSalvandoEmail] = useState(false)
+  const [testandoEmail, setTestandoEmail] = useState(false)
 
   // Parâmetros
   const [params, setParams] = useState({
@@ -93,6 +86,9 @@ export function Configuracoes() {
     }
     if (aba === 'assistente') {
       carregarConfigAssistente()
+    }
+    if (aba === 'email') {
+      carregarConfigEmail()
     }
     if (aba === 'notificacoes') {
       carregarConfigNotificacoesAgendamento()
@@ -243,15 +239,38 @@ export function Configuracoes() {
     }
   }
 
-  const handleTestarEmail = async (id: number) => {
-    setTestando(id)
+  const carregarConfigEmail = async () => {
     try {
-      await new Promise(r => setTimeout(r, 1200))
-      toast.success('Conexão SMTP testada com sucesso!')
-    } catch {
-      toast.error('Falha ao conectar ao servidor SMTP.')
+      setEmail(await api.getConfigEmail())
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao carregar a configuração de e-mail.')
+    }
+  }
+
+  const handleSalvarEmail = async () => {
+    setSalvandoEmail(true)
+    try {
+      await api.salvarConfigEmail({ ...email, senha: novaSenhaEmail.trim() || undefined })
+      setNovaSenhaEmail('')
+      toast.success('Configuração de e-mail salva!')
+      carregarConfigEmail()
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao salvar a configuração de e-mail.')
     } finally {
-      setTestando(null)
+      setSalvandoEmail(false)
+    }
+  }
+
+  // Teste é envio de verdade: só assim dá pra saber que a senha e a porta estão certas.
+  const handleTestarEmail = async () => {
+    setTestandoEmail(true)
+    try {
+      await api.testarEmail(emailTeste.trim())
+      toast.success(`E-mail de teste enviado para ${emailTeste.trim()}. Confira a caixa de entrada (e o spam).`)
+    } catch (e: any) {
+      toast.error(e?.message || 'Falha ao enviar o e-mail de teste.')
+    } finally {
+      setTestandoEmail(false)
     }
   }
 
@@ -363,46 +382,126 @@ export function Configuracoes() {
       {/* Aba E-mail */}
       {aba === 'email' && (
         <div className="space-y-4 max-w-2xl">
-          {contas.map(c => (
-            <div key={c.id} className="card space-y-4">
-              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Conta SMTP — {c.email}</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Host SMTP</label>
-                  <input className="input-field" defaultValue={c.host} />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Porta</label>
-                  <input className="input-field" defaultValue={c.porta} />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">E-mail</label>
-                  <input type="email" className="input-field" defaultValue={c.email} />
-                </div>
-                <div>
-                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Nome Remetente</label>
-                  <input className="input-field" defaultValue={c.nomeRemetente} />
-                </div>
-                <div className="flex items-center gap-2">
-                  <input type="checkbox" id={`tls-${c.id}`} defaultChecked={c.tls} className="rounded border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-blue-600" />
-                  <label htmlFor={`tls-${c.id}`} className="text-sm text-slate-700 dark:text-slate-300 cursor-pointer">Usar TLS/SSL</label>
-                </div>
+          <div className="card space-y-4">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Servidor de envio (SMTP)</h3>
+              <p className="text-xs text-slate-500 mt-1">
+                É por aqui que saem os avisos para o cliente que envia demanda pelo link público — confirmação do envio
+                e cada atualização, até a solicitação ser concluída ou recusada.
+              </p>
+            </div>
+
+            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                className="accent-blue-600"
+                checked={email.ativo}
+                onChange={(e) => setEmail(v => ({ ...v, ativo: e.target.checked }))}
+              />
+              Envio de e-mail ativo
+            </label>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Host SMTP</label>
+                <input
+                  className="input-field"
+                  placeholder="smtp.seudominio.com.br"
+                  value={email.host}
+                  onChange={(e) => setEmail(v => ({ ...v, host: e.target.value }))}
+                />
               </div>
-              <div className="flex gap-2">
-                <button onClick={handleSalvar} disabled={loading} className="btn-primary disabled:opacity-60">
-                  {loading ? <><Loader2 size={15} className="animate-spin" /> Salvando...</> : <><Save size={15} /> Salvar</>}
-                </button>
-                <button onClick={() => handleTestarEmail(c.id)} disabled={testando === c.id} className="btn-secondary disabled:opacity-60">
-                  {testando === c.id
-                    ? <><Loader2 size={15} className="animate-spin" /> Testando...</>
-                    : <><Wifi size={15} /> Testar Conexão</>}
-                </button>
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Porta</label>
+                <input
+                  className="input-field"
+                  type="number"
+                  value={email.porta}
+                  onChange={(e) => setEmail(v => ({ ...v, porta: Number(e.target.value) }))}
+                />
+                <p className="text-[11px] text-slate-500 mt-1">587 com STARTTLS, ou 465 com SSL.</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Usuário</label>
+                <input
+                  className="input-field"
+                  placeholder="normalmente o próprio e-mail"
+                  value={email.usuario}
+                  onChange={(e) => setEmail(v => ({ ...v, usuario: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Senha</label>
+                <input
+                  className="input-field"
+                  type="password"
+                  placeholder={email.temSenha ? '•••••••• (já configurada)' : 'senha da conta de e-mail'}
+                  value={novaSenhaEmail}
+                  onChange={(e) => setNovaSenhaEmail(e.target.value)}
+                  autoComplete="new-password"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">Deixe em branco para manter a senha atual.</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">E-mail do remetente</label>
+                <input
+                  className="input-field"
+                  type="email"
+                  placeholder="suporte@cilos.com.br"
+                  value={email.remetenteEmail}
+                  onChange={(e) => setEmail(v => ({ ...v, remetenteEmail: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Nome do remetente</label>
+                <input
+                  className="input-field"
+                  placeholder="Cilos Sistema"
+                  value={email.remetenteNome}
+                  onChange={(e) => setEmail(v => ({ ...v, remetenteNome: e.target.value }))}
+                />
               </div>
             </div>
-          ))}
-          <button className="btn-secondary w-full justify-center">
-            <Plus size={15} /> Adicionar Conta SMTP
-          </button>
+
+            <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                className="accent-blue-600"
+                checked={email.seguro}
+                onChange={(e) => setEmail(v => ({ ...v, seguro: e.target.checked }))}
+              />
+              Conexão SSL direta (marque só se usar a porta 465)
+            </label>
+
+            <button onClick={handleSalvarEmail} disabled={salvandoEmail} className="btn-primary disabled:opacity-60">
+              {salvandoEmail ? <><Loader2 size={15} className="animate-spin" /> Salvando...</> : <><Save size={15} /> Salvar</>}
+            </button>
+          </div>
+
+          <div className="card space-y-3">
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Testar envio</h3>
+            <p className="text-xs text-slate-500">
+              Salve antes de testar. O teste envia uma mensagem real — se ela chegar, está tudo certo.
+            </p>
+            <div className="flex gap-2">
+              <input
+                className="input-field flex-1"
+                type="email"
+                placeholder="enviar teste para..."
+                value={emailTeste}
+                onChange={(e) => setEmailTeste(e.target.value)}
+              />
+              <button
+                onClick={handleTestarEmail}
+                disabled={testandoEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(emailTeste.trim())}
+                className="btn-secondary disabled:opacity-60"
+              >
+                {testandoEmail
+                  ? <><Loader2 size={15} className="animate-spin" /> Enviando...</>
+                  : <><Wifi size={15} /> Enviar teste</>}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

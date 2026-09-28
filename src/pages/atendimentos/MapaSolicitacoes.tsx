@@ -673,6 +673,9 @@ export function MapaSolicitacoes() {
           onClick: () => executar(() => api.desarquivarSolicitacao(item.id), `Solicitação #${item.id} desarquivada`),
           destaque: true,
         },
+        // Arquivar é "por enquanto não"; revisando a gaveta é que se decide que não vai ser feito
+        // mesmo — então cancelar precisa estar à mão aqui, sem ter que desarquivar antes.
+        { label: 'Cancelar Atendimento', icon: <XCircle size={13} />, onClick: () => { setTexto(''); setModalCancelar(item) }, perigo: true },
         ...base,
       ]
     }

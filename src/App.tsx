@@ -7,6 +7,7 @@ import type { Usuario } from './types'
 
 // Auth
 import { Login } from './pages/auth/Login'
+import { SolicitacaoDemanda } from './pages/publico/SolicitacaoDemanda'
 import { AlterarSenha } from './pages/auth/AlterarSenha'
 
 // Dashboard
@@ -187,6 +188,9 @@ export default function App() {
     <Routes>
       {/* Public routes */}
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+
+      {/* Link público de demandas — sem login, é o endereço que vai pro cliente. */}
+      <Route path="/demanda" element={<SolicitacaoDemanda />} />
 
       {/* Alterar senha — standalone page (sem layout de sidebar) */}
       <Route path="/alterar-senha" element={<ProtectedRoute><AlterarSenha /></ProtectedRoute>} />
