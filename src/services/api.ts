@@ -168,9 +168,12 @@ async function fetchApi<T>(path: string, options: RequestInit = {}, timeoutMs?: 
     const err = await res.json().catch(() => ({ error: `HTTP ${res.status} ${res.statusText || ''}`.trim() }))
     const backendError = typeof err?.error === 'string' ? err.error.trim() : ''
     const backendMessage = typeof err?.message === 'string' ? err.message.trim() : ''
+    // Nome de classe de erro não é mensagem pra usuário: quando o backend mandar um, use o texto
+    // do campo `message`. Foi o que fez aparecer o toast "PrismaClientKnownRequestError" na tela.
     const genericErrors = new Set(['Internal Server Error', 'Erro desconhecido'])
+    const pareceNomeDeClasse = /^[A-Z][A-Za-z]*(Error|Exception)$/.test(backendError)
     const message =
-      backendMessage && (!backendError || genericErrors.has(backendError))
+      backendMessage && (!backendError || genericErrors.has(backendError) || pareceNomeDeClasse)
         ? backendMessage
         : backendError || backendMessage || `HTTP ${res.status}`
     const erroApi = new Error(message) as Error & { status?: number; details?: any }
@@ -720,6 +723,21 @@ export const api = {
     if (filtros?.prioritario) qs.set('prioritario', 'true')
     return fetchApi<{ total: number; data: Solicitacao[] }>(`/solicitacoes/finalizadas?${qs.toString()}`)
   },
+  getSolicitacoesArquivadas: (filtros?: { tecnicoId?: number[]; desenvolvedorId?: number[]; projetoId?: number[]; busca?: string; prioritario?: boolean }) => {
+    const qs = new URLSearchParams()
+    if (filtros?.tecnicoId?.length) qs.set('tecnicoId', filtros.tecnicoId.join(','))
+    if (filtros?.desenvolvedorId?.length) qs.set('desenvolvedorId', filtros.desenvolvedorId.join(','))
+    if (filtros?.projetoId?.length) qs.set('projetoId', filtros.projetoId.join(','))
+    if (filtros?.busca) qs.set('busca', filtros.busca)
+    if (filtros?.prioritario) qs.set('prioritario', 'true')
+    const q = qs.toString()
+    return fetchApi<{ total: number; data: Solicitacao[] }>(`/solicitacoes/arquivadas${q ? `?${q}` : ''}`)
+  },
+  arquivarSolicitacao: (id: number, motivo?: string) =>
+    fetchApi<{ ok: boolean }>(`/solicitacoes/${id}/arquivar`, { method: 'POST', body: JSON.stringify({ motivo: motivo ?? '' }) }),
+  desarquivarSolicitacao: (id: number) =>
+    fetchApi<{ ok: boolean; status: number }>(`/solicitacoes/${id}/desarquivar`, { method: 'POST' }),
+
   getPendentesAtualizacao: (filtros?: { tecnicoId?: number[]; desenvolvedorId?: number[]; projetoId?: number[]; busca?: string; prioritario?: boolean }) => {
     const qs = new URLSearchParams()
     if (filtros?.tecnicoId?.length) qs.set('tecnicoId', filtros.tecnicoId.join(','))

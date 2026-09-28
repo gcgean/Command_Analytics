@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   RefreshCw, Loader2, Star, Search, MoreVertical, AlertTriangle,
-  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText, CheckCheck, Paperclip, Bug,
+  Code2, FlaskConical, CheckCircle2, XCircle, History, UserPlus, Lightbulb, Pencil, Plus, FileText, Copy, Info, ScrollText, CheckCheck, Paperclip, Bug, Archive, ArchiveRestore,
 } from 'lucide-react'
 import { api, statusAtendimentoLabel } from '../../services/api'
 import { usePermissions } from '../../contexts/PermissionsContext'
@@ -15,7 +15,7 @@ import { PainelDesempenhoDev } from './PainelDesempenhoDev'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import type { ClienteAnexo, Projeto, Solicitacao, SolicitacaoPendenteAtualizacao, Usuario } from '../../types'
 
-type Aba = 'suporte' | 'finalizadas' | 'pendentes' | 'desempenho'
+type Aba = 'suporte' | 'finalizadas' | 'pendentes' | 'desempenho' | 'arquivadas'
 
 // Mesmos códigos do Delphi (UMapaAtendimentos.pas). Não existe status 15.
 const S = {
@@ -27,6 +27,7 @@ const S = {
   TESTADO_OK: 11,
   CORRIGIDO_DEV: 16,
   TESTADO_COM_ERRO: 17,
+  ARQUIVADO: 14,
 } as const
 
 // Ordem fixa do resumo de totalizadores — segue a sequência do fluxo (fila → desenvolvimento →
@@ -39,6 +40,8 @@ const ORDEM_STATUS_RESUMO = [1, 3, S.EM_ATENDIMENTO, 6, S.AGUARDANDO_ANALISE_DEV
 const ROTULO_STATUS: Record<number, string> = {
   ...statusAtendimentoLabel,
   [S.EM_ATENDIMENTO]: 'Aguardando Desenvolvimento',
+  // No plural ("Arquivados") o rótulo do card fica estranho: cada card é uma solicitação.
+  [S.ARQUIVADO]: 'Arquivada',
 }
 
 // Cor sólida e única por status — nada de tons repetidos nem de translúcido apagado, cada etapa
@@ -59,6 +62,7 @@ const CORES_ETAPA: Record<number, string> = {
   17: 'bg-[#C1272D] text-white', // Testado com Erro — vermelho telha
   16: 'bg-[#5C7A36] text-white', // Corrigido pelo Dev — verde folha
   7: 'bg-[#00473E] text-white', // Concluído (aba Finalizadas) — verde floresta, igual Testado OK
+  14: 'bg-[#6B4F3A] text-white', // Arquivada (aba Arquivadas) — marrom, fora do fluxo ativo
 }
 
 // Mesma família de cor de CORES_ETAPA, só que como texto legível sobre o card branco — usado no
@@ -76,6 +80,7 @@ const TEXTO_ETAPA: Record<number, string> = {
   17: 'text-[#C1272D] dark:text-[#f28c8f]', // vermelho telha
   16: 'text-[#5C7A36] dark:text-[#a3c47c]', // verde folha
   7: 'text-[#00473E] dark:text-[#4fbfae]', // Concluído — igual Testado OK
+  14: 'text-[#6B4F3A] dark:text-[#c2a288]', // Arquivada — marrom
 }
 
 function EtapaBadge({ status, className }: { status: number; className?: string }) {
@@ -359,6 +364,7 @@ export function MapaSolicitacoes() {
   // opcional: o campo pode ir vazio (mandar pra teste). Nos demais o motivo é obrigatório.
   const [modalJustificativa, setModalJustificativa] = useState<{ item: Solicitacao; status: number; titulo: string; opcional?: boolean } | null>(null)
   const [modalCancelar, setModalCancelar] = useState<Solicitacao | null>(null)
+  const [modalArquivar, setModalArquivar] = useState<Solicitacao | null>(null)
   const [modalFinalizar, setModalFinalizar] = useState<Solicitacao | null>(null)
   const [texto, setTexto] = useState('')
   const [salvando, setSalvando] = useState(false)
@@ -414,8 +420,18 @@ export function MapaSolicitacoes() {
       return
     }
 
+    const filtrosComuns = {
+      ...(busca.trim() ? { busca: busca.trim() } : {}),
+      ...(filtroTecnicoId.length ? { tecnicoId: filtroTecnicoId.map(Number) } : {}),
+      ...(filtroDesenvolvedorId.length ? { desenvolvedorId: filtroDesenvolvedorId.map(Number) } : {}),
+      ...(filtroProjetoId.length ? { projetoId: filtroProjetoId.map(Number) } : {}),
+      ...(filtroPrioritario ? { prioritario: true } : {}),
+    }
+
     const req =
-      aba === 'suporte'
+      aba === 'arquivadas'
+      ? api.getSolicitacoesArquivadas(filtrosComuns)
+      : aba === 'suporte'
         ? api.getSolicitacoesSuporte({
             ...(busca.trim() ? { busca: busca.trim() } : {}),
             // A etapa NÃO entra aqui de propósito: os totalizadores contam em cima desta lista,
@@ -647,6 +663,20 @@ export function MapaSolicitacoes() {
     ]
     if (!podeAgir) return base
 
+    // Na aba Arquivadas a única ação de fluxo é voltar o card pro backlog — o resto do menu
+    // (mudar etapa, finalizar) só confundiria quem está revisando o que foi engavetado.
+    if (aba === 'arquivadas') {
+      return [
+        {
+          label: 'Desarquivar',
+          icon: <ArchiveRestore size={13} />,
+          onClick: () => executar(() => api.desarquivarSolicitacao(item.id), `Solicitação #${item.id} desarquivada`),
+          destaque: true,
+        },
+        ...base,
+      ]
+    }
+
     return [
       {
         label: 'Marcar como Finalizado',
@@ -681,6 +711,7 @@ export function MapaSolicitacoes() {
         icon: <Lightbulb size={13} />,
         onClick: () => executar(() => api.toggleOrientacaoSolicitacao(item.id), 'Orientação atualizada'),
       },
+      { label: 'Arquivar', icon: <Archive size={13} />, onClick: () => { setTexto(''); setModalArquivar(item) } },
       { label: 'Cancelar Atendimento', icon: <XCircle size={13} />, onClick: () => { setTexto(''); setModalCancelar(item) }, perigo: true },
       ...base,
     ]
@@ -765,7 +796,7 @@ export function MapaSolicitacoes() {
       {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero. Clicar filtra.
           Escondido em "Clientes a atualizar": lá a lista não é por etapa. */}
       <div
-        hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'finalizadas'}
+        hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'finalizadas' || aba === 'arquivadas'}
         className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2"
       >
         <button
@@ -823,6 +854,7 @@ export function MapaSolicitacoes() {
           ['suporte', 'Backlog de Desenvolvimento'],
           ['finalizadas', 'Solicitações finalizadas'],
           ['pendentes', 'Clientes a atualizar'],
+          ['arquivadas', 'Arquivadas'],
           ['desempenho', 'Desempenho do Dev'],
         ] as Array<[Aba, string]>).map(([id, label]) => (
           <button
@@ -1117,6 +1149,18 @@ export function MapaSolicitacoes() {
                       {(item.dataAtendimento ?? item.dataAbertura) &&
                         new Date(item.dataAtendimento ?? item.dataAbertura!).toLocaleDateString('pt-BR')}
                     </p>
+                    {aba === 'arquivadas' && (item.motivoArquivamento || item.arquivadoEm) && (
+                      <p
+                        className="text-center text-[9px] text-[#6B4F3A] dark:text-[#c2a288] px-1 truncate"
+                        title={[
+                          item.motivoArquivamento,
+                          item.arquivadoPor ? `por ${item.arquivadoPor}` : '',
+                          item.arquivadoEm ? new Date(item.arquivadoEm).toLocaleString('pt-BR') : '',
+                        ].filter(Boolean).join(' · ')}
+                      >
+                        {item.motivoArquivamento || (item.arquivadoEm ? `Arquivada em ${new Date(item.arquivadoEm).toLocaleDateString('pt-BR')}` : '')}
+                      </p>
+                    )}
                   </div>
 
                   <div className={clsx(
@@ -1376,6 +1420,39 @@ export function MapaSolicitacoes() {
       </Modal>
 
       {/* Cancelamento */}
+      {/* Arquivar — motivo opcional: muita coisa é engavetada só por falta de prioridade. */}
+      <Modal isOpen={!!modalArquivar} onClose={() => setModalArquivar(null)} title={`Arquivar solicitação #${modalArquivar?.id ?? ''}`}>
+        <div className="space-y-3">
+          <p className="text-xs text-slate-500">
+            Ela sai do backlog e das listas principais, e passa a aparecer só na aba Arquivadas. Nada é
+            apagado: ao desarquivar, volta para a etapa em que está agora
+            {modalArquivar ? ` (${ROTULO_STATUS[Number(modalArquivar.status)] ?? 'etapa atual'})` : ''}.
+          </p>
+          <textarea
+            className="input w-full h-24 resize-none"
+            placeholder="Motivo (opcional) — ex.: sem previsão, aguardando decisão do cliente"
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+          />
+          <div className="flex justify-end gap-2">
+            <button className="btn-secondary" onClick={() => setModalArquivar(null)}>Voltar</button>
+            <button
+              className="btn-primary"
+              disabled={salvando}
+              onClick={async () => {
+                const ok = await executar(
+                  () => api.arquivarSolicitacao(modalArquivar!.id, texto.trim()),
+                  `Solicitação #${modalArquivar!.id} arquivada`
+                )
+                if (ok) setModalArquivar(null)
+              }}
+            >
+              {salvando ? 'Arquivando...' : 'Arquivar'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       <Modal isOpen={!!modalCancelar} onClose={() => setModalCancelar(null)} title={`Cancelar solicitação #${modalCancelar?.id ?? ''}`}>
         <div className="space-y-3">
           <p className="text-xs text-red-600 dark:text-red-400">

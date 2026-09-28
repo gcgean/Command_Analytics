@@ -383,10 +383,16 @@ async function enviarNotificacaoAgendamento(data: {
       return false
     }
 
-    const tecnico = await prisma.usuario.findUnique({ 
-      where: { id: data.tecnicoId },
-      select: { id: true, nomeCompleto: true, nomeUsu: true, idTelegram: true }
-    })
+    // Agendamento sem técnico (ou com código inválido) chegava aqui e o findUnique estourava
+    // "Argument `id` is missing", derrubando a notificação inteira. Sem técnico, cai no userId
+    // padrão da configuração, que é justamente pra isso.
+    const tecnicoId = Number(data.tecnicoId)
+    const tecnico = Number.isInteger(tecnicoId) && tecnicoId > 0
+      ? await prisma.usuario.findUnique({
+          where: { id: tecnicoId },
+          select: { id: true, nomeCompleto: true, nomeUsu: true, idTelegram: true }
+        })
+      : null
     
     // Prioriza o idTelegram do técnico, se não houver usa o padrão da configuração
     const targetUserId = tecnico?.idTelegram || config.userIdPadrao

@@ -59,7 +59,12 @@ export async function salvarAlertasDoServidor(servidorId: number, lista: AlertaU
 
 type TipoAlerta = 'queda' | 'ram'
 
-async function enviar(servidorId: number, tipo: TipoAlerta, mensagem: string) {
+/**
+ * Devolve false quando havia destinatários e nenhum recebeu — aí o alerta NÃO é marcado como
+ * dado, e a próxima verificação tenta de novo. O relay do Telegram cai de vez em quando
+ * (timeout 12002), e marcar como enviado nesse caso perdia o aviso de um servidor fora do ar.
+ */
+async function enviar(servidorId: number, tipo: TipoAlerta, mensagem: string): Promise<boolean> {
   const destinatarios = await prisma.$queryRawUnsafe<Array<{ id: number; idTelegram: string }>>(
     `SELECT u.COD_USU AS id, u.ID_TELEGRAM AS idTelegram
        FROM servidor_alerta_usuario a
@@ -69,10 +74,13 @@ async function enviar(servidorId: number, tipo: TipoAlerta, mensagem: string) {
         AND COALESCE(u.ID_TELEGRAM, '') <> ''`,
     servidorId,
   )
+  let algumEntregue = false
   for (const d of destinatarios) {
     const envio = await TelegramService.enviar({ userId: String(d.idTelegram), mensagem })
-    if (!envio.success) console.warn(`⚠ Alerta de servidor não enviado pro usuário ${d.id}:`, envio.error)
+    if (envio.success) algumEntregue = true
+    else console.warn(`⚠ Alerta de servidor não enviado pro usuário ${d.id}:`, envio.error)
   }
+  return destinatarios.length === 0 || algumEntregue
 }
 
 /**
@@ -98,31 +106,31 @@ export async function avaliarAlertasServidor(
   if (!resultado.online) {
     e.falhas += 1
     if (e.falhas >= VERIFICACOES_PARA_ALERTAR && !e.quedaAlertada) {
-      await enviar(servidor.id, 'queda', `🔴 Servidor fora do ar\n\n${nome}\nSem resposta em ${e.falhas} verificações seguidas.\n${hora}`)
-      e.quedaAlertada = true
+      e.quedaAlertada = await enviar(servidor.id, 'queda', `🔴 Servidor fora do ar\n\n${nome}\nSem resposta em ${e.falhas} verificações seguidas.\n${hora}`)
     }
     e.ramAltas = 0
   } else {
-    if (e.quedaAlertada) {
-      await enviar(servidor.id, 'queda', `🟢 Servidor voltou\n\n${nome} está respondendo de novo.\n${hora}`)
-    }
+    // A volta também continua sendo tentada enquanto não sair: é o par "caiu/voltou" que fecha a
+    // história pra quem recebeu o primeiro aviso.
+    const avisouVolta = e.quedaAlertada
+      ? await enviar(servidor.id, 'queda', `🟢 Servidor voltou\n\n${nome} está respondendo de novo.\n${hora}`)
+      : true
     e.falhas = 0
-    e.quedaAlertada = false
+    e.quedaAlertada = e.quedaAlertada && !avisouVolta
 
     const ram = resultado.ramPercent
     if (ram !== null) {
       if (ram >= RAM_LIMITE) {
         e.ramAltas += 1
         if (e.ramAltas >= VERIFICACOES_PARA_ALERTAR && !e.ramAlertada) {
-          await enviar(servidor.id, 'ram', `🟠 Gargalo de memória RAM\n\n${nome}\nRAM em ${ram.toFixed(0)}% há ${e.ramAltas} verificações seguidas.\n${hora}`)
-          e.ramAlertada = true
+          e.ramAlertada = await enviar(servidor.id, 'ram', `🟠 Gargalo de memória RAM\n\n${nome}\nRAM em ${ram.toFixed(0)}% há ${e.ramAltas} verificações seguidas.\n${hora}`)
         }
       } else if (ram < RAM_NORMAL) {
-        if (e.ramAlertada) {
-          await enviar(servidor.id, 'ram', `✅ Memória RAM normalizada\n\n${nome}\nRAM em ${ram.toFixed(0)}%.\n${hora}`)
-        }
+        const avisouNormal = e.ramAlertada
+          ? await enviar(servidor.id, 'ram', `✅ Memória RAM normalizada\n\n${nome}\nRAM em ${ram.toFixed(0)}%.\n${hora}`)
+          : true
         e.ramAltas = 0
-        e.ramAlertada = false
+        e.ramAlertada = e.ramAlertada && !avisouNormal
       }
     }
   }

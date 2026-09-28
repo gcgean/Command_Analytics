@@ -9,6 +9,7 @@ import { SISTEMAS_VERSAO, type SistemaVersao } from './projetos'
 import { compararVersao, versoesMaisNovasDoCliente } from '../utils/versaoInstaladaCliente'
 import { ProvedorDeepSeek, MSG_IA_LENTA } from '../ia/deepseek'
 import { obterConfigIA } from '../ia/config'
+import { registrarArquivamento, consumirArquivamento, infoArquivamento } from '../utils/arquivoSolicitacoes'
 
 
 
@@ -206,6 +207,36 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       orderBy: { id: 'asc' },
     })
     return { total: itens.length, data: await comAnexos(itens.map(paraCard)) }
+  })
+
+  // GET /solicitacoes/arquivadas — aba "Arquivadas": o que foi tirado do backlog sem ser cancelado
+  app.get('/arquivadas', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request) => {
+    const { tecnicoId, desenvolvedorId, projetoId, busca, prioritario } = request.query as Record<string, string>
+    const paraLista = (v?: string) => v?.split(',').map(Number).filter((n) => !Number.isNaN(n)) ?? []
+
+    const where: Record<string, any> = { status: STATUS.ARQUIVADO }
+    const tecnicoLista = paraLista(tecnicoId)
+    const desenvolvedorLista = paraLista(desenvolvedorId)
+    const projetoLista = paraLista(projetoId)
+    if (tecnicoLista.length) where.tecnicoId = { in: tecnicoLista }
+    if (desenvolvedorLista.length) where.desenvolvedorId = { in: desenvolvedorLista }
+    if (projetoLista.length) where.projetoId = { in: projetoLista }
+    if (busca) where.cliente = { nome: { contains: busca } }
+    if (prioritario === 'true') where.OR = [{ prioritario: 'S' }, { bugSistema: 'S' }]
+
+    const itens = await prisma.atendimento.findMany({ where, include: INCLUDE_CARD, orderBy: { id: 'desc' } })
+    const cards = await comAnexos(itens.map(paraCard))
+    // Motivo e data do arquivamento ficam na tabela à parte — juntados aqui pra aparecerem no card.
+    const info = await infoArquivamento(cards.map((c: any) => Number(c.id)))
+    return {
+      total: cards.length,
+      data: cards.map((c: any) => ({
+        ...c,
+        motivoArquivamento: info.get(Number(c.id))?.motivo ?? null,
+        arquivadoEm: info.get(Number(c.id))?.arquivadoEm ?? null,
+        arquivadoPor: info.get(Number(c.id))?.usuarioNome ?? null,
+      })),
+    }
   })
 
   // GET /solicitacoes/finalizadas — aba Solicitações finalizadas (por período)
@@ -556,6 +587,64 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
   })
 
   // POST /solicitacoes/:id/finalizar — aba "Finalização" do lançamento
+  // POST /solicitacoes/:id/arquivar — tira do backlog sem cancelar (status 14)
+  app.post('/:id/arquivar', { preHandler: [authMiddleware, exigirPermissaoDeAcao], schema: { tags: ['Solicitações'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { motivo } = request.body as { motivo?: string }
+    const usuarioId = Number((request.user as any)?.id || 0)
+
+    const atual = await prisma.atendimento.findUnique({ where: { id: Number(id) }, select: { status: true } })
+    if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
+    if (atual.status === STATUS.ARQUIVADO) return reply.status(400).send({ error: 'Essa solicitação já está arquivada.' })
+    // Concluída ou cancelada já saiu do backlog: arquivar só embaralharia o histórico.
+    if (atual.status === STATUS.CONCLUIDO || atual.status === STATUS.CANCELADO) {
+      return reply.status(400).send({ error: 'Solicitação concluída ou cancelada não precisa ser arquivada.' })
+    }
+
+    const texto = motivo?.trim()
+      ? `Arquivada: ${motivo.trim()}`
+      : 'Arquivada (não será feita no momento)'
+    await registrarArquivamento(Number(id), atual.status ?? null, motivo?.trim() || null, usuarioId || null)
+    await alterarStatus(Number(id), usuarioId, STATUS.ARQUIVADO, texto)
+    await registrarAuditoria({
+      tabela: 'atendimentos',
+      registroId: Number(id),
+      acao: 'STATUS',
+      usuarioId,
+      dadosAntes: { status: atual.status },
+      dadosDepois: { status: STATUS.ARQUIVADO, observacao: motivo?.trim() || null },
+    })
+    void notificarAtualizacaoSolicitacao(Number(id), usuarioId, texto)
+    return { ok: true }
+  })
+
+  // POST /solicitacoes/:id/desarquivar — volta pra etapa em que estava antes de ser arquivada
+  app.post('/:id/desarquivar', { preHandler: [authMiddleware, exigirPermissaoDeAcao], schema: { tags: ['Solicitações'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const usuarioId = Number((request.user as any)?.id || 0)
+
+    const atual = await prisma.atendimento.findUnique({ where: { id: Number(id) }, select: { status: true } })
+    if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
+    if (atual.status !== STATUS.ARQUIVADO) return reply.status(400).send({ error: 'Essa solicitação não está arquivada.' })
+
+    // Sem registro da etapa anterior (arquivadas pelo Delphi, antes desta tela), volta pra fila.
+    const anterior = await consumirArquivamento(Number(id))
+    const destino = anterior && STATUS_MAPA.includes(anterior) ? anterior : STATUS.EM_FILA
+    const texto = `Desarquivada${anterior && destino === anterior ? '' : ' (voltou para Em Fila)'}`
+
+    await alterarStatus(Number(id), usuarioId, destino, texto)
+    await registrarAuditoria({
+      tabela: 'atendimentos',
+      registroId: Number(id),
+      acao: 'STATUS',
+      usuarioId,
+      dadosAntes: { status: STATUS.ARQUIVADO },
+      dadosDepois: { status: destino },
+    })
+    void notificarAtualizacaoSolicitacao(Number(id), usuarioId, texto)
+    return { ok: true, status: destino }
+  })
+
   app.post('/:id/finalizar', { preHandler: [authMiddleware, exigirPermissaoDeAcao], schema: { tags: ['Solicitações'] } }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const { solucao } = request.body as { solucao?: string }

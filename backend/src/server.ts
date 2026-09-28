@@ -63,9 +63,13 @@ import { initNotificacoesAgendamento, startNotificacoesAgendamentoScheduler } fr
 import { startTelegramPollingScheduler } from './utils/telegramBot'
 import { startClientesDesatualizadosScheduler } from './utils/notificacaoClientesDesatualizados'
 import { initAlertasServidor } from './utils/alertasServidor'
+import { initArquivoSolicitacoes } from './utils/arquivoSolicitacoes'
 import { ensureConfiguracaoIA } from './ia/config'
 
-const app = Fastify({ logger: process.env.NODE_ENV === 'development' })
+// Em produção o logger ficava desligado, então erro nenhum era gravado — quando algo falhava na
+// tela, não havia o que investigar no `pm2 logs`. Nível 'warn' registra os erros sem o ruído de
+// uma linha por requisição.
+const app = Fastify({ logger: process.env.NODE_ENV === 'development' ? true : { level: 'warn' } })
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '30d'
 
 function isDatabaseUnavailableError(error: unknown): boolean {
@@ -101,6 +105,31 @@ app.setErrorHandler((error, _request, reply) => {
   }
 
   app.log.error(error)
+
+  // Erro do Prisma virava o toast "PrismaClientKnownRequestError" na tela: o nome da classe não
+  // diz nada a quem está usando nem a quem vai investigar. Aqui vira uma frase em português, e o
+  // código (P2003, P2000...) com a coluna envolvida fica no log do servidor.
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    const meta = error.meta ?? {}
+    const alvo = String((meta as any).target ?? (meta as any).field_name ?? (meta as any).column_name ?? '')
+    const detalhe = alvo ? ` (campo: ${alvo})` : ''
+    const porCodigo: Record<string, { status: number; message: string }> = {
+      P2000: { status: 400, message: `Um dos campos ficou maior que o limite permitido${detalhe}.` },
+      P2002: { status: 409, message: `Já existe um registro com esse valor${detalhe}.` },
+      P2003: { status: 400, message: `Um dos vínculos informados não existe mais${detalhe}. Recarregue a tela e tente de novo.` },
+      P2025: { status: 404, message: 'O registro não foi encontrado. Ele pode ter sido excluído por outra pessoa.' },
+      P2024: { status: 503, message: 'O banco de dados está sobrecarregado no momento. Tente novamente em instantes.' },
+      P1017: { status: 503, message: 'A conexão com o banco de dados caiu. Tente novamente.' },
+    }
+    const conhecido = porCodigo[error.code]
+    console.error(`[prisma ${error.code}] ${_request.method} ${_request.url}`, JSON.stringify(meta))
+    return reply.status(conhecido?.status ?? 500).send({
+      error: conhecido?.message ?? `Falha ao gravar no banco de dados (${error.code}).`,
+      code: error.code,
+      message: conhecido?.message ?? error.message,
+    })
+  }
+
   return reply.status(error.statusCode && error.statusCode >= 400 ? error.statusCode : 500).send({
     error: error.name || 'Internal Server Error',
     message: error.message || 'Erro interno do servidor.',
@@ -217,6 +246,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initAnexos()
     .then(() => console.log('✓ Tabela de anexos verificada'))
     .catch(e => console.warn('⚠ Anexos init:', e.message))
+  initArquivoSolicitacoes()
+    .then(() => console.log('✓ Tabela de solicitações arquivadas verificada'))
+    .catch(e => console.warn('⚠ Arquivo de solicitações init:', e.message))
   initAlertasServidor()
     .then(() => console.log('✓ Tabelas de alertas de servidor verificadas'))
     .catch(e => console.warn('⚠ Alertas de servidor init:', e.message))

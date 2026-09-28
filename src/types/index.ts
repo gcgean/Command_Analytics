@@ -108,6 +108,10 @@ export interface Projeto {
 
 export interface Solicitacao {
   id: number
+  // Só vêm preenchidos na aba Arquivadas.
+  motivoArquivamento?: string | null
+  arquivadoEm?: string | null
+  arquivadoPor?: string | null
   clienteId: number | null
   clienteNome: string
   clienteCurva: string | null
