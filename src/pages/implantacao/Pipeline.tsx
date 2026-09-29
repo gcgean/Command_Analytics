@@ -655,6 +655,10 @@ export function Pipeline() {
     const responsavelId = createResponsavel === 'none' ? null : Number(createResponsavel)
     const observacao = createObs.trim() || undefined
     setCreateSaving(true)
+    // Sem catch, qualquer recusa do servidor (serviço repetido, serviço inativo, cliente inválido)
+    // sumia sem deixar rastro: o botão parava de girar e a tela ficava igual, como se o clique não
+    // tivesse funcionado. Agora o motivo aparece.
+    const falhas: string[] = []
     try {
       if (createServicosIds.length === 1) {
         // Um único serviço: mantém exatamente o comportamento de sempre (título manual, checklist escolhido à mão).
@@ -673,23 +677,36 @@ export function Pipeline() {
       } else {
         // Vários serviços: um processo por serviço, todos com o mesmo cliente/etapa/responsável/
         // observação — só o serviço (e o título, que vira o nome do próprio serviço) muda.
+        // Um serviço que falha não pode cancelar os outros: cada um é um processo independente,
+        // e o que deu errado é listado no fim.
         for (const servicoId of createServicosIds) {
           const servico = servicos.find((s) => s.id === servicoId)
-          await api.criarProcessoImplantacao({
-            clienteId: Number(createClienteId),
-            tipo: 'novo_servico',
-            titulo: servico?.nome || 'Novo serviço implantado',
-            servicoId,
-            statusInstal: createStatus,
-            responsavelId,
-            observacao,
-            checklistIds: servico?.checklistIds ?? [],
-            criadoPorId,
-          })
+          try {
+            await api.criarProcessoImplantacao({
+              clienteId: Number(createClienteId),
+              tipo: 'novo_servico',
+              titulo: servico?.nome || 'Novo serviço implantado',
+              servicoId,
+              statusInstal: createStatus,
+              responsavelId,
+              observacao,
+              checklistIds: servico?.checklistIds ?? [],
+              criadoPorId,
+            })
+          } catch (err: any) {
+            falhas.push(`${servico?.nome || `Serviço ${servicoId}`}: ${err?.message || 'erro ao criar'}`)
+          }
         }
+        if (falhas.length === createServicosIds.length) {
+          alert(`Nenhum processo foi criado.\n\n${falhas.join('\n')}`)
+          return
+        }
+        if (falhas.length) alert(`Alguns processos não foram criados:\n\n${falhas.join('\n')}`)
       }
       setCreateOpen(false)
       await carregarPainel()
+    } catch (err: any) {
+      alert(err?.message || 'Não foi possível criar o processo.')
     } finally {
       setCreateSaving(false)
     }

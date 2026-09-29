@@ -66,7 +66,25 @@ export function SolicitacaoDemanda() {
     setArquivos(atual => [...atual, ...novos.filter(a => a.size <= MAX_TAMANHO)].slice(0, MAX_ARQUIVOS))
   }
 
+  // O que falta preencher, em ordem de tela. Botão desabilitado sem explicação fazia parecer que
+  // o envio estava quebrado — principalmente o mínimo de caracteres da descrição.
+  const faltando = (): string => {
+    if (form.nome.trim().length < 2) return 'Informe seu nome.'
+    if (![11, 14].includes(soDigitos(form.documento).length)) return 'Informe o CNPJ ou CPF completo da empresa.'
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())) return 'Informe um e-mail válido — é por ele que avisamos o andamento.'
+    if (soDigitos(form.whatsapp).length < 10) return 'Informe o WhatsApp com DDD.'
+    if (form.descricao.trim().length < 15) {
+      return `Descreva a demanda com um pouco mais de detalhe (faltam ${15 - form.descricao.trim().length} caractere(s)).`
+    }
+    return ''
+  }
+
   const enviar = async () => {
+    const pendencia = faltando()
+    if (pendencia) {
+      setErro(pendencia)
+      return
+    }
     setErro('')
     setEnviando(true)
     try {
@@ -95,13 +113,6 @@ export function SolicitacaoDemanda() {
       setEnviando(false)
     }
   }
-
-  const podeEnviar =
-    form.nome.trim().length > 1 &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim()) &&
-    soDigitos(form.whatsapp).length >= 10 &&
-    [11, 14].includes(soDigitos(form.documento).length) &&
-    form.descricao.trim().length >= 15
 
   if (enviado) {
     return (
@@ -263,7 +274,7 @@ export function SolicitacaoDemanda() {
           </div>
         )}
 
-        <button className="btn-primary w-full justify-center py-3" disabled={!podeEnviar || enviando} onClick={enviar}>
+        <button className="btn-primary w-full justify-center py-3" disabled={enviando} onClick={enviar}>
           {enviando
             ? <><Loader2 size={16} className="animate-spin" /> {arquivos.length ? 'Enviando arquivos...' : 'Enviando...'}</>
             : 'Enviar solicitação'}

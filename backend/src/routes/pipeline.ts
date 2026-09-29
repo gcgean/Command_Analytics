@@ -2525,19 +2525,23 @@ export async function pipelineRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Selecione um serviço cadastrado.' })
     }
 
-    // Evita duplicata: se o cliente já tem um processo ATIVO do mesmo serviço, não cria outro.
-    // (Foi o que gerou processos repetidos por clique duplo / nova tentativa de "trocar" o serviço.)
+    // Evita duplicata: se o cliente já tem um processo EM ANDAMENTO do mesmo serviço, não cria
+    // outro. (Foi o que gerou processos repetidos por clique duplo / nova tentativa de "trocar" o
+    // serviço.) Concluído e desistência não contam: a coluna `ativo` só diz que o processo não foi
+    // desativado à mão, então um serviço entregue meses atrás continuava bloqueando para sempre a
+    // contratação do mesmo serviço de novo.
     if (servicoIdNormalizado) {
       const jaExiste = await prisma.$queryRaw<Array<{ id: number; titulo: string | null }>>`
         SELECT id, titulo FROM implantacao_processos
         WHERE cliente_id = ${idCliente}
           AND servico_id = ${servicoIdNormalizado}
           AND COALESCE(ativo, 1) = 1
+          AND status_atual NOT IN (${STATUS_CONCLUIDO}, ${STATUS_DESISTENCIA})
         LIMIT 1
       `
       if (jaExiste.length) {
         return reply.status(409).send({
-          error: `Este cliente já possui um processo ativo do serviço "${servicoNomeResolvido}". Use o processo existente (você pode alterar a etapa ou o serviço dele em Editar) em vez de criar outro.`,
+          error: `Este cliente já possui um processo em andamento do serviço "${servicoNomeResolvido}". Use o processo existente (você pode alterar a etapa ou o serviço dele em Editar) em vez de criar outro.`,
         })
       }
     }
