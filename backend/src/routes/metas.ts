@@ -353,7 +353,7 @@ export async function metasRoutes(app: FastifyInstance) {
       const label = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
         .replace('.', '').replace(' de ', '/')
 
-      const [[ev], [up], [evAnt], [upAnt]] = await Promise.all([
+      const [[ev], [up], [evAnt], [upAnt], [perd], [reat]] = await Promise.all([
         prisma.$queryRaw<any[]>`
           SELECT COALESCE(SUM(c.valor_mensalidade),0) AS vNovos, COUNT(c.cod_cli) AS qtd
           FROM cliente c
@@ -382,15 +382,90 @@ export async function metasRoutes(app: FastifyInstance) {
           WHERE CAST(co.data_venda AS DATE) BETWEEN ${iniAnt} AND ${fimAnt}
             AND c.cod_cli NOT IN (1,6,7,8) AND c.cod_cla <> 30
         `.catch(() => [{ vUpg: 0 }]),
+        // Receita que saiu no mês: mesma regra do resumo (cliente inativo com a desativação no mês).
+        prisma.$queryRaw<any[]>`
+          SELECT COALESCE(SUM(c.valor_mensalidade),0) AS vPerd, COUNT(c.cod_cli) AS qtd
+          FROM cliente c
+          WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
+            AND c.ATIVO = 'N' AND c.DATA_DESATIVACAO BETWEEN ${ini} AND ${fim}
+            AND c.cod_cla <> 30
+        `.catch(() => [{ vPerd: 0, qtd: 0 }]),
+        prisma.$queryRaw<any[]>`
+          SELECT COALESCE(SUM(c.valor_mensalidade),0) AS vReat
+          FROM cliente c
+          WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
+            AND c.ATIVO = 'S' AND c.DATA_DESATIVACAO BETWEEN ${ini} AND ${fim}
+            AND NOT (c.DATACADASTRO_CLI BETWEEN ${ini} AND ${fim})
+            AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL,0) <> 8
+        `.catch(() => [{ vReat: 0 }]),
       ])
+
+      const receitaNovaMes    = n(ev.vNovos) + n(up.vUpg) + n(reat.vReat)
+      const receitaPerdidaMes = n(perd.vPerd)
 
       evolucao.push({
         mes: label,
-        receitaNova: n(ev.vNovos) + n(up.vUpg),
+        receitaNova: receitaNovaMes,
         clientesNovos: n(ev.qtd),
         anoAnterior: n(evAnt.vNovos) + n(upAnt.vUpg),
         meta: META_GERAL,
+        // Entradas x saídas do mês: é o que mostra quanto de receita nova realmente sobra.
+        receitaPerdida: receitaPerdidaMes,
+        clientesPerdidos: n(perd.qtd),
+        saldo: receitaNovaMes - receitaPerdidaMes,
       })
+    }
+
+    // ── MRR mês a mês ────────────────────────────────────────────────
+    // Base recorrente no fim de cada mês: soma da mensalidade de quem já era cliente naquela data e
+    // ainda não tinha saído. Usa o valor de mensalidade de HOJE, porque o banco não guarda o
+    // histórico de reajustes — então é a base de clientes que é reconstruída, não o preço de cada
+    // um. Para leitura de tendência serve; não é um relatório contábil.
+    const mrr: Array<{ mes: string; valor: number; clientes: number; variacao: number; variacaoPerc: number | null }> = []
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(ano, mesNum - 1 - i, 1)
+      const ld = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+      const fimMes = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${ld}`
+      const label = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+        .replace('.', '').replace(' de ', '/')
+
+      const [linha] = await prisma.$queryRaw<any[]>`
+        SELECT COALESCE(SUM(c.valor_mensalidade),0) AS valor, COUNT(c.cod_cli) AS qtd
+        FROM cliente c
+        WHERE c.cod_cli NOT IN (1,6,7,8,816) AND c.cod_cli < 10000000
+          AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL,0) <> 8
+          AND c.DATACADASTRO_CLI <= ${fimMes}
+          AND (c.ATIVO = 'S' OR c.DATA_DESATIVACAO IS NULL OR c.DATA_DESATIVACAO > ${fimMes})
+      `.catch(() => [{ valor: 0, qtd: 0 }])
+
+      const valor = n(linha.valor)
+      const anterior = mrr.length ? mrr[mrr.length - 1].valor : 0
+      mrr.push({
+        mes: label,
+        valor,
+        clientes: n(linha.qtd),
+        variacao: mrr.length ? valor - anterior : 0,
+        variacaoPerc: mrr.length && anterior > 0 ? ((valor - anterior) / anterior) * 100 : null,
+      })
+    }
+
+    // ── Projeção dos próximos 12 meses ───────────────────────────────
+    // Parte do MRR atual e soma, a cada mês, a média do que entrou menos a média do que saiu nos
+    // últimos 12 meses. É uma projeção de tendência: mantém o ritmo observado, sem prever nada
+    // novo (campanha, reajuste, perda grande de um cliente específico).
+    const mesesBase = evolucao.length || 1
+    const mediaEntrada = evolucao.reduce((soma, e: any) => soma + (e.receitaNova ?? 0), 0) / mesesBase
+    const mediaSaida = evolucao.reduce((soma, e: any) => soma + (e.receitaPerdida ?? 0), 0) / mesesBase
+    const crescimentoMedioMes = mediaEntrada - mediaSaida
+    const mrrAtual = mrr.length ? mrr[mrr.length - 1].valor : 0
+
+    const projecao: Array<{ mes: string; valor: number; acumulado: number }> = []
+    for (let i = 1; i <= 12; i++) {
+      const d = new Date(ano, mesNum - 1 + i, 1)
+      const label = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
+        .replace('.', '').replace(' de ', '/')
+      const valor = mrrAtual + crescimentoMedioMes * i
+      projecao.push({ mes: label, valor, acumulado: crescimentoMedioMes * i })
     }
 
     const valorUpgrades      = n(upgRow.valor)
@@ -576,6 +651,14 @@ export async function metasRoutes(app: FastifyInstance) {
       },
       porFilial,
       evolucao,
+      mrr,
+      projecao: {
+        mrrAtual,
+        mediaEntrada,
+        mediaSaida,
+        crescimentoMedioMes,
+        meses: projecao,
+      },
       clientesNovos: clientesNovosDetail.map((c: any) => ({
         codigo: n(c.codigo),
         nome: c.nome,

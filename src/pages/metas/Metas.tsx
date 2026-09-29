@@ -3,7 +3,7 @@ import { useThemeStore } from '../../store/themeStore'
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Cell, Legend,
-  LineChart,
+  LineChart, ReferenceLine,
 } from 'recharts'
 import {
   TrendingUp, TrendingDown, Users, Target, ChevronLeft,
@@ -26,7 +26,15 @@ interface Filial {
   nome: string; codCon: number; qtd: number
   valor: number; meta: number; perc: number
 }
-interface EvoMes { mes: string; receitaNova: number; clientesNovos: number; anoAnterior: number; meta: number }
+interface EvoMes {
+  mes: string; receitaNova: number; clientesNovos: number; anoAnterior: number; meta: number
+  receitaPerdida: number; clientesPerdidos: number; saldo: number
+}
+interface MrrMes { mes: string; valor: number; clientes: number; variacao: number; variacaoPerc: number | null }
+interface Projecao {
+  mrrAtual: number; mediaEntrada: number; mediaSaida: number; crescimentoMedioMes: number
+  meses: Array<{ mes: string; valor: number; acumulado: number }>
+}
 interface ClienteNovo { codigo: number; nome: string; valor: number; cidade: string; data_cadastro: string; segmento?: string; tipo?: string }
 interface ClienteReativado { codigo: number; nome: string; valor: number; cidade: string; data_desativacao: string; segmento?: string }
 interface ClientePerdido { codigo: number; nome: string; valor: number; cidade: string; data_desativacao: string }
@@ -41,6 +49,8 @@ interface DadosComercial {
   resumo: Resumo
   porFilial: Filial[]
   evolucao: EvoMes[]
+  mrr?: MrrMes[]
+  projecao?: Projecao
   clientesNovos: ClienteNovo[]
   clientesReativados: ClienteReativado[]
   clientesPerdidos: ClientePerdido[]
@@ -66,6 +76,15 @@ const SETORES_META: Departamento[] = [
 // ── helpers ────────────────────────────────────────────────────────
 const brl = (v: number) =>
   v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0, maximumFractionDigits: 0 })
+
+// O servidor manda a data como "2026-09-15T00:00:00.000Z". Passar isso por new Date() converte
+// pro fuso do navegador (UTC-3) e o dia volta um: 15/09 aparecia como 14/09. Aqui a data é lida
+// como texto, sem conversão.
+const dataBR = (v?: string | null) => {
+  if (!v) return ''
+  const [a, m, d] = String(v).slice(0, 10).split('-')
+  return d && m && a ? `${d}/${m}/${a}` : String(v)
+}
 
 const percColor = (p: number) =>
   p >= 100 ? 'text-emerald-400' : p >= 75 ? 'text-blue-400' : p >= 50 ? 'text-amber-400' : 'text-red-400'
@@ -497,6 +516,268 @@ function BoletimComercialTab() {
         </ResponsiveContainer>
       </div>
 
+      {/* ── Entradas x Saídas ─────────────────────────────────────────
+          Receita que entrou contra a que saiu, mês a mês, com o saldo. É a leitura que o gráfico
+          acima não dá: crescer em vendas não significa crescer em receita se a perda acompanha. */}
+      {(() => {
+        const fluxo = evolucao.map(e => ({
+          ...e,
+          receitaPerdida: e.receitaPerdida ?? 0,
+          saldo: e.saldo ?? (e.receitaNova - (e.receitaPerdida ?? 0)),
+        }))
+        const totalNova = fluxo.reduce((s, e) => s + e.receitaNova, 0)
+        const totalPerdida = fluxo.reduce((s, e) => s + e.receitaPerdida, 0)
+        const saldoTotal = totalNova - totalPerdida
+        const mesesNegativos = fluxo.filter(e => e.saldo < 0).length
+        const saldoMedio = fluxo.length ? saldoTotal / fluxo.length : 0
+
+        return (
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-emerald-500" /> Receita Nova x Receita Perdida (12 meses)
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Quanto de receita nova sobra por mês depois de descontar o que foi perdido.
+                </p>
+              </div>
+              <div className="flex items-center gap-4 text-xs text-slate-500">
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-500 inline-block" /> Entrou</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-500 inline-block" /> Saiu</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-1 rounded bg-blue-500 inline-block" /> Saldo</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs text-slate-500">Entrou (12 meses)</p>
+                <p className="text-lg font-bold text-emerald-500">{brl(totalNova)}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs text-slate-500">Saiu (12 meses)</p>
+                <p className="text-lg font-bold text-red-500">{brl(totalPerdida)}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs text-slate-500">Saldo acumulado</p>
+                <p className={`text-lg font-bold ${saldoTotal >= 0 ? 'text-blue-500' : 'text-red-500'}`}>{brl(saldoTotal)}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs text-slate-500">Sobra média por mês</p>
+                <p className={`text-lg font-bold ${saldoMedio >= 0 ? 'text-blue-500' : 'text-red-500'}`}>{brl(saldoMedio)}</p>
+                {mesesNegativos > 0 && (
+                  <p className="text-[11px] text-red-500 mt-0.5">{mesesNegativos} mês(es) no negativo</p>
+                )}
+              </div>
+            </div>
+
+            <ResponsiveContainer width="100%" height={260}>
+              <ComposedChart data={fluxo} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barGap={2} barCategoryGap="20%">
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <XAxis dataKey="mes" tick={{ fill: tickColor, fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: tickColor, fontSize: 10 }} axisLine={false} tickLine={false}
+                  tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} width={48} />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null
+                    const d = payload[0]?.payload as EvoMes
+                    if (!d) return null
+                    return (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2.5 text-xs shadow-xl">
+                        <p className="font-semibold text-slate-800 dark:text-slate-200 mb-2">{label}</p>
+                        <p className="text-emerald-500">Entrou: R$ {d.receitaNova.toLocaleString('pt-BR')}</p>
+                        <p className="text-red-500">Saiu: R$ {d.receitaPerdida.toLocaleString('pt-BR')}</p>
+                        <p className={`mt-1.5 font-semibold ${d.saldo >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                          Saldo: R$ {d.saldo.toLocaleString('pt-BR')}
+                        </p>
+                        <p className="text-slate-500 mt-1">
+                          {d.clientesNovos} entrada(s) · {d.clientesPerdidos ?? 0} saída(s)
+                        </p>
+                      </div>
+                    )
+                  }}
+                />
+                <ReferenceLine y={0} stroke={tickColor} />
+                <Bar dataKey="receitaNova" name="Entrou" radius={[3, 3, 0, 0]} maxBarSize={18} fill="#10b981" />
+                <Bar dataKey="receitaPerdida" name="Saiu" radius={[3, 3, 0, 0]} maxBarSize={18} fill="#ef4444" />
+                <Line dataKey="saldo" name="Saldo" stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )
+      })()}
+
+      {/* ── MRR mês a mês ─────────────────────────────────────────── */}
+      {dados.mrr && dados.mrr.length > 0 && (() => {
+        const serie = dados.mrr
+        const primeiro = serie[0]
+        const ultimo = serie[serie.length - 1]
+        const crescimento12m = ultimo.valor - primeiro.valor
+        const crescimentoPerc = primeiro.valor > 0 ? (crescimento12m / primeiro.valor) * 100 : null
+        const mediaMes = serie.slice(1).reduce((s, m) => s + m.variacao, 0) / Math.max(serie.length - 1, 1)
+
+        return (
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-indigo-500" /> Faturamento Recorrente (MRR) — 12 meses
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Soma das mensalidades da base ativa no fim de cada mês, e quanto ela cresceu.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs text-slate-500">MRR atual</p>
+                <p className="text-lg font-bold text-indigo-500">{brl(ultimo.valor)}</p>
+                <p className="text-[11px] text-slate-500">{ultimo.clientes} clientes</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs text-slate-500">Há 12 meses</p>
+                <p className="text-lg font-bold text-slate-500">{brl(primeiro.valor)}</p>
+                <p className="text-[11px] text-slate-500">{primeiro.clientes} clientes</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs text-slate-500">Crescimento no período</p>
+                <p className={`text-lg font-bold ${crescimento12m >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {crescimento12m >= 0 ? '+' : ''}{brl(crescimento12m)}
+                </p>
+                {crescimentoPerc !== null && (
+                  <p className="text-[11px] text-slate-500">{crescimentoPerc >= 0 ? '+' : ''}{crescimentoPerc.toFixed(1)}%</p>
+                )}
+              </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs text-slate-500">Crescimento médio por mês</p>
+                <p className={`text-lg font-bold ${mediaMes >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  {mediaMes >= 0 ? '+' : ''}{brl(mediaMes)}
+                </p>
+              </div>
+            </div>
+
+            <ResponsiveContainer width="100%" height={260}>
+              <ComposedChart data={serie} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <XAxis dataKey="mes" tick={{ fill: tickColor, fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: tickColor, fontSize: 10 }} axisLine={false} tickLine={false}
+                  tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} width={56} domain={['dataMin - 5000', 'dataMax + 5000']} />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null
+                    const d = payload[0]?.payload as MrrMes
+                    if (!d) return null
+                    return (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2.5 text-xs shadow-xl">
+                        <p className="font-semibold text-slate-800 dark:text-slate-200 mb-2">{label}</p>
+                        <p className="text-indigo-500">MRR: R$ {d.valor.toLocaleString('pt-BR')}</p>
+                        <p className="text-slate-500">{d.clientes} clientes na base</p>
+                        <p className={`mt-1.5 font-semibold ${d.variacao >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                          {d.variacao >= 0 ? '▲' : '▼'} R$ {Math.abs(d.variacao).toLocaleString('pt-BR')}
+                          {d.variacaoPerc !== null ? ` (${d.variacaoPerc >= 0 ? '+' : ''}${d.variacaoPerc.toFixed(1)}%)` : ''} vs mês anterior
+                        </p>
+                      </div>
+                    )
+                  }}
+                />
+                <Bar dataKey="variacao" name="Variação" maxBarSize={16} radius={[3, 3, 0, 0]}>
+                  {serie.map((m, i) => <Cell key={i} fill={m.variacao >= 0 ? '#10b981' : '#ef4444'} />)}
+                </Bar>
+                <Line dataKey="valor" name="MRR" stroke="#6366f1" strokeWidth={2.5} dot={{ r: 3 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )
+      })()}
+
+      {/* ── Projeção 12 meses ─────────────────────────────────────── */}
+      {dados.projecao && dados.projecao.meses.length > 0 && (() => {
+        const pj = dados.projecao
+        const ultimoMes = pj.meses[pj.meses.length - 1]
+        // Histórico e projeção no mesmo gráfico: duas séries, pra linha cheia virar tracejada no
+        // ponto em que o dado deixa de ser real e passa a ser estimativa.
+        const historico = (dados.mrr ?? []).map(m => ({ mes: m.mes, real: m.valor, previsto: null as number | null }))
+        const emenda = historico.length
+          ? [{ mes: historico[historico.length - 1].mes, real: historico[historico.length - 1].real, previsto: historico[historico.length - 1].real }]
+          : []
+        const futuro = pj.meses.map(m => ({ mes: m.mes, real: null as number | null, previsto: m.valor }))
+        const serie = [...historico.slice(0, -1), ...emenda, ...futuro]
+
+        return (
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+            <div className="mb-4">
+              <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4 text-purple-500" /> Projeção dos Próximos 12 Meses
+              </h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Mantendo o ritmo dos últimos 12 meses: entrada média menos perda média, aplicada sobre o MRR atual.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs text-slate-500">Entrada média/mês</p>
+                <p className="text-lg font-bold text-emerald-500">{brl(pj.mediaEntrada)}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs text-slate-500">Perda média/mês</p>
+                <p className="text-lg font-bold text-red-500">{brl(pj.mediaSaida)}</p>
+              </div>
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs text-slate-500">Sobra média/mês</p>
+                <p className={`text-lg font-bold ${pj.crescimentoMedioMes >= 0 ? 'text-blue-500' : 'text-red-500'}`}>
+                  {pj.crescimentoMedioMes >= 0 ? '+' : ''}{brl(pj.crescimentoMedioMes)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-purple-200 dark:border-purple-500/40 bg-purple-50 dark:bg-purple-500/10 p-3">
+                <p className="text-xs text-slate-500">MRR em 12 meses</p>
+                <p className="text-lg font-bold text-purple-500">{brl(ultimoMes.valor)}</p>
+                <p className="text-[11px] text-slate-500">
+                  {ultimoMes.acumulado >= 0 ? '+' : ''}{brl(ultimoMes.acumulado)} sobre hoje
+                </p>
+              </div>
+            </div>
+
+            {pj.crescimentoMedioMes < 0 && (
+              <p className="text-xs text-red-500 mb-3">
+                ⚠ A perda média está maior que a entrada média — mantido esse ritmo, a projeção é de queda.
+              </p>
+            )}
+
+            <ResponsiveContainer width="100%" height={260}>
+              <ComposedChart data={serie} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
+                <XAxis dataKey="mes" tick={{ fill: tickColor, fontSize: 10 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: tickColor, fontSize: 10 }} axisLine={false} tickLine={false}
+                  tickFormatter={v => `R$${(v / 1000).toFixed(0)}k`} width={56} />
+                <Tooltip
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null
+                    const real = payload.find(p => p.dataKey === 'real' && p.value != null)
+                    const previsto = payload.find(p => p.dataKey === 'previsto' && p.value != null)
+                    return (
+                      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2.5 text-xs shadow-xl">
+                        <p className="font-semibold text-slate-800 dark:text-slate-200 mb-2">{label}</p>
+                        {real && <p className="text-indigo-500">Realizado: R$ {Number(real.value).toLocaleString('pt-BR')}</p>}
+                        {previsto && <p className="text-purple-500">Projetado: R$ {Number(previsto.value).toLocaleString('pt-BR')}</p>}
+                      </div>
+                    )
+                  }}
+                />
+                <Line dataKey="real" name="Realizado" stroke="#6366f1" strokeWidth={2.5} dot={false} connectNulls={false} />
+                <Line dataKey="previsto" name="Projetado" stroke="#a855f7" strokeWidth={2.5}
+                  strokeDasharray="6 4" dot={false} connectNulls={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+            <p className="text-[11px] text-slate-500 mt-2">
+              Projeção de tendência: repete o comportamento dos últimos 12 meses. Não considera reajuste,
+              campanha nova nem a saída de um cliente grande.
+            </p>
+          </div>
+        )
+      })()}
+
       {/* ── Ranking do mês ────────────────────────────────────────── */}
       <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
@@ -534,11 +815,23 @@ function BoletimComercialTab() {
         </div>
       </div>
 
-      {/* ── Clientes Novos Detalhado ──────────────────────────────── */}
-      {dados.clientesNovos.length > 0 && (
+      {/* ── Clientes Novos e Reativados ───────────────────────────── */}
+      {(() => {
+        // Reativados entram na mesma lista dos novos, como no boletim do Delphi: para quem lê, os
+        // dois são receita que entrou no período. A data do reativado é a da volta dele.
+        const entradas = [
+          ...dados.clientesNovos.map(c => ({ ...c, data: c.data_cadastro, tipo: 'NOVO' as const })),
+          ...(dados.clientesReativados ?? []).map(c => ({ ...c, data: c.data_desativacao, tipo: 'REATIVADO' as const })),
+        ].sort((a, b) => String(b.data ?? '').localeCompare(String(a.data ?? '')))
+        return entradas.length > 0 ? (
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 overflow-x-auto">
           <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <Users className="w-4 h-4" /> Clientes Novos ({dados.clientesNovos.length})
+            <Users className="w-4 h-4" /> Clientes Novos e Reativados ({entradas.length})
+            {dados.resumo.qtdReativados > 0 && (
+              <span className="normal-case tracking-normal text-xs text-sky-500 font-normal">
+                — {dados.resumo.qtdReativados} reativado(s), {brl(dados.resumo.valorReativados)}
+              </span>
+            )}
           </h2>
           <table className="w-full text-sm min-w-[600px]">
             <thead><tr className="border-b border-slate-200 dark:border-slate-700">
@@ -548,24 +841,25 @@ function BoletimComercialTab() {
               <th className="text-center px-3 py-2 text-slate-500 dark:text-slate-400">Tipo</th>
               <th className="text-center px-3 py-2 text-slate-500 dark:text-slate-400">Data</th>
             </tr></thead>
-            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">{dados.clientesNovos.map((c, i) => (
-              <tr key={i} className="hover:bg-slate-100/60 dark:hover:bg-slate-700/30">
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">{entradas.map((c, i) => (
+              <tr key={`${c.tipo}-${c.codigo}-${i}`} className="hover:bg-slate-100/60 dark:hover:bg-slate-700/30">
                 <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{c.nome}</td>
                 <td className="text-right px-3 py-2 text-emerald-400 font-semibold">{brl(c.valor)}</td>
                 <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{c.cidade}</td>
                 <td className="text-center px-3 py-2">
                   <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                    c.tipo === 'NOVO' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'
+                    c.tipo === 'NOVO' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-sky-500/20 text-sky-400'
                   }`}>
                     {c.tipo === 'NOVO' ? 'Novo' : 'Reativado'}
                   </span>
                 </td>
-                <td className="text-center px-3 py-2 text-slate-500 text-xs">{new Date(c.data_cadastro).toLocaleDateString('pt-BR')}</td>
+                <td className="text-center px-3 py-2 text-slate-500 text-xs">{dataBR(c.data)}</td>
               </tr>
             ))}</tbody>
           </table>
         </div>
-      )}
+        ) : null
+      })()}
 
       {/* ── Upgrades Detalhado ────────────────────────────────────── */}
       {dados.upgrades.length > 0 && (
@@ -587,7 +881,7 @@ function BoletimComercialTab() {
                 <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{u.cliente}</td>
                 <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-xs">{u.descricao}</td>
                 <td className="text-right px-3 py-2 text-amber-400 font-semibold">{brl(u.valor)}</td>
-                <td className="text-center px-3 py-2 text-slate-500 text-xs">{new Date(u.data_venda).toLocaleDateString('pt-BR')}</td>
+                <td className="text-center px-3 py-2 text-slate-500 text-xs">{dataBR(u.data_venda)}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -612,7 +906,7 @@ function BoletimComercialTab() {
                 <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{c.nome}</td>
                 <td className="text-right px-3 py-2 text-red-400 font-semibold">{brl(c.valor)}</td>
                 <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{c.cidade}</td>
-                <td className="text-center px-3 py-2 text-slate-500 text-xs">{new Date(c.data_desativacao).toLocaleDateString('pt-BR')}</td>
+                <td className="text-center px-3 py-2 text-slate-500 text-xs">{dataBR(c.data_desativacao)}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -702,7 +996,7 @@ function BoletimComercialTab() {
                         <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{c.nome}</td>
                         <td className="px-2 py-2 text-slate-500">{c.cidade}</td>
                         <td className="px-2 py-2 text-slate-500">
-                          {c.data_cadastro ? new Date(c.data_cadastro).toLocaleDateString('pt-BR') : ''}
+                          {dataBR(c.data_cadastro)}
                         </td>
                         <td className="px-2 py-2 text-right text-emerald-500 font-medium">{brl(c.valor)}</td>
                       </tr>
@@ -770,7 +1064,7 @@ function BoletimComercialTab() {
                 <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-xs">{c.cidade}</td>
                 <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-xs">{c.telefone || '—'}</td>
                 <td className="px-3 py-2 text-slate-600 dark:text-slate-300 text-xs">{c.motivo}</td>
-                <td className="text-center px-3 py-2 text-slate-500 text-xs">{new Date(c.data_desativacao).toLocaleDateString('pt-BR')}</td>
+                <td className="text-center px-3 py-2 text-slate-500 text-xs">{dataBR(c.data_desativacao)}</td>
               </tr>
             ))}</tbody>
           </table>
