@@ -10,6 +10,7 @@ import { compararVersao, versoesMaisNovasDoCliente } from '../utils/versaoInstal
 import { ProvedorDeepSeek, MSG_IA_LENTA } from '../ia/deepseek'
 import { obterConfigIA } from '../ia/config'
 import { registrarArquivamento, consumirArquivamento, infoArquivamento } from '../utils/arquivoSolicitacoes'
+import { paraLatin1 } from '../utils/textoLatin1'
 
 
 
@@ -178,7 +179,7 @@ async function descreverMudancas(antes: Record<string, any>, depois: Record<stri
 async function gravarLog(atendimentoId: number, usuarioId: number, observacao: string) {
   await prisma.$executeRaw`
     INSERT INTO log_atendimento (cod_Atendimento, obs_atendimento, data_hora_log, cod_usu)
-    VALUES (${atendimentoId}, ${observacao.slice(0, 300)}, NOW(), ${usuarioId})
+    VALUES (${atendimentoId}, ${paraLatin1(observacao).slice(0, 300)}, NOW(), ${usuarioId})
   `
 }
 
@@ -543,7 +544,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       data: {
         clienteId: Number(b.clienteId),
         tipoContato: Number(b.tipoContato ?? 0),
-        observacoes: String(b.observacoes).slice(0, 5000),
+        observacoes: paraLatin1(String(b.observacoes)).slice(0, 5000),
         status,
         dataAbertura: agora,
         dataAtendimento: b.dataAtendimento ? new Date(b.dataAtendimento) : agora,
@@ -591,8 +592,8 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
 
     const dados: Record<string, any> = { dataUltAlteracao: new Date() }
     if (b.clienteId) dados.clienteId = Number(b.clienteId)
-    if (b.observacoes !== undefined) dados.observacoes = String(b.observacoes).slice(0, 5000)
-    if (b.solucao !== undefined) dados.solucao = String(b.solucao).slice(0, 2000)
+    if (b.observacoes !== undefined) dados.observacoes = paraLatin1(String(b.observacoes)).slice(0, 5000)
+    if (b.solucao !== undefined) dados.solucao = paraLatin1(String(b.solucao)).slice(0, 2000)
     if (b.tipoContato !== undefined) dados.tipoContato = Number(b.tipoContato)
     // O técnico responsável nunca é zerado: vindo vazio, mantém o que já estava gravado e, se nem
     // isso existir, fica com quem está alterando (mesma regra do lançamento no POST).
@@ -697,7 +698,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     if (!atual) return reply.status(404).send({ error: 'Solicitação não encontrada.' })
     if (atual.status === STATUS.CONCLUIDO) return reply.status(400).send({ error: 'Essa solicitação já está concluída.' })
 
-    const solucaoTexto = solucao?.trim() ?? ''
+    const solucaoTexto = paraLatin1(solucao?.trim() ?? '')
     const agora = new Date()
     await prisma.atendimento.update({
       where: { id: Number(id) },
@@ -972,7 +973,7 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
       where: { id: Number(id) },
       data: {
         status: STATUS.CANCELADO,
-        motivoCancelamento: motivo.trim().slice(0, 300),
+        motivoCancelamento: paraLatin1(motivo.trim()).slice(0, 300),
         usuarioCancelamentoId: usuarioId,
         dataCancelamento: new Date(),
         dataUltAlteracao: new Date(),

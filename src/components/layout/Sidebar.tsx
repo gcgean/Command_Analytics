@@ -102,6 +102,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
   {
     group: 'METAS',
     items: [
+      { label: 'Cadastro de Metas', icon: <Target className="w-4 h-4" />, to: '/metas/cadastro', recurso: 'cadastro-metas' },
       { label: 'Boletim Comercial', icon: <Target className="w-4 h-4" />, to: '/metas', recurso: 'boletim-comercial' },
       { label: 'Metas de Tarefas por Período', icon: <ListChecks className="w-4 h-4" />, to: '/metas/periodo', recurso: 'metas-periodo' },
     ]

@@ -7,6 +7,7 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '../database/client'
 import { TelegramService } from '../services/telegram'
 import { registrarAuditoria } from '../utils/auditoria'
+import { paraLatin1 } from '../utils/textoLatin1'
 import {
   registrarSolicitante,
   tokenValido,
@@ -125,7 +126,7 @@ export async function publicoRoutes(app: FastifyInstance) {
       data: {
         clienteId: cliente?.cod_cli ?? null,
         tipoContato: 0,
-        observacoes: observacoes.slice(0, 5000),
+        observacoes: paraLatin1(observacoes).slice(0, 5000),
         status: STATUS_TRIAGEM,
         dataAbertura: agora,
         dataAtendimento: agora,
@@ -140,7 +141,7 @@ export async function publicoRoutes(app: FastifyInstance) {
 
     await prisma.$executeRaw`
       INSERT INTO log_atendimento (cod_Atendimento, obs_atendimento, data_hora_log, cod_usu)
-      VALUES (${criado.id}, ${`Demanda enviada pelo cliente via link público (${nome})`.slice(0, 300)}, NOW(), ${USUARIO_FORMULARIO})
+      VALUES (${criado.id}, ${paraLatin1(`Demanda enviada pelo cliente via link público (${nome})`).slice(0, 300)}, NOW(), ${USUARIO_FORMULARIO})
     `
     await registrarAuditoria({
       tabela: 'atendimentos',

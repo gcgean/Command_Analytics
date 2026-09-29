@@ -19,6 +19,7 @@ import type { Departamento, MetaCadastroItem, TipoMetaCadastro, Usuario } from '
 interface Resumo {
   totalAtivos: number; qtdNovos: number; valorClientesNovos: number
   qtdPerdidos: number; receitaPerdida: number; valorUpgrades: number
+  qtdReativados: number; valorReativados: number
   receitaNova: number; receitaLiquida: number; percMeta: number
 }
 interface Filial {
@@ -26,7 +27,8 @@ interface Filial {
   valor: number; meta: number; perc: number
 }
 interface EvoMes { mes: string; receitaNova: number; clientesNovos: number; anoAnterior: number; meta: number }
-interface ClienteNovo { codigo: number; nome: string; valor: number; cidade: string; data_cadastro: string; tipo?: string }
+interface ClienteNovo { codigo: number; nome: string; valor: number; cidade: string; data_cadastro: string; segmento?: string; tipo?: string }
+interface ClienteReativado { codigo: number; nome: string; valor: number; cidade: string; data_desativacao: string; segmento?: string }
 interface ClientePerdido { codigo: number; nome: string; valor: number; cidade: string; data_desativacao: string }
 interface Upgrade { vendedor: string; cliente: string; descricao: string; valor: number; data_venda: string }
 interface CidadeResumo { cidade: string; qtd: number; valor: number }
@@ -40,6 +42,7 @@ interface DadosComercial {
   porFilial: Filial[]
   evolucao: EvoMes[]
   clientesNovos: ClienteNovo[]
+  clientesReativados: ClienteReativado[]
   clientesPerdidos: ClientePerdido[]
   upgrades: Upgrade[]
   novosPorCidade: CidadeResumo[]
@@ -119,6 +122,8 @@ function BoletimComercialTab() {
   const [dados, setDados] = useState<DadosComercial | null>(null)
   const [loading, setLoading] = useState(true)
   const [erro, setErro] = useState(false)
+  // Segmento clicado na tabela "Novos por Segmento" — abre a lista de quem entrou nele.
+  const [segmentoAberto, setSegmentoAberto] = useState<string | null>(null)
 
   const mesPad = String(mes).padStart(2, '0')
   const mesKey = `${ano}-${mesPad}`
@@ -287,6 +292,19 @@ function BoletimComercialTab() {
             {resumo.qtdPerdidos}
           </p>
           <p className="text-xs text-slate-500 mt-0.5">{resumo.qtdPerdidos > 0 ? `-${brl(resumo.receitaPerdida)}` : '—'}</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-slate-500">Reativados</p>
+            <RefreshCw className="w-4 h-4 text-sky-400" />
+          </div>
+          <p className={`text-2xl font-black ${resumo.qtdReativados > 0 ? 'text-sky-400' : 'text-slate-400'}`}>
+            {resumo.qtdReativados}
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {resumo.qtdReativados > 0 ? brl(resumo.valorReativados) : '—'}
+          </p>
         </div>
 
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
@@ -629,6 +647,7 @@ function BoletimComercialTab() {
         <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 overflow-x-auto">
           <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
             <Target className="w-4 h-4" /> Novos por Segmento
+            <span className="normal-case tracking-normal text-xs text-slate-400 font-normal">— clique numa linha para ver os clientes</span>
           </h2>
           <table className="w-full text-sm min-w-[400px]">
             <thead><tr className="border-b border-slate-200 dark:border-slate-700">
@@ -637,8 +656,13 @@ function BoletimComercialTab() {
               <th className="text-right px-3 py-2 text-slate-500 dark:text-slate-400">Valor Total</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">{dados.novosPorSegmento.map((s, i) => (
-              <tr key={i} className="hover:bg-slate-100/60 dark:hover:bg-slate-700/30">
-                <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{s.seguimento}</td>
+              <tr
+                key={i}
+                className="hover:bg-slate-100/60 dark:hover:bg-slate-700/30 cursor-pointer"
+                onClick={() => setSegmentoAberto(s.seguimento)}
+                title={`Ver os ${s.quantidade} cliente(s) de ${s.seguimento}`}
+              >
+                <td className="px-3 py-2 text-slate-700 dark:text-slate-200 underline decoration-dotted underline-offset-4">{s.seguimento}</td>
                 <td className="text-center px-3 py-2 text-blue-400 font-semibold">{s.quantidade}</td>
                 <td className="text-right px-3 py-2 text-emerald-400 font-semibold">{brl(s.valor_total)}</td>
               </tr>
@@ -646,6 +670,53 @@ function BoletimComercialTab() {
           </table>
         </div>
       )}
+
+      {/* Clientes do segmento clicado — sai do próprio detalhe de novos, que já vem com o
+          segmento de cada cliente; não precisa de outra consulta ao servidor. */}
+      {segmentoAberto && (() => {
+        const lista = dados.clientesNovos.filter(c => (c.segmento || 'SEM CLASSIFICACAO') === segmentoAberto)
+        const total = lista.reduce((soma, c) => soma + c.valor, 0)
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={() => setSegmentoAberto(null)}>
+            <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-2xl max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-start justify-between p-5 border-b border-slate-200 dark:border-slate-700">
+                <div>
+                  <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100">{segmentoAberto}</h3>
+                  <p className="text-sm text-slate-500">{lista.length} cliente(s) novo(s) · {brl(total)}</p>
+                </div>
+                <button className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xl leading-none" onClick={() => setSegmentoAberto(null)}>×</button>
+              </div>
+              <div className="overflow-y-auto p-5">
+                <table className="w-full text-sm">
+                  <thead><tr className="border-b border-slate-200 dark:border-slate-700">
+                    <th className="text-left px-2 py-2 text-slate-500">Cód</th>
+                    <th className="text-left px-2 py-2 text-slate-500">Cliente</th>
+                    <th className="text-left px-2 py-2 text-slate-500">Cidade</th>
+                    <th className="text-left px-2 py-2 text-slate-500">Cadastro</th>
+                    <th className="text-right px-2 py-2 text-slate-500">Mensalidade</th>
+                  </tr></thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                    {lista.map(c => (
+                      <tr key={c.codigo} className="hover:bg-slate-100/60 dark:hover:bg-slate-700/30">
+                        <td className="px-2 py-2 text-slate-500">{c.codigo}</td>
+                        <td className="px-2 py-2 text-slate-700 dark:text-slate-200">{c.nome}</td>
+                        <td className="px-2 py-2 text-slate-500">{c.cidade}</td>
+                        <td className="px-2 py-2 text-slate-500">
+                          {c.data_cadastro ? new Date(c.data_cadastro).toLocaleDateString('pt-BR') : ''}
+                        </td>
+                        <td className="px-2 py-2 text-right text-emerald-500 font-medium">{brl(c.valor)}</td>
+                      </tr>
+                    ))}
+                    {lista.length === 0 && (
+                      <tr><td colSpan={5} className="text-center py-6 text-slate-500">Nenhum cliente neste segmento.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Clientes Perdidos por Motivo ────────────────────────────── */}
       {dados.perdidosPorMotivo.length > 0 && (
@@ -780,9 +851,14 @@ function AbaButton({
   )
 }
 
-export function Metas() {
+/**
+ * Mesma tela em dois endereços: o cadastro de metas (com os tipos) e o boletim comercial viraram
+ * menus separados, porque uma coisa é configurar e a outra é o acompanhamento do dia a dia — quem
+ * usa o boletim não mexe no cadastro.
+ */
+function MetasPagina({ modo }: { modo: 'cadastro' | 'boletim' }) {
   const { toast } = useToast()
-  const [aba, setAba] = useState<AbaMetas>('cadastro')
+  const [aba, setAba] = useState<AbaMetas>(modo === 'boletim' ? 'boletim' : 'cadastro')
   const [loadingCadastros, setLoadingCadastros] = useState(true)
   const [salvandoTipo, setSalvandoTipo] = useState(false)
   const [salvandoMeta, setSalvandoMeta] = useState(false)
@@ -911,16 +987,21 @@ export function Metas() {
         <div>
           <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
             <Target className="w-5 h-5 text-blue-500" />
-            Metas
+            {modo === 'boletim' ? 'Boletim Comercial' : 'Cadastro de Metas'}
           </h1>
           <p className="text-sm text-slate-500 dark:text-slate-400">
-            Cadastre metas por setor, organize tipos de meta e controle a visualização por usuário.
+            {modo === 'boletim'
+              ? 'Acompanhamento comercial do período.'
+              : 'Cadastre metas por setor, organize tipos de meta e controle a visualização por usuário.'}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <AbaButton active={aba === 'cadastro'} icon={<Target className="w-4 h-4" />} label="Cadastro de Metas" onClick={() => setAba('cadastro')} />
-          <AbaButton active={aba === 'tipos'} icon={<Layers3 className="w-4 h-4" />} label="Tipos de Meta" onClick={() => setAba('tipos')} />
-          <AbaButton active={aba === 'boletim'} icon={<Settings2 className="w-4 h-4" />} label="Boletim Comercial" onClick={() => setAba('boletim')} />
+          {modo === 'cadastro' && (
+            <>
+              <AbaButton active={aba === 'cadastro'} icon={<Target className="w-4 h-4" />} label="Cadastro de Metas" onClick={() => setAba('cadastro')} />
+              <AbaButton active={aba === 'tipos'} icon={<Layers3 className="w-4 h-4" />} label="Tipos de Meta" onClick={() => setAba('tipos')} />
+            </>
+          )}
         </div>
       </div>
 
@@ -1292,4 +1373,14 @@ export function Metas() {
       )}
     </div>
   )
+}
+
+/** Rota /metas — só o acompanhamento comercial. */
+export function Metas() {
+  return <MetasPagina modo="boletim" />
+}
+
+/** Rota /metas/cadastro — cadastro de metas e tipos de meta. */
+export function CadastroMetas() {
+  return <MetasPagina modo="cadastro" />
 }

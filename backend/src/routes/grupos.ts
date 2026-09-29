@@ -40,6 +40,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'campanhas',                label: 'Campanhas',                       grupo: 'MARKETING' },
   { id: 'videos',                   label: 'Vídeos',                          grupo: 'MARKETING' },
   // METAS
+  { id: 'cadastro-metas',           label: 'Cadastro de Metas',               grupo: 'METAS' },
   { id: 'boletim-comercial',        label: 'Boletim Comercial',               grupo: 'METAS' },
   { id: 'metas-periodo',            label: 'Metas de Tarefas por Período',    grupo: 'METAS' },
   // CERTIFICADOS DIGITAIS

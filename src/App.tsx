@@ -61,7 +61,7 @@ import { Tarefas } from './pages/desenvolvimento/Tarefas'
 import { Videos } from './pages/videos/Videos'
 
 // Metas
-import { Metas } from './pages/metas/Metas'
+import { Metas, CadastroMetas } from './pages/metas/Metas'
 
 // Certificados Digitais
 import { CertificadosDigitais } from './pages/certificados/CertificadosDigitais'
@@ -209,6 +209,7 @@ export default function App() {
         <Route path="atendimentos/historico" element={<HistoricoAtendimentos />} />
         <Route path="atendimentos/mapa" element={<MapaAtendimentos />} />
         <Route path="atendimentos/solicitacoes" element={<PermissionRoute recurso="solicitacoes"><MapaSolicitacoes /></PermissionRoute>} />
+        <Route path="metas/cadastro" element={<PermissionRoute recurso="cadastro-metas"><CadastroMetas /></PermissionRoute>} />
         <Route path="metas/periodo" element={<PermissionRoute recurso="metas-periodo"><MetasPeriodo /></PermissionRoute>} />
 
         <Route path="agenda" element={<PermissionRoute recurso="agenda"><Agenda /></PermissionRoute>} />

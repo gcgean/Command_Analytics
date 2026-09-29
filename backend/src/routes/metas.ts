@@ -283,15 +283,34 @@ export async function metasRoutes(app: FastifyInstance) {
     `.catch((err) => { console.error('Erro clientes novos (summary):', err); return [{ qtd: 0, valor: 0 }] })
 
     // 3. Clientes perdidos
+    // A tabela historico_bloqueio_cliente daqui NAO e a do Firebird que o Delphi usa: tem outro
+    // esquema (id_cliente/status_atual, sem `tipo` nem `data_hora_bloqueio_desbloqueio`) e parou
+    // de receber dados em 11/2023. A consulta antiga falhava e o .catch devolvia zero — por isso o
+    // boletim mostrava "Perdidos 0" para sempre. A fonte viavel aqui e a propria tabela cliente:
+    // quem esta inativo e tem data de desativacao dentro do periodo.
     const [perdRow] = await prisma.$queryRaw<any[]>`
-      SELECT COUNT(DISTINCT c.cod_cli) AS qtd,
+      SELECT COUNT(c.cod_cli) AS qtd,
              COALESCE(SUM(c.valor_mensalidade), 0) AS valor
-      FROM historico_bloqueio_cliente hb
-      INNER JOIN cliente c ON c.cod_cli = hb.cod_cli
+      FROM cliente c
       WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
-        AND CAST(hb.data_hora_bloqueio_desbloqueio AS DATE) BETWEEN ${dataIni} AND ${dataFim}
-        AND c.cod_cla <> 30 AND hb.tipo = 'D'
+        AND c.ATIVO = 'N'
+        AND c.DATA_DESATIVACAO BETWEEN ${dataIni} AND ${dataFim}
+        AND c.cod_cla <> 30
     `.catch((err) => { console.error('Erro clientes perdidos (summary):', err); return [{ qtd: 0, valor: 0 }] })
+
+    // 3b. Clientes reativados — estavam desativados e voltaram: hoje ativos, com a desativacao
+    // datada dentro do periodo. Quem entrou como cliente novo no mesmo periodo fica de fora, senao
+    // a mensalidade entraria duas vezes no realizado (o sistema legado conta duas vezes).
+    const [reativRow] = await prisma.$queryRaw<any[]>`
+      SELECT COUNT(c.cod_cli) AS qtd,
+             COALESCE(SUM(c.valor_mensalidade), 0) AS valor
+      FROM cliente c
+      WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
+        AND c.ATIVO = 'S'
+        AND c.DATA_DESATIVACAO BETWEEN ${dataIni} AND ${dataFim}
+        AND NOT (c.DATACADASTRO_CLI BETWEEN ${dataIni} AND ${dataFim})
+        AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
+    `.catch((err) => { console.error('Erro clientes reativados (summary):', err); return [{ qtd: 0, valor: 0 }] })
 
     // 4. Total ativos
     const [totalRow] = await prisma.$queryRaw<any[]>`
@@ -379,8 +398,11 @@ export async function metasRoutes(app: FastifyInstance) {
     const qtdNovos           = n(novosRow.qtd)
     const qtdPerdidos        = n(perdRow.qtd)
     const receitaPerdida     = n(perdRow.valor)
+    const qtdReativados      = n(reativRow.qtd)
+    const valorReativados    = n(reativRow.valor)
     const totalAtivos        = n(totalRow.qtd)
-    const receitaNova        = valorUpgrades + valorClientesNovos
+    // Reativado entra no realizado igual ao legado: e receita que voltou no periodo.
+    const receitaNova        = valorUpgrades + valorClientesNovos + valorReativados
     const receitaLiquida     = receitaNova - receitaPerdida
     const percMeta           = META_GERAL > 0 ? (receitaNova / META_GERAL) * 100 : 0
 
@@ -403,8 +425,10 @@ export async function metasRoutes(app: FastifyInstance) {
     const clientesNovosDetail = await prisma.$queryRaw<any[]>`
       SELECT c.cod_cli AS codigo, c.NOME_FANTASIA AS nome, c.valor_mensalidade AS valor,
              c.CIDRES_CLI AS cidade, CAST(c.DATACADASTRO_CLI AS DATE) AS data_cadastro,
+             COALESCE(cc.NOME_CLA, 'SEM CLASSIFICACAO') AS segmento,
              'NOVO' AS tipo
       FROM cliente c
+      LEFT JOIN classif_cliente cc ON cc.COD_CLA = c.cod_cla
       WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
         AND c.ATIVO = 'S'
         AND c.DATACADASTRO_CLI BETWEEN ${dataIni} AND ${dataFim}
@@ -412,17 +436,31 @@ export async function metasRoutes(app: FastifyInstance) {
       ORDER BY c.DATACADASTRO_CLI DESC
     `.catch((err) => { console.error('Erro clientes novos:', err); return [] as any[] })
 
+    // Detalhe dos reativados — mesma regra do resumo, pra tela poder listar quem voltou.
+    const clientesReativadosDetail = await prisma.$queryRaw<any[]>`
+      SELECT c.cod_cli AS codigo, c.NOME_FANTASIA AS nome, c.valor_mensalidade AS valor,
+             c.CIDRES_CLI AS cidade, CAST(c.DATA_DESATIVACAO AS DATE) AS data_desativacao,
+             COALESCE(cc.NOME_CLA, 'SEM CLASSIFICACAO') AS segmento
+      FROM cliente c
+      LEFT JOIN classif_cliente cc ON cc.COD_CLA = c.cod_cla
+      WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
+        AND c.ATIVO = 'S'
+        AND c.DATA_DESATIVACAO BETWEEN ${dataIni} AND ${dataFim}
+        AND NOT (c.DATACADASTRO_CLI BETWEEN ${dataIni} AND ${dataFim})
+        AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
+      ORDER BY c.DATA_DESATIVACAO DESC
+    `.catch((err) => { console.error('Erro clientes reativados:', err); return [] as any[] })
+
     // Detalhes de clientes perdidos
     const clientesPerdidosDetail = await prisma.$queryRaw<any[]>`
       SELECT c.cod_cli AS codigo, c.NOME_FANTASIA AS nome, c.valor_mensalidade AS valor,
-             c.CIDRES_CLI AS cidade,
-             CAST(h.data_hora_bloqueio_desbloqueio AS DATE) AS data_desativacao
-      FROM historico_bloqueio_cliente h
-      INNER JOIN cliente c ON c.cod_cli = h.cod_cli
+             c.CIDRES_CLI AS cidade, CAST(c.DATA_DESATIVACAO AS DATE) AS data_desativacao
+      FROM cliente c
       WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
-        AND CAST(h.data_hora_bloqueio_desbloqueio AS DATE) BETWEEN ${dataIni} AND ${dataFim}
-        AND c.cod_cla <> 30 AND h.tipo = 'D'
-      ORDER BY h.data_hora_bloqueio_desbloqueio DESC
+        AND c.ATIVO = 'N'
+        AND c.DATA_DESATIVACAO BETWEEN ${dataIni} AND ${dataFim}
+        AND c.cod_cla <> 30
+      ORDER BY c.DATA_DESATIVACAO DESC
     `.catch((err) => { console.error('Erro clientes perdidos:', err); return [] as any[] })
 
     // Detalhes de upgrades
@@ -454,17 +492,17 @@ export async function metasRoutes(app: FastifyInstance) {
 
     // Novos clientes por segmento
     const novosPorSegmento = await prisma.$queryRaw<any[]>`
-      SELECT cc.NOME_CLA AS seguimento,
+      SELECT COALESCE(cc.NOME_CLA, 'SEM CLASSIFICACAO') AS seguimento,
              COALESCE(SUM(c.valor_mensalidade), 0) AS valor_total,
              COUNT(c.cod_cli) AS quantidade
       FROM cliente c
-      INNER JOIN classif_cliente cc ON cc.COD_CLA = c.cod_cla
+      LEFT JOIN classif_cliente cc ON cc.COD_CLA = c.cod_cla
       WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
         AND c.ATIVO = 'S'
         AND c.DATACADASTRO_CLI BETWEEN ${dataIni} AND ${dataFim}
         AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
-      GROUP BY cc.NOME_CLA
-      ORDER BY valor_total DESC, cc.NOME_CLA
+      GROUP BY seguimento
+      ORDER BY valor_total DESC, seguimento
     `.catch((err) => { console.error('Erro novos por segmento:', err); return [] as any[] })
 
     // Clientes perdidos detalhado
@@ -533,6 +571,7 @@ export async function metasRoutes(app: FastifyInstance) {
       resumo: {
         totalAtivos, qtdNovos, valorClientesNovos,
         qtdPerdidos, receitaPerdida, valorUpgrades,
+        qtdReativados, valorReativados,
         receitaNova, receitaLiquida, percMeta,
       },
       porFilial,
@@ -543,7 +582,16 @@ export async function metasRoutes(app: FastifyInstance) {
         valor: n(c.valor),
         cidade: c.cidade,
         data_cadastro: c.data_cadastro,
+        segmento: c.segmento,
         tipo: c.tipo,
+      })),
+      clientesReativados: clientesReativadosDetail.map((c: any) => ({
+        codigo: n(c.codigo),
+        nome: c.nome,
+        valor: n(c.valor),
+        cidade: c.cidade,
+        data_desativacao: c.data_desativacao,
+        segmento: c.segmento,
       })),
       clientesPerdidos: clientesPerdidosDetail.map((c: any) => ({
         codigo: n(c.codigo),
