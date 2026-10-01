@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, Trash2, Ban, Pencil, CheckSquare, Eye } from 'lucide-react'
+import { Settings, Plus, Clock, User, Calendar, X, CheckCircle, Trash2, Ban, Pencil, CheckSquare, Eye, Users, AlertTriangle } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 
 import { Card } from '../../components/ui/Card'
@@ -851,6 +851,20 @@ export function AgendamentoProgramado() {
     const dFim = fromBRDate(bloqueioForm.dataFim)
     if (!dIni || !dFim) return
 
+    // Confirmação só no caso geral: é o que fecha a agenda de todo mundo, e já aconteceu de ser
+    // criado sem querer achando que valia para uma pessoa só.
+    if (!bloqueioForm.tecnicoId) {
+      const periodo = bloqueioForm.dataIni === bloqueioForm.dataFim
+        ? `${bloqueioForm.dataIni}, das ${bloqueioForm.horaIni} às ${bloqueioForm.horaFim}`
+        : `${bloqueioForm.dataIni} ${bloqueioForm.horaIni} até ${bloqueioForm.dataFim} ${bloqueioForm.horaFim}`
+      const ok = confirm(
+        `Este bloqueio vale para TODOS os ${allTecnicos.length} técnicos.\n\n` +
+        `Período: ${periodo}\n\n` +
+        'Ninguém poderá ser agendado nesse intervalo. Confirma?'
+      )
+      if (!ok) return
+    }
+
     setSavingBloqueio(true)
     try {
       await api.createBloqueio({
@@ -1283,9 +1297,15 @@ export function AgendamentoProgramado() {
                 {bloqueios.map(b => (
                   <div key={b.id} className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/20">
                     <div>
-                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200">
-                        {b.tecnicoNome ?? 'Todos os técnicos'}
-                        <span className="ml-2 text-xs text-slate-600 dark:text-slate-400">
+                      <p className="text-sm font-medium text-slate-800 dark:text-slate-200 flex flex-wrap items-center gap-2">
+                        {/* Bloqueio sem técnico fecha a agenda da equipe inteira. Antes aparecia como
+                            texto comum, igual ao nome de uma pessoa, e passava despercebido. */}
+                        {b.tecnicoNome ?? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-600 text-white text-[11px] font-bold uppercase tracking-wide">
+                            <Users className="w-3 h-3" /> Todos os técnicos
+                          </span>
+                        )}
+                        <span className="text-xs text-slate-600 dark:text-slate-400">
                           {fmtDate(b.dataIni)} {b.horaIni} → {fmtDate(b.dataFim)} {b.horaFim}
                         </span>
                       </p>
@@ -1304,14 +1324,26 @@ export function AgendamentoProgramado() {
             <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3">Novo Bloqueio</p>
             <div className="space-y-4">
               <Select
-                label="Técnico (em branco = bloqueia todos)"
+                label="Técnico"
                 options={[
-                  { value: '', label: 'Todos os técnicos' },
+                  { value: '', label: `Todos os técnicos (${allTecnicos.length}) — bloqueio geral` },
                   ...allTecnicos.map(t => ({ value: String(t.id), label: t.nome }))
                 ]}
                 value={bloqueioForm.tecnicoId}
                 onChange={e => setBloqueioForm(f => ({ ...f, tecnicoId: e.target.value }))}
               />
+              {/* O engano comum é deixar em branco achando que bloqueia só uma pessoa. O aviso
+                  aparece antes de salvar, enquanto ainda dá pra escolher o técnico. */}
+              {!bloqueioForm.tecnicoId && (
+                <div className="flex gap-2 items-start rounded-lg border border-amber-300 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs text-amber-700 dark:text-amber-300">
+                    Este bloqueio vai fechar a agenda de <strong>todos os {allTecnicos.length} técnicos</strong> no
+                    período. Use assim para feriado ou parada geral. Se for a ausência de uma pessoa só,
+                    selecione o técnico acima.
+                  </p>
+                </div>
+              )}
               <div className="grid grid-cols-2 gap-4">
                 <DateInput
                   label="Data início"

@@ -369,6 +369,10 @@ function BoletimComercialTab() {
                   : `${Math.abs(delta12mPerc).toFixed(1)}% ${tendenciaSubindo ? 'acima' : 'abaixo'} do início`}
               </span>
             </p>
+            <p className="text-xs text-slate-500 mt-1">
+              Receita nova de cada mês (clientes novos + reativados + upgrades), comparada com o mesmo
+              mês do ano passado. Serve para ver o ritmo ao longo do ano, não o valor de um mês isolado.
+            </p>
           </div>
           <div className="flex items-center gap-2 text-xs">
             {tendenciaSubindo ? (
@@ -450,10 +454,16 @@ function BoletimComercialTab() {
 
       {/* ── Evolução Mensal ───────────────────────────────────────── */}
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2">
-            <Award className="w-4 h-4 text-blue-400" /> Evolução dos Últimos 12 Meses
-          </h2>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-2">
+              <Award className="w-4 h-4 text-blue-400" /> Evolução dos Últimos 12 Meses
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Mesma receita nova do gráfico acima, mês a mês, lado a lado com o ano anterior. A barra fica
+              verde quando o mês bateu a meta, e a linha tracejada é a meta de {brl(meta.geral)}.
+            </p>
+          </div>
           <div className="flex items-center gap-4 text-xs text-slate-500">
             <span className="flex items-center gap-1.5">
               <span className="w-3 h-3 rounded bg-blue-500 inline-block" /> Ano Atual

@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  MetaDev, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  MetaDev, PropostaOrcamento, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
@@ -753,6 +753,22 @@ export const api = {
   concluirMetaDev: (id: number, concluida: boolean) =>
     fetchApi<{ ok: boolean }>(`/metas-dev/${id}/concluir`, { method: 'PATCH', body: JSON.stringify({ concluida }) }),
   excluirMetaDev: (id: number) => fetchApi<{ ok: boolean }>(`/metas-dev/${id}`, { method: 'DELETE' }),
+
+  // ─── Propostas de orçamento (comercial) ────────────────────
+  getPropostas: (clienteId?: number) =>
+    fetchApi<PropostaOrcamento[]>(`/orcamentos${clienteId ? `?clienteId=${clienteId}` : ''}`),
+  salvarProposta: (dados: {
+    clienteId: number | null; clienteNome: string; valorPlano: number; subtotal: number
+    descontoPerc: number; total: number; parcelas: number; validadeDias: number
+    observacoes?: string; itens: Array<{ descricao: string; detalhe?: string; valor: number }>
+    enviarPara?: string
+  }) =>
+    fetchApi<{ ok: boolean; id: number; emailEnviado: boolean; erroEmail?: string }>('/orcamentos', {
+      method: 'POST',
+      body: JSON.stringify(dados),
+    }),
+  reenviarProposta: (id: number, para: string) =>
+    fetchApi<{ ok: boolean }>(`/orcamentos/${id}/reenviar`, { method: 'POST', body: JSON.stringify({ para }) }),
 
   // ─── Link público de demandas (sem login) ──────────────────
   buscarClientePublico: (documento: string) =>

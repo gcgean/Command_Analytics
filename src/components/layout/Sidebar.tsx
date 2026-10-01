@@ -56,7 +56,6 @@ const navGroups: { group: string; items: NavItem[] }[] = [
           { label: 'Pipeline',       icon: <GitBranch className="w-4 h-4" />,    to: '/implantacao',                  recurso: 'implantacao' },
           { label: 'Acompanhamento', icon: <ClipboardList className="w-4 h-4" />,to: '/implantacao/acompanhamento',   recurso: 'implantacao-acompanhamento' },
           { label: 'Encerrados',     icon: <Archive className="w-4 h-4" />,      to: '/implantacao/encerrados',       recurso: 'implantacao-concluidos' },
-          { label: 'Orçamento',      icon: <Receipt className="w-4 h-4" />,      to: '/implantacao/orcamento',        recurso: 'implantacao-orcamento' },
         ]
       },
       {
@@ -89,6 +88,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
       { label: 'Mapa de Solicitações', icon: <ClipboardList className="w-4 h-4" />, to: '/atendimentos/solicitacoes', recurso: 'solicitacoes' },
       { label: 'Cadastro de Projetos', icon: <FolderKanban className="w-4 h-4" />, to: '/cadastro-projetos', recurso: 'cadastro-projetos' },
       { label: 'Tarefas Dev',       icon: <Code2 className="w-4 h-4" />, to: '/desenvolvimento', recurso: 'desenvolvimento' },
+      { label: 'Metas de Tarefas por Período', icon: <ListChecks className="w-4 h-4" />, to: '/metas/periodo', recurso: 'metas-periodo' },
       { label: 'Versões e Licenças',icon: <Tag className="w-4 h-4" />,   to: '/versoes',         recurso: 'versoes' },
     ]
   },
@@ -100,11 +100,13 @@ const navGroups: { group: string; items: NavItem[] }[] = [
     ]
   },
   {
-    group: 'METAS',
+    group: 'COMERCIAL',
     items: [
-      { label: 'Cadastro de Metas', icon: <Target className="w-4 h-4" />, to: '/metas/cadastro', recurso: 'cadastro-metas' },
       { label: 'Boletim Comercial', icon: <Target className="w-4 h-4" />, to: '/metas', recurso: 'boletim-comercial' },
-      { label: 'Metas de Tarefas por Período', icon: <ListChecks className="w-4 h-4" />, to: '/metas/periodo', recurso: 'metas-periodo' },
+      { label: 'Cadastro de Metas', icon: <Target className="w-4 h-4" />, to: '/metas/cadastro', recurso: 'cadastro-metas' },
+      // O orçamento é o cálculo que o comercial faz antes de fechar; ficava dentro de Implantação,
+      // que é o time que executa depois.
+      { label: 'Orçamento', icon: <Receipt className="w-4 h-4" />, to: '/implantacao/orcamento', recurso: 'implantacao-orcamento' },
     ]
   },
   {

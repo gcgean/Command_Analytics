@@ -17,7 +17,6 @@ export const SYSTEM_RESOURCES = [
   { id: 'monitor-clientes',         label: 'Monitor de Clientes',             grupo: 'CLIENTES' },
   { id: 'dashboard-mensalidades',   label: 'Dashboard de Mensalidades',        grupo: 'CLIENTES' },
   { id: 'implantacao',              label: 'Pipeline de Implantação',         grupo: 'CLIENTES' },
-  { id: 'implantacao-orcamento',    label: 'Orçamento',                       grupo: 'CLIENTES' },
   { id: 'implantacao-acompanhamento', label: 'Acompanhamento Implantação',    grupo: 'CLIENTES' },
   { id: 'implantacao-concluidos',   label: 'Implantação — Processos Encerrados', grupo: 'CLIENTES' },
   { id: 'implantacao-concluidos-reabrir', label: 'Implantação — Reabrir Processo Encerrado', grupo: 'CLIENTES' },
@@ -35,14 +34,15 @@ export const SYSTEM_RESOURCES = [
   { id: 'solicitacoes',             label: 'Mapa de Solicitações',            grupo: 'DESENVOLVIMENTO' },
   { id: 'solicitacoes-acoes',       label: 'Solicitações — Alterar Etapa',    grupo: 'DESENVOLVIMENTO' },
   { id: 'cadastro-projetos',        label: 'Cadastro de Projetos',            grupo: 'DESENVOLVIMENTO' },
+  { id: 'metas-periodo',            label: 'Metas de Tarefas por Período',    grupo: 'DESENVOLVIMENTO' },
   { id: 'versoes',                  label: 'Versões e Licenças',              grupo: 'DESENVOLVIMENTO' },
   // MARKETING
   { id: 'campanhas',                label: 'Campanhas',                       grupo: 'MARKETING' },
   { id: 'videos',                   label: 'Vídeos',                          grupo: 'MARKETING' },
   // METAS
-  { id: 'cadastro-metas',           label: 'Cadastro de Metas',               grupo: 'METAS' },
-  { id: 'boletim-comercial',        label: 'Boletim Comercial',               grupo: 'METAS' },
-  { id: 'metas-periodo',            label: 'Metas de Tarefas por Período',    grupo: 'METAS' },
+  { id: 'boletim-comercial',        label: 'Boletim Comercial',               grupo: 'COMERCIAL' },
+  { id: 'cadastro-metas',           label: 'Cadastro de Metas',               grupo: 'COMERCIAL' },
+  { id: 'implantacao-orcamento',    label: 'Orçamento',                       grupo: 'COMERCIAL' },
   // CERTIFICADOS DIGITAIS
   { id: 'certificados-digitais',    label: 'Controle de Certificados Digitais', grupo: 'CERTIFICADOS DIGITAIS' },
   // RH

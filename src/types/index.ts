@@ -1246,3 +1246,21 @@ export interface MetaDev {
   concluidaEm: string | null
   concluidaPorNome: string | null
 }
+
+/** Proposta comercial gerada na tela de Orçamento (gravada no servidor). */
+export interface PropostaOrcamento {
+  id: number
+  clienteId: number | null
+  clienteNome: string | null
+  clienteEmail: string | null
+  valorPlano: number
+  subtotal: number
+  descontoPerc: number
+  total: number
+  parcelas: number
+  validadeDias: number
+  observacoes: string | null
+  emailEnviado: boolean
+  criadoEm: string
+  itens: Array<{ descricao: string; detalhe?: string; valor: number }>
+}
