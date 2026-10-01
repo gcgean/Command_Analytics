@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import clsx from 'clsx'
 import {
   Calculator, Car, GraduationCap, BedDouble, Database, Percent, FileText,
   Search, X, Mail, Printer, Send, Loader2, Building2, CheckCircle2, CalendarClock,
+  ChevronLeft, ChevronRight, Check,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
-import { Modal } from '../../components/ui/Modal'
 import { useToast } from '../../components/ui/Toast'
 import type { ImplantacaoCliente, ImplantacaoPainel, PropostaOrcamento } from '../../types'
 
@@ -28,31 +29,16 @@ function nomeSecundario(c: ImplantacaoCliente) {
 const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 /** Campos de dinheiro digitam em centavos: 15000 vira R$ 150,00. */
-function parseMoeda(value: string) {
-  return Number(value.replace(/\D/g, '') || '0') / 100
-}
+const parseMoeda = (value: string) => Number(value.replace(/\D/g, '') || '0') / 100
 
 type Form = {
   valorPlano: number
-  qtdCarros: number
-  distanciaKm: number
-  custoKm: number
-  idaEVolta: boolean
-  qtdTecnicos: number
-  qtdHorasTreinamento: number
-  custoHoraTecnica: number
-  diasHospedagem: number
-  custoHospedagem: number
-  refeicoesPorDia: number
-  diasAlimentacao: number
-  custoAlimentacao: number
-  valorMigracao: number
-  outrosCustos: number
-  outrosDescricao: string
-  desconto: number
-  parcelas: number
-  validadeDias: number
-  observacoes: string
+  qtdCarros: number; distanciaKm: number; custoKm: number; idaEVolta: boolean
+  qtdTecnicos: number; qtdHorasTreinamento: number; custoHoraTecnica: number
+  diasHospedagem: number; custoHospedagem: number
+  refeicoesPorDia: number; diasAlimentacao: number; custoAlimentacao: number
+  valorMigracao: number; outrosCustos: number; outrosDescricao: string
+  desconto: number; parcelas: number; validadeDias: number; observacoes: string
 }
 
 const FORM_INICIAL: Form = {
@@ -75,11 +61,12 @@ function CampoNumero({ label, valor, onChange, sufixo, step = 1, dica }: {
       <label className="text-xs font-medium text-slate-600 dark:text-slate-400 block mb-1">{label}</label>
       <div className="relative">
         <input
-          type="number" min={0} step={step} className="input-field pr-10"
+          type="number" min={0} step={step} className="input-field pr-12"
           value={valor}
+          onFocus={(e) => e.target.select()}
           onChange={(e) => onChange(parseFloat(e.target.value) || 0)}
         />
-        {sufixo && <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">{sufixo}</span>}
+        {sufixo && <span className="absolute right-8 top-1/2 -translate-y-1/2 text-xs text-slate-400 pointer-events-none">{sufixo}</span>}
       </div>
       {dica && <p className="text-[11px] text-slate-400 mt-1">{dica}</p>}
     </div>
@@ -95,6 +82,7 @@ function CampoMoeda({ label, valor, onChange, dica }: {
       <input
         type="text" inputMode="numeric" className="input-field"
         value={brl(valor)}
+        onFocus={(e) => e.target.select()}
         onChange={(e) => onChange(parseMoeda(e.target.value))}
       />
       {dica && <p className="text-[11px] text-slate-400 mt-1">{dica}</p>}
@@ -102,42 +90,27 @@ function CampoMoeda({ label, valor, onChange, dica }: {
   )
 }
 
-function Secao({ icone, titulo, descricao, total, children }: {
-  icone: React.ReactNode; titulo: string; descricao?: string; total?: number; children: React.ReactNode
-}) {
-  return (
-    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
-      <div className="flex items-start justify-between gap-3 mb-4">
-        <div className="flex items-start gap-3">
-          <div className="p-2 rounded-lg bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400">{icone}</div>
-          <div>
-            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">{titulo}</h3>
-            {descricao && <p className="text-xs text-slate-500 mt-0.5">{descricao}</p>}
-          </div>
-        </div>
-        {total !== undefined && (
-          <span className={`text-sm font-bold whitespace-nowrap ${total > 0 ? 'text-slate-800 dark:text-slate-200' : 'text-slate-400'}`}>
-            {brl(total)}
-          </span>
-        )}
-      </div>
-      {children}
-    </div>
-  )
-}
+const PASSOS = [
+  { id: 0, titulo: 'Cliente e plano', icone: Building2, opcional: false },
+  { id: 1, titulo: 'Deslocamento', icone: Car, opcional: true },
+  { id: 2, titulo: 'Equipe e estadia', icone: GraduationCap, opcional: true },
+  { id: 3, titulo: 'Extras', icone: Database, opcional: true },
+  { id: 4, titulo: 'Condições', icone: Percent, opcional: true },
+  { id: 5, titulo: 'Proposta', icone: FileText, opcional: false },
+] as const
 
 export function Orcamento() {
   const { toast } = useToast()
   const buscaRef = useRef<HTMLInputElement | null>(null)
+  const topoRef = useRef<HTMLDivElement | null>(null)
 
+  const [passo, setPasso] = useState(0)
   const [painel, setPainel] = useState<ImplantacaoPainel | null>(null)
   const [loadingClientes, setLoadingClientes] = useState(false)
   const [autocompleteAberto, setAutocompleteAberto] = useState(false)
   const [buscaCliente, setBuscaCliente] = useState('')
   const [cliente, setCliente] = useState<ImplantacaoCliente | null>(null)
   const [form, setForm] = useState<Form>(FORM_INICIAL)
-
-  const [previewAberto, setPreviewAberto] = useState(false)
   const [emailDestino, setEmailDestino] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [historico, setHistorico] = useState<PropostaOrcamento[]>([])
@@ -155,8 +128,12 @@ export function Orcamento() {
   const carregarHistorico = useCallback(() => {
     api.getPropostas().then(setHistorico).catch(() => setHistorico([]))
   }, [])
-
   useEffect(() => { carregarHistorico() }, [carregarHistorico])
+
+  const irPara = (destino: number) => {
+    setPasso(Math.max(0, Math.min(PASSOS.length - 1, destino)))
+    topoRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const clientesFiltrados = useMemo(() => {
     const termo = normalizarBusca(buscaCliente)
@@ -203,6 +180,16 @@ export function Orcamento() {
     { descricao: form.outrosDescricao.trim() || 'Outros custos', valor: form.outrosCustos },
   ]), [form, custoDeslocamento, custoTreinamento, custoHospedagem, custoAlimentacao])
 
+  const resumoLinhas = itens.filter((i) => i.valor > 0)
+
+  // Valor fechado em cada passo — mostrado no indicador, pra saber o que já foi preenchido.
+  const valorDoPasso = (id: number) => {
+    if (id === 1) return custoDeslocamento
+    if (id === 2) return custoTreinamento + custoHospedagem + custoAlimentacao
+    if (id === 3) return form.valorMigracao + form.outrosCustos
+    return 0
+  }
+
   function selecionarCliente(c: ImplantacaoCliente) {
     setCliente(c)
     setBuscaCliente(nomeDestaque(c))
@@ -226,7 +213,7 @@ export function Orcamento() {
         subtotal, descontoPerc: form.desconto, total,
         parcelas: form.parcelas, validadeDias: form.validadeDias,
         observacoes: form.observacoes,
-        itens: itens.filter((i) => i.valor > 0),
+        itens: resumoLinhas,
         enviarPara: enviarEmail ? emailDestino.trim() : undefined,
       })
       if (enviarEmail && !r.emailEnviado) {
@@ -236,7 +223,6 @@ export function Orcamento() {
       } else {
         toast.success('Proposta salva no histórico.')
       }
-      setPreviewAberto(false)
       carregarHistorico()
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível gerar a proposta.')
@@ -257,179 +243,363 @@ export function Orcamento() {
     }
   }
 
-  const resumoLinhas = itens.filter((i) => i.valor > 0)
+  function limparTudo() {
+    setForm(FORM_INICIAL); setCliente(null); setBuscaCliente(''); setEmailDestino(''); setPasso(0)
+  }
 
   return (
-    <div className="space-y-6 pb-10">
+    <div className="space-y-5 pb-10" ref={topoRef}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-blue-600 text-white"><Calculator size={22} /></div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Orçamento de Implantação</h1>
-            <p className="text-slate-600 dark:text-slate-400 text-sm">
-              Calcule os custos e envie a proposta para o cliente.
-            </p>
+            <p className="text-slate-600 dark:text-slate-400 text-sm">Monte o custo passo a passo e envie a proposta.</p>
           </div>
         </div>
-        <Button variant="secondary" onClick={() => { setForm(FORM_INICIAL); setCliente(null); setBuscaCliente(''); setEmailDestino('') }}>
-          Limpar
-        </Button>
+        <Button variant="secondary" onClick={limparTudo}>Começar de novo</Button>
       </div>
 
-      {/* Cliente */}
-      <Card padding="sm">
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
-            <Building2 className="w-3.5 h-3.5" /> Cliente (opcional)
-          </label>
-          <div className="relative">
-            <Input
-              ref={buscaRef}
-              icon={<Search className="w-3.5 h-3.5" />}
-              value={buscaCliente}
-              onFocus={() => setAutocompleteAberto(true)}
-              onChange={(e) => { setBuscaCliente(e.target.value); setAutocompleteAberto(true) }}
-              placeholder="Buscar por nome fantasia, razão social ou CNPJ"
-            />
-            {autocompleteAberto && buscaCliente.trim().length >= 2 && (
-              <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                {loadingClientes ? (
-                  <div className="px-3 py-2 text-xs text-slate-500">Carregando...</div>
-                ) : clientesFiltrados.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-slate-500">Nenhum cliente encontrado.</div>
-                ) : clientesFiltrados.map((c) => (
-                  <button
-                    key={c.clienteId}
-                    type="button"
-                    className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => selecionarCliente(c)}
-                  >
-                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{nomeDestaque(c)}</span>
-                    <span className="text-xs text-slate-500">{nomeSecundario(c) || 'Sem razão social'} — {c.cnpj || 'Sem CNPJ'}</span>
-                  </button>
-                ))}
+      {/* Indicador de passos — clicável, porque o comercial costuma voltar e ajustar um número. */}
+      <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-3 overflow-x-auto">
+        <div className="flex items-center gap-1 min-w-max">
+          {PASSOS.map((p, i) => {
+            const Icone = p.icone
+            const atual = passo === p.id
+            const concluido = passo > p.id
+            const valor = valorDoPasso(p.id)
+            return (
+              <div key={p.id} className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => irPara(p.id)}
+                  className={clsx(
+                    'flex items-center gap-2 px-3 py-2 rounded-xl transition-colors',
+                    atual ? 'bg-blue-600 text-white'
+                      : concluido ? 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'
+                      : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700'
+                  )}
+                >
+                  <span className={clsx(
+                    'w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0',
+                    atual ? 'bg-white/20' : concluido ? 'bg-emerald-500 text-white' : 'bg-slate-200 dark:bg-slate-700'
+                  )}>
+                    {concluido ? <Check size={13} /> : i + 1}
+                  </span>
+                  <span className="text-sm font-medium whitespace-nowrap flex items-center gap-1.5">
+                    <Icone size={14} /> {p.titulo}
+                    {valor > 0 && (
+                      <span className={clsx('text-[11px]', atual ? 'text-blue-100' : 'text-emerald-600 dark:text-emerald-400')}>
+                        {brl(valor)}
+                      </span>
+                    )}
+                  </span>
+                </button>
+                {i < PASSOS.length - 1 && <ChevronRight size={14} className="text-slate-300 dark:text-slate-600 mx-0.5" />}
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 min-h-[320px]">
+
+            {/* ── Passo 1: cliente e plano ── */}
+            {passo === 0 && (
+              <div className="space-y-5">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Para quem é a proposta?</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Escolher o cliente preenche o e-mail e a mensalidade automaticamente. Dá para seguir sem escolher.
+                  </p>
+                </div>
+                <div className="relative">
+                  <Input
+                    ref={buscaRef}
+                    icon={<Search className="w-3.5 h-3.5" />}
+                    value={buscaCliente}
+                    onFocus={() => setAutocompleteAberto(true)}
+                    onChange={(e) => { setBuscaCliente(e.target.value); setAutocompleteAberto(true) }}
+                    placeholder="Buscar por nome fantasia, razão social ou CNPJ"
+                  />
+                  {autocompleteAberto && buscaCliente.trim().length >= 2 && (
+                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+                      {loadingClientes ? (
+                        <div className="px-3 py-2 text-xs text-slate-500">Carregando...</div>
+                      ) : clientesFiltrados.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-slate-500">Nenhum cliente encontrado.</div>
+                      ) : clientesFiltrados.map((c) => (
+                        <button
+                          key={c.clienteId}
+                          type="button"
+                          className="flex w-full flex-col gap-0.5 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => selecionarCliente(c)}
+                        >
+                          <span className="text-sm font-semibold text-slate-800 dark:text-slate-100">{nomeDestaque(c)}</span>
+                          <span className="text-xs text-slate-500">{nomeSecundario(c) || 'Sem razão social'} — {c.cnpj || 'Sem CNPJ'}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {cliente && (
+                  <div className="rounded-xl border border-blue-200 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/10 p-3 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold text-blue-900 dark:text-blue-200">{nomeDestaque(cliente)}</p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300">
+                        {cliente.cnpj || 'Sem CNPJ'}
+                        {cliente.cidade ? ` · ${cliente.cidade}${cliente.uf ? `/${cliente.uf}` : ''}` : ''}
+                        {cliente.email ? ` · ${cliente.email}` : ''}
+                      </p>
+                    </div>
+                    <button type="button" onClick={() => { setCliente(null); setBuscaCliente(''); setEmailDestino('') }}
+                      className="text-blue-700 dark:text-blue-300"><X className="h-4 w-4" /></button>
+                  </div>
+                )}
+
+                <div className="grid sm:grid-cols-2 gap-4 pt-2 border-t border-slate-100 dark:border-slate-700">
+                  <CampoMoeda label="Mensalidade do plano" valor={form.valorPlano} onChange={(v) => set('valorPlano', v)}
+                    dica="Não entra no custo de implantação." />
+                  <div className="flex items-end">
+                    <div className="w-full rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 px-3 py-2">
+                      <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Receita no primeiro ano</p>
+                      <p className="text-base font-bold text-emerald-700 dark:text-emerald-400">{brl(primeiroAno)}</p>
+                      <p className="text-[11px] text-emerald-700/70 dark:text-emerald-400/70">12 mensalidades + implantação</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Passo 2: deslocamento ── */}
+            {passo === 1 && (
+              <div className="space-y-5">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Quanto custa chegar até o cliente?</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Se a implantação for remota, deixe a distância em zero e siga.</p>
+                </div>
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <CampoNumero label="Qtd. de carros" valor={form.qtdCarros} onChange={(v) => set('qtdCarros', v)} />
+                  <CampoNumero label="Distância" valor={form.distanciaKm} onChange={(v) => set('distanciaKm', v)} sufixo="km" />
+                  <CampoMoeda label="Custo por km" valor={form.custoKm} onChange={(v) => set('custoKm', v)} />
+                </div>
+                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <input type="checkbox" className="accent-blue-600" checked={form.idaEVolta} onChange={(e) => set('idaEVolta', e.target.checked)} />
+                  Contar ida e volta (dobra a distância)
+                </label>
+                <div className="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-3 text-sm">
+                  <span className="text-slate-500">
+                    {form.qtdCarros} × {form.distanciaKm} km{form.idaEVolta ? ' × 2' : ''} × {brl(form.custoKm)} =
+                  </span>{' '}
+                  <strong className="text-slate-800 dark:text-slate-200">{brl(custoDeslocamento)}</strong>
+                </div>
+              </div>
+            )}
+
+            {/* ── Passo 3: equipe e estadia ── */}
+            {passo === 2 && (
+              <div className="space-y-5">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Quem vai e por quanto tempo?</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    A quantidade de técnicos vale para o treinamento, a hospedagem e a alimentação.
+                  </p>
+                </div>
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <CampoNumero label="Qtd. de técnicos" valor={form.qtdTecnicos} onChange={(v) => set('qtdTecnicos', v)} />
+                  <CampoNumero label="Horas de treinamento" valor={form.qtdHorasTreinamento} onChange={(v) => set('qtdHorasTreinamento', v)} sufixo="h" />
+                  <CampoMoeda label="Custo por hora técnica" valor={form.custoHoraTecnica} onChange={(v) => set('custoHoraTecnica', v)} />
+                </div>
+
+                <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
+                  <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2">
+                    <BedDouble size={15} className="text-blue-500" /> Estadia (só se a equipe dormir fora)
+                  </p>
+                  <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <CampoNumero label="Diárias de hospedagem" valor={form.diasHospedagem} onChange={(v) => set('diasHospedagem', v)} />
+                    <CampoMoeda label="Custo por diária" valor={form.custoHospedagem} onChange={(v) => set('custoHospedagem', v)} />
+                    <div />
+                    <CampoNumero label="Dias com alimentação" valor={form.diasAlimentacao} onChange={(v) => set('diasAlimentacao', v)} />
+                    <CampoNumero label="Refeições por dia" valor={form.refeicoesPorDia} onChange={(v) => set('refeicoesPorDia', v)} dica="Por técnico." />
+                    <CampoMoeda label="Custo por refeição" valor={form.custoAlimentacao} onChange={(v) => set('custoAlimentacao', v)} />
+                  </div>
+                </div>
+
+                <div className="grid sm:grid-cols-3 gap-3">
+                  {[
+                    { rotulo: 'Treinamento', valor: custoTreinamento },
+                    { rotulo: 'Hospedagem', valor: custoHospedagem },
+                    { rotulo: 'Alimentação', valor: custoAlimentacao },
+                  ].map((x) => (
+                    <div key={x.rotulo} className="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-3">
+                      <p className="text-[11px] text-slate-500">{x.rotulo}</p>
+                      <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{brl(x.valor)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ── Passo 4: extras ── */}
+            {passo === 3 && (
+              <div className="space-y-5">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Tem algo além do padrão?</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">Migração de dados, equipamento, licença extra. Pode pular se não houver.</p>
+                </div>
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <CampoMoeda label="Migração de dados" valor={form.valorMigracao} onChange={(v) => set('valorMigracao', v)} />
+                  <div>
+                    <label className="text-xs font-medium text-slate-600 dark:text-slate-400 block mb-1">Descrição (outros)</label>
+                    <input className="input-field" placeholder="Ex.: impressora, licença extra"
+                      value={form.outrosDescricao} onChange={(e) => set('outrosDescricao', e.target.value)} />
+                  </div>
+                  <CampoMoeda label="Outros custos" valor={form.outrosCustos} onChange={(v) => set('outrosCustos', v)} />
+                </div>
+              </div>
+            )}
+
+            {/* ── Passo 5: condições ── */}
+            {passo === 4 && (
+              <div className="space-y-5">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Como o cliente vai pagar?</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">O desconto incide sobre a implantação, não sobre a mensalidade.</p>
+                </div>
+                <div className="grid sm:grid-cols-3 gap-4">
+                  <CampoNumero label="Desconto" valor={form.desconto} onChange={(v) => set('desconto', Math.min(100, v))} sufixo="%" step={0.5}
+                    dica={form.desconto > 0 ? `- ${brl(descontoValor)}` : undefined} />
+                  <CampoNumero label="Parcelas da implantação" valor={form.parcelas} onChange={(v) => set('parcelas', Math.max(1, Math.round(v)))} sufixo="x"
+                    dica={form.parcelas > 1 ? `${form.parcelas}× de ${brl(valorParcela)}` : 'À vista'} />
+                  <CampoNumero label="Validade da proposta" valor={form.validadeDias} onChange={(v) => set('validadeDias', v)} sufixo="dias" />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-600 dark:text-slate-400 block mb-1">Observações (vão na proposta)</label>
+                  <textarea className="input-field w-full h-24 resize-none"
+                    placeholder="Ex.: valores de deslocamento válidos para a região de Limoeiro do Norte."
+                    value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} />
+                </div>
+              </div>
+            )}
+
+            {/* ── Passo 6: proposta ── */}
+            {passo === 5 && (
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Confira e envie</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">É exatamente isto que o cliente vai receber.</p>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
+                  <div className="flex items-start justify-between gap-3 border-b border-slate-200 dark:border-slate-700 pb-3">
+                    <div>
+                      <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                        {cliente ? nomeDestaque(cliente) : 'Proposta sem cliente vinculado'}
+                      </p>
+                      {cliente && (
+                        <p className="text-xs text-slate-500">{nomeSecundario(cliente) || 'Sem razão social'} · {cliente.cnpj || 'Sem CNPJ'}</p>
+                      )}
+                    </div>
+                    <p className="text-xs text-slate-500 whitespace-nowrap">{new Date().toLocaleDateString('pt-BR')}</p>
+                  </div>
+
+                  <div className="space-y-2 text-sm">
+                    {resumoLinhas.length === 0 && <p className="text-slate-500">Nenhum custo de implantação lançado.</p>}
+                    {resumoLinhas.map((i) => (
+                      <div key={i.descricao} className="flex justify-between gap-3">
+                        <div>
+                          <span className="text-slate-700 dark:text-slate-300">{i.descricao}</span>
+                          {i.detalhe && <p className="text-[11px] text-slate-400">{i.detalhe}</p>}
+                        </div>
+                        <strong className="whitespace-nowrap">{brl(i.valor)}</strong>
+                      </div>
+                    ))}
+                    <div className="flex justify-between border-t border-slate-200 dark:border-slate-700 pt-2">
+                      <span>Subtotal</span><strong>{brl(subtotal)}</strong>
+                    </div>
+                    {form.desconto > 0 && (
+                      <div className="flex justify-between text-red-500">
+                        <span>Desconto ({form.desconto}%)</span><strong>- {brl(descontoValor)}</strong>
+                      </div>
+                    )}
+                    <div className="flex justify-between border-t-2 border-blue-500 pt-2 text-base">
+                      <span className="font-semibold">TOTAL DA IMPLANTAÇÃO</span>
+                      <strong className="text-blue-600">{brl(total)}</strong>
+                    </div>
+                    {form.parcelas > 1 && <p className="text-right text-xs text-slate-500">ou {form.parcelas}× de {brl(valorParcela)}</p>}
+                    <div className="flex justify-between bg-emerald-50 dark:bg-emerald-500/10 rounded-lg p-2.5">
+                      <span className="text-emerald-700 dark:text-emerald-400">Mensalidade do plano</span>
+                      <strong className="text-emerald-700 dark:text-emerald-400">{brl(form.valorPlano)}/mês</strong>
+                    </div>
+                  </div>
+
+                  {form.observacoes.trim() && (
+                    <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap border-t border-slate-200 dark:border-slate-700 pt-3">
+                      {form.observacoes}
+                    </p>
+                  )}
+                  <p className="text-[11px] text-slate-400">Proposta válida por {form.validadeDias} dias.</p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-medium text-slate-600 dark:text-slate-400 block mb-1">E-mail do cliente</label>
+                  <input className="input-field" type="email" placeholder="cliente@empresa.com.br"
+                    value={emailDestino} onChange={(e) => setEmailDestino(e.target.value)} />
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button disabled={enviando} onClick={() => gerarProposta(true)}>
+                    {enviando ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : <><Mail className="w-4 h-4" /> Salvar e enviar por e-mail</>}
+                  </Button>
+                  <Button variant="secondary" disabled={enviando} onClick={() => gerarProposta(false)}>Só salvar</Button>
+                  <Button variant="secondary" onClick={() => window.print()}><Printer className="w-4 h-4" /> Imprimir / PDF</Button>
+                </div>
               </div>
             )}
           </div>
-          {cliente && (
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <span className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
-                {nomeDestaque(cliente)}
-                <button type="button" onClick={() => { setCliente(null); setBuscaCliente(''); setEmailDestino('') }}>
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </span>
-              {cliente.cidade && <span className="text-xs text-slate-500">{cliente.cidade}{cliente.uf ? `/${cliente.uf}` : ''}</span>}
-              {cliente.email && <span className="text-xs text-slate-500">{cliente.email}</span>}
-            </div>
-          )}
-        </div>
-      </Card>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        <div className="lg:col-span-2 space-y-4">
-          <Secao icone={<Database size={18} />} titulo="Plano contratado" descricao="Mensalidade que o cliente vai pagar — não entra no custo de implantação.">
-            <div className="grid sm:grid-cols-2 gap-4">
-              <CampoMoeda label="Mensalidade do plano" valor={form.valorPlano} onChange={(v) => set('valorPlano', v)} />
-              <div className="flex items-end">
-                <div className="w-full rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/30 px-3 py-2">
-                  <p className="text-[11px] text-emerald-700 dark:text-emerald-400">Receita no primeiro ano (12 meses + implantação)</p>
-                  <p className="text-base font-bold text-emerald-700 dark:text-emerald-400">{brl(primeiroAno)}</p>
-                </div>
-              </div>
-            </div>
-          </Secao>
-
-          <Secao icone={<Car size={18} />} titulo="Deslocamento" total={custoDeslocamento}
-            descricao={`${form.qtdCarros} carro(s) × ${form.distanciaKm} km${form.idaEVolta ? ' × 2 (ida e volta)' : ' (só ida)'} × ${brl(form.custoKm)}`}>
-            <div className="grid sm:grid-cols-3 gap-4">
-              <CampoNumero label="Qtd. de carros" valor={form.qtdCarros} onChange={(v) => set('qtdCarros', v)} />
-              <CampoNumero label="Distância" valor={form.distanciaKm} onChange={(v) => set('distanciaKm', v)} sufixo="km" />
-              <CampoMoeda label="Custo por km" valor={form.custoKm} onChange={(v) => set('custoKm', v)} />
-            </div>
-            <label className="flex items-center gap-2 mt-3 text-sm text-slate-700 dark:text-slate-300">
-              <input type="checkbox" className="accent-blue-600" checked={form.idaEVolta} onChange={(e) => set('idaEVolta', e.target.checked)} />
-              Contar ida e volta (dobra a distância)
-            </label>
-          </Secao>
-
-          <Secao icone={<GraduationCap size={18} />} titulo="Equipe e treinamento" total={custoTreinamento}
-            descricao="A quantidade de técnicos também é usada na hospedagem e na alimentação.">
-            <div className="grid sm:grid-cols-3 gap-4">
-              <CampoNumero label="Qtd. de técnicos" valor={form.qtdTecnicos} onChange={(v) => set('qtdTecnicos', v)} />
-              <CampoNumero label="Horas de treinamento" valor={form.qtdHorasTreinamento} onChange={(v) => set('qtdHorasTreinamento', v)} sufixo="h" />
-              <CampoMoeda label="Custo por hora técnica" valor={form.custoHoraTecnica} onChange={(v) => set('custoHoraTecnica', v)} />
-            </div>
-          </Secao>
-
-          <Secao icone={<BedDouble size={18} />} titulo="Hospedagem e alimentação" total={custoHospedagem + custoAlimentacao}
-            descricao={`Hospedagem ${brl(custoHospedagem)} · Alimentação ${brl(custoAlimentacao)}`}>
-            <div className="grid sm:grid-cols-2 gap-4">
-              <CampoNumero label="Diárias de hospedagem" valor={form.diasHospedagem} onChange={(v) => set('diasHospedagem', v)}
-                dica="Multiplicado pela quantidade de técnicos." />
-              <CampoMoeda label="Custo por diária" valor={form.custoHospedagem} onChange={(v) => set('custoHospedagem', v)} />
-              <CampoNumero label="Dias com alimentação" valor={form.diasAlimentacao} onChange={(v) => set('diasAlimentacao', v)} />
-              <CampoNumero label="Refeições por dia" valor={form.refeicoesPorDia} onChange={(v) => set('refeicoesPorDia', v)}
-                dica="Por técnico, por dia." />
-              <CampoMoeda label="Custo por refeição" valor={form.custoAlimentacao} onChange={(v) => set('custoAlimentacao', v)} />
-            </div>
-          </Secao>
-
-          <Secao icone={<Database size={18} />} titulo="Migração e outros custos" total={form.valorMigracao + form.outrosCustos}>
-            <div className="grid sm:grid-cols-3 gap-4">
-              <CampoMoeda label="Migração de dados" valor={form.valorMigracao} onChange={(v) => set('valorMigracao', v)} />
-              <div>
-                <label className="text-xs font-medium text-slate-600 dark:text-slate-400 block mb-1">Descrição (outros)</label>
-                <input className="input-field" placeholder="Ex.: equipamento, licença extra"
-                  value={form.outrosDescricao} onChange={(e) => set('outrosDescricao', e.target.value)} />
-              </div>
-              <CampoMoeda label="Outros custos" valor={form.outrosCustos} onChange={(v) => set('outrosCustos', v)} />
-            </div>
-          </Secao>
-
-          <Secao icone={<Percent size={18} />} titulo="Condições comerciais"
-            descricao="O desconto incide sobre a implantação, não sobre a mensalidade.">
-            <div className="grid sm:grid-cols-3 gap-4">
-              <CampoNumero label="Desconto" valor={form.desconto} onChange={(v) => set('desconto', Math.min(100, v))} sufixo="%" step={0.5}
-                dica={form.desconto > 0 ? `- ${brl(descontoValor)}` : undefined} />
-              <CampoNumero label="Parcelas da implantação" valor={form.parcelas} onChange={(v) => set('parcelas', Math.max(1, Math.round(v)))} sufixo="x"
-                dica={form.parcelas > 1 ? `${form.parcelas}× de ${brl(valorParcela)}` : 'À vista'} />
-              <CampoNumero label="Validade da proposta" valor={form.validadeDias} onChange={(v) => set('validadeDias', v)} sufixo="dias" />
-            </div>
-            <div className="mt-4">
-              <label className="text-xs font-medium text-slate-600 dark:text-slate-400 block mb-1">Observações (vão na proposta)</label>
-              <textarea className="input-field w-full h-20 resize-none"
-                placeholder="Ex.: valores de deslocamento válidos para a região de Limoeiro do Norte."
-                value={form.observacoes} onChange={(e) => set('observacoes', e.target.value)} />
-            </div>
-          </Secao>
+          {/* Navegação */}
+          <div className="flex items-center justify-between gap-3">
+            <Button variant="secondary" disabled={passo === 0} onClick={() => irPara(passo - 1)}>
+              <ChevronLeft className="w-4 h-4" /> Voltar
+            </Button>
+            <p className="text-xs text-slate-400">Passo {passo + 1} de {PASSOS.length}</p>
+            {passo < PASSOS.length - 1 ? (
+              <Button onClick={() => irPara(passo + 1)}>
+                {PASSOS[passo].opcional && valorDoPasso(passo) === 0 ? 'Pular' : 'Continuar'} <ChevronRight className="w-4 h-4" />
+              </Button>
+            ) : (
+              <Button variant="secondary" onClick={() => irPara(0)}>Revisar do início</Button>
+            )}
+          </div>
         </div>
 
-        {/* Resumo */}
-        <div className="space-y-4 lg:sticky lg:top-6">
+        {/* Resumo sempre visível */}
+        <div className="lg:sticky lg:top-6">
           <div className="bg-white dark:bg-slate-800 border-2 border-blue-500/30 rounded-2xl overflow-hidden">
             <div className="bg-blue-600 text-white px-5 py-3 flex items-center gap-2">
               <FileText size={16} /> <span className="text-sm font-semibold">Resumo da proposta</span>
             </div>
             <div className="p-5 space-y-3">
               {resumoLinhas.length === 0 && (
-                <p className="text-sm text-slate-500">Preencha os custos ao lado para montar a proposta.</p>
+                <p className="text-sm text-slate-500">Os custos aparecem aqui conforme você preenche os passos.</p>
               )}
               {resumoLinhas.map((i) => (
                 <div key={i.descricao} className="flex justify-between gap-3 text-sm">
-                  <div className="min-w-0">
-                    <p className="text-slate-700 dark:text-slate-300">{i.descricao}</p>
-                    {i.detalhe && <p className="text-[11px] text-slate-400 truncate">{i.detalhe}</p>}
-                  </div>
+                  <span className="text-slate-700 dark:text-slate-300">{i.descricao}</span>
                   <span className="text-slate-800 dark:text-slate-200 whitespace-nowrap">{brl(i.valor)}</span>
                 </div>
               ))}
-
-              <div className="border-t border-slate-200 dark:border-slate-700 pt-3 flex justify-between text-sm">
-                <span className="text-slate-600 dark:text-slate-400">Subtotal</span>
-                <span className="text-slate-800 dark:text-slate-200">{brl(subtotal)}</span>
-              </div>
+              {resumoLinhas.length > 0 && (
+                <div className="border-t border-slate-200 dark:border-slate-700 pt-3 flex justify-between text-sm">
+                  <span className="text-slate-600 dark:text-slate-400">Subtotal</span>
+                  <span className="text-slate-800 dark:text-slate-200">{brl(subtotal)}</span>
+                </div>
+              )}
               {form.desconto > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-red-500">Desconto ({form.desconto}%)</span>
@@ -437,12 +607,10 @@ export function Orcamento() {
                 </div>
               )}
               <div className="border-t-2 border-blue-500 pt-3 flex items-end justify-between">
-                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Total da implantação</span>
+                <span className="text-sm font-semibold text-slate-700 dark:text-slate-200">Total</span>
                 <span className="text-2xl font-bold text-blue-600 dark:text-blue-400">{brl(total)}</span>
               </div>
-              {form.parcelas > 1 && (
-                <p className="text-xs text-slate-500 text-right">ou {form.parcelas}× de {brl(valorParcela)}</p>
-              )}
+              {form.parcelas > 1 && <p className="text-xs text-slate-500 text-right">ou {form.parcelas}× de {brl(valorParcela)}</p>}
 
               <div className="rounded-lg bg-emerald-50 dark:bg-emerald-500/10 p-3 flex justify-between items-center">
                 <span className="text-sm text-emerald-700 dark:text-emerald-400">Mensalidade</span>
@@ -450,12 +618,14 @@ export function Orcamento() {
               </div>
 
               <p className="text-[11px] text-slate-400 flex items-center gap-1">
-                <CalendarClock className="w-3 h-3" /> Proposta válida por {form.validadeDias} dias
+                <CalendarClock className="w-3 h-3" /> Válida por {form.validadeDias} dias
               </p>
 
-              <button className="btn-primary w-full justify-center mt-2" onClick={() => setPreviewAberto(true)}>
-                <Send size={15} /> Gerar proposta
-              </button>
+              {passo < PASSOS.length - 1 && (
+                <button className="btn-primary w-full justify-center mt-1" onClick={() => irPara(PASSOS.length - 1)}>
+                  <Send size={15} /> Ir para a proposta
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -482,23 +652,17 @@ export function Orcamento() {
             <tbody>
               {historico.map((p) => (
                 <tr key={p.id} className="border-t border-slate-200 dark:border-slate-700">
-                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">
-                    {new Date(p.criadoEm).toLocaleString('pt-BR')}
-                  </td>
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">{new Date(p.criadoEm).toLocaleString('pt-BR')}</td>
                   <td className="px-4 py-3 text-slate-700 dark:text-slate-200">{p.clienteNome || 'Sem cliente vinculado'}</td>
                   <td className="px-4 py-3 text-right text-slate-700 dark:text-slate-200">{brl(p.total)}</td>
                   <td className="px-4 py-3 text-right text-emerald-600 dark:text-emerald-400">{brl(p.valorPlano)}</td>
                   <td className="px-4 py-3">
-                    {p.emailEnviado ? (
-                      <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
-                        <CheckCircle2 className="w-3.5 h-3.5" /> enviado
-                      </span>
-                    ) : <span className="text-xs text-slate-400">não enviado</span>}
+                    {p.emailEnviado
+                      ? <span className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="w-3.5 h-3.5" /> enviado</span>
+                      : <span className="text-xs text-slate-400">não enviado</span>}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Button size="sm" variant="secondary" onClick={() => reenviar(p)}>
-                      <Mail className="w-3.5 h-3.5" /> Enviar
-                    </Button>
+                    <Button size="sm" variant="secondary" onClick={() => reenviar(p)}><Mail className="w-3.5 h-3.5" /> Enviar</Button>
                   </td>
                 </tr>
               ))}
@@ -509,86 +673,6 @@ export function Orcamento() {
           </table>
         </div>
       </Card>
-
-      {/* Preview / envio */}
-      <Modal isOpen={previewAberto} onClose={() => setPreviewAberto(false)} title="Proposta comercial" size="lg">
-        <div className="space-y-4">
-          <div id="proposta-impressao" className="rounded-xl border border-slate-200 dark:border-slate-700 p-5 space-y-4">
-            <div className="flex items-start justify-between gap-3 border-b border-slate-200 dark:border-slate-700 pb-3">
-              <div>
-                <p className="text-lg font-bold text-slate-900 dark:text-slate-100">
-                  {cliente ? nomeDestaque(cliente) : 'Proposta sem cliente vinculado'}
-                </p>
-                {cliente && (
-                  <p className="text-xs text-slate-500">
-                    {nomeSecundario(cliente) || 'Sem razão social'} · {cliente.cnpj || 'Sem CNPJ'}
-                  </p>
-                )}
-              </div>
-              <p className="text-xs text-slate-500 whitespace-nowrap">{new Date().toLocaleDateString('pt-BR')}</p>
-            </div>
-
-            <div className="space-y-2 text-sm">
-              {resumoLinhas.map((i) => (
-                <div key={i.descricao} className="flex justify-between gap-3">
-                  <div>
-                    <span className="text-slate-700 dark:text-slate-300">{i.descricao}</span>
-                    {i.detalhe && <p className="text-[11px] text-slate-400">{i.detalhe}</p>}
-                  </div>
-                  <strong className="whitespace-nowrap">{brl(i.valor)}</strong>
-                </div>
-              ))}
-              <div className="flex justify-between border-t border-slate-200 dark:border-slate-700 pt-2">
-                <span>Subtotal</span><strong>{brl(subtotal)}</strong>
-              </div>
-              {form.desconto > 0 && (
-                <div className="flex justify-between text-red-500">
-                  <span>Desconto ({form.desconto}%)</span><strong>- {brl(descontoValor)}</strong>
-                </div>
-              )}
-              <div className="flex justify-between border-t-2 border-blue-500 pt-2 text-base">
-                <span className="font-semibold">TOTAL DA IMPLANTAÇÃO</span>
-                <strong className="text-blue-600">{brl(total)}</strong>
-              </div>
-              {form.parcelas > 1 && (
-                <p className="text-right text-xs text-slate-500">ou {form.parcelas}× de {brl(valorParcela)}</p>
-              )}
-              <div className="flex justify-between bg-emerald-50 dark:bg-emerald-500/10 rounded-lg p-2.5">
-                <span className="text-emerald-700 dark:text-emerald-400">Mensalidade do plano</span>
-                <strong className="text-emerald-700 dark:text-emerald-400">{brl(form.valorPlano)}/mês</strong>
-              </div>
-            </div>
-
-            {form.observacoes.trim() && (
-              <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap border-t border-slate-200 dark:border-slate-700 pt-3">
-                {form.observacoes}
-              </p>
-            )}
-            <p className="text-[11px] text-slate-400">Proposta válida por {form.validadeDias} dias.</p>
-          </div>
-
-          <div>
-            <label className="text-xs font-medium text-slate-600 dark:text-slate-400 block mb-1">
-              Enviar para (e-mail do cliente)
-            </label>
-            <input className="input-field" type="email" placeholder="cliente@empresa.com.br"
-              value={emailDestino} onChange={(e) => setEmailDestino(e.target.value)} />
-          </div>
-
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="secondary" onClick={() => setPreviewAberto(false)}>Cancelar</Button>
-            <Button variant="secondary" onClick={() => window.print()}>
-              <Printer className="w-4 h-4" /> Imprimir / PDF
-            </Button>
-            <Button variant="secondary" disabled={enviando} onClick={() => gerarProposta(false)}>
-              Só salvar
-            </Button>
-            <Button disabled={enviando} onClick={() => gerarProposta(true)}>
-              {enviando ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</> : <><Mail className="w-4 h-4" /> Salvar e enviar</>}
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   )
 }
