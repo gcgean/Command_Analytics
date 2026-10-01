@@ -3,14 +3,14 @@ import clsx from 'clsx'
 import {
   Calculator, Car, GraduationCap, Database, Percent, FileText, BedDouble,
   Search, X, Printer, Loader2, Building2, UserPlus, TrendingUp, AlertTriangle,
-  ChevronLeft, ChevronRight, Check, Repeat, Save, Wallet,
+  ChevronLeft, ChevronRight, Check, Save, Wallet,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { useToast } from '../../components/ui/Toast'
-import type { ImplantacaoCliente, ImplantacaoPainel, PropostaOrcamento } from '../../types'
+import type { ImplantacaoCliente, ImplantacaoPainel, PropostaOrcamento, MigracaoTabelada, ParametrosPrecificacao } from '../../types'
 
 function normalizarBusca(value?: string | null) {
   return String(value || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
@@ -36,11 +36,8 @@ type Form = {
   qtdTecnicos: number; horasTreinamento: number; custoHoraTecnica: number
   diasHospedagem: number; custoHospedagem: number
   refeicoesPorDia: number; diasAlimentacao: number; custoAlimentacao: number
-  horasMigracao: number; custoHoraMigracao: number
+  migracaoId: number | null; valorMigracao: number
   outrosCustos: number; outrosDescricao: string
-  // custo recorrente (todo mês)
-  horasSuporteMes: number; custoHoraSuporte: number
-  custoInfraMes: number; custoLicencasMes: number
   // precificação
   margemAlvo: number; impostosPerc: number; comissaoPerc: number
   precoImplantacao: number; mensalidade: number
@@ -52,10 +49,8 @@ const FORM_INICIAL: Form = {
   qtdTecnicos: 1, horasTreinamento: 8, custoHoraTecnica: 80,
   diasHospedagem: 0, custoHospedagem: 150,
   refeicoesPorDia: 2, diasAlimentacao: 0, custoAlimentacao: 45,
-  horasMigracao: 0, custoHoraMigracao: 80,
+  migracaoId: null, valorMigracao: 0,
   outrosCustos: 0, outrosDescricao: '',
-  horasSuporteMes: 2, custoHoraSuporte: 60,
-  custoInfraMes: 0, custoLicencasMes: 0,
   margemAlvo: 30, impostosPerc: 6, comissaoPerc: 5,
   precoImplantacao: 0, mensalidade: 0,
   parcelas: 1, observacoes: '',
@@ -108,9 +103,8 @@ function LinhaCusto({ rotulo, detalhe, valor }: { rotulo: string; detalhe?: stri
 const PASSOS = [
   { id: 0, titulo: 'Cliente', icone: Building2 },
   { id: 1, titulo: 'Custos da implantação', icone: Car },
-  { id: 2, titulo: 'Custo mensal', icone: Repeat },
-  { id: 3, titulo: 'Precificação', icone: Percent },
-  { id: 4, titulo: 'Resultado', icone: TrendingUp },
+  { id: 2, titulo: 'Precificação', icone: Percent },
+  { id: 3, titulo: 'Resultado', icone: TrendingUp },
 ] as const
 
 export function Orcamento() {
@@ -127,6 +121,8 @@ export function Orcamento() {
   const [form, setForm] = useState<Form>(FORM_INICIAL)
   const [salvando, setSalvando] = useState(false)
   const [historico, setHistorico] = useState<PropostaOrcamento[]>([])
+  const [migracoes, setMigracoes] = useState<MigracaoTabelada[]>([])
+  const [repasseMigracao, setRepasseMigracao] = useState(30)
 
   const set = <K extends keyof Form>(campo: K, valor: Form[K]) => setForm((f) => ({ ...f, [campo]: valor }))
 
@@ -141,6 +137,23 @@ export function Orcamento() {
     api.getPropostas().then(setHistorico).catch(() => setHistorico([]))
   }, [])
   useEffect(() => { carregarHistorico() }, [carregarHistorico])
+
+  // Custos padrão vêm de Configurações > Precificação: o vendedor não precisa saber de cor.
+  useEffect(() => {
+    api.getParametrosPrecificacao()
+      .then((p: ParametrosPrecificacao) => {
+        setRepasseMigracao(p.migracaoRepassePerc ?? 30)
+        setForm((f) => ({
+          ...f,
+          custoKm: p.custoKm, custoHoraTecnica: p.custoHoraTecnica,
+          custoHospedagem: p.custoHospedagem, custoAlimentacao: p.custoAlimentacao,
+          refeicoesPorDia: p.refeicoesDia, horasTreinamento: p.horasTreinamento,
+          margemAlvo: p.margemAlvo, impostosPerc: p.impostosPerc, comissaoPerc: p.comissaoPerc,
+        }))
+      })
+      .catch(() => {})
+    api.getMigracoes().then(setMigracoes).catch(() => setMigracoes([]))
+  }, [])
 
   const irPara = (destino: number) => {
     setPasso(Math.max(0, Math.min(PASSOS.length - 1, destino)))
@@ -165,12 +178,11 @@ export function Orcamento() {
   const cTreinamento = form.qtdTecnicos * form.horasTreinamento * form.custoHoraTecnica
   const cHospedagem = form.diasHospedagem * form.custoHospedagem * form.qtdTecnicos
   const cAlimentacao = form.diasAlimentacao * form.refeicoesPorDia * form.qtdTecnicos * form.custoAlimentacao
-  const cMigracao = form.horasMigracao * form.custoHoraMigracao
-  const custoImplantacao = cDeslocamento + cTreinamento + cHospedagem + cAlimentacao + cMigracao + form.outrosCustos
-
-  // ── Custo recorrente (todo mês) ─────────────────────────────────
-  const cSuporte = form.horasSuporteMes * form.custoHoraSuporte
-  const custoMensal = cSuporte + form.custoInfraMes + form.custoLicencasMes
+  // O que a migração custa para a empresa é o repasse ao parceiro que executa; o resto é margem.
+  const cMigracao = form.valorMigracao * (repasseMigracao / 100)
+  const custoSemMigracao = cDeslocamento + cTreinamento + cHospedagem + cAlimentacao + form.outrosCustos
+  const custoImplantacao = custoSemMigracao + cMigracao
+  const migracaoSelecionada = migracoes.find((m) => m.id === form.migracaoId) ?? null
 
   // ── Precificação ────────────────────────────────────────────────
   // Imposto e comissão incidem sobre o que é cobrado, não sobre o custo. Por isso o preço sai de
@@ -178,13 +190,13 @@ export function Orcamento() {
   // entrega margem menor do que a pretendida.
   const cargaPerc = Math.min(99, form.impostosPerc + form.comissaoPerc + form.margemAlvo)
   const divisor = 1 - cargaPerc / 100
-  const sugestaoImplantacao = divisor > 0 ? custoImplantacao / divisor : 0
-  const sugestaoMensalidade = divisor > 0 ? custoMensal / divisor : 0
+  // A migração já tem preço de tabela, então entra inteira no preço; o restante é que recebe margem.
+  const sugestaoImplantacao = (divisor > 0 ? custoSemMigracao / divisor : 0) + form.valorMigracao
 
   // Preço em que a empresa não ganha nem perde (cobre custo + imposto + comissão).
   const divisorMinimo = 1 - (form.impostosPerc + form.comissaoPerc) / 100
   const minimoImplantacao = divisorMinimo > 0 ? custoImplantacao / divisorMinimo : custoImplantacao
-  const minimoMensalidade = divisorMinimo > 0 ? custoMensal / divisorMinimo : custoMensal
+  const custoMigracaoLabel = `${repasseMigracao}% de ${brl(form.valorMigracao)}`
 
   const precoImplantacao = form.precoImplantacao
   const mensalidade = form.mensalidade
@@ -193,18 +205,15 @@ export function Orcamento() {
   const lucroImplantacao = precoImplantacao - custoImplantacao - deducoesImpl
   const margemImplantacao = precoImplantacao > 0 ? (lucroImplantacao / precoImplantacao) * 100 : 0
 
-  const deducoesMens = mensalidade * (form.impostosPerc + form.comissaoPerc) / 100
-  const lucroMensal = mensalidade - custoMensal - deducoesMens
-  const margemMensal = mensalidade > 0 ? (lucroMensal / mensalidade) * 100 : 0
-
-  const lucroPrimeiroAno = lucroImplantacao + lucroMensal * 12
-  // Quando a implantação sai no prejuízo (desconto agressivo), em quantos meses a mensalidade paga.
-  const paybackMeses = lucroImplantacao < 0 && lucroMensal > 0 ? Math.abs(lucroImplantacao) / lucroMensal : null
+  // A mensalidade é preço de tabela, então entra como receita — a tela não tenta adivinhar o custo
+  // mensal de atender esse cliente.
+  const receitaPrimeiroAno = precoImplantacao + mensalidade * 12
+  // Implantação vendida abaixo do custo: em quantos meses de mensalidade a diferença volta.
+  const paybackMeses = lucroImplantacao < 0 && mensalidade > 0 ? Math.abs(lucroImplantacao) / mensalidade : null
   const descontoMaxImpl = precoImplantacao > minimoImplantacao && precoImplantacao > 0
     ? ((precoImplantacao - minimoImplantacao) / precoImplantacao) * 100 : 0
 
   const prejuizoImpl = precoImplantacao > 0 && lucroImplantacao < 0
-  const prejuizoMens = mensalidade > 0 && lucroMensal < 0
   const semPreco = precoImplantacao <= 0 && mensalidade <= 0
 
   const itensCusto = useMemo(() => ([
@@ -212,9 +221,15 @@ export function Orcamento() {
     { descricao: 'Treinamento', detalhe: `${form.qtdTecnicos} técnico(s) × ${form.horasTreinamento}h × ${brl(form.custoHoraTecnica)}`, valor: cTreinamento },
     { descricao: 'Hospedagem', detalhe: `${form.diasHospedagem} diária(s) × ${form.qtdTecnicos} técnico(s)`, valor: cHospedagem },
     { descricao: 'Alimentação', detalhe: `${form.diasAlimentacao} dia(s) × ${form.refeicoesPorDia} refeição(ões) × ${form.qtdTecnicos}`, valor: cAlimentacao },
-    { descricao: 'Migração', detalhe: `${form.horasMigracao}h × ${brl(form.custoHoraMigracao)}`, valor: cMigracao },
+    {
+      descricao: 'Migração (repasse)',
+      detalhe: migracaoSelecionada
+        ? `${migracaoSelecionada.sistema} · ${migracaoSelecionada.tipo} — ${custoMigracaoLabel}`
+        : custoMigracaoLabel,
+      valor: cMigracao,
+    },
     { descricao: form.outrosDescricao.trim() || 'Outros custos', valor: form.outrosCustos },
-  ]), [form, cDeslocamento, cTreinamento, cHospedagem, cAlimentacao, cMigracao])
+  ]), [form, cDeslocamento, cTreinamento, cHospedagem, cAlimentacao, cMigracao, migracaoSelecionada, custoMigracaoLabel])
 
   const custosLancados = itensCusto.filter((i) => i.valor > 0)
 
@@ -233,7 +248,6 @@ export function Orcamento() {
 
   function aplicarSugestoes() {
     set('precoImplantacao', Math.ceil(sugestaoImplantacao))
-    set('mensalidade', Math.ceil(sugestaoMensalidade))
   }
 
   async function salvar() {
@@ -250,9 +264,9 @@ export function Orcamento() {
         validadeDias: 15,
         observacoes: form.observacoes,
         itens: custosLancados,
-        custoImplantacao, custoMensal,
+        custoImplantacao, custoMensal: 0,
         precoImplantacao,
-        lucroImplantacao, lucroMensal,
+        lucroImplantacao, lucroMensal: 0,
         margemPerc: margemImplantacao,
         impostosPerc: form.impostosPerc,
         comissaoPerc: form.comissaoPerc,
@@ -267,7 +281,33 @@ export function Orcamento() {
     }
   }
 
-  const valorDoPasso = (id: number) => (id === 1 ? custoImplantacao : id === 2 ? custoMensal : 0)
+  const valorDoPasso = (id: number) => (id === 1 ? custoImplantacao : 0)
+
+  /**
+   * Enter anda pelos campos como o Tab — quem preenche orçamento vem do teclado numérico e não
+   * quer trocar de mão a cada campo. No último campo do passo, Enter avança para o próximo passo.
+   * Textarea fica de fora: ali Enter é quebra de linha.
+   */
+  function enterComoTab(e: React.KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== 'Enter' || e.shiftKey) return
+    const alvo = e.target as HTMLElement
+    if (alvo.tagName === 'TEXTAREA' || alvo.tagName === 'BUTTON') return
+    if (alvo.getAttribute('data-enter-proprio') === 'true') return
+
+    e.preventDefault()
+    const campos = Array.from(
+      e.currentTarget.querySelectorAll<HTMLElement>('input:not([type="checkbox"]):not([disabled]), select:not([disabled]), textarea:not([disabled])'),
+    ).filter((el) => el.offsetParent !== null)
+
+    const proximo = campos[campos.indexOf(alvo) + 1]
+    if (proximo) {
+      proximo.focus()
+      if (proximo instanceof HTMLInputElement) proximo.select()
+      return
+    }
+    // Acabaram os campos do passo: segue para o próximo.
+    if (passo < PASSOS.length - 1) irPara(passo + 1)
+  }
 
   return (
     <div className="space-y-5 pb-10" ref={topoRef}>
@@ -323,7 +363,10 @@ export function Orcamento() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 min-h-[340px]">
+          <div
+            className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 min-h-[340px]"
+            onKeyDown={enterComoTab}
+          >
 
             {/* ── 1. Cliente ── */}
             {passo === 0 && (
@@ -340,8 +383,9 @@ export function Orcamento() {
                     value={buscaCliente}
                     onFocus={() => setAutocompleteAberto(true)}
                     onChange={(e) => { setBuscaCliente(e.target.value); setAutocompleteAberto(true) }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); usarNomeDigitado() } }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); usarNomeDigitado() } }}
                     placeholder="Digite o nome do cliente — cadastrado ou não"
+                    data-enter-proprio="true"
                   />
                   {autocompleteAberto && buscaCliente.trim().length >= 2 && (
                     <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
@@ -445,9 +489,41 @@ export function Orcamento() {
                 <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
                   <p className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-3 flex items-center gap-2"><Database size={15} className="text-blue-500" /> Migração e extras</p>
                   <div className="grid sm:grid-cols-3 gap-4">
-                    <CampoNumero label="Horas de migração" valor={form.horasMigracao} onChange={(v) => set('horasMigracao', v)} sufixo="h" />
-                    <CampoMoeda label="Custo da hora de migração" valor={form.custoHoraMigracao} onChange={(v) => set('custoHoraMigracao', v)} />
-                    <div />
+                    <div className="sm:col-span-2">
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-400 block mb-1">Migração tabelada</label>
+                      <select
+                        className="input-field"
+                        value={form.migracaoId ?? ''}
+                        onChange={(e) => {
+                          const id = e.target.value ? Number(e.target.value) : null
+                          const escolhida = migracoes.find((m) => m.id === id)
+                          set('migracaoId', id)
+                          // Preenche o valor da tabela; o vendedor pode ajustar logo ao lado.
+                          if (escolhida) set('valorMigracao', escolhida.valor)
+                          if (!id) set('valorMigracao', 0)
+                        }}
+                      >
+                        <option value="">Sem migração</option>
+                        {migracoes.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.sistema} — {m.tipo === 'basica' ? 'Básica' : m.tipo === 'media' ? 'Média' : 'Avançada'} ({brl(m.valor)})
+                          </option>
+                        ))}
+                      </select>
+                      {migracoes.length === 0 && (
+                        <p className="text-[11px] text-amber-500 mt-1">
+                          Nenhuma migração cadastrada — veja Comercial › Tabela de Migração.
+                        </p>
+                      )}
+                    </div>
+                    <CampoMoeda label="Valor cobrado da migração" valor={form.valorMigracao} onChange={(v) => set('valorMigracao', v)}
+                      dica={form.valorMigracao > 0 ? `custo ${brl(cMigracao)} (${repasseMigracao}% de repasse)` : undefined} />
+                    {migracaoSelecionada?.descricao && (
+                      <div className="sm:col-span-3 rounded-lg bg-slate-50 dark:bg-slate-900/40 p-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-1">O que esse nível inclui</p>
+                        <p className="text-xs text-slate-600 dark:text-slate-400 whitespace-pre-wrap">{migracaoSelecionada.descricao}</p>
+                      </div>
+                    )}
                     <div className="sm:col-span-2">
                       <label className="text-xs font-medium text-slate-600 dark:text-slate-400 block mb-1">Descrição (outros)</label>
                       <input className="input-field" placeholder="Ex.: impressora, licença extra, hora extra"
@@ -464,39 +540,8 @@ export function Orcamento() {
               </div>
             )}
 
-            {/* ── 3. Custo mensal ── */}
+            {/* ── 3. Precificação ── */}
             {passo === 2 && (
-              <div className="space-y-5">
-                <div>
-                  <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Quanto esse cliente vai custar todo mês?</h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    É o que define a mensalidade mínima. Cliente que consome muito suporte precisa de mensalidade maior.
-                  </p>
-                </div>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  <CampoNumero label="Horas de suporte por mês" valor={form.horasSuporteMes} onChange={(v) => set('horasSuporteMes', v)} sufixo="h"
-                    dica="Estimativa pelo porte e perfil do cliente." />
-                  <CampoMoeda label="Custo da hora de suporte" valor={form.custoHoraSuporte} onChange={(v) => set('custoHoraSuporte', v)} />
-                  <CampoMoeda label="Infra / nuvem por mês" valor={form.custoInfraMes} onChange={(v) => set('custoInfraMes', v)}
-                    dica="Servidor, backup, banda." />
-                  <CampoMoeda label="Licenças de terceiros por mês" valor={form.custoLicencasMes} onChange={(v) => set('custoLicencasMes', v)}
-                    dica="NF-e, TEF, integrações pagas." />
-                </div>
-                <div className="grid sm:grid-cols-2 gap-3">
-                  <div className="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-3">
-                    <p className="text-[11px] text-slate-500">Suporte</p>
-                    <p className="text-sm font-bold text-slate-800 dark:text-slate-200">{brl(cSuporte)}</p>
-                  </div>
-                  <div className="rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-3">
-                    <p className="text-[11px] text-amber-700 dark:text-amber-400">Custo mensal total</p>
-                    <p className="text-sm font-bold text-amber-800 dark:text-amber-300">{brl(custoMensal)}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── 4. Precificação ── */}
-            {passo === 3 && (
               <div className="space-y-5">
                 <div>
                   <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Qual preço cobrar?</h2>
@@ -524,14 +569,13 @@ export function Orcamento() {
                   </div>
                   <div className="grid sm:grid-cols-2 gap-3">
                     <div className="rounded-lg bg-white dark:bg-slate-800 p-3">
-                      <p className="text-[11px] text-slate-500">Implantação</p>
+                      <p className="text-[11px] text-slate-500">Preço da implantação</p>
                       <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{brl(sugestaoImplantacao)}</p>
-                      <p className="text-[11px] text-slate-500">mínimo sem lucro: {brl(minimoImplantacao)}</p>
                     </div>
                     <div className="rounded-lg bg-white dark:bg-slate-800 p-3">
-                      <p className="text-[11px] text-slate-500">Mensalidade</p>
-                      <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{brl(sugestaoMensalidade)}</p>
-                      <p className="text-[11px] text-slate-500">mínimo sem lucro: {brl(minimoMensalidade)}</p>
+                      <p className="text-[11px] text-slate-500">Mínimo sem lucro</p>
+                      <p className="text-lg font-bold text-slate-700 dark:text-slate-300">{brl(minimoImplantacao)}</p>
+                      <p className="text-[11px] text-slate-500">cobre custo, imposto e comissão</p>
                     </div>
                   </div>
                 </div>
@@ -539,26 +583,26 @@ export function Orcamento() {
                 <div className="grid sm:grid-cols-3 gap-4 pt-2 border-t border-slate-100 dark:border-slate-700">
                   <CampoMoeda label="Preço da implantação" valor={form.precoImplantacao} onChange={(v) => set('precoImplantacao', v)} destaque
                     dica={precoImplantacao > 0 ? `margem ${pct(margemImplantacao)}` : 'o que será cobrado do cliente'} />
-                  <CampoMoeda label="Mensalidade" valor={form.mensalidade} onChange={(v) => set('mensalidade', v)} destaque
-                    dica={mensalidade > 0 ? `margem ${pct(margemMensal)}` : 'o que será cobrado por mês'} />
+                  <CampoMoeda label="Mensalidade (preço de tabela)" valor={form.mensalidade} onChange={(v) => set('mensalidade', v)} destaque
+                    dica="Valor do plano contratado — entra como receita recorrente." />
                   <CampoNumero label="Parcelas da implantação" valor={form.parcelas} onChange={(v) => set('parcelas', Math.max(1, Math.round(v)))} sufixo="x"
                     dica={form.parcelas > 1 ? `${form.parcelas}× de ${brl(precoImplantacao / form.parcelas)}` : 'à vista'} />
                 </div>
 
-                {(prejuizoImpl || prejuizoMens) && (
+                {prejuizoImpl && (
                   <div className="flex gap-2 items-start rounded-lg border border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10 p-3">
                     <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
                     <p className="text-xs text-red-700 dark:text-red-300">
-                      {prejuizoImpl && <>A implantação está abaixo do mínimo de {brl(minimoImplantacao)} — prejuízo de {brl(Math.abs(lucroImplantacao))}. </>}
-                      {prejuizoMens && <>A mensalidade está abaixo do mínimo de {brl(minimoMensalidade)} — prejuízo de {brl(Math.abs(lucroMensal))} por mês.</>}
+                      A implantação está abaixo do mínimo de {brl(minimoImplantacao)} — prejuízo de {brl(Math.abs(lucroImplantacao))}.
+                      {mensalidade > 0 && paybackMeses !== null && <> A mensalidade cobre essa diferença em {paybackMeses.toFixed(1)} meses.</>}
                     </p>
                   </div>
                 )}
               </div>
             )}
 
-            {/* ── 5. Resultado ── */}
-            {passo === 4 && (
+            {/* ── 4. Resultado ── */}
+            {passo === 3 && (
               <div className="space-y-5">
                 <div>
                   <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Esse negócio dá lucro?</h2>
@@ -581,29 +625,25 @@ export function Orcamento() {
                         </p>
                         <p className="text-[11px] text-slate-500">margem {pct(margemImplantacao)} · custo {brl(custoImplantacao)}</p>
                       </div>
-                      <div className={clsx('rounded-xl border p-4',
-                        lucroMensal >= 0 ? 'border-emerald-200 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10'
-                          : 'border-red-200 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10')}>
-                        <p className="text-xs text-slate-600 dark:text-slate-400">Lucro por mês</p>
-                        <p className={clsx('text-2xl font-bold', lucroMensal >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
-                          {brl(lucroMensal)}
-                        </p>
-                        <p className="text-[11px] text-slate-500">margem {pct(margemMensal)} · custo {brl(custoMensal)}</p>
+                      <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 p-4">
+                        <p className="text-xs text-slate-600 dark:text-slate-400">Mensalidade</p>
+                        <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{brl(mensalidade)}</p>
+                        <p className="text-[11px] text-slate-500">receita recorrente, preço de tabela</p>
                       </div>
                     </div>
 
                     <div className="grid sm:grid-cols-3 gap-3">
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-3">
-                        <p className="text-[11px] text-slate-500">Lucro no 1º ano</p>
-                        <p className={clsx('text-base font-bold', lucroPrimeiroAno >= 0 ? 'text-slate-800 dark:text-slate-200' : 'text-red-500')}>
-                          {brl(lucroPrimeiroAno)}
-                        </p>
+                        <p className="text-[11px] text-slate-500">Receita no 1º ano</p>
+                        <p className="text-base font-bold text-slate-800 dark:text-slate-200">{brl(receitaPrimeiroAno)}</p>
+                        <p className="text-[11px] text-slate-400">implantação + 12 mensalidades</p>
                       </div>
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-3">
                         <p className="text-[11px] text-slate-500">Retorno do prejuízo inicial</p>
                         <p className="text-base font-bold text-slate-800 dark:text-slate-200">
                           {paybackMeses === null ? '—' : `${paybackMeses.toFixed(1)} meses`}
                         </p>
+                        <p className="text-[11px] text-slate-400">em mensalidades</p>
                       </div>
                       <div className="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-3">
                         <p className="text-[11px] text-slate-500">Desconto máximo na implantação</p>
@@ -611,16 +651,6 @@ export function Orcamento() {
                         <p className="text-[11px] text-slate-400">sem ficar no prejuízo</p>
                       </div>
                     </div>
-
-                    {prejuizoMens && (
-                      <div className="flex gap-2 items-start rounded-lg border border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10 p-3">
-                        <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0 mt-0.5" />
-                        <p className="text-xs text-red-700 dark:text-red-300">
-                          A mensalidade não cobre o custo mensal. Esse cliente dá prejuízo todo mês, e nenhuma
-                          implantação bem vendida compensa isso no longo prazo.
-                        </p>
-                      </div>
-                    )}
 
                     <div>
                       <label className="text-xs font-medium text-slate-600 dark:text-slate-400 block mb-1">Observações internas</label>
@@ -668,10 +698,6 @@ export function Orcamento() {
                 <span className="text-slate-600 dark:text-slate-400">Implantação</span>
                 <strong className="text-amber-600 dark:text-amber-400">{brl(custoImplantacao)}</strong>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600 dark:text-slate-400">Por mês</span>
-                <strong className="text-amber-600 dark:text-amber-400">{brl(custoMensal)}</strong>
-              </div>
 
               <div className="border-t-2 border-blue-500 pt-3 space-y-2">
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Preço definido</p>
@@ -690,21 +716,19 @@ export function Orcamento() {
 
               {!semPreco && (
                 <div className={clsx('rounded-lg p-3 space-y-1',
-                  lucroImplantacao >= 0 && lucroMensal >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-red-50 dark:bg-red-500/10')}>
+                  lucroImplantacao >= 0 ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-red-50 dark:bg-red-500/10')}>
                   <div className="flex justify-between text-sm">
                     <span className={lucroImplantacao >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
-                      Lucro implantação
+                      Lucro na implantação
                     </span>
                     <strong className={lucroImplantacao >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
                       {brl(lucroImplantacao)}
                     </strong>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className={lucroMensal >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
-                      Lucro por mês
-                    </span>
-                    <strong className={lucroMensal >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
-                      {brl(lucroMensal)}
+                    <span className="text-slate-600 dark:text-slate-400">Margem</span>
+                    <strong className={lucroImplantacao >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}>
+                      {pct(margemImplantacao)}
                     </strong>
                   </div>
                 </div>

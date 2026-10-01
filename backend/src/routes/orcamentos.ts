@@ -54,7 +54,78 @@ export async function initOrcamentos(): Promise<void> {
   await garantirColuna('impostos_perc', 'impostos_perc DECIMAL(6,2) NOT NULL DEFAULT 0')
   await garantirColuna('comissao_perc', 'comissao_perc DECIMAL(6,2) NOT NULL DEFAULT 0')
   await garantirColuna('payback_meses', 'payback_meses DECIMAL(6,1) NULL')
+  await initTabelaMigracao()
+
+  // Custos padrão da empresa, usados como ponto de partida da precificação. Ficam numa linha só:
+  // é configuração da operação, não histórico.
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS configuracao_precificacao (
+      id                  INT AUTO_INCREMENT PRIMARY KEY,
+      custo_km            DECIMAL(10,2) NOT NULL DEFAULT 1.50,
+      custo_hora_tecnica  DECIMAL(10,2) NOT NULL DEFAULT 80.00,
+      custo_hora_migracao DECIMAL(10,2) NOT NULL DEFAULT 80.00,
+      custo_hora_suporte  DECIMAL(10,2) NOT NULL DEFAULT 60.00,
+      custo_hospedagem    DECIMAL(10,2) NOT NULL DEFAULT 150.00,
+      custo_alimentacao   DECIMAL(10,2) NOT NULL DEFAULT 45.00,
+      refeicoes_dia       INT NOT NULL DEFAULT 2,
+      horas_treinamento   INT NOT NULL DEFAULT 8,
+      horas_suporte_mes   DECIMAL(6,2) NOT NULL DEFAULT 2,
+      custo_infra_mes     DECIMAL(10,2) NOT NULL DEFAULT 0,
+      custo_licencas_mes  DECIMAL(10,2) NOT NULL DEFAULT 0,
+      margem_alvo         DECIMAL(6,2) NOT NULL DEFAULT 30,
+      impostos_perc       DECIMAL(6,2) NOT NULL DEFAULT 6,
+      comissao_perc       DECIMAL(6,2) NOT NULL DEFAULT 5,
+      atualizado_em       DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW()
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+  const temRepasse = await prisma.$queryRaw<Array<{ c: bigint | number }>>`
+    SELECT COUNT(*) AS c FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'configuracao_precificacao' AND COLUMN_NAME = 'migracao_repasse_perc'
+  `
+  if (Number(temRepasse[0]?.c ?? 0) === 0) {
+    // Repasse ao parceiro que executa a migração — é esse percentual que vira custo, não o valor cheio.
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE configuracao_precificacao ADD COLUMN migracao_repasse_perc DECIMAL(6,2) NOT NULL DEFAULT 30`,
+    )
+  }
+
+  const [linha] = await prisma.$queryRawUnsafe<any[]>(`SELECT COUNT(*) AS c FROM configuracao_precificacao`)
+  if (Number(linha?.c ?? 0) === 0) {
+    await prisma.$executeRawUnsafe(`INSERT INTO configuracao_precificacao () VALUES ()`)
+  }
 }
+
+/**
+ * Tabela de migração: por sistema de origem e nível (básica, média, avançada), com o que cada
+ * nível inclui e o valor cobrado. O custo não é esse valor — é o repasse ao parceiro que executa
+ * a migração (percentual nos parâmetros de precificação).
+ */
+export async function initTabelaMigracao(): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS migracao_tabela (
+      id            INT AUTO_INCREMENT PRIMARY KEY,
+      sistema       VARCHAR(100) NOT NULL,
+      tipo          VARCHAR(20) NOT NULL,
+      descricao     VARCHAR(600) NULL,
+      valor         DECIMAL(10,2) NOT NULL DEFAULT 0,
+      ativo         TINYINT(1) NOT NULL DEFAULT 1,
+      atualizado_em DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+      UNIQUE KEY uk_migracao_sistema_tipo (sistema, tipo)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+}
+
+export const TIPOS_MIGRACAO = ['basica', 'media', 'avancada'] as const
+
+const CAMPOS_PRECIFICACAO = [
+  'custo_km', 'custo_hora_tecnica', 'custo_hora_migracao', 'custo_hora_suporte',
+  'custo_hospedagem', 'custo_alimentacao', 'refeicoes_dia', 'horas_treinamento',
+  'horas_suporte_mes', 'custo_infra_mes', 'custo_licencas_mes',
+  'margem_alvo', 'impostos_perc', 'comissao_perc', 'migracao_repasse_perc',
+] as const
+
+/** snake_case do banco → camelCase da tela (custo_hora_tecnica → custoHoraTecnica). */
+const paraCamel = (s: string) => s.replace(/_([a-z])/g, (_m, c) => c.toUpperCase())
 
 interface ItemProposta { descricao: string; detalhe?: string; valor: number }
 
@@ -132,6 +203,80 @@ function montarHtmlProposta(p: {
 }
 
 export async function orcamentosRoutes(app: FastifyInstance) {
+  // GET /orcamentos/parametros — custos padrão usados como ponto de partida
+  app.get('/parametros', { preHandler: authMiddleware, schema: { tags: ['Orçamentos'] } }, async () => {
+    const [linha] = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM configuracao_precificacao ORDER BY id LIMIT 1`)
+    const saida: Record<string, number> = {}
+    for (const campo of CAMPOS_PRECIFICACAO) saida[paraCamel(campo)] = Number(linha?.[campo] ?? 0)
+    return saida
+  })
+
+  app.put('/parametros', { preHandler: authMiddleware, schema: { tags: ['Orçamentos'] } }, async (request) => {
+    const b = request.body as Record<string, any>
+    const valores = CAMPOS_PRECIFICACAO.map((campo) => Number(b[paraCamel(campo)] ?? 0))
+    const sets = CAMPOS_PRECIFICACAO.map((campo) => `${campo} = ?`).join(', ')
+    await prisma.$executeRawUnsafe(`UPDATE configuracao_precificacao SET ${sets} ORDER BY id LIMIT 1`, ...valores)
+
+    const [linha] = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM configuracao_precificacao ORDER BY id LIMIT 1`)
+    const saida: Record<string, number> = {}
+    for (const campo of CAMPOS_PRECIFICACAO) saida[paraCamel(campo)] = Number(linha?.[campo] ?? 0)
+    return saida
+  })
+
+  // ── Tabela de migração ──────────────────────────────────────────
+  app.get('/migracoes', { preHandler: authMiddleware, schema: { tags: ['Orçamentos'] } }, async (request) => {
+    const { todos } = request.query as Record<string, string>
+    const linhas = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, sistema, tipo, descricao, valor, ativo FROM migracao_tabela
+        ${todos === 'true' ? '' : 'WHERE ativo = 1'}
+        ORDER BY sistema, FIELD(tipo, 'basica', 'media', 'avancada')`,
+    )
+    return linhas.map((l) => ({
+      id: Number(l.id), sistema: l.sistema, tipo: l.tipo,
+      descricao: l.descricao, valor: Number(l.valor), ativo: Number(l.ativo) === 1,
+    }))
+  })
+
+  app.post('/migracoes', { preHandler: authMiddleware, schema: { tags: ['Orçamentos'] } }, async (request, reply) => {
+    const b = request.body as Record<string, any>
+    const sistema = String(b.sistema ?? '').trim().slice(0, 100)
+    const tipo = String(b.tipo ?? '').trim()
+    if (!sistema) return reply.status(400).send({ error: 'Informe o sistema de origem.' })
+    if (!TIPOS_MIGRACAO.includes(tipo as any)) return reply.status(400).send({ error: 'Tipo de migração inválido.' })
+
+    try {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO migracao_tabela (sistema, tipo, descricao, valor, ativo) VALUES (?,?,?,?,?)`,
+        sistema, tipo, String(b.descricao ?? '').slice(0, 600) || null, Number(b.valor ?? 0), b.ativo === false ? 0 : 1,
+      )
+    } catch (e: any) {
+      if (String(e?.message ?? '').includes('Duplicate')) {
+        return reply.status(409).send({ error: `Já existe migração ${tipo} cadastrada para ${sistema}.` })
+      }
+      throw e
+    }
+    return reply.status(201).send({ ok: true })
+  })
+
+  app.put('/migracoes/:id', { preHandler: authMiddleware, schema: { tags: ['Orçamentos'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const b = request.body as Record<string, any>
+    const sistema = String(b.sistema ?? '').trim().slice(0, 100)
+    if (!sistema) return reply.status(400).send({ error: 'Informe o sistema de origem.' })
+    await prisma.$executeRawUnsafe(
+      `UPDATE migracao_tabela SET sistema=?, tipo=?, descricao=?, valor=?, ativo=? WHERE id=?`,
+      sistema, String(b.tipo ?? 'basica'), String(b.descricao ?? '').slice(0, 600) || null,
+      Number(b.valor ?? 0), b.ativo === false ? 0 : 1, Number(id),
+    )
+    return { ok: true }
+  })
+
+  app.delete('/migracoes/:id', { preHandler: authMiddleware, schema: { tags: ['Orçamentos'] } }, async (request) => {
+    const { id } = request.params as { id: string }
+    await prisma.$executeRawUnsafe(`DELETE FROM migracao_tabela WHERE id = ?`, Number(id))
+    return { ok: true }
+  })
+
   // GET /orcamentos — histórico das últimas propostas
   app.get('/', { preHandler: authMiddleware, schema: { tags: ['Orçamentos'] } }, async (request) => {
     const { clienteId, limite } = request.query as Record<string, string>

@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  MetaDev, PropostaOrcamento, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
@@ -753,6 +753,21 @@ export const api = {
   concluirMetaDev: (id: number, concluida: boolean) =>
     fetchApi<{ ok: boolean }>(`/metas-dev/${id}/concluir`, { method: 'PATCH', body: JSON.stringify({ concluida }) }),
   excluirMetaDev: (id: number) => fetchApi<{ ok: boolean }>(`/metas-dev/${id}`, { method: 'DELETE' }),
+
+  // ─── Tabela de migração ────────────────────────────────────
+  getMigracoes: (todos = false) =>
+    fetchApi<MigracaoTabelada[]>(`/orcamentos/migracoes${todos ? '?todos=true' : ''}`),
+  criarMigracao: (dados: { sistema: string; tipo: string; descricao?: string; valor: number; ativo?: boolean }) =>
+    fetchApi<{ ok: boolean }>('/orcamentos/migracoes', { method: 'POST', body: JSON.stringify(dados) }),
+  atualizarMigracao: (id: number, dados: { sistema: string; tipo: string; descricao?: string; valor: number; ativo?: boolean }) =>
+    fetchApi<{ ok: boolean }>(`/orcamentos/migracoes/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
+  excluirMigracao: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/orcamentos/migracoes/${id}`, { method: 'DELETE' }),
+
+  // ─── Parâmetros de precificação (custos padrão) ────────────
+  getParametrosPrecificacao: () => fetchApi<ParametrosPrecificacao>('/orcamentos/parametros'),
+  salvarParametrosPrecificacao: (dados: ParametrosPrecificacao) =>
+    fetchApi<ParametrosPrecificacao>('/orcamentos/parametros', { method: 'PUT', body: JSON.stringify(dados) }),
 
   // ─── Propostas de orçamento (comercial) ────────────────────
   getPropostas: (clienteId?: number) =>

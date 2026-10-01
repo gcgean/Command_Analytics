@@ -5,7 +5,7 @@ import { api } from '../../services/api'
 import clsx from 'clsx'
 import type { StatusProcessamentoNotificacaoAgendamento } from '../../types'
 
-type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'assistente' | 'notificacoes' | 'parametros'
+type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'assistente' | 'notificacoes' | 'parametros' | 'precificacao'
 
 interface TokenWhats {
   id: number
@@ -46,6 +46,15 @@ export function Configuracoes() {
   })
   const [novaSenhaEmail, setNovaSenhaEmail] = useState('')
   const [emailTeste, setEmailTeste] = useState('')
+
+  // Precificação: custos padrão que a tela de Precificação de Implantação usa como ponto de partida.
+  const [precificacao, setPrecificacao] = useState({
+    custoKm: 1.5, custoHoraTecnica: 80, custoHoraMigracao: 80, custoHoraSuporte: 60,
+    custoHospedagem: 150, custoAlimentacao: 45, refeicoesDia: 2, horasTreinamento: 8,
+    horasSuporteMes: 2, custoInfraMes: 0, custoLicencasMes: 0,
+    margemAlvo: 30, impostosPerc: 6, comissaoPerc: 5, migracaoRepassePerc: 30,
+  })
+  const [salvandoPrecificacao, setSalvandoPrecificacao] = useState(false)
   const [salvandoEmail, setSalvandoEmail] = useState(false)
   const [testandoEmail, setTestandoEmail] = useState(false)
 
@@ -89,6 +98,11 @@ export function Configuracoes() {
     }
     if (aba === 'email') {
       carregarConfigEmail()
+    }
+    if (aba === 'precificacao') {
+      api.getParametrosPrecificacao()
+        .then(setPrecificacao)
+        .catch(() => toast.error('Erro ao carregar os parâmetros de precificação.'))
     }
     if (aba === 'notificacoes') {
       carregarConfigNotificacoesAgendamento()
@@ -239,6 +253,18 @@ export function Configuracoes() {
     }
   }
 
+  const handleSalvarPrecificacao = async () => {
+    setSalvandoPrecificacao(true)
+    try {
+      setPrecificacao(await api.salvarParametrosPrecificacao(precificacao))
+      toast.success('Custos padrão salvos! A tela de precificação já usa os novos valores.')
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao salvar os parâmetros.')
+    } finally {
+      setSalvandoPrecificacao(false)
+    }
+  }
+
   const carregarConfigEmail = async () => {
     try {
       setEmail(await api.getConfigEmail())
@@ -287,6 +313,7 @@ export function Configuracoes() {
     { key: 'assistente', label: 'Assistente IA' },
     { key: 'notificacoes', label: 'Notificações' },
     { key: 'parametros', label: 'Parâmetros' },
+    { key: 'precificacao', label: 'Precificação' },
   ]
 
   return (
@@ -504,6 +531,80 @@ export function Configuracoes() {
           </div>
         </div>
       )}
+
+      {aba === 'precificacao' && (() => {
+        const campoMoeda = (rotulo: string, chave: keyof typeof precificacao, dica?: string) => (
+          <div key={chave}>
+            <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">{rotulo}</label>
+            <input
+              className="input-field"
+              value={Number(precificacao[chave] || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              onChange={(e) => setPrecificacao(v => ({ ...v, [chave]: Number(e.target.value.replace(/\D/g, '') || '0') / 100 }))}
+              onFocus={(e) => e.target.select()}
+            />
+            {dica && <p className="text-[11px] text-slate-400 mt-1">{dica}</p>}
+          </div>
+        )
+        const campoNumero = (rotulo: string, chave: keyof typeof precificacao, sufixo?: string, dica?: string) => (
+          <div key={chave}>
+            <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">{rotulo}{sufixo ? ` (${sufixo})` : ''}</label>
+            <input
+              className="input-field" type="number" min={0} step="0.5"
+              value={precificacao[chave]}
+              onChange={(e) => setPrecificacao(v => ({ ...v, [chave]: parseFloat(e.target.value) || 0 }))}
+              onFocus={(e) => e.target.select()}
+            />
+            {dica && <p className="text-[11px] text-slate-400 mt-1">{dica}</p>}
+          </div>
+        )
+
+        return (
+          <div className="space-y-4 max-w-3xl">
+            <div className="card space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Custos padrão da operação</h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  São os valores que a tela <strong>Comercial › Orçamento</strong> já traz preenchidos. O vendedor pode
+                  alterar caso a caso; aqui fica o padrão da empresa, para ninguém precisar saber de cor.
+                </p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Custos de implantação</p>
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                  {campoMoeda('Custo por km', 'custoKm', 'Combustível + desgaste do veículo.')}
+                  {campoMoeda('Hora técnica', 'custoHoraTecnica', 'Salário + encargos ÷ horas trabalhadas.')}
+                  {campoMoeda('Hora de migração', 'custoHoraMigracao')}
+                  {campoMoeda('Diária de hospedagem', 'custoHospedagem')}
+                  {campoMoeda('Refeição', 'custoAlimentacao')}
+                  {campoNumero('Refeições por dia', 'refeicoesDia', 'por técnico')}
+                  {campoNumero('Horas de treinamento', 'horasTreinamento', 'padrão')}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-700">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Margem e encargos</p>
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                  {campoNumero('Margem desejada', 'margemAlvo', '%', 'Lucro que a empresa quer sobre a venda.')}
+                  {campoNumero('Impostos', 'impostosPerc', '%', 'Simples/ISS sobre o faturamento.')}
+                  {campoNumero('Comissão do vendedor', 'comissaoPerc', '%')}
+                  {campoNumero('Repasse da migração', 'migracaoRepassePerc', '%', 'Parte do valor da migração paga a quem executa — é o custo da empresa.')}
+                </div>
+                <p className="text-[11px] text-slate-500 mt-3">
+                  Preço sugerido = custo ÷ (1 − margem − impostos − comissão). Imposto e comissão saem do valor
+                  cobrado, não do custo — por isso não é custo + margem.
+                </p>
+              </div>
+
+              <button onClick={handleSalvarPrecificacao} disabled={salvandoPrecificacao} className="btn-primary disabled:opacity-60">
+                {salvandoPrecificacao
+                  ? <><Loader2 size={15} className="animate-spin" /> Salvando...</>
+                  : <><Save size={15} /> Salvar custos padrão</>}
+              </button>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Aba Telegram */}
       {aba === 'telegram' && (

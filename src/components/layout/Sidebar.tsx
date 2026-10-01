@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Headphones, Calendar, Monitor,
   Users, BarChart3, GitBranch, Briefcase, BookUser,
   DollarSign, Award, Package,
-  Code2, Tag, Video, Target, Server,
+  Code2, Tag, Video, Target, Server, Database,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X, Star,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
   ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell, Cable, FolderKanban
@@ -107,6 +107,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
       // O orçamento é o cálculo que o comercial faz antes de fechar; ficava dentro de Implantação,
       // que é o time que executa depois.
       { label: 'Orçamento', icon: <Receipt className="w-4 h-4" />, to: '/implantacao/orcamento', recurso: 'implantacao-orcamento' },
+      { label: 'Tabela de Migração', icon: <Database className="w-4 h-4" />, to: '/comercial/migracoes', recurso: 'tabela-migracao' },
     ]
   },
   {

@@ -1272,3 +1272,35 @@ export interface PropostaOrcamento {
   margemPerc?: number
   paybackMeses?: number | null
 }
+
+/** Custos padrão da empresa, usados como ponto de partida na precificação. */
+export interface ParametrosPrecificacao {
+  custoKm: number
+  custoHoraTecnica: number
+  custoHoraMigracao: number
+  custoHoraSuporte: number
+  custoHospedagem: number
+  custoAlimentacao: number
+  refeicoesDia: number
+  horasTreinamento: number
+  horasSuporteMes: number
+  custoInfraMes: number
+  custoLicencasMes: number
+  margemAlvo: number
+  impostosPerc: number
+  comissaoPerc: number
+  /** Percentual do valor da migração repassado ao parceiro que executa — é o custo da empresa. */
+  migracaoRepassePerc: number
+}
+
+export type TipoMigracao = 'basica' | 'media' | 'avancada'
+
+/** Linha da tabela de migração: valor cobrado por sistema de origem e nível. */
+export interface MigracaoTabelada {
+  id: number
+  sistema: string
+  tipo: TipoMigracao | string
+  descricao: string | null
+  valor: number
+  ativo: boolean
+}
