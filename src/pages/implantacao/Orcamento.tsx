@@ -311,6 +311,84 @@ export function Orcamento() {
 
   return (
     <div className="space-y-5 pb-10" ref={topoRef}>
+      {/* Documento de impressão — fica fora da tela e só aparece no papel (regras em index.css). */}
+      <div className="so-impressao area-impressao">
+        <div style={{ fontFamily: 'Arial, sans-serif', fontSize: 12, color: '#000' }}>
+          <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>Precificação de Implantação</h1>
+          <p style={{ fontSize: 11, color: '#475569', marginBottom: 14 }}>
+            {nomeCliente || 'Sem cliente informado'} · emitido em {new Date().toLocaleString('pt-BR')}
+          </p>
+
+          <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Custos apurados</p>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
+            <tbody>
+              {custosLancados.map((i) => (
+                <tr key={i.descricao}>
+                  <td style={{ padding: '5px 0', borderBottom: '1px solid #e2e8f0' }}>
+                    {i.descricao}
+                    {i.detalhe && <div style={{ fontSize: 10, color: '#64748b' }}>{i.detalhe}</div>}
+                  </td>
+                  <td style={{ padding: '5px 0', borderBottom: '1px solid #e2e8f0', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {brl(i.valor)}
+                  </td>
+                </tr>
+              ))}
+              <tr>
+                <td style={{ padding: '7px 0', fontWeight: 700 }}>Custo total da implantação</td>
+                <td style={{ padding: '7px 0', textAlign: 'right', fontWeight: 700 }}>{brl(custoImplantacao)}</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Preço e resultado</p>
+          <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 14 }}>
+            <tbody>
+              <tr>
+                <td style={{ padding: '5px 0', borderBottom: '1px solid #e2e8f0' }}>Preço da implantação</td>
+                <td style={{ padding: '5px 0', borderBottom: '1px solid #e2e8f0', textAlign: 'right' }}>
+                  {brl(precoImplantacao)}{form.parcelas > 1 ? ` (${form.parcelas}× de ${brl(precoImplantacao / form.parcelas)})` : ''}
+                </td>
+              </tr>
+              <tr>
+                <td style={{ padding: '5px 0', borderBottom: '1px solid #e2e8f0' }}>Mensalidade (tabela)</td>
+                <td style={{ padding: '5px 0', borderBottom: '1px solid #e2e8f0', textAlign: 'right' }}>{brl(mensalidade)}/mês</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '5px 0', borderBottom: '1px solid #e2e8f0' }}>
+                  Impostos e comissão ({pct(form.impostosPerc + form.comissaoPerc)})
+                </td>
+                <td style={{ padding: '5px 0', borderBottom: '1px solid #e2e8f0', textAlign: 'right' }}>- {brl(deducoesImpl)}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '7px 0', fontWeight: 700 }}>Lucro na implantação</td>
+                <td style={{ padding: '7px 0', textAlign: 'right', fontWeight: 700 }}>
+                  {brl(lucroImplantacao)} ({pct(margemImplantacao)})
+                </td>
+              </tr>
+              <tr>
+                <td style={{ padding: '5px 0' }}>Receita no primeiro ano</td>
+                <td style={{ padding: '5px 0', textAlign: 'right' }}>{brl(receitaPrimeiroAno)}</td>
+              </tr>
+              <tr>
+                <td style={{ padding: '5px 0' }}>Desconto máximo sem prejuízo</td>
+                <td style={{ padding: '5px 0', textAlign: 'right' }}>{pct(descontoMaxImpl)} (mínimo {brl(minimoImplantacao)})</td>
+              </tr>
+            </tbody>
+          </table>
+
+          {form.observacoes.trim() && (
+            <>
+              <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 4 }}>Observações internas</p>
+              <p style={{ whiteSpace: 'pre-wrap', marginBottom: 14 }}>{form.observacoes}</p>
+            </>
+          )}
+
+          <p style={{ fontSize: 10, color: '#64748b', borderTop: '1px solid #e2e8f0', paddingTop: 8 }}>
+            Documento interno de precificação — contém custo e margem. Não enviar ao cliente.
+          </p>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-blue-600 text-white"><Calculator size={22} /></div>
