@@ -9,6 +9,17 @@ import { enviarEmail, montarHtmlEmail } from '../utils/email'
  * proposta gerada fica gravada, com os valores do momento, pra servir de histórico e permitir
  * reenviar o mesmo e-mail depois.
  */
+/** Acrescenta a coluna só se faltar — a tabela já pode existir da versão anterior da tela. */
+async function garantirColuna(coluna: string, ddl: string) {
+  const rows = await prisma.$queryRaw<Array<{ c: bigint | number }>>`
+    SELECT COUNT(*) AS c FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'orcamento_proposta' AND COLUMN_NAME = ${coluna}
+  `
+  if (Number(rows[0]?.c ?? 0) === 0) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE orcamento_proposta ADD COLUMN ${ddl}`)
+  }
+}
+
 export async function initOrcamentos(): Promise<void> {
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS orcamento_proposta (
@@ -31,6 +42,18 @@ export async function initOrcamentos(): Promise<void> {
       INDEX idx_orcamento_data (criado_em)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+
+  // A tela virou precificação interna: além do que será cobrado, guarda o custo apurado e a
+  // margem resultante. Sem isso não dá pra olhar para trás e saber se o preço fechado deu lucro.
+  await garantirColuna('custo_implantacao', 'custo_implantacao DECIMAL(10,2) NOT NULL DEFAULT 0')
+  await garantirColuna('custo_mensal', 'custo_mensal DECIMAL(10,2) NOT NULL DEFAULT 0')
+  await garantirColuna('preco_implantacao', 'preco_implantacao DECIMAL(10,2) NOT NULL DEFAULT 0')
+  await garantirColuna('lucro_implantacao', 'lucro_implantacao DECIMAL(10,2) NOT NULL DEFAULT 0')
+  await garantirColuna('lucro_mensal', 'lucro_mensal DECIMAL(10,2) NOT NULL DEFAULT 0')
+  await garantirColuna('margem_perc', 'margem_perc DECIMAL(6,2) NOT NULL DEFAULT 0')
+  await garantirColuna('impostos_perc', 'impostos_perc DECIMAL(6,2) NOT NULL DEFAULT 0')
+  await garantirColuna('comissao_perc', 'comissao_perc DECIMAL(6,2) NOT NULL DEFAULT 0')
+  await garantirColuna('payback_meses', 'payback_meses DECIMAL(6,1) NULL')
 }
 
 interface ItemProposta { descricao: string; detalhe?: string; valor: number }
@@ -132,6 +155,13 @@ export async function orcamentosRoutes(app: FastifyInstance) {
       parcelas: Number(l.parcelas),
       validadeDias: Number(l.validade_dias),
       observacoes: l.observacoes,
+      custoImplantacao: Number(l.custo_implantacao ?? 0),
+      custoMensal: Number(l.custo_mensal ?? 0),
+      precoImplantacao: Number(l.preco_implantacao ?? 0),
+      lucroImplantacao: Number(l.lucro_implantacao ?? 0),
+      lucroMensal: Number(l.lucro_mensal ?? 0),
+      margemPerc: Number(l.margem_perc ?? 0),
+      paybackMeses: l.payback_meses === null || l.payback_meses === undefined ? null : Number(l.payback_meses),
       emailEnviado: Number(l.email_enviado) === 1,
       criadoEm: l.criado_em,
       itens: (() => {
@@ -158,8 +188,9 @@ export async function orcamentosRoutes(app: FastifyInstance) {
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO orcamento_proposta
-        (cliente_id, cliente_nome, cliente_email, valor_plano, subtotal, desconto_perc, total, parcelas, validade_dias, itens, observacoes, email_enviado, usuario_id)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?)`,
+        (cliente_id, cliente_nome, cliente_email, valor_plano, subtotal, desconto_perc, total, parcelas, validade_dias, itens, observacoes, email_enviado, usuario_id,
+         custo_implantacao, custo_mensal, preco_implantacao, lucro_implantacao, lucro_mensal, margem_perc, impostos_perc, comissao_perc, payback_meses)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?, ?,?,?,?,?,?,?,?,?)`,
       b.clienteId ? Number(b.clienteId) : null,
       String(b.clienteNome ?? '').slice(0, 150) || null,
       enviarPara || null,
@@ -172,6 +203,15 @@ export async function orcamentosRoutes(app: FastifyInstance) {
       JSON.stringify(itens).slice(0, 60000),
       String(b.observacoes ?? '').slice(0, 1000) || null,
       usuarioId,
+      Number(b.custoImplantacao ?? 0),
+      Number(b.custoMensal ?? 0),
+      Number(b.precoImplantacao ?? b.total ?? 0),
+      Number(b.lucroImplantacao ?? 0),
+      Number(b.lucroMensal ?? 0),
+      Number(b.margemPerc ?? 0),
+      Number(b.impostosPerc ?? 0),
+      Number(b.comissaoPerc ?? 0),
+      b.paybackMeses === null || b.paybackMeses === undefined ? null : Number(b.paybackMeses),
     )
     const [novo] = await prisma.$queryRawUnsafe<any[]>(`SELECT LAST_INSERT_ID() AS id`)
     const id = Number(novo?.id ?? 0)

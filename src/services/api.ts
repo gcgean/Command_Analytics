@@ -762,6 +762,9 @@ export const api = {
     descontoPerc: number; total: number; parcelas: number; validadeDias: number
     observacoes?: string; itens: Array<{ descricao: string; detalhe?: string; valor: number }>
     enviarPara?: string
+    custoImplantacao?: number; custoMensal?: number; precoImplantacao?: number
+    lucroImplantacao?: number; lucroMensal?: number; margemPerc?: number
+    impostosPerc?: number; comissaoPerc?: number; paybackMeses?: number | null
   }) =>
     fetchApi<{ ok: boolean; id: number; emailEnviado: boolean; erroEmail?: string }>('/orcamentos', {
       method: 'POST',

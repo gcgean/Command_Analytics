@@ -1263,4 +1263,12 @@ export interface PropostaOrcamento {
   emailEnviado: boolean
   criadoEm: string
   itens: Array<{ descricao: string; detalhe?: string; valor: number }>
+  // Precificação interna: custo apurado, preço fechado e margem resultante.
+  custoImplantacao?: number
+  custoMensal?: number
+  precoImplantacao?: number
+  lucroImplantacao?: number
+  lucroMensal?: number
+  margemPerc?: number
+  paybackMeses?: number | null
 }
