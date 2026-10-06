@@ -172,6 +172,30 @@ const data = (v: unknown) => {
 }
 const numero = (v: unknown) => (v === null || v === undefined || v === '' ? null : Number(v))
 
+/**
+ * A URL do painel (paycore.cliente.com.br) e a da API (api-paycore.cliente.com.br) são parecidas,
+ * e cadastrar a do painel devolve o HTML do site — que estoura como "Unexpected token '<'". Aqui
+ * o prefixo é corrigido sozinho, porque é um engano fácil de cometer e óbvio de resolver.
+ */
+export function normalizarBaseUrl(url: string): string {
+  const limpa = String(url ?? '').trim().replace(/\/+$/, '')
+  return limpa.replace(/^(https?:\/\/)(?!api-)paycore\./i, '$1api-paycore.')
+}
+
+/**
+ * A lista pode vir direto em `data` ou embrulhada no envelope `{ success, data: { data, meta } }`,
+ * dependendo da rota. Aqui a lista é extraída de qualquer um dos formatos — espalhar o objeto
+ * errado estourava com "Spread syntax requires ...iterable".
+ */
+export function extrairLista(corpo: any): { itens: any[]; meta: any } {
+  if (Array.isArray(corpo)) return { itens: corpo, meta: null }
+  if (Array.isArray(corpo?.data)) return { itens: corpo.data, meta: corpo?.meta ?? null }
+  if (Array.isArray(corpo?.data?.data)) return { itens: corpo.data.data, meta: corpo?.data?.meta ?? corpo?.meta ?? null }
+  if (Array.isArray(corpo?.items)) return { itens: corpo.items, meta: corpo?.meta ?? null }
+  if (Array.isArray(corpo?.results)) return { itens: corpo.results, meta: corpo?.meta ?? null }
+  return { itens: [], meta: corpo?.meta ?? corpo?.data?.meta ?? null }
+}
+
 /** Busca paginada numa rota da API, trazendo todas as páginas. */
 async function buscarTudo(servidor: ServidorPaycore, rota: string, params: Record<string, string> = {}): Promise<any[]> {
   const itens: any[] = []
@@ -181,7 +205,7 @@ async function buscarTudo(servidor: ServidorPaycore, rota: string, params: Recor
   // Teto de páginas: evita laço infinito se a API devolver meta estranho.
   for (let i = 0; i < 100; i++) {
     const qs = new URLSearchParams({ ...params, page: String(pagina), limit: String(limite) })
-    const url = `${servidor.baseUrl.replace(/\/$/, '')}${rota}?${qs}`
+    const url = `${normalizarBaseUrl(servidor.baseUrl)}${rota}?${qs}`
     const resposta = await fetch(url, {
       headers: { Authorization: `Bearer ${servidor.apiKey ?? ''}`, Accept: 'application/json' },
       signal: AbortSignal.timeout(30_000),
@@ -189,12 +213,18 @@ async function buscarTudo(servidor: ServidorPaycore, rota: string, params: Recor
     if (!resposta.ok) {
       throw new Error(`${rota} respondeu ${resposta.status} ${resposta.statusText}`)
     }
+
+    // Resposta em HTML quer dizer que a URL aponta pro painel, não pra API.
+    const tipo = resposta.headers.get('content-type') ?? ''
+    if (!tipo.includes('json')) {
+      throw new Error(`${rota} devolveu ${tipo || 'conteúdo não-JSON'} — confira se a URL é a da API (api-paycore...), não a do painel.`)
+    }
     const corpo: any = await resposta.json()
-    const lote: any[] = corpo?.data ?? []
+    const { itens: lote, meta } = extrairLista(corpo)
     itens.push(...lote)
 
-    const total = Number(corpo?.meta?.total ?? corpo?.meta?.totalItems ?? 0)
-    const paginas = Number(corpo?.meta?.lastPage ?? corpo?.meta?.totalPages ?? (total ? Math.ceil(total / limite) : 0))
+    const total = Number(meta?.total ?? meta?.totalItems ?? meta?.count ?? 0)
+    const paginas = Number(meta?.lastPage ?? meta?.totalPages ?? meta?.pageCount ?? (total ? Math.ceil(total / limite) : 0))
     if (lote.length < limite || (paginas && pagina >= paginas)) break
     pagina += 1
   }

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
-import { sincronizarServidor, sincronizarTodos, type ServidorPaycore } from '../utils/paycoreSync'
+import { sincronizarServidor, sincronizarTodos, normalizarBaseUrl, extrairLista, type ServidorPaycore } from '../utils/paycoreSync'
 
 /**
  * Consulta e administração dos dados vindos das plataformas PayCore. A carga em si é feita pela
@@ -33,7 +33,7 @@ export async function paycoreRoutes(app: FastifyInstance) {
   app.post('/servidores', { preHandler: authMiddleware, schema: { tags: ['PayCore'] } }, async (request, reply) => {
     const b = request.body as Record<string, any>
     const nome = String(b.nome ?? '').trim().slice(0, 80)
-    const baseUrl = String(b.baseUrl ?? '').trim().replace(/\/$/, '').slice(0, 200)
+    const baseUrl = normalizarBaseUrl(String(b.baseUrl ?? '')).slice(0, 200)
     if (!nome) return reply.status(400).send({ error: 'Informe o nome do servidor.' })
     if (!/^https?:\/\//.test(baseUrl)) return reply.status(400).send({ error: 'Informe a URL da API (começando com https://).' })
 
@@ -55,7 +55,7 @@ export async function paycoreRoutes(app: FastifyInstance) {
     const { id } = request.params as { id: string }
     const b = request.body as Record<string, any>
     const nome = String(b.nome ?? '').trim().slice(0, 80)
-    const baseUrl = String(b.baseUrl ?? '').trim().replace(/\/$/, '').slice(0, 200)
+    const baseUrl = normalizarBaseUrl(String(b.baseUrl ?? '')).slice(0, 200)
     if (!nome || !/^https?:\/\//.test(baseUrl)) {
       return reply.status(400).send({ error: 'Informe o nome e a URL da API.' })
     }
@@ -95,7 +95,7 @@ export async function paycoreRoutes(app: FastifyInstance) {
     if (!l) return reply.status(404).send({ error: 'Servidor não encontrado.' })
     if (!l.api_key) return reply.status(400).send({ error: 'Cadastre a chave de API antes de testar.' })
 
-    const base = String(l.base_url).replace(/\/$/, '')
+    const base = normalizarBaseUrl(String(l.base_url))
     const testes: Array<{ rota: string; status: number | string; total: number | null; campos: string[]; amostra: any; erro?: string }> = []
 
     for (const rota of ['/api/v1/applications', '/api/v1/customers', '/api/v1/subscriptions', '/api/v1/payments']) {
@@ -104,8 +104,10 @@ export async function paycoreRoutes(app: FastifyInstance) {
           headers: { Authorization: `Bearer ${l.api_key}`, Accept: 'application/json' },
           signal: AbortSignal.timeout(20_000),
         })
-        const corpo: any = await resposta.json().catch(() => null)
-        const primeiro = corpo?.data?.[0] ?? null
+        const tipo = resposta.headers.get('content-type') ?? ''
+        const corpo: any = tipo.includes('json') ? await resposta.json().catch(() => null) : null
+        const { itens, meta } = extrairLista(corpo)
+        const primeiro = itens[0] ?? null
 
         // Só os nomes dos campos e um punhado de valores — nada de despejar o cadastro inteiro.
         const amostra = primeiro
@@ -119,10 +121,12 @@ export async function paycoreRoutes(app: FastifyInstance) {
         testes.push({
           rota,
           status: resposta.status,
-          total: corpo?.meta?.total ?? corpo?.meta?.totalItems ?? null,
+          total: meta?.total ?? meta?.totalItems ?? meta?.count ?? itens.length,
           campos: primeiro ? Object.keys(primeiro) : [],
           amostra,
-          erro: resposta.ok ? undefined : String(corpo?.message ?? resposta.statusText),
+          erro: !tipo.includes('json')
+            ? 'A URL respondeu HTML, não JSON — use o endereço da API (api-paycore...), não o do painel.'
+            : resposta.ok ? undefined : String(corpo?.message ?? resposta.statusText),
         })
       } catch (e: any) {
         testes.push({ rota, status: 'falhou', total: null, campos: [], amostra: null, erro: String(e?.message ?? e).slice(0, 200) })
