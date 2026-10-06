@@ -1,4 +1,5 @@
 import { prisma } from '../database/client'
+import { vendedorDoDocumento } from './crmSync'
 
 /**
  * Sincronização com as plataformas PayCore (Command System e Cilos são servidores distintos, cada
@@ -246,6 +247,22 @@ async function descobrirVendedor(documento: string) {
     doc,
   )
   const codCli = cli?.cod_cli ? Number(cli.cod_cli) : null
+
+  // 1ª opção: o CRM sincronizado — é onde o comercial de fato registra de quem é o negócio, e
+  // traz o vendedor com código próprio, não só o nome solto.
+  const doCrm = await vendedorDoDocumento(doc)
+  if (doCrm?.vendedorNome) {
+    let id = doCrm.vendedorId
+    // O código do vendedor é do CRM, não do nosso cadastro: tenta casar pelo nome.
+    const [u] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COD_USU FROM usuario
+        WHERE UPPER(TRIM(COALESCE(NOME_USUARIO_COMPLETO, NOME_USU))) = UPPER(TRIM(?))
+           OR UPPER(TRIM(NOME_USU)) = UPPER(TRIM(?)) LIMIT 1`,
+      doCrm.vendedorNome, doCrm.vendedorNome,
+    )
+    id = u?.COD_USU ? Number(u.COD_USU) : null
+    return { codCli, id, nome: doCrm.vendedorNome, origem: doCrm.origem ?? 'crm' }
+  }
 
   if (codCli) {
     const [prec] = await prisma.$queryRawUnsafe<any[]>(

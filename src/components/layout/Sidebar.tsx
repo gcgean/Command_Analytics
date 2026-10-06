@@ -109,6 +109,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
       { label: 'Precificação', icon: <Receipt className="w-4 h-4" />, to: '/implantacao/orcamento', recurso: 'implantacao-orcamento' },
       { label: 'Tabela de Migração', icon: <Database className="w-4 h-4" />, to: '/comercial/migracoes', recurso: 'tabela-migracao' },
       { label: 'Clientes PayCore', icon: <CreditCard className="w-4 h-4" />, to: '/comercial/paycore', recurso: 'paycore-clientes' },
+      { label: 'CRM Cilos', icon: <Briefcase className="w-4 h-4" />, to: '/comercial/crm', recurso: 'crm-integracao' },
     ]
   },
   {

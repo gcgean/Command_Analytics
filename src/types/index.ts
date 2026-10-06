@@ -1355,3 +1355,49 @@ export interface FaturamentoPaycore {
   porVendedor: Array<{ vendedor: string; pagamentos: number; bruto: number }>
   total: number
 }
+
+/** Configuração e totais da integração com o CRM Cilos. */
+export interface ConfigCrm {
+  baseUrl: string
+  email: string
+  /** A senha nunca volta do backend; isso só diz se existe uma gravada. */
+  temSenha: boolean
+  companyId: number | null
+  ativo: boolean
+  ultimaSync: string | null
+  ultimoErro: string | null
+  totais: { clientes: number; negocios: number; ganhos: number; vendedores: number }
+}
+
+/** Negócio importado do CRM — é por aqui que descobrimos de quem é o cliente. */
+export interface NegocioCrm {
+  id: number
+  titulo: string
+  valor: number
+  data: string | null
+  status: string | null
+  finalizadoEm: string | null
+  leadNome: string | null
+  documento: string | null
+  vendedorNome: string | null
+  etapa: string | null
+  motivoGanho: string | null
+  motivoPerda: string | null
+  itens: number
+  codCli: number | null
+}
+
+export interface VendedorCrm {
+  vendedor: string
+  negocios: number
+  ganhos: number
+  perdidos: number
+  valorGanho: number
+}
+
+export interface ResultadoSyncCrm {
+  clientes: number
+  negocios: number
+  itens: number
+  erro?: string
+}

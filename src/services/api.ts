@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
@@ -783,6 +783,28 @@ export const api = {
     fetchApi<{ resultados: ResultadoSyncPaycore[] }>('/paycore/sincronizar', {
       method: 'POST', body: JSON.stringify({ servidorId }),
     }, 180_000),
+
+  // ─── CRM Cilos (consulta de vendedores e vendas) ───────────
+  getConfigCrm: () => fetchApi<ConfigCrm>('/crm-integracao/config'),
+  salvarConfigCrm: (dados: { baseUrl: string; email: string; senha?: string; ativo?: boolean }) =>
+    fetchApi<{ ok: boolean }>('/crm-integracao/config', { method: 'PUT', body: JSON.stringify(dados) }),
+  sincronizarCrm: (completa = false) =>
+    fetchApi<ResultadoSyncCrm>('/crm-integracao/sincronizar', {
+      method: 'POST', body: JSON.stringify({ completa }),
+    }, 300_000),
+  getNegociosCrm: (filtros?: { busca?: string; status?: string; vendedor?: string; limite?: number }) => {
+    const qs = new URLSearchParams()
+    if (filtros?.busca) qs.set('busca', filtros.busca)
+    if (filtros?.status) qs.set('status', filtros.status)
+    if (filtros?.vendedor) qs.set('vendedor', filtros.vendedor)
+    if (filtros?.limite) qs.set('limite', String(filtros.limite))
+    const q = qs.toString()
+    return fetchApi<NegocioCrm[]>(`/crm-integracao/negocios${q ? `?${q}` : ''}`)
+  },
+  getVendedoresCrm: () => fetchApi<VendedorCrm[]>('/crm-integracao/vendedores'),
+  getVendedorPorDocumento: (documento: string) =>
+    fetchApi<{ vendedorId: number | null; vendedorNome: string | null; origem: string | null; negocioId?: number }>(
+      `/crm-integracao/vendedor?documento=${encodeURIComponent(documento)}`),
 
   // ─── Tabela de migração ────────────────────────────────────
   getMigracoes: (todos = false) =>

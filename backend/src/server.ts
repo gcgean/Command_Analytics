@@ -72,6 +72,8 @@ import { metasDevRoutes, initMetasDev } from './routes/metasDev'
 import { orcamentosRoutes, initOrcamentos } from './routes/orcamentos'
 import { paycoreRoutes } from './routes/paycore'
 import { initPaycoreSync, startPaycoreSyncScheduler } from './utils/paycoreSync'
+import { crmIntegracaoRoutes } from './routes/crmIntegracao'
+import { initCrmSync, startCrmSyncScheduler } from './utils/crmSync'
 import { initNotasGeradas } from './routes/solicitacoes'
 import { ensureConfiguracaoIA } from './ia/config'
 
@@ -229,6 +231,7 @@ app.register(async (api) => {
   api.register(metasDevRoutes,     { prefix: '/metas-dev' })
   api.register(orcamentosRoutes,   { prefix: '/orcamentos' })
   api.register(paycoreRoutes,      { prefix: '/paycore' })
+  api.register(crmIntegracaoRoutes,{ prefix: '/crm-integracao' })
   // Sem authMiddleware de propósito: é o formulário que o cliente abre pelo link público.
   api.register(publicoRoutes,      { prefix: '/publico' })
 }, { prefix: '/api' })
@@ -264,6 +267,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initNotasGeradas()
     .then(() => console.log('✓ Tabela de notas de atualização verificada'))
     .catch(e => console.warn('⚠ Notas de atualização init:', e.message))
+  initCrmSync()
+    .then(() => { console.log('✓ Tabelas do CRM verificadas'); startCrmSyncScheduler() })
+    .catch(e => console.warn('⚠ CRM init:', e.message))
   initPaycoreSync()
     .then(() => { console.log('✓ Tabelas do PayCore verificadas'); startPaycoreSyncScheduler() })
     .catch(e => console.warn('⚠ PayCore init:', e.message))
