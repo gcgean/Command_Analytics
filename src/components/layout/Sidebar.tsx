@@ -106,8 +106,9 @@ const navGroups: { group: string; items: NavItem[] }[] = [
       { label: 'Cadastro de Metas', icon: <Target className="w-4 h-4" />, to: '/metas/cadastro', recurso: 'cadastro-metas' },
       // O orçamento é o cálculo que o comercial faz antes de fechar; ficava dentro de Implantação,
       // que é o time que executa depois.
-      { label: 'Orçamento', icon: <Receipt className="w-4 h-4" />, to: '/implantacao/orcamento', recurso: 'implantacao-orcamento' },
+      { label: 'Precificação', icon: <Receipt className="w-4 h-4" />, to: '/implantacao/orcamento', recurso: 'implantacao-orcamento' },
       { label: 'Tabela de Migração', icon: <Database className="w-4 h-4" />, to: '/comercial/migracoes', recurso: 'tabela-migracao' },
+      { label: 'Clientes PayCore', icon: <CreditCard className="w-4 h-4" />, to: '/comercial/paycore', recurso: 'paycore-clientes' },
     ]
   },
   {

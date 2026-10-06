@@ -55,6 +55,7 @@ export function Configuracoes() {
     margemAlvo: 30, impostosPerc: 6, comissaoPerc: 5, migracaoRepassePerc: 30,
   })
   const [salvandoPrecificacao, setSalvandoPrecificacao] = useState(false)
+
   const [salvandoEmail, setSalvandoEmail] = useState(false)
   const [testandoEmail, setTestandoEmail] = useState(false)
 

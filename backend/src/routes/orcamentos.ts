@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { enviarEmail, montarHtmlEmail } from '../utils/email'
+import { registrarAuditoria } from '../utils/auditoria'
 
 /**
  * Propostas comerciais de implantação. Antes a tela só calculava na memória do navegador: ao
@@ -54,6 +55,9 @@ export async function initOrcamentos(): Promise<void> {
   await garantirColuna('impostos_perc', 'impostos_perc DECIMAL(6,2) NOT NULL DEFAULT 0')
   await garantirColuna('comissao_perc', 'comissao_perc DECIMAL(6,2) NOT NULL DEFAULT 0')
   await garantirColuna('payback_meses', 'payback_meses DECIMAL(6,1) NULL')
+  // Formulário inteiro em JSON: é o que permite reabrir uma precificação salva e continuar de onde
+  // parou, com cada campo no lugar. As colunas numéricas continuam existindo para relatório.
+  await garantirColuna('dados', 'dados TEXT NULL')
   await initTabelaMigracao()
 
   // Custos padrão da empresa, usados como ponto de partida da precificação. Ficam numa linha só:
@@ -307,6 +311,7 @@ export async function orcamentosRoutes(app: FastifyInstance) {
       lucroMensal: Number(l.lucro_mensal ?? 0),
       margemPerc: Number(l.margem_perc ?? 0),
       paybackMeses: l.payback_meses === null || l.payback_meses === undefined ? null : Number(l.payback_meses),
+      dados: (() => { try { return l.dados ? JSON.parse(l.dados) : null } catch { return null } })(),
       emailEnviado: Number(l.email_enviado) === 1,
       criadoEm: l.criado_em,
       itens: (() => {
@@ -334,8 +339,8 @@ export async function orcamentosRoutes(app: FastifyInstance) {
     await prisma.$executeRawUnsafe(
       `INSERT INTO orcamento_proposta
         (cliente_id, cliente_nome, cliente_email, valor_plano, subtotal, desconto_perc, total, parcelas, validade_dias, itens, observacoes, email_enviado, usuario_id,
-         custo_implantacao, custo_mensal, preco_implantacao, lucro_implantacao, lucro_mensal, margem_perc, impostos_perc, comissao_perc, payback_meses)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?, ?,?,?,?,?,?,?,?,?)`,
+         custo_implantacao, custo_mensal, preco_implantacao, lucro_implantacao, lucro_mensal, margem_perc, impostos_perc, comissao_perc, payback_meses, dados)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,0,?, ?,?,?,?,?,?,?,?,?,?)`,
       b.clienteId ? Number(b.clienteId) : null,
       String(b.clienteNome ?? '').slice(0, 150) || null,
       enviarPara || null,
@@ -357,9 +362,24 @@ export async function orcamentosRoutes(app: FastifyInstance) {
       Number(b.impostosPerc ?? 0),
       Number(b.comissaoPerc ?? 0),
       b.paybackMeses === null || b.paybackMeses === undefined ? null : Number(b.paybackMeses),
+      b.dados ? JSON.stringify(b.dados).slice(0, 60000) : null,
     )
     const [novo] = await prisma.$queryRawUnsafe<any[]>(`SELECT LAST_INSERT_ID() AS id`)
     const id = Number(novo?.id ?? 0)
+
+    await registrarAuditoria({
+      tabela: 'orcamento_proposta',
+      registroId: id,
+      acao: 'CRIACAO',
+      usuarioId,
+      dadosDepois: {
+        cliente: b.clienteNome ?? null,
+        custoImplantacao: Number(b.custoImplantacao ?? 0),
+        precoImplantacao: Number(b.precoImplantacao ?? b.total ?? 0),
+        mensalidade: Number(b.valorPlano ?? 0),
+        margemPerc: Number(b.margemPerc ?? 0),
+      },
+    })
 
     if (!enviarPara) return reply.status(201).send({ ok: true, id, emailEnviado: false })
 
@@ -386,6 +406,69 @@ export async function orcamentosRoutes(app: FastifyInstance) {
     }
     await prisma.$executeRawUnsafe(`UPDATE orcamento_proposta SET email_enviado = 1 WHERE id = ?`, id)
     return reply.status(201).send({ ok: true, id, emailEnviado: true })
+  })
+
+  // PUT /orcamentos/:id — altera uma precificação já salva (o vendedor renegociou o preço)
+  app.put('/:id', { preHandler: authMiddleware, schema: { tags: ['Orçamentos'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const b = request.body as Record<string, any>
+    const usuarioId = Number((request.user as any)?.id || 0) || null
+
+    const [antes] = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM orcamento_proposta WHERE id = ?`, Number(id))
+    if (!antes) return reply.status(404).send({ error: 'Precificação não encontrada.' })
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE orcamento_proposta SET
+         cliente_id=?, cliente_nome=?, valor_plano=?, subtotal=?, desconto_perc=?, total=?, parcelas=?,
+         validade_dias=?, itens=?, observacoes=?, custo_implantacao=?, custo_mensal=?, preco_implantacao=?,
+         lucro_implantacao=?, lucro_mensal=?, margem_perc=?, impostos_perc=?, comissao_perc=?, payback_meses=?, dados=?
+       WHERE id=?`,
+      b.clienteId ? Number(b.clienteId) : null,
+      String(b.clienteNome ?? '').slice(0, 150) || null,
+      Number(b.valorPlano ?? 0),
+      Number(b.subtotal ?? 0),
+      Number(b.descontoPerc ?? 0),
+      Number(b.total ?? 0),
+      Math.max(1, Number(b.parcelas ?? 1)),
+      Math.max(1, Number(b.validadeDias ?? 15)),
+      JSON.stringify(Array.isArray(b.itens) ? b.itens : []).slice(0, 60000),
+      String(b.observacoes ?? '').slice(0, 1000) || null,
+      Number(b.custoImplantacao ?? 0),
+      Number(b.custoMensal ?? 0),
+      Number(b.precoImplantacao ?? b.total ?? 0),
+      Number(b.lucroImplantacao ?? 0),
+      Number(b.lucroMensal ?? 0),
+      Number(b.margemPerc ?? 0),
+      Number(b.impostosPerc ?? 0),
+      Number(b.comissaoPerc ?? 0),
+      b.paybackMeses === null || b.paybackMeses === undefined ? null : Number(b.paybackMeses),
+      b.dados ? JSON.stringify(b.dados).slice(0, 60000) : null,
+      Number(id),
+    )
+
+    // Guarda o antes e o depois: preço de precificação é assunto sensível, e saber quem mudou o
+    // que, e quando, evita discussão depois da venda fechada.
+    await registrarAuditoria({
+      tabela: 'orcamento_proposta',
+      registroId: Number(id),
+      acao: 'ALTERACAO',
+      usuarioId,
+      dadosAntes: {
+        cliente: antes.cliente_nome,
+        custoImplantacao: Number(antes.custo_implantacao ?? 0),
+        precoImplantacao: Number(antes.preco_implantacao ?? 0),
+        mensalidade: Number(antes.valor_plano ?? 0),
+        margemPerc: Number(antes.margem_perc ?? 0),
+      },
+      dadosDepois: {
+        cliente: b.clienteNome ?? null,
+        custoImplantacao: Number(b.custoImplantacao ?? 0),
+        precoImplantacao: Number(b.precoImplantacao ?? b.total ?? 0),
+        mensalidade: Number(b.valorPlano ?? 0),
+        margemPerc: Number(b.margemPerc ?? 0),
+      },
+    })
+    return { ok: true }
   })
 
   // POST /orcamentos/:id/reenviar — manda de novo a mesma proposta

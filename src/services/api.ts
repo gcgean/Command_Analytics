@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
@@ -754,6 +754,36 @@ export const api = {
     fetchApi<{ ok: boolean }>(`/metas-dev/${id}/concluir`, { method: 'PATCH', body: JSON.stringify({ concluida }) }),
   excluirMetaDev: (id: number) => fetchApi<{ ok: boolean }>(`/metas-dev/${id}`, { method: 'DELETE' }),
 
+  // ─── PayCore (plataformas de assinatura) ───────────────────
+  getClientesPaycore: (filtros?: { servidorId?: number; appId?: string }) => {
+    const qs = new URLSearchParams()
+    if (filtros?.servidorId) qs.set('servidorId', String(filtros.servidorId))
+    if (filtros?.appId) qs.set('appId', filtros.appId)
+    const q = qs.toString()
+    return fetchApi<ClientePaycore[]>(`/paycore/clientes${q ? `?${q}` : ''}`)
+  },
+  getFaturamentoPaycore: (inicio?: string, fim?: string) => {
+    const qs = new URLSearchParams()
+    if (inicio) qs.set('inicio', inicio)
+    if (fim) qs.set('fim', fim)
+    const q = qs.toString()
+    return fetchApi<FaturamentoPaycore>(`/paycore/faturamento${q ? `?${q}` : ''}`)
+  },
+  getServidoresPaycore: () => fetchApi<ServidorPaycore[]>('/paycore/servidores'),
+  criarServidorPaycore: (dados: { nome: string; baseUrl: string; apiKey?: string; ativo?: boolean }) =>
+    fetchApi<{ ok: boolean }>('/paycore/servidores', { method: 'POST', body: JSON.stringify(dados) }),
+  atualizarServidorPaycore: (id: number, dados: { nome: string; baseUrl: string; apiKey?: string; ativo?: boolean }) =>
+    fetchApi<{ ok: boolean }>(`/paycore/servidores/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
+  excluirServidorPaycore: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/paycore/servidores/${id}`, { method: 'DELETE' }),
+  testarServidorPaycore: (id: number) =>
+    fetchApi<{ servidor: string; ok: boolean; testes: Array<{ rota: string; status: number | string; total: number | null; campos: string[]; amostra: Record<string, unknown> | null; erro?: string }> }>(
+      `/paycore/servidores/${id}/testar`, { method: 'POST' }, 120_000),
+  sincronizarPaycore: (servidorId?: number) =>
+    fetchApi<{ resultados: ResultadoSyncPaycore[] }>('/paycore/sincronizar', {
+      method: 'POST', body: JSON.stringify({ servidorId }),
+    }, 180_000),
+
   // ─── Tabela de migração ────────────────────────────────────
   getMigracoes: (todos = false) =>
     fetchApi<MigracaoTabelada[]>(`/orcamentos/migracoes${todos ? '?todos=true' : ''}`),
@@ -780,11 +810,14 @@ export const api = {
     custoImplantacao?: number; custoMensal?: number; precoImplantacao?: number
     lucroImplantacao?: number; lucroMensal?: number; margemPerc?: number
     impostosPerc?: number; comissaoPerc?: number; paybackMeses?: number | null
+    dados?: Record<string, unknown>
   }) =>
     fetchApi<{ ok: boolean; id: number; emailEnviado: boolean; erroEmail?: string }>('/orcamentos', {
       method: 'POST',
       body: JSON.stringify(dados),
     }),
+  atualizarProposta: (id: number, dados: Record<string, unknown>) =>
+    fetchApi<{ ok: boolean }>(`/orcamentos/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
   reenviarProposta: (id: number, para: string) =>
     fetchApi<{ ok: boolean }>(`/orcamentos/${id}/reenviar`, { method: 'POST', body: JSON.stringify({ para }) }),
 

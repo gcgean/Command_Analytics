@@ -70,6 +70,8 @@ import { publicoRoutes } from './routes/publico'
 import { emailRoutes } from './routes/email'
 import { metasDevRoutes, initMetasDev } from './routes/metasDev'
 import { orcamentosRoutes, initOrcamentos } from './routes/orcamentos'
+import { paycoreRoutes } from './routes/paycore'
+import { initPaycoreSync, startPaycoreSyncScheduler } from './utils/paycoreSync'
 import { initNotasGeradas } from './routes/solicitacoes'
 import { ensureConfiguracaoIA } from './ia/config'
 
@@ -226,6 +228,7 @@ app.register(async (api) => {
   api.register(emailRoutes,        { prefix: '/email' })
   api.register(metasDevRoutes,     { prefix: '/metas-dev' })
   api.register(orcamentosRoutes,   { prefix: '/orcamentos' })
+  api.register(paycoreRoutes,      { prefix: '/paycore' })
   // Sem authMiddleware de propósito: é o formulário que o cliente abre pelo link público.
   api.register(publicoRoutes,      { prefix: '/publico' })
 }, { prefix: '/api' })
@@ -261,6 +264,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initNotasGeradas()
     .then(() => console.log('✓ Tabela de notas de atualização verificada'))
     .catch(e => console.warn('⚠ Notas de atualização init:', e.message))
+  initPaycoreSync()
+    .then(() => { console.log('✓ Tabelas do PayCore verificadas'); startPaycoreSyncScheduler() })
+    .catch(e => console.warn('⚠ PayCore init:', e.message))
   initOrcamentos()
     .then(() => console.log('✓ Tabela de propostas de orçamento verificada'))
     .catch(e => console.warn('⚠ Orçamentos init:', e.message))

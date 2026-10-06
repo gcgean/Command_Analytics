@@ -3,7 +3,7 @@ import clsx from 'clsx'
 import {
   Calculator, Car, GraduationCap, Database, Percent, FileText, BedDouble,
   Search, X, Printer, Loader2, Building2, UserPlus, TrendingUp, AlertTriangle,
-  ChevronLeft, ChevronRight, Check, Save, Wallet,
+  ChevronLeft, ChevronRight, Check, Save, Wallet, Pencil, FilePlus2,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
@@ -121,6 +121,8 @@ export function Orcamento() {
   const [form, setForm] = useState<Form>(FORM_INICIAL)
   const [salvando, setSalvando] = useState(false)
   const [historico, setHistorico] = useState<PropostaOrcamento[]>([])
+  // Precificação aberta para edição — null é uma nova.
+  const [editandoId, setEditandoId] = useState<number | null>(null)
   const [migracoes, setMigracoes] = useState<MigracaoTabelada[]>([])
   const [repasseMigracao, setRepasseMigracao] = useState(30)
 
@@ -246,6 +248,29 @@ export function Orcamento() {
   }
   const nomeCliente = cliente ? nomeDestaque(cliente) : clienteAvulso
 
+  function abrirPrecificacao(p: PropostaOrcamento) {
+    if (p.dados?.form) {
+      setForm({ ...FORM_INICIAL, ...p.dados.form })
+      setClienteAvulso(String(p.dados.clienteAvulso ?? ''))
+      setBuscaCliente(String(p.dados.clienteNome ?? p.clienteNome ?? ''))
+      const achado = (painel?.clientes || []).find((c) => c.clienteId === p.dados?.clienteId) ?? null
+      setCliente(achado)
+    } else {
+      // Precificação salva antes de existir o formulário completo: traz o que dá.
+      setForm((f) => ({ ...f, precoImplantacao: p.precoImplantacao ?? p.total, mensalidade: p.valorPlano }))
+      setClienteAvulso(p.clienteNome ?? '')
+      setBuscaCliente(p.clienteNome ?? '')
+      setCliente(null)
+      toast.info('Essa precificação é antiga e não guardou todos os campos — confira os custos.')
+    }
+    setEditandoId(p.id)
+    irPara(0)
+  }
+
+  function novaPrecificacao() {
+    setForm(FORM_INICIAL); limparCliente(); setEditandoId(null); setPasso(0)
+  }
+
   function aplicarSugestoes() {
     set('precoImplantacao', Math.ceil(sugestaoImplantacao))
   }
@@ -253,7 +278,7 @@ export function Orcamento() {
   async function salvar() {
     setSalvando(true)
     try {
-      await api.salvarProposta({
+      const corpo = {
         clienteId: cliente?.clienteId ?? null,
         clienteNome: nomeCliente,
         valorPlano: mensalidade,
@@ -271,8 +296,17 @@ export function Orcamento() {
         impostosPerc: form.impostosPerc,
         comissaoPerc: form.comissaoPerc,
         paybackMeses,
-      })
-      toast.success('Precificação salva no histórico.')
+        // O formulário inteiro vai junto: é o que permite reabrir e continuar de onde parou.
+        dados: { form, clienteAvulso, clienteId: cliente?.clienteId ?? null, clienteNome: nomeCliente },
+      }
+
+      if (editandoId) {
+        await api.atualizarProposta(editandoId, corpo)
+        toast.success(`Precificação #${editandoId} atualizada.`)
+      } else {
+        await api.salvarProposta(corpo)
+        toast.success('Precificação salva no histórico.')
+      }
       carregarHistorico()
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível salvar.')
@@ -399,9 +433,16 @@ export function Orcamento() {
             </p>
           </div>
         </div>
-        <Button variant="secondary" onClick={() => { setForm(FORM_INICIAL); limparCliente(); setPasso(0) }}>
-          Começar de novo
-        </Button>
+        <div className="flex items-center gap-2">
+          {editandoId && (
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 text-xs font-medium">
+              <Pencil className="w-3.5 h-3.5" /> Editando a precificação #{editandoId}
+            </span>
+          )}
+          <Button variant="secondary" onClick={novaPrecificacao}>
+            {editandoId ? <><FilePlus2 className="w-4 h-4" /> Nova precificação</> : 'Começar de novo'}
+          </Button>
+        </div>
       </div>
 
       {/* Passos */}
@@ -739,7 +780,9 @@ export function Orcamento() {
 
                     <div className="flex flex-wrap gap-2">
                       <Button disabled={salvando} onClick={salvar}>
-                        {salvando ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</> : <><Save className="w-4 h-4" /> Salvar precificação</>}
+                        {salvando
+                          ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+                          : <><Save className="w-4 h-4" /> {editandoId ? `Salvar alterações (#${editandoId})` : 'Salvar precificação'}</>}
                       </Button>
                       <Button variant="secondary" onClick={() => window.print()}><Printer className="w-4 h-4" /> Imprimir</Button>
                     </div>
@@ -840,6 +883,7 @@ export function Orcamento() {
                 <th className="px-4 py-3 text-right">Preço</th>
                 <th className="px-4 py-3 text-right">Mensalidade</th>
                 <th className="px-4 py-3 text-right">Margem</th>
+                <th className="px-4 py-3"></th>
               </tr>
             </thead>
             <tbody>
@@ -854,10 +898,15 @@ export function Orcamento() {
                     (p.margemPerc ?? 0) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500')}>
                     {p.margemPerc === undefined ? '—' : pct(p.margemPerc)}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button size="sm" variant="secondary" onClick={() => abrirPrecificacao(p)}>
+                      <Pencil className="w-3.5 h-3.5" /> Editar
+                    </Button>
+                  </td>
                 </tr>
               ))}
               {historico.length === 0 && (
-                <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={6}>Nenhuma precificação salva ainda.</td></tr>
+                <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={7}>Nenhuma precificação salva ainda.</td></tr>
               )}
             </tbody>
           </table>

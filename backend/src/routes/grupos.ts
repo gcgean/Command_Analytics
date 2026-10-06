@@ -42,8 +42,9 @@ export const SYSTEM_RESOURCES = [
   // METAS
   { id: 'boletim-comercial',        label: 'Boletim Comercial',               grupo: 'COMERCIAL' },
   { id: 'cadastro-metas',           label: 'Cadastro de Metas',               grupo: 'COMERCIAL' },
-  { id: 'implantacao-orcamento',    label: 'Orçamento',                       grupo: 'COMERCIAL' },
+  { id: 'implantacao-orcamento',    label: 'Precificação de Implantação',     grupo: 'COMERCIAL' },
   { id: 'tabela-migracao',          label: 'Tabela de Migração',              grupo: 'COMERCIAL' },
+  { id: 'paycore-clientes',         label: 'Clientes PayCore',                grupo: 'COMERCIAL' },
   // CERTIFICADOS DIGITAIS
   { id: 'certificados-digitais',    label: 'Controle de Certificados Digitais', grupo: 'CERTIFICADOS DIGITAIS' },
   // RH

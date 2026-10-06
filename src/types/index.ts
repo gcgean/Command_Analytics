@@ -1271,6 +1271,8 @@ export interface PropostaOrcamento {
   lucroMensal?: number
   margemPerc?: number
   paybackMeses?: number | null
+  /** Formulário completo, para reabrir a precificação exatamente como foi salva. */
+  dados?: Record<string, any> | null
 }
 
 /** Custos padrão da empresa, usados como ponto de partida na precificação. */
@@ -1303,4 +1305,53 @@ export interface MigracaoTabelada {
   descricao: string | null
   valor: number
   ativo: boolean
+}
+
+/** Cliente vindo de um servidor PayCore (base separada, ligada pelo documento). */
+export interface ClientePaycore {
+  servidorId: number
+  servidorNome: string | null
+  customerId: string
+  documento: string | null
+  razaoSocial: string | null
+  nomeFantasia: string | null
+  email: string | null
+  segmento: string | null
+  status: string | null
+  codCli: number | null
+  vendedorId: number | null
+  vendedorNome: string | null
+  vendedorOrigem: string | null
+  /** Produtos (aplicações do PayCore) que esse cliente assina, separados por vírgula. */
+  produtos: string | null
+  assinaturas: number
+  faturado: number
+}
+
+/** Um servidor PayCore — Command System e Cilos são instalações distintas. */
+export interface ServidorPaycore {
+  id: number
+  nome: string
+  baseUrl: string
+  temChave: boolean
+  ativo: boolean
+  ultimaSync: string | null
+  ultimoErro: string | null
+  clientes: number
+  aplicacoes: number
+}
+
+export interface ResultadoSyncPaycore {
+  servidor: string
+  aplicacoes: number
+  clientes: number
+  assinaturas: number
+  pagamentos: number
+  erro?: string
+}
+
+export interface FaturamentoPaycore {
+  porProduto: Array<{ servidor: string | null; produto: string; pagamentos: number; bruto: number; liquido: number }>
+  porVendedor: Array<{ vendedor: string; pagamentos: number; bruto: number }>
+  total: number
 }
