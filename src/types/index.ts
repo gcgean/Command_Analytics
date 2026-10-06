@@ -1401,3 +1401,48 @@ export interface ResultadoSyncCrm {
   itens: number
   erro?: string
 }
+
+/** Painel gerencial do funil de vendas (tabela `negocios`). */
+export interface PainelCrm {
+  resumo: { total: number; abertos: number; ganhos: number; perdidos: number; taxaConversao: number | null }
+  etapas: Array<{ etapa: string; quantidade: number; ordem: number }>
+  vendedores: Array<{ vendedor: string; negocios: number; abertos: number; ganhos: number; perdidos: number }>
+  evolucao: Array<{ mes: string; ganhos: number; perdidos: number }>
+  motivosPerda: Array<{ motivo: string; quantidade: number }>
+  opcoes: { funis: Array<{ funil: string; quantidade: number }>; vendedores: string[]; etapas: string[] }
+}
+
+/** Um negócio do funil. `status`: 0 em aberto, 1 ganho, 2 perdido. */
+export interface NegocioFunil {
+  id: number
+  titulo: string
+  vendedor: string | null
+  etapa: string | null
+  funil: string | null
+  status: number
+  descricao: string | null
+  motivoPerda: string | null
+  clienteId: number | null
+  criadoEm: string | null
+  ganhoEm: string | null
+  perdidoEm: string | null
+}
+
+export interface ListaNegociosFunil {
+  total: number
+  pagina: number
+  limite: number
+  itens: NegocioFunil[]
+}
+
+export interface FiltrosFunil {
+  busca?: string
+  funil?: string
+  vendedor?: string
+  etapa?: string
+  situacao?: 'aberto' | 'ganho' | 'perdido' | ''
+  inicio?: string
+  fim?: string
+  pagina?: number
+  limite?: number
+}

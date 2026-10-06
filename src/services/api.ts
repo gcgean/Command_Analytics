@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
@@ -188,6 +188,17 @@ async function fetchApi<T>(path: string, options: RequestInit = {}, timeoutMs?: 
 // ============================================================
 // API SERVICE
 // ============================================================
+/** Monta a query string do funil ignorando filtros vazios. */
+function queryFunil(f?: FiltrosFunil): string {
+  if (!f) return ''
+  const qs = new URLSearchParams()
+  Object.entries(f).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') qs.set(k, String(v))
+  })
+  const q = qs.toString()
+  return q ? `?${q}` : ''
+}
+
 export const api = {
   // ─── Auth ──────────────────────────────────────────────────
   health: async () => fetchApi('/health'),
@@ -568,7 +579,8 @@ export const api = {
     fetchApi<{ ok: boolean }>(`/pipeline/implantacao/${clienteId}/processos/${processoId}/reabrir`, { method: 'PATCH', body: JSON.stringify(data) }),
 
   // ─── CRM ───────────────────────────────────────────────────
-  getNegocios: () => fetchApi<Negocio[]>('/crm/negocios'),
+  getPainelCrm: (f?: FiltrosFunil) => fetchApi<PainelCrm>(`/crm/painel${queryFunil(f)}`),
+  getNegocios: (f?: FiltrosFunil) => fetchApi<ListaNegociosFunil>(`/crm/negocios${queryFunil(f)}`),
   createNegocio: (data: Partial<Negocio>) =>
     fetchApi<Negocio>('/crm/negocios', { method: 'POST', body: JSON.stringify(data) }),
   updateNegocioStatus: (id: number, status: string, dataFechamento?: string) =>
