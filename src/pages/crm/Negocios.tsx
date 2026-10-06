@@ -80,19 +80,27 @@ export function Negocios() {
     () => Object.entries(filtros).some(([, v]) => v !== '' && v !== undefined),
     [filtros],
   )
-  // O topo do funil é a referência para enxergar onde os negócios travam.
-  const topoFunil = painel?.etapas[0]?.quantidade ?? 0
+  // A barra é proporcional à maior etapa; o número ao lado é a fatia do total
+  // em aberto. Usar a primeira etapa como referência estourava os 100%.
+  const maiorEtapa = Math.max(1, ...(painel?.etapas.map((e) => e.quantidade) ?? [0]))
+  const totalAbertos = painel?.resumo.abertos ?? 0
+
+  /** Leva para a lista já filtrada — é como se abre "os ganhos do fulano". */
+  const verNaLista = (extra: Partial<FiltrosFunil>) => {
+    setFiltros({ ...filtros, ...extra })
+    setAba('lista')
+  }
 
   const indicadores = [
-    { rotulo: 'Em aberto', valor: r?.abertos ?? 0, icone: Clock, cor: 'text-blue-600 dark:text-blue-400', fundo: 'bg-blue-50 dark:bg-blue-500/10' },
-    { rotulo: 'Ganhos', valor: r?.ganhos ?? 0, icone: Trophy, cor: 'text-emerald-600 dark:text-emerald-400', fundo: 'bg-emerald-50 dark:bg-emerald-500/10' },
-    { rotulo: 'Perdidos', valor: r?.perdidos ?? 0, icone: XCircle, cor: 'text-red-600 dark:text-red-400', fundo: 'bg-red-50 dark:bg-red-500/10' },
+    { rotulo: 'Em aberto', valor: r?.abertos ?? 0, icone: Clock, cor: 'text-blue-600 dark:text-blue-400', fundo: 'bg-blue-50 dark:bg-blue-500/10', situacao: 'aberto' as const },
+    { rotulo: 'Ganhos', valor: r?.ganhos ?? 0, icone: Trophy, cor: 'text-emerald-600 dark:text-emerald-400', fundo: 'bg-emerald-50 dark:bg-emerald-500/10', situacao: 'ganho' as const },
+    { rotulo: 'Perdidos', valor: r?.perdidos ?? 0, icone: XCircle, cor: 'text-red-600 dark:text-red-400', fundo: 'bg-red-50 dark:bg-red-500/10', situacao: 'perdido' as const },
     {
       rotulo: 'Conversão', valor: r?.taxaConversao == null ? '—' : `${r.taxaConversao.toFixed(1)}%`,
       icone: Percent, cor: 'text-amber-600 dark:text-amber-400', fundo: 'bg-amber-50 dark:bg-amber-500/10',
       nota: 'sobre os já decididos',
     },
-    { rotulo: 'Total', valor: r?.total ?? 0, icone: TrendingUp, cor: 'text-slate-700 dark:text-slate-300', fundo: 'bg-slate-100 dark:bg-slate-700/40' },
+    { rotulo: 'Total', valor: r?.total ?? 0, icone: TrendingUp, cor: 'text-slate-700 dark:text-slate-300', fundo: 'bg-slate-100 dark:bg-slate-700/40', situacao: '' as const },
   ]
 
   return (
@@ -162,7 +170,9 @@ export function Negocios() {
       {/* Indicadores */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {indicadores.map((k) => (
-          <div key={k.rotulo} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <button key={k.rotulo} onClick={() => verNaLista({ situacao: k.situacao, etapa: '' })}
+            title="Ver os negócios desta situação"
+            className="text-left bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4 hover:border-blue-400 dark:hover:border-blue-500 transition-colors">
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="text-xs text-slate-500">{k.rotulo}</p>
@@ -175,7 +185,7 @@ export function Negocios() {
                 <k.icone className={clsx('w-4 h-4', k.cor)} />
               </div>
             </div>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -187,12 +197,13 @@ export function Negocios() {
             {/* Funil */}
             <Card>
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Onde estão os negócios em aberto</h2>
-              <p className="text-xs text-slate-500 mt-0.5 mb-4">Etapas na ordem do funil. A barra compara com a etapa de entrada.</p>
+              <p className="text-xs text-slate-500 mt-0.5 mb-4">Etapas na ordem do funil. O percentual é a fatia do total em aberto.</p>
               <div className="space-y-3">
                 {painel.etapas.map((e, i) => {
-                  const pct = topoFunil ? (e.quantidade / topoFunil) * 100 : 0
+                  const largura = (e.quantidade / maiorEtapa) * 100
+                  const fatia = totalAbertos ? (e.quantidade / totalAbertos) * 100 : 0
                   return (
-                    <button key={e.etapa} onClick={() => { setAba('lista'); setFiltros({ ...filtros, etapa: e.etapa, situacao: 'aberto' }) }}
+                    <button key={e.etapa} onClick={() => verNaLista({ etapa: e.etapa, situacao: 'aberto' })}
                       className="w-full text-left group">
                       <div className="flex items-baseline justify-between text-xs mb-1">
                         <span className="font-medium text-slate-700 dark:text-slate-300 group-hover:text-blue-600 dark:group-hover:text-blue-400">
@@ -200,12 +211,12 @@ export function Negocios() {
                         </span>
                         <span className="text-slate-500">
                           {e.quantidade.toLocaleString('pt-BR')}
-                          <span className="text-slate-400 ml-1.5">{pct.toFixed(0)}%</span>
+                          <span className="text-slate-400 ml-1.5">{fatia.toFixed(0)}%</span>
                         </span>
                       </div>
                       <div className="h-2.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
                         <div className={clsx('h-full rounded-full transition-all', CORES_ETAPA[i % CORES_ETAPA.length])}
-                          style={{ width: `${Math.max(pct, 1.5)}%` }} />
+                          style={{ width: `${Math.max(largura, 1.5)}%` }} />
                       </div>
                     </button>
                   )
@@ -249,7 +260,7 @@ export function Negocios() {
                 <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                   <Users className="w-4 h-4" /> Desempenho por vendedor
                 </h2>
-                <p className="text-xs text-slate-500 mt-0.5">Clique no vendedor para filtrar o funil inteiro por ele.</p>
+                <p className="text-xs text-slate-500 mt-0.5">Clique num número para ver os negócios daquele vendedor.</p>
               </div>
               <div className="overflow-x-auto max-h-[420px]">
                 <table className="w-full text-sm">
@@ -268,12 +279,29 @@ export function Negocios() {
                       const taxa = fechados ? (v.ganhos / fechados) * 100 : null
                       return (
                         <tr key={v.vendedor}
-                          onClick={() => setFiltros({ ...filtros, vendedor: v.vendedor })}
-                          className="border-t border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40">
-                          <td className="px-4 py-2.5 text-slate-800 dark:text-slate-200">{v.vendedor}</td>
-                          <td className="px-3 py-2.5 text-center text-slate-600 dark:text-slate-300">{v.abertos}</td>
-                          <td className="px-3 py-2.5 text-center text-emerald-600 dark:text-emerald-400 font-medium">{v.ganhos}</td>
-                          <td className="px-3 py-2.5 text-center text-red-500">{v.perdidos}</td>
+                          className="border-t border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                          <td className="px-4 py-2.5">
+                            <button onClick={() => verNaLista({ vendedor: v.vendedor, situacao: '', etapa: '' })}
+                              title={`Ver todos os negócios de ${v.vendedor}`}
+                              className="text-slate-800 dark:text-slate-200 hover:text-blue-600 dark:hover:text-blue-400 hover:underline">
+                              {v.vendedor}
+                            </button>
+                          </td>
+                          {([
+                            ['aberto', v.abertos, 'text-slate-600 dark:text-slate-300'],
+                            ['ganho', v.ganhos, 'text-emerald-600 dark:text-emerald-400 font-medium'],
+                            ['perdido', v.perdidos, 'text-red-500'],
+                          ] as const).map(([situacao, quantidade, classe]) => (
+                            <td key={situacao} className="px-3 py-2.5 text-center">
+                              {quantidade === 0 ? <span className="text-slate-400">0</span> : (
+                                <button onClick={() => verNaLista({ vendedor: v.vendedor, situacao, etapa: '' })}
+                                  title={`Ver os negócios de ${v.vendedor}`}
+                                  className={clsx('hover:underline', classe)}>
+                                  {quantidade}
+                                </button>
+                              )}
+                            </td>
+                          ))}
                           <td className="px-4 py-2.5 text-right">
                             {taxa === null ? <span className="text-slate-400">—</span> : (
                               <span className="inline-flex items-center gap-2">
@@ -321,16 +349,26 @@ export function Negocios() {
 
       {!carregando && aba === 'lista' && lista && (
         <Card padding="none">
-          {filtros.etapa && (
-            <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex items-center gap-2 text-xs">
-              <span className="text-slate-500">Etapa:</span>
-              <span className="px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-700 dark:text-blue-300 font-medium">
-                {filtros.etapa}
-              </span>
-              <button className="text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
-                onClick={() => setFiltros({ ...filtros, etapa: '' })}>remover</button>
-            </div>
-          )}
+          {(() => {
+            const marcadores: Array<[string, string, keyof FiltrosFunil]> = []
+            if (filtros.vendedor) marcadores.push(['Vendedor', filtros.vendedor, 'vendedor'])
+            if (filtros.situacao) marcadores.push(['Situação', { aberto: 'Em aberto', ganho: 'Ganhos', perdido: 'Perdidos' }[filtros.situacao], 'situacao'])
+            if (filtros.etapa) marcadores.push(['Etapa', filtros.etapa, 'etapa'])
+            if (marcadores.length === 0) return null
+            return (
+              <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2 text-xs">
+                {marcadores.map(([rotulo, valor, campo]) => (
+                  <span key={campo}
+                    className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300">
+                    <span className="opacity-70">{rotulo}:</span>
+                    <span className="font-medium">{valor}</span>
+                    <button onClick={() => setFiltros({ ...filtros, [campo]: '' })} title="Remover filtro"
+                      className="opacity-60 hover:opacity-100">✕</button>
+                  </span>
+                ))}
+              </div>
+            )
+          })()}
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 dark:bg-slate-900/50">

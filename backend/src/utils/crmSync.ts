@@ -301,8 +301,16 @@ export async function sincronizarCrm(opcoes?: { diasJanela?: number }): Promise<
       }
     }
 
+    // O CRM responde 200 com lista vazia quando o usuário da integração não enxerga
+    // os negócios — avisa em vez de deixar a tela em branco sem explicação.
+    const aviso = resultado.clientes > 0 && resultado.negocios === 0
+      ? 'O CRM devolveu os clientes, mas nenhum negócio. O usuário da integração '
+        + 'provavelmente não tem permissão de ver os negócios dos outros operadores: '
+        + 'no CRM, dê a esse usuário acesso aos negócios de toda a equipe.'
+      : null
+
     await prisma.$executeRawUnsafe(
-      `UPDATE crm_config SET ultima_sync = NOW(), ultimo_erro = NULL WHERE id = ?`, config.id,
+      `UPDATE crm_config SET ultima_sync = NOW(), ultimo_erro = ? WHERE id = ?`, aviso, config.id,
     )
   } catch (e: any) {
     resultado.erro = String(e?.message ?? e).slice(0, 500)
@@ -322,34 +330,31 @@ export async function vendedorDoDocumento(documento: string): Promise<{
   const doc = soDigitos(documento)
   if (doc.length !== 11 && doc.length !== 14) return null
 
-  // Negócio ganho é a evidência mais forte de quem vendeu.
-  const [ganho] = await prisma.$queryRawUnsafe<any[]>(
-    `SELECT id, vendedor_id, vendedor_nome FROM crm_negocio
-      WHERE documento = ? AND status = 'won' AND vendedor_nome IS NOT NULL
-      ORDER BY finalizado_em DESC, id DESC LIMIT 1`, doc,
+  // Vale o ÚLTIMO vendedor que atendeu o cliente, não o primeiro que aparecer:
+  // o cliente pode ter passado por vários antes de fechar, e quem responde por
+  // ele hoje é quem o atendeu por último. Por isso não damos preferência ao
+  // negócio ganho — só à data mais recente.
+  const [ultimo] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT id, vendedor_id, vendedor_nome, status
+       FROM crm_negocio
+      WHERE documento = ? AND vendedor_nome IS NOT NULL AND vendedor_nome <> ''
+      ORDER BY COALESCE(finalizado_em, criado_em, data) DESC, id DESC
+      LIMIT 1`, doc,
   )
-  if (ganho) {
+  if (ultimo) {
     return {
-      vendedorId: ganho.vendedor_id ? Number(ganho.vendedor_id) : null,
-      vendedorNome: ganho.vendedor_nome, origem: 'crm_negocio_ganho', negocioId: Number(ganho.id),
-    }
-  }
-
-  const [qualquer] = await prisma.$queryRawUnsafe<any[]>(
-    `SELECT id, vendedor_id, vendedor_nome FROM crm_negocio
-      WHERE documento = ? AND vendedor_nome IS NOT NULL ORDER BY id DESC LIMIT 1`, doc,
-  )
-  if (qualquer) {
-    return {
-      vendedorId: qualquer.vendedor_id ? Number(qualquer.vendedor_id) : null,
-      vendedorNome: qualquer.vendedor_nome, origem: 'crm_negocio', negocioId: Number(qualquer.id),
+      vendedorId: ultimo.vendedor_id ? Number(ultimo.vendedor_id) : null,
+      vendedorNome: ultimo.vendedor_nome,
+      origem: ultimo.status === 'won' ? 'crm_negocio_ganho' : 'crm_negocio',
+      negocioId: Number(ultimo.id),
     }
   }
 
   // Sem negócio: cai no responsável pelo cadastro do cliente.
   const [cliente] = await prisma.$queryRawUnsafe<any[]>(
     `SELECT vendedor_id, vendedor_nome FROM crm_cliente
-      WHERE documento = ? AND vendedor_nome IS NOT NULL LIMIT 1`, doc,
+      WHERE documento = ? AND vendedor_nome IS NOT NULL AND vendedor_nome <> ''
+      ORDER BY atualizado_em DESC LIMIT 1`, doc,
   )
   if (cliente) {
     return {
