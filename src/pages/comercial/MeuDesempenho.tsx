@@ -13,6 +13,11 @@ import { useThemeStore } from '../../store/themeStore'
 import type { MeuDesempenhoComissao } from '../../types'
 
 const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const dataBR = (v?: string | null) => {
+  if (!v) return '—'
+  const [a, m, d] = String(v).slice(0, 10).split('-')
+  return d && m && a ? `${d}/${m}/${a}` : '—'
+}
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const CURTO = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
@@ -257,6 +262,192 @@ export function MeuDesempenho() {
                 </strong> no time comercial neste mês.
               </p>
             </Card>
+          )}
+
+          {/* ── O que entrou na base, item a item ───────────────────── */}
+          {(dados.detalhe.implantacoes.length > 0 || dados.detalhe.clientesNovos.length > 0
+            || dados.detalhe.upgrades.length > 0 || dados.detalhe.assinaturas.length > 0) && (
+            <div className="space-y-5">
+              <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                O que entrou na sua meta neste mês
+              </h2>
+
+              {dados.detalhe.implantacoes.length > 0 && (
+                <Card padding="none">
+                  <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      Implantações ({dados.detalhe.implantacoes.length})
+                    </h3>
+                    <span className="text-xs text-slate-500">
+                      {brl(v.composicao.implantacao + v.composicao.migracao)} na base
+                    </span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[640px]">
+                      <thead className="bg-slate-50 dark:bg-slate-900/50">
+                        <tr className="text-left text-slate-600 dark:text-slate-400">
+                          <th className="px-4 py-2 font-medium">Cliente</th>
+                          <th className="px-3 py-2 font-medium">Sistema / plano</th>
+                          <th className="px-3 py-2 font-medium text-right">Implantação</th>
+                          <th className="px-3 py-2 font-medium text-right">Migração</th>
+                          <th className="px-3 py-2 font-medium text-right">Mensalidade</th>
+                          <th className="px-4 py-2 font-medium text-center">Data</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dados.detalhe.implantacoes.map((i) => (
+                          <tr key={i.processo} className="border-t border-slate-200 dark:border-slate-700">
+                            <td className="px-4 py-2 text-slate-800 dark:text-slate-200">
+                              {i.cliente}
+                              <span className="block text-[10px] text-slate-400">
+                                #{i.processo}{i.cidade ? ` · ${i.cidade}` : ''}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{i.plano ?? '—'}</td>
+                            <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">
+                              {brl(i.implantacao)}
+                            </td>
+                            <td className="px-3 py-2 text-right text-slate-600 dark:text-slate-300">
+                              {i.migracao ? brl(i.migracao) : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-right text-slate-500">
+                              {i.mensalidade ? brl(i.mensalidade) : '—'}
+                              <span className="block text-[10px] text-slate-400">não entra aqui</span>
+                            </td>
+                            <td className="px-4 py-2 text-center text-slate-500 text-xs whitespace-nowrap">{dataBR(i.data)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="px-4 py-2 text-[11px] text-slate-400 border-t border-slate-200 dark:border-slate-700">
+                    A mensalidade do processo não entra por aqui: ela conta quando o cliente é
+                    registrado como novo, para não ser somada duas vezes.
+                  </p>
+                </Card>
+              )}
+
+              {dados.detalhe.clientesNovos.length > 0 && (
+                <Card padding="none">
+                  <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      Clientes novos ({dados.detalhe.clientesNovos.length})
+                    </h3>
+                    <span className="text-xs text-slate-500">{brl(v.composicao.mensalidadeNova)} na base</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[560px]">
+                      <thead className="bg-slate-50 dark:bg-slate-900/50">
+                        <tr className="text-left text-slate-600 dark:text-slate-400">
+                          <th className="px-4 py-2 font-medium">Cliente</th>
+                          <th className="px-3 py-2 font-medium">Segmento</th>
+                          <th className="px-3 py-2 font-medium text-right">Mensalidade</th>
+                          <th className="px-4 py-2 font-medium text-center">Data</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dados.detalhe.clientesNovos.map((c) => (
+                          <tr key={c.codigo} className="border-t border-slate-200 dark:border-slate-700">
+                            <td className="px-4 py-2 text-slate-800 dark:text-slate-200">
+                              {c.cliente}
+                              <span className="block text-[10px] text-slate-400">
+                                #{c.codigo}{c.cidade ? ` · ${c.cidade}` : ''}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-300 text-xs">{c.segmento ?? '—'}</td>
+                            <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">{brl(c.valor)}</td>
+                            <td className="px-4 py-2 text-center text-slate-500 text-xs whitespace-nowrap">{dataBR(c.data)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
+
+              {dados.detalhe.upgrades.length > 0 && (
+                <Card padding="none">
+                  <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      Upgrades e módulos ({dados.detalhe.upgrades.length})
+                    </h3>
+                    <span className="text-xs text-slate-500">{brl(v.composicao.upgrades)} na base</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[520px]">
+                      <thead className="bg-slate-50 dark:bg-slate-900/50">
+                        <tr className="text-left text-slate-600 dark:text-slate-400">
+                          <th className="px-4 py-2 font-medium">Cliente</th>
+                          <th className="px-3 py-2 font-medium">Produto / módulo</th>
+                          <th className="px-3 py-2 font-medium text-right">Valor</th>
+                          <th className="px-4 py-2 font-medium text-center">Data</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dados.detalhe.upgrades.map((u, i) => (
+                          <tr key={i} className="border-t border-slate-200 dark:border-slate-700">
+                            <td className="px-4 py-2 text-slate-800 dark:text-slate-200">{u.cliente}</td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{u.descricao}</td>
+                            <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">{brl(u.valor)}</td>
+                            <td className="px-4 py-2 text-center text-slate-500 text-xs whitespace-nowrap">{dataBR(u.data)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
+
+              {dados.detalhe.assinaturas.length > 0 && (
+                <Card padding="none">
+                  <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex flex-wrap items-baseline justify-between gap-2">
+                    <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      Assinaturas no PayCore ({dados.detalhe.assinaturas.length})
+                    </h3>
+                    <span className="text-xs text-slate-500">{brl(v.composicao.paycore)} na base</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[620px]">
+                      <thead className="bg-slate-50 dark:bg-slate-900/50">
+                        <tr className="text-left text-slate-600 dark:text-slate-400">
+                          <th className="px-4 py-2 font-medium">Cliente</th>
+                          <th className="px-3 py-2 font-medium">Produto</th>
+                          <th className="px-3 py-2 font-medium">Plano</th>
+                          <th className="px-3 py-2 font-medium text-right">Mensal</th>
+                          <th className="px-4 py-2 font-medium text-center">Início</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {dados.detalhe.assinaturas.map((a, i) => (
+                          <tr key={i} className="border-t border-slate-200 dark:border-slate-700">
+                            <td className="px-4 py-2 text-slate-800 dark:text-slate-200">
+                              {a.cliente}
+                              {a.servidor && <span className="block text-[10px] text-slate-400">{a.servidor}</span>}
+                            </td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{a.produto ?? '—'}</td>
+                            <td className="px-3 py-2 text-slate-600 dark:text-slate-300 text-xs">
+                              {a.plano ?? '—'}
+                              {a.periodicidade && <span className="block text-[10px] text-slate-400">{a.periodicidade}</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">{brl(a.valor)}</td>
+                            <td className="px-4 py-2 text-center text-slate-500 text-xs whitespace-nowrap">{dataBR(a.data)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </Card>
+              )}
+
+              <Card>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-sm text-slate-600 dark:text-slate-300">
+                    Soma de tudo acima — é esta a base da sua comissão
+                  </span>
+                  <span className="text-lg font-bold text-slate-900 dark:text-slate-100">{brl(v.base)}</span>
+                </div>
+              </Card>
+            </div>
           )}
 
           <p className="text-[11px] text-slate-400">

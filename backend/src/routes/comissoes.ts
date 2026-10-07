@@ -157,6 +157,12 @@ export async function comissoesRoutes(app: FastifyInstance) {
     }
     const minha = linhas.find((l) => l.usuarioId === eu) ?? null
 
+    const [anoC, mesC] = comp.split('-').map(Number)
+    const fimDoMes = `${comp}-${String(new Date(anoC, mesC, 0).getDate()).padStart(2, '0')}`
+    const [u] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT NOME_USU AS nome FROM usuario WHERE COD_USU = ?`, eu).catch(() => [null])
+    const nomeUsu = u?.nome ?? ''
+
     // Os últimos 6 meses, para a pessoa ver a própria evolução e não só a foto do mês.
     const historico: Array<{ competencia: string; base: number; percentual: number; variavel: number; total: number }> = []
     const [ano, mes] = comp.split('-').map(Number)
@@ -180,6 +186,71 @@ export async function comissoesRoutes(app: FastifyInstance) {
     const planos = await listarPlanos()
     const plano = planos.find((p) => p.id === minha?.planoId) ?? planos[0] ?? null
 
+    // ── O que a pessoa fez no período, item a item ──
+    // Sem isso o vendedor vê só o total e não tem como conferir de onde ele saiu.
+    const planoDaPessoa = (await listarPlanos()).find((pl) => pl.id === minha?.planoId)
+    const colunaData = planoDaPessoa?.baseCalculo === 'processo'
+      ? 'c.data_hora_dados' : 'c.data_venc_implantacao'
+
+    const implantacoes = minha ? await prisma.$queryRawUnsafe<any[]>(
+      `SELECT c.id_processo, cli.NOME_FANTASIA AS cliente, cli.CIDRES_CLI AS cidade,
+              pl.descricao AS plano, c.valor_implantacao, c.valor_migracao,
+              c.valor_mensalidade, DATE(${colunaData}) AS data
+         FROM processo_implantacao_comercial c
+         LEFT JOIN processo_implantacao pi ON pi.id = c.id_processo
+         LEFT JOIN cliente cli ON cli.cod_cli = pi.id_cli
+         LEFT JOIN planos pl ON pl.id = c.id_plano
+        WHERE c.id_usu_vendedor = ? AND DATE(${colunaData}) BETWEEN ? AND ?
+        ORDER BY data DESC`,
+      eu, `${comp}-01`, fimDoMes,
+    ).catch(() => [] as any[]) : []
+
+    const clientesNovos = minha ? await prisma.$queryRawUnsafe<any[]>(
+      `SELECT c.cod_cli, c.NOME_FANTASIA AS cliente, c.CIDRES_CLI AS cidade,
+              c.valor_mensalidade AS valor, DATE(c.DATACADASTRO_CLI) AS data,
+              COALESCE(cc.NOME_CLA, 'Sem classificação') AS segmento
+         FROM cliente c
+         LEFT JOIN classif_cliente cc ON cc.COD_CLA = c.cod_cla
+         LEFT JOIN usuario u ON u.COD_USU = c.cod_usu_local_Cad
+        WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000 AND c.ATIVO = 'S'
+          AND c.DATACADASTRO_CLI BETWEEN ? AND ?
+          AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
+          AND UPPER(TRIM(COALESCE(
+                (SELECT nn.vendedor_nome FROM crm_negocio nn
+                  WHERE nn.documento = REPLACE(REPLACE(REPLACE(REPLACE(c.CNPJ_CLI,'.',''),'/',''),'-',''),' ','')
+                    AND nn.vendedor_nome IS NOT NULL AND nn.vendedor_nome <> ''
+                  ORDER BY COALESCE(nn.finalizado_em, nn.criado_em, nn.data) DESC, nn.id DESC LIMIT 1),
+                NULLIF(u.NOME_USU, ''), ''))) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))
+        ORDER BY data DESC`,
+      `${comp}-01`, fimDoMes, minha.nome, nomeUsu,
+    ).catch(() => [] as any[]) : []
+
+    const upgrades = minha ? await prisma.$queryRawUnsafe<any[]>(
+      `SELECT co.descricao, cli.NOME_FANTASIA AS cliente, co.Valor_operacao AS valor,
+              CAST(co.data_venda AS DATE) AS data
+         FROM comissoes_funcionario co
+         INNER JOIN cliente cli ON cli.cod_cli = co.cod_cli
+        WHERE co.cod_func = ? AND CAST(co.data_venda AS DATE) BETWEEN ? AND ?
+          AND cli.cod_cli NOT IN (1,6,7,8) AND cli.cod_cla <> 30
+        ORDER BY data DESC`,
+      eu, `${comp}-01`, fimDoMes,
+    ).catch(() => [] as any[]) : []
+
+    const assinaturas = minha ? await prisma.$queryRawUnsafe<any[]>(
+      `SELECT a.cliente_nome AS cliente, a.app_nome AS produto, a.plano, a.periodicidade,
+              (a.mensal + a.valor_modulos) AS valor, DATE(a.inicio) AS data,
+              s.nome AS servidor
+         FROM paycore_assinatura a
+         INNER JOIN paycore_cliente pc
+           ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
+         LEFT JOIN paycore_servidor s ON s.id = a.servidor_id
+        WHERE pc.vendedor_id = ? AND DATE(a.inicio) BETWEEN ? AND ?
+        ORDER BY data DESC`,
+      eu, `${comp}-01`, fimDoMes,
+    ).catch(() => [] as any[]) : []
+
+    const dataTexto = (v: any) => (v ? String(v).slice(0, 10) : null)
+
     // Para o gestor poder trocar de pessoa sem sair da tela.
     const equipe = gestor
       ? linhas.map((l) => ({ usuarioId: l.usuarioId, nome: l.nome }))
@@ -194,6 +265,41 @@ export async function comissoesRoutes(app: FastifyInstance) {
       // Sem vínculo com plano não há comissão a mostrar — a tela diz isso em vez de zerar tudo.
       semPlano: !minha,
       escada: plano?.faixas ?? [],
+      detalhe: {
+        implantacoes: implantacoes.map((i) => ({
+          processo: Number(i.id_processo),
+          cliente: i.cliente ?? `Processo ${i.id_processo}`,
+          cidade: i.cidade ?? null,
+          plano: i.plano ?? null,
+          implantacao: Number(i.valor_implantacao ?? 0),
+          migracao: Number(i.valor_migracao ?? 0),
+          mensalidade: Number(i.valor_mensalidade ?? 0),
+          data: dataTexto(i.data),
+        })),
+        clientesNovos: clientesNovos.map((c) => ({
+          codigo: Number(c.cod_cli),
+          cliente: c.cliente ?? `Cliente ${c.cod_cli}`,
+          cidade: c.cidade ?? null,
+          segmento: c.segmento ?? null,
+          valor: Number(c.valor ?? 0),
+          data: dataTexto(c.data),
+        })),
+        upgrades: upgrades.map((u2) => ({
+          cliente: u2.cliente ?? '—',
+          descricao: u2.descricao ?? '—',
+          valor: Number(u2.valor ?? 0),
+          data: dataTexto(u2.data),
+        })),
+        assinaturas: assinaturas.map((a4) => ({
+          cliente: a4.cliente ?? '—',
+          produto: a4.produto ?? null,
+          plano: a4.plano ?? null,
+          periodicidade: a4.periodicidade ?? null,
+          servidor: a4.servidor ?? null,
+          valor: Number(a4.valor ?? 0),
+          data: dataTexto(a4.data),
+        })),
+      },
       ranking: posicao >= 0 ? { posicao: posicao + 1, total: ordenado.length } : null,
       historico,
     }

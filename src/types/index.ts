@@ -1616,6 +1616,22 @@ export interface MeuDesempenhoComissao {
   /** Sem vínculo com plano não há comissão a mostrar. */
   semPlano: boolean
   escada: Array<{ id: number; valorDe: number; percentual: number }>
+  /** O que entrou na base, item a item, para o vendedor conferir sem pedir relatório. */
+  detalhe: {
+    implantacoes: Array<{
+      processo: number; cliente: string; cidade: string | null; plano: string | null
+      implantacao: number; migracao: number; mensalidade: number; data: string | null
+    }>
+    clientesNovos: Array<{
+      codigo: number; cliente: string; cidade: string | null; segmento: string | null
+      valor: number; data: string | null
+    }>
+    upgrades: Array<{ cliente: string; descricao: string; valor: number; data: string | null }>
+    assinaturas: Array<{
+      cliente: string; produto: string | null; plano: string | null
+      periodicidade: string | null; servidor: string | null; valor: number; data: string | null
+    }>
+  }
   /** Posição no mês, sem expor o número dos colegas. */
   ranking: { posicao: number; total: number } | null
   historico: Array<{ competencia: string; base: number; percentual: number; variavel: number; total: number }>
