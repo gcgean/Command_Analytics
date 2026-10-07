@@ -39,6 +39,7 @@ export function CrmIntegracao() {
   const [salvando, setSalvando] = useState(false)
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
+  const [filtroVendedor, setFiltroVendedor] = useState('')
   const [form, setForm] = useState({ baseUrl: 'https://app.crm.cilos.com.br', email: '', senha: '', ativo: true })
 
   const carregar = useCallback(async () => {
@@ -46,7 +47,11 @@ export function CrmIntegracao() {
     try {
       const [cfg, neg, vend] = await Promise.all([
         api.getConfigCrm(),
-        api.getNegociosCrm({ status: filtroStatus || undefined, busca: busca.trim() || undefined }).catch(() => []),
+        api.getNegociosCrm({
+          status: filtroStatus || undefined,
+          vendedor: filtroVendedor || undefined,
+          busca: busca.trim() || undefined,
+        }).catch(() => []),
         api.getVendedoresCrm().catch(() => []),
       ])
       setConfig(cfg)
@@ -58,7 +63,7 @@ export function CrmIntegracao() {
     } finally {
       setCarregando(false)
     }
-  }, [toast, filtroStatus, busca])
+  }, [toast, filtroStatus, filtroVendedor, busca])
 
   useEffect(() => { void carregar() }, [carregar])
 
@@ -160,6 +165,19 @@ export function CrmIntegracao() {
               <option value="lost">Perdidos</option>
               <option value="in_progress">Em andamento</option>
             </select>
+            <select className="input-field w-full sm:w-56" value={filtroVendedor}
+              onChange={(e) => setFiltroVendedor(e.target.value)}>
+              <option value="">Todos os vendedores</option>
+              {vendedores.map((v) => (
+                <option key={v.vendedor} value={v.vendedor}>{v.vendedor} ({v.negocios})</option>
+              ))}
+            </select>
+            {(filtroStatus || filtroVendedor || busca) && (
+              <button onClick={() => { setBusca(''); setFiltroStatus(''); setFiltroVendedor('') }}
+                className="text-xs px-3 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">
+                Limpar filtros
+              </button>
+            )}
           </div>
 
           <Card padding="none">
@@ -189,7 +207,15 @@ export function CrmIntegracao() {
                           {n.titulo}
                           {n.etapa && <span className="block text-[11px] text-slate-400">{n.etapa}</span>}
                         </td>
-                        <td className="px-4 py-3 text-slate-700 dark:text-slate-300">{n.vendedorNome ?? '—'}</td>
+                        <td className="px-4 py-3">
+                          {n.vendedorNome ? (
+                            <button onClick={() => setFiltroVendedor(n.vendedorNome!)}
+                              title={`Ver só os negócios de ${n.vendedorNome}`}
+                              className="text-slate-700 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-left">
+                              {n.vendedorNome}
+                            </button>
+                          ) : <span className="text-slate-400">—</span>}
+                        </td>
                         <td className="px-4 py-3">
                           {selo && Icone ? (
                             <span className={clsx('inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium', selo.classe)}>
@@ -240,7 +266,10 @@ export function CrmIntegracao() {
                 const fechados = v.ganhos + v.perdidos
                 const taxa = fechados ? (v.ganhos / fechados) * 100 : null
                 return (
-                  <tr key={v.vendedor} className="border-t border-slate-200 dark:border-slate-700">
+                  <tr key={v.vendedor}
+                    onClick={() => { setFiltroVendedor(v.vendedor); setAba('negocios') }}
+                    title={`Ver os negócios de ${v.vendedor}`}
+                    className="border-t border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40">
                     <td className="px-4 py-3 text-slate-800 dark:text-slate-200">{v.vendedor}</td>
                     <td className="px-4 py-3 text-center text-slate-600 dark:text-slate-300">{v.negocios}</td>
                     <td className="px-4 py-3 text-center text-emerald-600 dark:text-emerald-400">{v.ganhos}</td>
