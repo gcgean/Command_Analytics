@@ -1,7 +1,8 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
+  PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
@@ -795,6 +796,29 @@ export const api = {
     fetchApi<{ resultados: ResultadoSyncPaycore[] }>('/paycore/sincronizar', {
       method: 'POST', body: JSON.stringify({ servidorId }),
     }, 180_000),
+
+  // ─── Remuneração comercial (fixo + comissão por faixa) ─────
+  getPlanosComissao: () => fetchApi<PlanoComissao[]>('/comissoes/planos'),
+  salvarPlanoComissao: (id: number, dados: PlanoComissao) =>
+    fetchApi<{ ok: boolean }>(`/comissoes/planos/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
+  getVendedoresComissao: () => fetchApi<VendedorComissao[]>('/comissoes/vendedores'),
+  getCandidatosComissao: () => fetchApi<CandidatoComissao[]>('/comissoes/candidatos'),
+  salvarVendedorComissao: (dados: {
+    usuarioId: number; planoId: number; dataAdmissao?: string
+    fixoPersonalizado?: number; metaIndividual?: number; ativo?: boolean
+  }) => fetchApi<{ ok: boolean }>('/comissoes/vendedores', { method: 'POST', body: JSON.stringify(dados) }),
+  excluirVendedorComissao: (usuarioId: number) =>
+    fetchApi<{ ok: boolean }>(`/comissoes/vendedores/${usuarioId}`, { method: 'DELETE' }),
+  getApuracaoComissao: (competencia: string) =>
+    fetchApi<ApuracaoComissao>(`/comissoes/apuracao?competencia=${competencia}`),
+  fecharComissao: (competencia: string, usuarioId?: number) =>
+    fetchApi<{ fechados: number }>('/comissoes/apuracao/fechar', {
+      method: 'POST', body: JSON.stringify({ competencia, usuarioId }),
+    }),
+  reabrirComissao: (competencia: string, usuarioId: number) =>
+    fetchApi<{ ok: boolean }>('/comissoes/apuracao/reabrir', {
+      method: 'POST', body: JSON.stringify({ competencia, usuarioId }),
+    }),
 
   // ─── Revendas (banco externo, sincronização diária) ────────
   getDashboardRevendas: (filtros?: { inicio?: string; fim?: string }) => {

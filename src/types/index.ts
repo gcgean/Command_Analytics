@@ -1531,3 +1531,62 @@ export interface DashboardRevendas {
   }>
   evolucao: Array<{ mes: string; novos: number; perdidos: number }>
 }
+
+/** Plano de remuneração: fixo por fase + escada de comissão sobre a implantação. */
+export interface PlanoComissao {
+  id: number
+  nome: string
+  descricao: string | null
+  /** 'vencimento' = parcelas que vencem no mês; 'processo' = processos abertos no mês. */
+  baseCalculo: string
+  fixoInicial: number
+  fixoEfetivo: number
+  mesesFaseInicial: number
+  metaReferencia: number
+  ativo: boolean
+  faixas: Array<{ id: number; valorDe: number; percentual: number }>
+}
+
+export interface VendedorComissao {
+  id: number
+  usuarioId: number
+  nome: string
+  planoId: number
+  planoNome: string | null
+  dataAdmissao: string | null
+  /** Quando preenchidos, sobrepõem o plano só para esta pessoa. */
+  fixoPersonalizado: number | null
+  metaIndividual: number | null
+  ativo: boolean
+}
+
+export interface CandidatoComissao { id: number; nome: string; processos: number }
+
+export interface LinhaComissao {
+  usuarioId: number
+  nome: string
+  planoId: number
+  planoNome: string
+  dataAdmissao: string | null
+  mesesDeCasa: number | null
+  emFaseInicial: boolean
+  base: number
+  processos: number
+  meta: number
+  percMeta: number | null
+  faixaDe: number | null
+  percentual: number
+  variavel: number
+  fixo: number
+  total: number
+  /** O degrau seguinte vale sobre tudo, então o ganho extra não é só sobre a diferença. */
+  proximaFaixa: { valorDe: number; percentual: number; falta: number; ganhoExtra: number } | null
+  fechado: boolean
+  fechadoEm: string | null
+}
+
+export interface ApuracaoComissao {
+  competencia: string
+  linhas: LinhaComissao[]
+  totais: { base: number; variavel: number; fixo: number; total: number }
+}

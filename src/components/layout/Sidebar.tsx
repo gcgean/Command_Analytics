@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Headphones, Calendar, Monitor,
   Users, BarChart3, GitBranch, Briefcase, BookUser,
   DollarSign, Award, Package,
-  Code2, Tag, Video, Target, Server, Database, Store,
+  Code2, Tag, Video, Target, Server, Database, Store, Percent,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X, Star,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
   ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell, Cable, FolderKanban
@@ -111,6 +111,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
       { label: 'Clientes PayCore', icon: <CreditCard className="w-4 h-4" />, to: '/comercial/paycore', recurso: 'paycore-clientes' },
       { label: 'CRM Cilos', icon: <Briefcase className="w-4 h-4" />, to: '/comercial/crm', recurso: 'crm-integracao' },
       { label: 'Revendas', icon: <Store className="w-4 h-4" />, to: '/comercial/revendas', recurso: 'revendas' },
+      { label: 'Remuneração Comercial', icon: <Percent className="w-4 h-4" />, to: '/comercial/remuneracao', recurso: 'remuneracao-comercial' },
     ]
   },
   {

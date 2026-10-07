@@ -75,6 +75,8 @@ import { initPaycoreSync, startPaycoreSyncScheduler } from './utils/paycoreSync'
 import { crmIntegracaoRoutes } from './routes/crmIntegracao'
 import { initCrmSync, startCrmSyncScheduler } from './utils/crmSync'
 import { revendasRoutes } from './routes/revendas'
+import { comissoesRoutes } from './routes/comissoes'
+import { initComissoes } from './utils/comissoes'
 import { initRevendasSync, startRevendasSyncScheduler } from './utils/revendasSync'
 import { initNotasGeradas } from './routes/solicitacoes'
 import { ensureConfiguracaoIA } from './ia/config'
@@ -235,6 +237,7 @@ app.register(async (api) => {
   api.register(paycoreRoutes,      { prefix: '/paycore' })
   api.register(crmIntegracaoRoutes,{ prefix: '/crm-integracao' })
   api.register(revendasRoutes,    { prefix: '/revendas' })
+  api.register(comissoesRoutes,   { prefix: '/comissoes' })
   // Sem authMiddleware de propósito: é o formulário que o cliente abre pelo link público.
   api.register(publicoRoutes,      { prefix: '/publico' })
 }, { prefix: '/api' })
@@ -273,6 +276,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initCrmSync()
     .then(() => { console.log('✓ Tabelas do CRM verificadas'); startCrmSyncScheduler() })
     .catch(e => console.warn('⚠ CRM init:', e.message))
+  initComissoes()
+    .then(() => console.log('✓ Tabelas de comissão verificadas'))
+    .catch(e => console.warn('⚠ Comissões init:', e.message))
   initRevendasSync()
     .then(() => { console.log('✓ Tabelas de revendas verificadas'); startRevendasSyncScheduler() })
     .catch(e => console.warn('⚠ Revendas init:', e.message))

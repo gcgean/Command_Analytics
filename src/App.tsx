@@ -13,6 +13,7 @@ import { TabelaMigracao } from './pages/comercial/TabelaMigracao'
 import { ClientesPaycore } from './pages/comercial/ClientesPaycore'
 import { CrmIntegracao } from './pages/comercial/CrmIntegracao'
 import { Revendas } from './pages/comercial/Revendas'
+import { RemuneracaoComercial } from './pages/comercial/RemuneracaoComercial'
 import { AlterarSenha } from './pages/auth/AlterarSenha'
 
 // Dashboard
@@ -216,6 +217,7 @@ export default function App() {
         <Route path="comercial/paycore" element={<PermissionRoute recurso="paycore-clientes"><ClientesPaycore /></PermissionRoute>} />
         <Route path="comercial/crm" element={<PermissionRoute recurso="crm-integracao"><CrmIntegracao /></PermissionRoute>} />
         <Route path="comercial/revendas" element={<PermissionRoute recurso="revendas"><Revendas /></PermissionRoute>} />
+        <Route path="comercial/remuneracao" element={<PermissionRoute recurso="remuneracao-comercial"><RemuneracaoComercial /></PermissionRoute>} />
         <Route path="comercial/migracoes" element={<PermissionRoute recurso="tabela-migracao"><TabelaMigracao /></PermissionRoute>} />
         <Route path="metas/cadastro" element={<PermissionRoute recurso="cadastro-metas"><CadastroMetas /></PermissionRoute>} />
         <Route path="metas/periodo" element={<PermissionRoute recurso="metas-periodo"><MetasPeriodo /></PermissionRoute>} />
