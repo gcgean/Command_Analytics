@@ -1477,8 +1477,6 @@ export interface MapaRevendas {
 
 /** Uma revenda (ponto_revenda) com os números dos clientes ligados a ela. */
 export interface RevendaLinha {
-  /** 'analytics' = ponto_revenda do nosso banco; 'externa' = cópia do banco das revendas. */
-  origem: 'analytics' | 'externa'
   codPonto: number
   nome: string
   razaoSocial: string | null
@@ -1502,7 +1500,6 @@ export interface RevendaLinha {
 
 export interface DashboardRevendas {
   periodo: { inicio: string; fim: string }
-  origem: 'todas' | 'analytics' | 'externa'
   externa: { configurada: boolean; ultimaSync: string | null; revendas: number }
   resumo: {
     revendas: number; revendasAtivas: number; clientes: number

@@ -797,11 +797,10 @@ export const api = {
     }, 180_000),
 
   // ─── Revendas (banco externo, sincronização diária) ────────
-  getDashboardRevendas: (filtros?: { inicio?: string; fim?: string; origem?: string }) => {
+  getDashboardRevendas: (filtros?: { inicio?: string; fim?: string }) => {
     const qs = new URLSearchParams()
     if (filtros?.inicio) qs.set('inicio', filtros.inicio)
     if (filtros?.fim) qs.set('fim', filtros.fim)
-    if (filtros?.origem && filtros.origem !== 'todas') qs.set('origem', filtros.origem)
     const q = qs.toString()
     return fetchApi<DashboardRevendas>(`/revendas/dashboard${q ? `?${q}` : ''}`)
   },
