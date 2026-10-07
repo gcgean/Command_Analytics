@@ -123,11 +123,10 @@ export function MeuDesempenho() {
           <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-2xl p-5 text-white">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs uppercase tracking-wider text-emerald-100">Previsão de ganho no mês</p>
-                <p className="text-4xl font-black mt-1">{brl(v.total)}</p>
+                <p className="text-xs uppercase tracking-wider text-emerald-100">Comissão prevista no mês</p>
+                <p className="text-4xl font-black mt-1">{brl(v.variavel)}</p>
                 <p className="text-sm text-emerald-100 mt-1">
-                  {brl(v.fixo)} de fixo + {brl(v.variavel)} de comissão
-                  {v.emFaseInicial && ' · fixo de treinamento'}
+                  {v.percentual}% sobre {brl(v.base)} que você produziu
                 </p>
               </div>
               <div className="text-right">
@@ -183,8 +182,8 @@ export function MeuDesempenho() {
                   Faltam <strong>{brl(v.proximaFaixa.falta)}</strong> para a faixa de
                   {' '}<strong>{v.proximaFaixa.percentual}%</strong>. Como o percentual passa a valer sobre
                   {' '}tudo que você vendeu no mês, sua comissão sobe{' '}
-                  <strong>+{brl(v.proximaFaixa.ganhoExtra)}</strong> — e o total do mês vai para{' '}
-                  <strong>{brl(v.fixo + v.variavel + v.proximaFaixa.ganhoExtra)}</strong>.
+                  <strong>+{brl(v.proximaFaixa.ganhoExtra)}</strong> — indo para{' '}
+                  <strong>{brl(v.variavel + v.proximaFaixa.ganhoExtra)}</strong>.
                 </p>
               </div>
             )}
