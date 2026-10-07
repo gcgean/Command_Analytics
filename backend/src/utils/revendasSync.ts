@@ -29,6 +29,41 @@ export async function initRevendasSync(): Promise<void> {
   if (Number(linha?.c ?? 0) === 0) {
     await prisma.$executeRawUnsafe(`INSERT INTO revenda_config (porta) VALUES (3306)`)
   }
+
+  // Cópia das revendas do banco externo. Ficam em tabelas nossas para o dashboard
+  // não depender daquele servidor estar no ar na hora da consulta.
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS revenda_externa (
+      cod_ponto        INT NOT NULL PRIMARY KEY,
+      descricao        VARCHAR(100) NULL,
+      razao_social     VARCHAR(150) NULL,
+      cnpj             VARCHAR(20) NULL,
+      cidade           VARCHAR(100) NULL,
+      estado           VARCHAR(10) NULL,
+      ativa            CHAR(1) NULL,
+      perc_revenda     FLOAT NULL,
+      nome_responsavel VARCHAR(100) NULL,
+      telefone         VARCHAR(30) NULL,
+      email            VARCHAR(150) NULL,
+      atualizado_em    DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW()
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  // Um cliente do banco externo, já reduzido ao que o dashboard precisa.
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS revenda_externa_cliente (
+      cod_cli       INT NOT NULL PRIMARY KEY,
+      cod_ponto     INT NULL,
+      nome          VARCHAR(200) NULL,
+      documento     VARCHAR(20) NULL,
+      ativo         CHAR(1) NULL,
+      mensalidade   DECIMAL(10,2) NOT NULL DEFAULT 0,
+      cadastro      DATE NULL,
+      desativacao   DATE NULL,
+      atualizado_em DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+      INDEX idx_rev_ext_cli_ponto (cod_ponto)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
 }
 
 export interface ConfigRevendas {
@@ -219,22 +254,139 @@ export interface ResultadoSyncRevendas {
   erro?: string
 }
 
+/** Colunas existentes numa tabela do banco externo, em minúsculas → nome real. */
+async function colunasDe(conexao: mysql.Connection, tabela: string): Promise<Map<string, string>> {
+  const [linhas] = await conexao.query<any[]>(
+    `SELECT column_name AS c FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = ?`, [tabela],
+  )
+  const mapa = new Map<string, string>()
+  for (const l of linhas) {
+    const nome = String(l.c ?? l.COLUMN_NAME ?? l.column_name)
+    mapa.set(nome.toLowerCase(), nome)
+  }
+  return mapa
+}
+
+/** Primeiro nome de coluna que existir, entre os candidatos. */
+function achar(mapa: Map<string, string>, ...candidatos: string[]): string | null {
+  for (const c of candidatos) {
+    const real = mapa.get(c.toLowerCase())
+    if (real) return real
+  }
+  return null
+}
+
+/** `coluna AS apelido`, ou NULL quando a coluna não existe lá. */
+function campo(mapa: Map<string, string>, apelido: string, ...candidatos: string[]): string {
+  const real = achar(mapa, ...candidatos)
+  return real ? `\`${real}\` AS ${apelido}` : `NULL AS ${apelido}`
+}
+
+const soData = (v: any): string | null => {
+  if (!v) return null
+  const s = String(v).slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) && s !== '0000-00-00' ? s : null
+}
+
 /**
- * Copia os dados das revendas para as nossas tabelas. O mapeamento depende do esquema do banco
- * externo — use `mapearBancoRevendas()` para levantá-lo antes de preencher esta função.
+ * Copia as revendas e os clientes do banco externo para as nossas tabelas.
+ *
+ * O esquema de lá não é nosso e pode variar entre instalações, então as colunas são descobertas
+ * em tempo de execução: o que existir é copiado, o que faltar vira NULL. Assim a sincronização
+ * não quebra por causa de uma coluna com outro nome.
  */
 export async function sincronizarRevendas(): Promise<ResultadoSyncRevendas> {
   const resultado: ResultadoSyncRevendas = { revendas: 0, clientes: 0, faturamento: 0 }
   const config = await obterConfigRevendas()
   if (!config?.ativo) return { ...resultado, erro: 'Integração das revendas desativada.' }
 
+  let conexao: mysql.Connection | null = null
   try {
-    const conexao = await conectarRevendas(config)
-    try {
-      // TODO: mapear as tabelas de revendas do banco externo (ainda não conhecemos o esquema).
-      resultado.erro = 'Mapeamento das tabelas de revendas ainda não configurado.'
-    } finally {
-      await conexao.end().catch(() => {})
+    conexao = await conectarRevendas(config)
+
+    const colRevenda = await colunasDe(conexao, 'ponto_revenda')
+    if (colRevenda.size === 0) {
+      throw new Error('A tabela `ponto_revenda` não existe nesse banco. Confira o banco informado.')
+    }
+    const chaveRevenda = achar(colRevenda, 'cod_ponto', 'id', 'codigo')
+    if (!chaveRevenda) throw new Error('Não encontrei a coluna de código em `ponto_revenda`.')
+
+    const [revendas] = await conexao.query<any[]>(
+      `SELECT \`${chaveRevenda}\` AS cod_ponto,
+              ${campo(colRevenda, 'descricao', 'descricao', 'nome', 'fantasia')},
+              ${campo(colRevenda, 'razao_social', 'razao_social')},
+              ${campo(colRevenda, 'cnpj', 'cnpj', 'documento')},
+              ${campo(colRevenda, 'cidade', 'cidade')},
+              ${campo(colRevenda, 'estado', 'estado', 'uf')},
+              ${campo(colRevenda, 'ativa', 'ATIVO', 'ativa')},
+              ${campo(colRevenda, 'perc_revenda', 'perc_revenda', 'percentual')},
+              ${campo(colRevenda, 'nome_responsavel', 'nome_responsavel', 'responsavel')},
+              ${campo(colRevenda, 'telefone', 'telefone', 'celular_suporte', 'fone')},
+              ${campo(colRevenda, 'email', 'email')}
+         FROM \`ponto_revenda\``,
+    )
+
+    for (const r of revendas) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO revenda_externa
+           (cod_ponto, descricao, razao_social, cnpj, cidade, estado, ativa, perc_revenda,
+            nome_responsavel, telefone, email)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)
+         ON DUPLICATE KEY UPDATE
+           descricao=VALUES(descricao), razao_social=VALUES(razao_social), cnpj=VALUES(cnpj),
+           cidade=VALUES(cidade), estado=VALUES(estado), ativa=VALUES(ativa),
+           perc_revenda=VALUES(perc_revenda), nome_responsavel=VALUES(nome_responsavel),
+           telefone=VALUES(telefone), email=VALUES(email)`,
+        Number(r.cod_ponto), texto(r.descricao, 100), texto(r.razao_social, 150), texto(r.cnpj, 20),
+        texto(r.cidade, 100), texto(r.estado, 10), texto(r.ativa, 1) ?? 'S',
+        r.perc_revenda == null ? null : Number(r.perc_revenda),
+        texto(r.nome_responsavel, 100), texto(r.telefone, 30), texto(r.email, 150),
+      )
+      resultado.revendas += 1
+    }
+    // Revenda que sumiu de lá não deve continuar aparecendo aqui.
+    const vivos = revendas.map((r) => Number(r.cod_ponto)).filter((n) => Number.isFinite(n))
+    if (vivos.length) {
+      await prisma.$executeRawUnsafe(
+        `DELETE FROM revenda_externa WHERE cod_ponto NOT IN (${vivos.map(() => '?').join(',')})`, ...vivos,
+      )
+    }
+
+    // ── Clientes ──
+    const colCliente = await colunasDe(conexao, 'cliente')
+    const chaveCliente = achar(colCliente, 'cod_cli', 'id', 'codigo')
+    const colPonto = achar(colCliente, 'cod_ponto_revenda', 'cod_ponto', 'id_revenda')
+    if (chaveCliente && colPonto) {
+      const [clientes] = await conexao.query<any[]>(
+        `SELECT \`${chaveCliente}\` AS cod_cli, \`${colPonto}\` AS cod_ponto,
+                ${campo(colCliente, 'nome', 'NOME_CLI', 'razao_social', 'nome')},
+                ${campo(colCliente, 'documento', 'CNPJ_CLI', 'cnpj', 'documento')},
+                ${campo(colCliente, 'ativo', 'ATIVO')},
+                ${campo(colCliente, 'mensalidade', 'valor_mensalidade', 'mensalidade')},
+                ${campo(colCliente, 'cadastro', 'DATACADASTRO_CLI', 'data_cadastro', 'criado_em')},
+                ${campo(colCliente, 'desativacao', 'DATA_DESATIVACAO', 'data_desativacao')}
+           FROM \`cliente\``,
+      )
+      for (const c of clientes) {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO revenda_externa_cliente
+             (cod_cli, cod_ponto, nome, documento, ativo, mensalidade, cadastro, desativacao)
+           VALUES (?,?,?,?,?,?,?,?)
+           ON DUPLICATE KEY UPDATE
+             cod_ponto=VALUES(cod_ponto), nome=VALUES(nome), documento=VALUES(documento),
+             ativo=VALUES(ativo), mensalidade=VALUES(mensalidade),
+             cadastro=VALUES(cadastro), desativacao=VALUES(desativacao)`,
+          Number(c.cod_cli), c.cod_ponto == null ? null : Number(c.cod_ponto),
+          texto(c.nome, 200), texto(String(c.documento ?? '').replace(/\D/g, ''), 20) || null,
+          texto(c.ativo, 1) ?? 'S', Number(c.mensalidade ?? 0),
+          soData(c.cadastro), soData(c.desativacao),
+        )
+        resultado.clientes += 1
+        if (String(c.ativo ?? 'S') === 'S') resultado.faturamento += Number(c.mensalidade ?? 0)
+      }
+    } else {
+      resultado.erro = 'As revendas vieram, mas não achei em `cliente` a coluna que aponta para a revenda.'
     }
 
     await prisma.$executeRawUnsafe(
@@ -247,6 +399,15 @@ export async function sincronizarRevendas(): Promise<ResultadoSyncRevendas> {
       `UPDATE revenda_config SET ultimo_erro = ? WHERE id = ?`, resultado.erro, config.id,
     )
     console.warn('⚠ Revendas:', resultado.erro)
+  } finally {
+    await conexao?.end().catch(() => {})
   }
   return resultado
+}
+
+/** Corta o texto no tamanho da coluna e troca vazio por null. */
+function texto(v: any, max: number): string | null {
+  if (v === null || v === undefined) return null
+  const s = String(v).trim()
+  return s ? s.slice(0, max) : null
 }

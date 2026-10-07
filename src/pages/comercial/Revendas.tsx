@@ -5,7 +5,7 @@ import {
 } from 'recharts'
 import {
   Store, Loader2, Save, PlugZap, Search, Table2, RefreshCw, CheckCircle2, AlertTriangle,
-  Users, Wallet, TrendingUp,
+  Users, Wallet, TrendingUp, DownloadCloud,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
@@ -26,6 +26,8 @@ export function Revendas() {
   const isDark = useThemeStore((s) => s.theme) === 'dark'
   const [aba, setAba] = useState<'dashboard' | 'conexao' | 'mapa'>('dashboard')
   const [painel, setPainel] = useState<DashboardRevendas | null>(null)
+  const [origem, setOrigem] = useState<'todas' | 'analytics' | 'externa'>('todas')
+  const [sincronizando, setSincronizando] = useState(false)
   const [config, setConfig] = useState<ConfigRevendas | null>(null)
   const [form, setForm] = useState({ host: '', porta: 3306, usuario: '', senha: '', banco: '', ativo: true, horaSync: '03:00' })
   const [carregando, setCarregando] = useState(true)
@@ -43,7 +45,7 @@ export function Revendas() {
     try {
       const [c, d] = await Promise.all([
         api.getConfigRevendas(),
-        api.getDashboardRevendas().catch(() => null),
+        api.getDashboardRevendas({ origem }).catch(() => null),
       ])
       setConfig(c)
       setPainel(d)
@@ -56,7 +58,7 @@ export function Revendas() {
     } finally {
       setCarregando(false)
     }
-  }, [toast])
+  }, [toast, origem])
 
   useEffect(() => { void carregar() }, [carregar])
 
@@ -86,6 +88,20 @@ export function Revendas() {
       toast.error(e?.message || 'Falha ao testar.')
     } finally {
       setTestando(false)
+    }
+  }
+
+  async function sincronizar() {
+    setSincronizando(true)
+    try {
+      const r = await api.sincronizarRevendas()
+      if (r.erro) toast.error(r.erro)
+      else toast.success(`${r.revendas} revenda(s) e ${r.clientes} cliente(s) sincronizados.`)
+      void carregar()
+    } catch (e: any) {
+      toast.error(e?.message || 'Falha ao sincronizar com o banco das revendas.')
+    } finally {
+      setSincronizando(false)
     }
   }
 
@@ -126,9 +142,16 @@ export function Revendas() {
             </p>
           </div>
         </div>
-        <Button variant="secondary" disabled={testando} onClick={testar}>
-          {testando ? <><Loader2 className="w-4 h-4 animate-spin" /> Testando...</> : <><PlugZap className="w-4 h-4" /> Testar conexão</>}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" disabled={sincronizando} onClick={sincronizar}>
+            {sincronizando
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Sincronizando...</>
+              : <><DownloadCloud className="w-4 h-4" /> Sincronizar agora</>}
+          </Button>
+          <Button variant="secondary" disabled={testando} onClick={testar}>
+            {testando ? <><Loader2 className="w-4 h-4 animate-spin" /> Testando...</> : <><PlugZap className="w-4 h-4" /> Testar conexão</>}
+          </Button>
+        </div>
       </div>
 
       {config?.ultimoErro && (
@@ -167,6 +190,39 @@ export function Revendas() {
 
       {!carregando && aba === 'dashboard' && painel && (
         <div className="space-y-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-500">Origem:</span>
+            {([
+              ['todas', 'Todas'],
+              ['externa', 'Banco das revendas'],
+              ['analytics', 'Base do Analytics'],
+            ] as const).map(([id, rotulo]) => (
+              <button key={id} onClick={() => setOrigem(id)}
+                className={clsx('text-xs px-3 py-1.5 rounded-full border transition-colors',
+                  origem === id
+                    ? 'bg-violet-600 border-violet-600 text-white'
+                    : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-violet-400')}>
+                {rotulo}
+              </button>
+            ))}
+            {painel.externa.ultimaSync && (
+              <span className="text-[11px] text-slate-400 ml-auto">
+                Banco das revendas sincronizado em {new Date(painel.externa.ultimaSync).toLocaleString('pt-BR')}
+              </span>
+            )}
+          </div>
+
+          {!painel.externa.configurada && origem !== 'analytics' && (
+            <div className="rounded-lg border border-blue-200 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/10 p-3 text-xs text-blue-800 dark:text-blue-300 flex gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                O banco das revendas ainda não está conectado — estes números são só da base do
+                Analytics. Preencha o acesso na aba <strong>Conexão</strong> e clique em
+                {' '}<strong>Sincronizar agora</strong>.
+              </span>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {[
               { rotulo: 'Revendas ativas', valor: painel.resumo.revendasAtivas + ' de ' + painel.resumo.revendas, icone: Store, cor: 'text-violet-600 dark:text-violet-400' },
@@ -209,6 +265,7 @@ export function Revendas() {
                 <thead className="bg-slate-50 dark:bg-slate-900/50">
                   <tr className="text-left text-slate-600 dark:text-slate-400">
                     <th className="px-4 py-2.5 font-medium">Revenda</th>
+                    <th className="px-3 py-2.5 font-medium">Origem</th>
                     <th className="px-3 py-2.5 font-medium text-center">Clientes</th>
                     <th className="px-3 py-2.5 font-medium text-center">Ativos</th>
                     <th className="px-3 py-2.5 font-medium text-center">Novos</th>
@@ -219,7 +276,7 @@ export function Revendas() {
                 </thead>
                 <tbody>
                   {painel.revendas.map((r) => (
-                    <tr key={r.codPonto} className="border-t border-slate-200 dark:border-slate-700">
+                    <tr key={`${r.origem}-${r.codPonto}`} className="border-t border-slate-200 dark:border-slate-700">
                       <td className="px-4 py-2.5">
                         <div className="flex items-center gap-2">
                           <span className="text-slate-800 dark:text-slate-200">{r.nome}</span>
@@ -230,6 +287,14 @@ export function Revendas() {
                         <p className="text-[11px] text-slate-400">
                           {[r.responsavel, [r.cidade, r.estado].filter(Boolean).join('/')].filter(Boolean).join(' · ') || '—'}
                         </p>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span className={clsx('text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap',
+                          r.origem === 'externa'
+                            ? 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300')}>
+                          {r.origem === 'externa' ? 'banco das revendas' : 'Analytics'}
+                        </span>
                       </td>
                       <td className="px-3 py-2.5 text-center text-slate-600 dark:text-slate-300">{r.clientes}</td>
                       <td className="px-3 py-2.5 text-center text-slate-800 dark:text-slate-200 font-medium">{r.ativos}</td>
@@ -245,7 +310,7 @@ export function Revendas() {
                     </tr>
                   ))}
                   {painel.revendas.length === 0 && (
-                    <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={7}>Nenhuma revenda cadastrada.</td></tr>
+                    <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={8}>Nenhuma revenda nessa origem.</td></tr>
                   )}
                 </tbody>
               </table>
@@ -255,19 +320,10 @@ export function Revendas() {
           <Card>
             <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Entradas e saídas de clientes</h2>
             <p className="text-xs text-slate-500 mt-0.5 mb-4">
-              Últimos 12 meses, somando todas as revendas e os clientes sem revenda.
+              Últimos 12 meses, somando todas as revendas da origem selecionada.
             </p>
             {(() => {
-              const porMes = new Map<string, { mes: string; novos: number; perdidos: number }>()
-              for (const e of painel.evolucao) {
-                const linha = porMes.get(e.mes) ?? { mes: e.mes, novos: 0, perdidos: 0 }
-                linha.novos += e.novos
-                linha.perdidos += e.perdidos
-                porMes.set(e.mes, linha)
-              }
-              const dados = [...porMes.values()]
-                .sort((a, b) => a.mes.localeCompare(b.mes))
-                .map((d) => ({ ...d, mes: mesBR(d.mes) }))
+              const dados = painel.evolucao.map((d) => ({ ...d, mes: mesBR(d.mes) }))
               if (dados.length === 0) {
                 return <p className="text-sm text-slate-500 py-10 text-center">Sem movimentação no período.</p>
               }

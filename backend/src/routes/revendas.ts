@@ -83,20 +83,22 @@ export async function revendasRoutes(app: FastifyInstance) {
   })
 
   /**
-   * Dashboard das revendas. Os dados vêm do nosso próprio banco: `ponto_revenda` é a lista de
-   * revendas e `cliente.cod_ponto_revenda` liga cada cliente à sua. Não depende do banco externo.
+   * Dashboard das revendas, de duas origens:
+   *  - "analytics": `ponto_revenda` do nosso banco, com `cliente.cod_ponto_revenda`;
+   *  - "externa": a cópia do banco das revendas, trazida pela sincronização diária.
    *
    * Receita = soma da mensalidade dos clientes ativos (MRR). Não existe histórico de preço, então
    * a evolução conta entradas e saídas de clientes, não o valor cobrado em cada mês passado.
    */
   app.get('/dashboard', { preHandler: authMiddleware, schema: { tags: ['Revendas'] } }, async (request) => {
-    const { inicio, fim } = request.query as Record<string, string>
+    const { inicio, fim, origem } = request.query as Record<string, string>
     const de = inicio || new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10)
     const ate = fim || new Date().toISOString().slice(0, 10)
+    const quais = origem === 'analytics' || origem === 'externa' ? origem : 'todas'
 
-    // O LEFT JOIN traz uma linha com NULL para revenda sem cliente; sem o teste de cod_cli
-    // o COALESCE(ATIVO,'S') contaria essa linha vazia como um cliente ativo.
-    const revendas = await prisma.$queryRawUnsafe<any[]>(
+    // O LEFT JOIN traz uma linha com NULL para revenda sem cliente; sem o teste da chave do
+    // cliente o COALESCE(ATIVO,'S') contaria essa linha vazia como um cliente ativo.
+    const linhasLocais = quais === 'externa' ? [] : await prisma.$queryRawUnsafe<any[]>(
       `SELECT r.cod_ponto, r.descricao, r.razao_social, r.cnpj, r.cidade, r.estado,
               r.ATIVO AS ativa, r.perc_revenda, r.nome_responsavel, r.telefone, r.email,
               COUNT(c.cod_cli) AS clientes,
@@ -109,37 +111,32 @@ export async function revendasRoutes(app: FastifyInstance) {
          FROM ponto_revenda r
          LEFT JOIN cliente c ON c.cod_ponto_revenda = r.cod_ponto
         GROUP BY r.cod_ponto, r.descricao, r.razao_social, r.cnpj, r.cidade, r.estado,
-                 r.ATIVO, r.perc_revenda, r.nome_responsavel, r.telefone, r.email
-        ORDER BY mrr DESC, clientes DESC`,
+                 r.ATIVO, r.perc_revenda, r.nome_responsavel, r.telefone, r.email`,
       de, ate, de, ate,
     )
 
-    // Clientes que não apontam para revenda nenhuma — ficam de fora dos totais por revenda.
-    const [sem] = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT COUNT(*) AS q,
-              SUM(COALESCE(ATIVO,'S') = 'S') AS ativos,
-              COALESCE(SUM(CASE WHEN COALESCE(ATIVO,'S') = 'S' THEN valor_mensalidade END), 0) AS mrr
-         FROM cliente WHERE cod_ponto_revenda IS NULL OR cod_ponto_revenda = 0`)
+    const linhasExternas = quais === 'analytics' ? [] : await prisma.$queryRawUnsafe<any[]>(
+      `SELECT r.cod_ponto, r.descricao, r.razao_social, r.cnpj, r.cidade, r.estado,
+              r.ativa, r.perc_revenda, r.nome_responsavel, r.telefone, r.email,
+              COUNT(c.cod_cli) AS clientes,
+              SUM(c.cod_cli IS NOT NULL AND COALESCE(c.ativo,'S') = 'S') AS ativos,
+              SUM(c.cod_cli IS NOT NULL AND COALESCE(c.ativo,'S') <> 'S') AS inativos,
+              COALESCE(SUM(CASE WHEN COALESCE(c.ativo,'S') = 'S' THEN c.mensalidade END), 0) AS mrr,
+              SUM(c.cod_cli IS NOT NULL AND c.cadastro BETWEEN ? AND ?) AS novos,
+              SUM(c.cod_cli IS NOT NULL AND COALESCE(c.ativo,'S') <> 'S'
+                  AND c.desativacao BETWEEN ? AND ?) AS perdidos
+         FROM revenda_externa r
+         LEFT JOIN revenda_externa_cliente c ON c.cod_ponto = r.cod_ponto
+        GROUP BY r.cod_ponto, r.descricao, r.razao_social, r.cnpj, r.cidade, r.estado,
+                 r.ativa, r.perc_revenda, r.nome_responsavel, r.telefone, r.email`,
+      de, ate, de, ate,
+    ).catch(() => [])
 
-    // Entradas e saídas mês a mês, últimos 12 meses, por revenda.
-    const evolucao = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT mes, cod_ponto, SUM(novos) novos, SUM(perdidos) perdidos FROM (
-         SELECT DATE_FORMAT(c.DATACADASTRO_CLI, '%Y-%m') mes,
-                COALESCE(c.cod_ponto_revenda, 0) cod_ponto, 1 novos, 0 perdidos
-           FROM cliente c
-          WHERE c.DATACADASTRO_CLI >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
-         UNION ALL
-         SELECT DATE_FORMAT(c.DATA_DESATIVACAO, '%Y-%m') mes,
-                COALESCE(c.cod_ponto_revenda, 0) cod_ponto, 0 novos, 1 perdidos
-           FROM cliente c
-          WHERE COALESCE(c.ATIVO,'S') <> 'S'
-            AND c.DATA_DESATIVACAO >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
-       ) x WHERE mes IS NOT NULL GROUP BY mes, cod_ponto ORDER BY mes`)
-
-    const linhas = revendas.map((r) => {
+    const montar = (r: any, fonte: 'analytics' | 'externa') => {
       const ativos = Number(r.ativos ?? 0)
       const mrr = Number(r.mrr ?? 0)
       return {
+        origem: fonte,
         codPonto: Number(r.cod_ponto),
         nome: r.descricao || r.razao_social || `Revenda ${r.cod_ponto}`,
         razaoSocial: r.razao_social ?? null,
@@ -159,11 +156,63 @@ export async function revendasRoutes(app: FastifyInstance) {
         mrr,
         ticketMedio: ativos ? mrr / ativos : 0,
       }
-    })
+    }
+
+    const linhas = [
+      ...linhasLocais.map((r) => montar(r, 'analytics')),
+      ...linhasExternas.map((r) => montar(r, 'externa')),
+    ].sort((a, b) => b.mrr - a.mrr || b.clientes - a.clientes)
     const mrrTotal = linhas.reduce((s, l) => s + l.mrr, 0)
+
+    // Clientes que não apontam para revenda nenhuma — ficam de fora dos totais por revenda.
+    const [semLocal] = quais === 'externa' ? [null] : await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS q,
+              SUM(COALESCE(ATIVO,'S') = 'S') AS ativos,
+              COALESCE(SUM(CASE WHEN COALESCE(ATIVO,'S') = 'S' THEN valor_mensalidade END), 0) AS mrr
+         FROM cliente WHERE cod_ponto_revenda IS NULL OR cod_ponto_revenda = 0`)
+    const [semExterna] = quais === 'analytics' ? [null] : await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS q,
+              SUM(COALESCE(ativo,'S') = 'S') AS ativos,
+              COALESCE(SUM(CASE WHEN COALESCE(ativo,'S') = 'S' THEN mensalidade END), 0) AS mrr
+         FROM revenda_externa_cliente WHERE cod_ponto IS NULL OR cod_ponto = 0`).catch(() => [null])
+
+    // Entradas e saídas mês a mês, últimos 12 meses.
+    const evLocal = quais === 'externa' ? [] : await prisma.$queryRawUnsafe<any[]>(
+      `SELECT mes, SUM(novos) novos, SUM(perdidos) perdidos FROM (
+         SELECT DATE_FORMAT(DATACADASTRO_CLI, '%Y-%m') mes, 1 novos, 0 perdidos FROM cliente
+          WHERE DATACADASTRO_CLI >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+         UNION ALL
+         SELECT DATE_FORMAT(DATA_DESATIVACAO, '%Y-%m') mes, 0 novos, 1 perdidos FROM cliente
+          WHERE COALESCE(ATIVO,'S') <> 'S' AND DATA_DESATIVACAO >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+       ) x WHERE mes IS NOT NULL GROUP BY mes`)
+    const evExterna = quais === 'analytics' ? [] : await prisma.$queryRawUnsafe<any[]>(
+      `SELECT mes, SUM(novos) novos, SUM(perdidos) perdidos FROM (
+         SELECT DATE_FORMAT(cadastro, '%Y-%m') mes, 1 novos, 0 perdidos FROM revenda_externa_cliente
+          WHERE cadastro >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+         UNION ALL
+         SELECT DATE_FORMAT(desativacao, '%Y-%m') mes, 0 novos, 1 perdidos FROM revenda_externa_cliente
+          WHERE COALESCE(ativo,'S') <> 'S' AND desativacao >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
+       ) x WHERE mes IS NOT NULL GROUP BY mes`).catch(() => [])
+
+    const porMes = new Map<string, { mes: string; novos: number; perdidos: number }>()
+    for (const e of [...evLocal, ...evExterna]) {
+      const linha = porMes.get(e.mes) ?? { mes: e.mes, novos: 0, perdidos: 0 }
+      linha.novos += Number(e.novos ?? 0)
+      linha.perdidos += Number(e.perdidos ?? 0)
+      porMes.set(e.mes, linha)
+    }
+
+    const [cfg] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT ultima_sync, ativo FROM revenda_config ORDER BY id LIMIT 1`)
 
     return {
       periodo: { inicio: de, fim: ate },
+      origem: quais,
+      externa: {
+        configurada: !!cfg?.ativo,
+        ultimaSync: cfg?.ultima_sync ?? null,
+        revendas: linhasExternas.length,
+      },
       resumo: {
         revendas: linhas.length,
         revendasAtivas: linhas.filter((l) => l.ativa).length,
@@ -178,16 +227,11 @@ export async function revendasRoutes(app: FastifyInstance) {
         participacao: mrrTotal ? (l.mrr / mrrTotal) * 100 : 0,
       })),
       semRevenda: {
-        clientes: Number(sem?.q ?? 0),
-        ativos: Number(sem?.ativos ?? 0),
-        mrr: Number(sem?.mrr ?? 0),
+        clientes: Number(semLocal?.q ?? 0) + Number(semExterna?.q ?? 0),
+        ativos: Number(semLocal?.ativos ?? 0) + Number(semExterna?.ativos ?? 0),
+        mrr: Number(semLocal?.mrr ?? 0) + Number(semExterna?.mrr ?? 0),
       },
-      evolucao: evolucao.map((e) => ({
-        mes: e.mes,
-        codPonto: Number(e.cod_ponto ?? 0),
-        novos: Number(e.novos ?? 0),
-        perdidos: Number(e.perdidos ?? 0),
-      })),
+      evolucao: [...porMes.values()].sort((a, b) => a.mes.localeCompare(b.mes)),
     }
   })
 
