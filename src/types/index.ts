@@ -1496,6 +1496,18 @@ export interface RevendaLinha {
   mrr: number
   ticketMedio: number
   participacao: number
+  /** Mensalidade somada dos clientes que entraram no período. */
+  receitaGanha: number
+  /** Mensalidade somada dos clientes que saíram no período. */
+  receitaPerdida: number
+  saldoReceita: number
+  /** Clientes ativos com mensalidade zerada — receita que não está sendo cobrada. */
+  semMensalidade: number
+  /** Perdidos sobre a base do início do período; null quando não havia base. */
+  churn: number | null
+  /** Variação da receita reconstruída entre o primeiro e o último mês. */
+  crescimento: number | null
+  serie: Array<{ mes: string; mrr: number; ativos: number }>
 }
 
 export interface DashboardRevendas {
@@ -1504,9 +1516,18 @@ export interface DashboardRevendas {
   resumo: {
     revendas: number; revendasAtivas: number; clientes: number
     ativos: number; mrr: number; novos: number; perdidos: number
+    receitaGanha: number; receitaPerdida: number; saldoReceita: number
+    /** Fatia da receita que vem da maior revenda. */
+    concentracao: number | null
+    maiorRevenda: string | null
+    semMensalidade: number
   }
   revendas: RevendaLinha[]
   /** Clientes sem revenda informada — ficam de fora dos totais por revenda. */
   semRevenda: { clientes: number; ativos: number; mrr: number }
+  meses: string[]
+  movimento: Array<{
+    mes: string; ganha: number; perdida: number; saldo: number; novos: number; perdidos: number
+  }>
   evolucao: Array<{ mes: string; novos: number; perdidos: number }>
 }

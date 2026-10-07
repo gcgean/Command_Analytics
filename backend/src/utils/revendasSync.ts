@@ -64,6 +64,12 @@ export async function initRevendasSync(): Promise<void> {
       INDEX idx_rev_ext_cli_ponto (cod_ponto)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+
+  // Linhas copiadas antes da correção da sentinela 1900-01-01.
+  await prisma.$executeRawUnsafe(
+    `UPDATE revenda_externa_cliente SET desativacao = NULL WHERE desativacao < '1990-01-01'`)
+  await prisma.$executeRawUnsafe(
+    `UPDATE revenda_externa_cliente SET cadastro = NULL WHERE cadastro < '1990-01-01'`)
 }
 
 export interface ConfigRevendas {
@@ -283,10 +289,16 @@ function campo(mapa: Map<string, string>, apelido: string, ...candidatos: string
   return real ? `\`${real}\` AS ${apelido}` : `NULL AS ${apelido}`
 }
 
+/**
+ * Data do banco externo, ou null. Lá, "sem data" é gravado como 1900-01-01 (e às vezes
+ * 0000-00-00) em vez de NULL — tratar isso como data real zeraria qualquer cálculo que
+ * pergunte se o cliente estava ativo num mês.
+ */
 const soData = (v: any): string | null => {
   if (!v) return null
   const s = String(v).slice(0, 10)
-  return /^\d{4}-\d{2}-\d{2}$/.test(s) && s !== '0000-00-00' ? s : null
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null
+  return Number(s.slice(0, 4)) >= 1990 ? s : null
 }
 
 /**
