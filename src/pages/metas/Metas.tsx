@@ -8,7 +8,7 @@ import {
 import {
   TrendingUp, TrendingDown, Users, Target, ChevronLeft,
   ChevronRight, Zap, Award, AlertTriangle, CheckCircle2,
-  Building2, Loader2, RefreshCw, Save, Plus, Settings2, Layers3, Pencil,
+  Building2, Loader2, RefreshCw, Save, Plus, Settings2, Layers3, Pencil, CreditCard,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { useToast } from '../../components/ui/Toast'
@@ -20,6 +20,7 @@ interface Resumo {
   totalAtivos: number; qtdNovos: number; valorClientesNovos: number
   qtdPerdidos: number; receitaPerdida: number; valorUpgrades: number
   qtdReativados: number; valorReativados: number
+  qtdPaycore: number; valorPaycore: number
   receitaNova: number; receitaLiquida: number; percMeta: number
 }
 interface Filial {
@@ -53,6 +54,16 @@ interface DadosComercial {
   projecao?: Projecao
   clientesNovos: ClienteNovo[]
   clientesReativados: ClienteReativado[]
+  paycore?: {
+    assinaturas: number
+    valor: number
+    caixa: { pagamentos: number; bruto: number; liquido: number }
+    detalhe: Array<{
+      id: string; cliente: string | null; produto: string | null; plano: string | null
+      valor: number; inicio: string | null; status: string | null
+      servidor: string | null; vendedor: string | null; jaContado: boolean
+    }>
+  }
   clientesPerdidos: ClientePerdido[]
   upgrades: Upgrade[]
   novosPorCidade: CidadeResumo[]
@@ -262,18 +273,20 @@ function BoletimComercialTab() {
         </div>
 
         {/* sub-metas */}
-        {resumo.valorUpgrades > 0 && (
-          <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
-            <div>
-              <p className="text-xs text-slate-500 mb-1">📦 Clientes Novos</p>
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{brl(resumo.valorClientesNovos)}</p>
-              <div className="mt-1"><ProgressBar perc={(resumo.valorClientesNovos / meta.geral) * 100} height="h-1.5" /></div>
-            </div>
-            <div>
-              <p className="text-xs text-slate-500 mb-1">⚡ Upgrades</p>
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{brl(resumo.valorUpgrades)}</p>
-              <div className="mt-1"><ProgressBar perc={(resumo.valorUpgrades / meta.geral) * 100} height="h-1.5" /></div>
-            </div>
+        {(resumo.valorUpgrades > 0 || (resumo.valorPaycore ?? 0) > 0) && (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mt-4 pt-4 border-t border-slate-200 dark:border-slate-700">
+            {([
+              ['📦 Clientes Novos', resumo.valorClientesNovos],
+              ['⚡ Upgrades', resumo.valorUpgrades],
+              ['🔄 Reativados', resumo.valorReativados],
+              ['💳 PayCore', resumo.valorPaycore ?? 0],
+            ] as const).filter(([, v]) => v > 0).map(([rotulo, valor]) => (
+              <div key={rotulo}>
+                <p className="text-xs text-slate-500 mb-1">{rotulo}</p>
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">{brl(valor)}</p>
+                <div className="mt-1"><ProgressBar perc={(valor / meta.geral) * 100} height="h-1.5" /></div>
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -333,6 +346,19 @@ function BoletimComercialTab() {
           </div>
           <p className="text-2xl font-black text-amber-400">{brl(resumo.valorUpgrades)}</p>
           <p className="text-xs text-slate-500 mt-0.5">comissões</p>
+        </div>
+
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-slate-500">PayCore</p>
+            <CreditCard className={`w-4 h-4 ${(resumo.qtdPaycore ?? 0) > 0 ? 'text-violet-400' : 'text-slate-500'}`} />
+          </div>
+          <p className={`text-2xl font-black ${(resumo.qtdPaycore ?? 0) > 0 ? 'text-violet-400' : 'text-slate-400'}`}>
+            {brl(resumo.valorPaycore ?? 0)}
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {(resumo.qtdPaycore ?? 0) > 0 ? `${resumo.qtdPaycore} assinatura(s)` : '—'}
+          </p>
         </div>
 
         <div className={clsx(
@@ -892,6 +918,52 @@ function BoletimComercialTab() {
                 <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-xs">{u.descricao}</td>
                 <td className="text-right px-3 py-2 text-amber-400 font-semibold">{brl(u.valor)}</td>
                 <td className="text-center px-3 py-2 text-slate-500 text-xs">{dataBR(u.data_venda)}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── PayCore Detalhado ─────────────────────────────────────── */}
+      {(dados.paycore?.detalhe.length ?? 0) > 0 && (
+        <div className="bg-white dark:bg-slate-800 border border-violet-500/20 rounded-2xl p-5 overflow-x-auto">
+          <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+            <CreditCard className="w-4 h-4 text-violet-400" /> PayCore ({dados.paycore!.detalhe.length})
+          </h2>
+          <p className="text-xs text-slate-500 mb-3">
+            Assinaturas que começaram no período. O que entra na meta é a mensalidade
+            ({brl(dados.paycore!.valor)}); o caixa recebido no mês foi {brl(dados.paycore!.caixa.bruto)}
+            {' '}em {dados.paycore!.caixa.pagamentos} pagamento(s) e fica fora da meta, por ser outra unidade.
+          </p>
+          <table className="w-full text-sm min-w-[720px]">
+            <thead><tr className="border-b border-slate-200 dark:border-slate-700">
+              <th className="text-left px-3 py-2 text-slate-500 dark:text-slate-400">Cliente</th>
+              <th className="text-left px-3 py-2 text-slate-500 dark:text-slate-400">Produto</th>
+              <th className="text-left px-3 py-2 text-slate-500 dark:text-slate-400">Servidor</th>
+              <th className="text-left px-3 py-2 text-slate-500 dark:text-slate-400">Vendedor</th>
+              <th className="text-right px-3 py-2 text-slate-500 dark:text-slate-400">Valor Mensal</th>
+              <th className="text-center px-3 py-2 text-slate-500 dark:text-slate-400">Início</th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">{dados.paycore!.detalhe.map((a) => (
+              <tr key={a.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-700/30">
+                <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
+                  {a.cliente ?? '—'}
+                  {a.jaContado && (
+                    <span className="block text-[10px] text-amber-600 dark:text-amber-400">
+                      já contado em clientes novos — fora da meta
+                    </span>
+                  )}
+                </td>
+                <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
+                  {a.produto ?? '—'}
+                  {a.plano && <span className="block text-[10px] text-slate-400">{a.plano}</span>}
+                </td>
+                <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-xs">{a.servidor ?? '—'}</td>
+                <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-xs">{a.vendedor ?? '—'}</td>
+                <td className={`text-right px-3 py-2 font-semibold ${a.jaContado ? 'text-slate-400 line-through' : 'text-violet-400'}`}>
+                  {brl(a.valor)}
+                </td>
+                <td className="text-center px-3 py-2 text-slate-500 text-xs">{dataBR(a.inicio)}</td>
               </tr>
             ))}</tbody>
           </table>

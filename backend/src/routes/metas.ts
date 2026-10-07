@@ -353,7 +353,7 @@ export async function metasRoutes(app: FastifyInstance) {
       const label = d.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' })
         .replace('.', '').replace(' de ', '/')
 
-      const [[ev], [up], [evAnt], [upAnt], [perd], [reat]] = await Promise.all([
+      const [[ev], [up], [evAnt], [upAnt], [perd], [reat], [pay]] = await Promise.all([
         prisma.$queryRaw<any[]>`
           SELECT COALESCE(SUM(c.valor_mensalidade),0) AS vNovos, COUNT(c.cod_cli) AS qtd
           FROM cliente c
@@ -398,9 +398,19 @@ export async function metasRoutes(app: FastifyInstance) {
             AND NOT (c.DATACADASTRO_CLI BETWEEN ${ini} AND ${fim})
             AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL,0) <> 8
         `.catch(() => [{ vReat: 0 }]),
+        // PayCore: mesma regra do realizado, para a tendência não contradizer o topo da tela.
+        prisma.$queryRaw<any[]>`
+          SELECT COALESCE(SUM(a.mensal + a.valor_modulos),0) AS vPay
+          FROM paycore_assinatura a
+          LEFT JOIN paycore_cliente pc
+            ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
+          LEFT JOIN cliente c ON c.cod_cli = pc.cod_cli
+          WHERE DATE(a.inicio) BETWEEN ${ini} AND ${fim}
+            AND (c.cod_cli IS NULL OR NOT (DATE(c.DATACADASTRO_CLI) BETWEEN ${ini} AND ${fim}))
+        `.catch(() => [{ vPay: 0 }]),
       ])
 
-      const receitaNovaMes    = n(ev.vNovos) + n(up.vUpg) + n(reat.vReat)
+      const receitaNovaMes    = n(ev.vNovos) + n(up.vUpg) + n(reat.vReat) + n(pay.vPay)
       const receitaPerdidaMes = n(perd.vPerd)
 
       evolucao.push({
@@ -468,6 +478,46 @@ export async function metasRoutes(app: FastifyInstance) {
       projecao.push({ mes: label, valor, acumulado: crescimentoMedioMes * i })
     }
 
+    // ── PayCore ──
+    // O boletim mede receita RECORRENTE nova, então o que entra na meta é a mensalidade das
+    // assinaturas que começaram no período — não o caixa recebido, que é outra unidade.
+    // Assinatura de cliente que já foi contado como "novo" aqui fica de fora, senão a mesma
+    // receita entraria duas vezes na meta.
+    const [paycoreRow] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS qtd, COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+         FROM paycore_assinatura a
+         LEFT JOIN paycore_cliente pc
+           ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
+         LEFT JOIN cliente c ON c.cod_cli = pc.cod_cli
+        WHERE DATE(a.inicio) BETWEEN ? AND ?
+          AND (c.cod_cli IS NULL OR DATE(c.DATACADASTRO_CLI) NOT BETWEEN ? AND ?)`,
+      dataIni, dataFim, dataIni, dataFim,
+    ).catch((err) => { console.error('Erro PayCore (meta):', err); return [{ qtd: 0, valor: 0 }] })
+
+    // Caixa efetivamente recebido no período. Fica fora da meta, só como informação.
+    const [paycoreCaixaRow] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS qtd, COALESCE(SUM(valor), 0) AS bruto,
+              COALESCE(SUM(COALESCE(valor_liquido, valor)), 0) AS liquido
+         FROM paycore_faturamento
+        WHERE status = 'succeeded' AND DATE(pago_em) BETWEEN ? AND ?`,
+      dataIni, dataFim,
+    ).catch(() => [{ qtd: 0, bruto: 0, liquido: 0 }])
+
+    const paycoreDetail = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT a.subscription_id, a.cliente_nome, a.app_nome, a.plano,
+              (a.mensal + a.valor_modulos) AS valor, a.inicio, a.status,
+              s.nome AS servidor, pc.cod_cli, pc.vendedor_nome,
+              (c.cod_cli IS NOT NULL AND DATE(c.DATACADASTRO_CLI) BETWEEN ? AND ?) AS jaContado
+         FROM paycore_assinatura a
+         LEFT JOIN paycore_servidor s ON s.id = a.servidor_id
+         LEFT JOIN paycore_cliente pc
+           ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
+         LEFT JOIN cliente c ON c.cod_cli = pc.cod_cli
+        WHERE DATE(a.inicio) BETWEEN ? AND ?
+        ORDER BY a.inicio DESC`,
+      dataIni, dataFim, dataIni, dataFim,
+    ).catch(() => [] as any[])
+
     const valorUpgrades      = n(upgRow.valor)
     const valorClientesNovos = n(novosRow.valor)
     const qtdNovos           = n(novosRow.qtd)
@@ -476,8 +526,10 @@ export async function metasRoutes(app: FastifyInstance) {
     const qtdReativados      = n(reativRow.qtd)
     const valorReativados    = n(reativRow.valor)
     const totalAtivos        = n(totalRow.qtd)
+    const qtdPaycore         = n(paycoreRow.qtd)
+    const valorPaycore       = n(paycoreRow.valor)
     // Reativado entra no realizado igual ao legado: e receita que voltou no periodo.
-    const receitaNova        = valorUpgrades + valorClientesNovos + valorReativados
+    const receitaNova        = valorUpgrades + valorClientesNovos + valorReativados + valorPaycore
     const receitaLiquida     = receitaNova - receitaPerdida
     const percMeta           = META_GERAL > 0 ? (receitaNova / META_GERAL) * 100 : 0
 
@@ -647,7 +699,31 @@ export async function metasRoutes(app: FastifyInstance) {
         totalAtivos, qtdNovos, valorClientesNovos,
         qtdPerdidos, receitaPerdida, valorUpgrades,
         qtdReativados, valorReativados,
+        qtdPaycore, valorPaycore,
         receitaNova, receitaLiquida, percMeta,
+      },
+      paycore: {
+        assinaturas: qtdPaycore,
+        valor: valorPaycore,
+        // Caixa recebido no período — informativo, não entra na meta.
+        caixa: {
+          pagamentos: n(paycoreCaixaRow?.qtd),
+          bruto: n(paycoreCaixaRow?.bruto),
+          liquido: n(paycoreCaixaRow?.liquido),
+        },
+        detalhe: paycoreDetail.map((a: any) => ({
+          id: a.subscription_id,
+          cliente: a.cliente_nome,
+          produto: a.app_nome,
+          plano: a.plano,
+          valor: n(a.valor),
+          inicio: a.inicio,
+          status: a.status,
+          servidor: a.servidor,
+          vendedor: a.vendedor_nome,
+          // Já contado como cliente novo na base — não soma de novo na meta.
+          jaContado: Number(a.jaContado ?? 0) === 1,
+        })),
       },
       porFilial,
       evolucao,
