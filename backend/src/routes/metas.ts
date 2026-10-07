@@ -1037,13 +1037,23 @@ export async function metasRoutes(app: FastifyInstance) {
     // Ritmo necessário para fechar a meta.
     if (META_GERAL > 0 && receitaNova < META_GERAL) {
       const falta = META_GERAL - receitaNova
+      const f = ritmo.fatorNecessario
+      // O alarme é o ritmo, não o percentual: 22% no dia 7 de 31 é estar em dia.
+      const tomRitmo = diasRestantes <= 0 ? 'critico'
+        : ritmo.distanciaRitmo >= 0 ? 'bom'
+        : f !== null && f > 2 ? 'critico'
+        : f !== null && f > 1.25 ? 'alerta'
+        : 'neutro'
       insights.push({
-        tom: ritmo.fatorNecessario !== null && ritmo.fatorNecessario > 2 ? 'critico' : 'alerta',
+        tom: tomRitmo,
         titulo: 'Ritmo para bater a meta',
-        texto: diasRestantes > 0
-          ? `Faltam ${brlTexto(falta)} em ${diasRestantes} dia(s): é preciso fechar ${brlTexto(ritmo.necessarioPorDia)} por dia, contra ${brlTexto(ritmo.mediaDiaria)} por dia no ritmo atual`
-            + (ritmo.fatorNecessario ? ` — ${ritmo.fatorNecessario.toFixed(1)}x o que vem sendo feito.` : '.')
-          : `O período fechou ${brlTexto(falta)} abaixo da meta.`,
+        texto: diasRestantes <= 0
+          ? `O período fechou ${brlTexto(falta)} abaixo da meta.`
+          : ritmo.distanciaRitmo >= 0
+            ? `No ritmo: ${brlTexto(ritmo.distanciaRitmo)} à frente do esperado para hoje. `
+              + `Mantendo ${brlTexto(ritmo.necessarioPorDia)} por dia nos ${diasRestantes} dia(s) restantes, a meta fecha.`
+            : `Faltam ${brlTexto(falta)} em ${diasRestantes} dia(s): é preciso fechar ${brlTexto(ritmo.necessarioPorDia)} por dia, contra ${brlTexto(ritmo.mediaDiaria)} por dia no ritmo atual`
+              + (f ? ` — ${f.toFixed(1)}x o que vem sendo feito.` : '.'),
       })
     } else if (META_GERAL > 0) {
       insights.push({

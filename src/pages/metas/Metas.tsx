@@ -223,6 +223,49 @@ function BoletimComercialTab() {
   const { periodo, meta, resumo, porFilial, evolucao } = dados
   const perc = resumo.percMeta
   const faltaMeta = Math.max(0, meta.geral - resumo.receitaNova)
+
+  /**
+   * Diagnóstico do período pelo RITMO, não pelo percentual acumulado: 22% no dia 7 de 31 é estar
+   * no ritmo; 60% no dia 28 é estar atrasado. Compara o realizado com o esperado para hoje e olha
+   * quantas vezes o ritmo diário precisa crescer nos dias que restam.
+   */
+  const situacao = (() => {
+    if (perc >= 100) {
+      return { icone: '🎉', texto: 'Meta batida!', detalhe: null as string | null,
+        classe: 'text-emerald-500' }
+    }
+    const r = dados.ritmo
+    if (!r || meta.geral <= 0) {
+      return { icone: '📊', texto: `Faltam ${brl(faltaMeta)} para bater a meta`,
+        detalhe: null as string | null, classe: percColor(perc) }
+    }
+    if (r.diasRestantes <= 0) {
+      return { icone: '🚨', texto: `Período encerrado ${brl(faltaMeta)} abaixo da meta`,
+        detalhe: `Fechou em ${perc.toFixed(0)}% do objetivo.`, classe: 'text-red-500' }
+    }
+    const adiantado = r.distanciaRitmo >= 0
+    const fator = r.fatorNecessario
+    const comum = `Faltam ${brl(faltaMeta)} em ${r.diasRestantes} dia(s): ${brl(r.necessarioPorDia)} por dia.`
+    if (adiantado) {
+      return { icone: '✅', texto: `No ritmo — ${brl(r.distanciaRitmo)} à frente do esperado para hoje`,
+        detalhe: comum, classe: 'text-emerald-500' }
+    }
+    if (fator !== null && fator <= 1.25) {
+      return { icone: '🟡', texto: `Quase no ritmo — ${brl(Math.abs(r.distanciaRitmo))} atrás do esperado para hoje`,
+        detalhe: `${comum} É ${fator.toFixed(1)}× a média atual de ${brl(r.mediaDiaria)} por dia.`,
+        classe: 'text-amber-500' }
+    }
+    if (fator !== null && fator <= 2) {
+      return { icone: '⚠️', texto: `Atrasado — ${brl(Math.abs(r.distanciaRitmo))} atrás do esperado para hoje`,
+        detalhe: `${comum} É ${fator.toFixed(1)}× a média atual de ${brl(r.mediaDiaria)} por dia.`,
+        classe: 'text-orange-500' }
+    }
+    return { icone: '🚨', texto: `Situação crítica — ${brl(Math.abs(r.distanciaRitmo))} atrás do esperado para hoje`,
+      detalhe: fator !== null
+        ? `${comum} Seria preciso ${fator.toFixed(1)}× a média atual de ${brl(r.mediaDiaria)} por dia.`
+        : comum,
+      classe: 'text-red-500' }
+  })()
   const isMesAtual = ano === now.getFullYear() && mes === now.getMonth() + 1
   const evolucao12Meses = evolucao.slice(-12)
   const receitaInicio12m = evolucao12Meses[0]?.receitaNova ?? 0
@@ -259,25 +302,27 @@ function BoletimComercialTab() {
       </div>
 
       {/* ── Hero — Meta Geral ─────────────────────────────────────── */}
+      {/*
+        A situação não se mede pelo % acumulado: 22% no dia 7 de 31 é estar no ritmo, e 60% no dia
+        28 é estar atrasado. O que vale é o realizado contra o esperado para hoje e quantas vezes o
+        ritmo diário precisa crescer no que resta do mês.
+      */}
       <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 mb-5">
           <div>
             <p className="text-xs text-slate-500 uppercase tracking-wider mb-1">Meta do Período</p>
             <div className="flex items-baseline gap-3">
-              <span className={`text-4xl font-black ${percColor(perc)}`}>
+              <span className={clsx('text-4xl font-black', situacao.classe)}>
                 {perc.toFixed(0)}%
               </span>
               <span className="text-slate-500 dark:text-slate-400 text-sm">de {brl(meta.geral)}</span>
             </div>
-            <p className={`text-sm mt-1 font-medium ${percColor(perc)}`}>
-              {perc >= 100
-                ? '🎉 Meta batida!'
-                : perc >= 75
-                ? `🔥 Faltam ${brl(faltaMeta)} para bater a meta`
-                : perc >= 50
-                ? `⚠️ Faltam ${brl(faltaMeta)} — acelere!`
-                : `🚨 Faltam ${brl(faltaMeta)} — situação crítica`}
+            <p className={clsx('text-sm mt-1 font-medium', situacao.classe)}>
+              {situacao.icone} {situacao.texto}
             </p>
+            {situacao.detalhe && (
+              <p className="text-xs text-slate-500 mt-0.5">{situacao.detalhe}</p>
+            )}
           </div>
           <div className="flex gap-3">
             <div className="text-right">
