@@ -322,7 +322,7 @@ export async function metasRoutes(app: FastifyInstance) {
 
     // 5. Por filial
     const porFilialRaw = await prisma.$queryRaw<any[]>`
-      SELECT COALESCE(p.NOME_CON, CONCAT('Filial ', c.COD_CON)) AS nome,
+      SELECT COALESCE(NULLIF(p.descricao, ''), CONCAT('Filial ', c.COD_CON)) AS nome,
              c.COD_CON AS codCon,
              COUNT(c.cod_cli) AS qtd,
              COALESCE(SUM(c.valor_mensalidade), 0) AS valor
@@ -333,7 +333,7 @@ export async function metasRoutes(app: FastifyInstance) {
         AND c.DATACADASTRO_CLI BETWEEN ${dataIni} AND ${dataFim}
         AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
         AND c.COD_CON IS NOT NULL
-      GROUP BY c.COD_CON, p.NOME_CON
+      GROUP BY c.COD_CON, p.descricao
       ORDER BY valor DESC
     `.catch((err) => { console.error('Erro por filial:', err); return [] as any[] })
 
@@ -601,6 +601,42 @@ export async function metasRoutes(app: FastifyInstance) {
       GROUP BY vendedor
     `.catch(() => [] as any[])
 
+    // Clientes novos e reativados por vendedor. A tabela `cliente` não guarda vendedor, então a
+    // atribuição vem do CRM pelo CNPJ (último vendedor que atendeu) e, na falta dele, de quem fez
+    // o cadastro. Sem isso a soma por vendedor ficava menor que a soma por produto.
+    const vendedorDoCliente = `COALESCE(
+      (SELECT nn.vendedor_nome FROM crm_negocio nn
+        WHERE nn.documento = REPLACE(REPLACE(REPLACE(REPLACE(c.CNPJ_CLI,'.',''),'/',''),'-',''),' ','')
+          AND nn.vendedor_nome IS NOT NULL AND nn.vendedor_nome <> ''
+        ORDER BY COALESCE(nn.finalizado_em, nn.criado_em, nn.data) DESC, nn.id DESC LIMIT 1),
+      NULLIF(u.NOME_USU, ''),
+      'Sem vendedor')`
+
+    const novosPorVendedor = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT ${vendedorDoCliente} AS vendedor,
+              COUNT(*) AS qtd, COALESCE(SUM(c.valor_mensalidade), 0) AS valor
+         FROM cliente c
+         LEFT JOIN usuario u ON u.COD_USU = c.cod_usu_local_Cad
+        WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000 AND c.ATIVO = 'S'
+          AND c.DATACADASTRO_CLI BETWEEN ? AND ?
+          AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
+        GROUP BY vendedor`,
+      dataIni, dataFim,
+    ).catch((err) => { console.error('Erro novos por vendedor:', err); return [] as any[] })
+
+    const reativadosPorVendedor = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT ${vendedorDoCliente} AS vendedor,
+              COUNT(*) AS qtd, COALESCE(SUM(c.valor_mensalidade), 0) AS valor
+         FROM cliente c
+         LEFT JOIN usuario u ON u.COD_USU = c.cod_usu_local_Cad
+        WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000 AND c.ATIVO = 'S'
+          AND c.DATA_DESATIVACAO BETWEEN ? AND ?
+          AND NOT (c.DATACADASTRO_CLI BETWEEN ? AND ?)
+          AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
+        GROUP BY vendedor`,
+      dataIni, dataFim, dataIni, dataFim,
+    ).catch(() => [] as any[])
+
     // Receita em risco: assinatura suspensa ainda ocupa a base mas pode nunca mais pagar.
     const paycoreSaude = await prisma.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(a.status, 'desconhecido') AS status, COUNT(*) AS qtd,
@@ -635,20 +671,66 @@ export async function metasRoutes(app: FastifyInstance) {
     const receitaLiquida     = receitaNova - receitaPerdida
     const percMeta           = META_GERAL > 0 ? (receitaNova / META_GERAL) * 100 : 0
 
+    // Upgrades e PayCore por filial, para a filial ser medida com a mesma régua da meta geral.
+    const upgPorFilial = await prisma.$queryRaw<any[]>`
+      SELECT c.COD_CON AS codCon, COALESCE(SUM(co.Valor_operacao), 0) AS valor
+      FROM comissoes_funcionario co
+      INNER JOIN cliente c ON c.cod_cli = co.cod_cli
+      WHERE CAST(co.data_venda AS DATE) BETWEEN ${dataIni} AND ${dataFim}
+        AND c.cod_cli NOT IN (1,6,7,8) AND c.cod_cla <> 30 AND c.COD_CON IS NOT NULL
+      GROUP BY c.COD_CON
+    `.catch(() => [] as any[])
+
+    const paycorePorFilial = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT c.COD_CON AS codCon, COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+         FROM paycore_assinatura a
+         INNER JOIN paycore_cliente pc
+           ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
+         INNER JOIN cliente c ON c.cod_cli = pc.cod_cli
+        WHERE DATE(a.inicio) BETWEEN ? AND ?
+          AND NOT (DATE(c.DATACADASTRO_CLI) BETWEEN ? AND ?)
+          AND c.COD_CON IS NOT NULL
+        GROUP BY c.COD_CON`,
+      dataIni, dataFim, dataIni, dataFim,
+    ).catch(() => [] as any[])
+
+    const extraFilial = new Map<number, { upgrades: number; paycore: number }>()
+    for (const u of upgPorFilial) {
+      const cod = n(u.codCon)
+      const at = extraFilial.get(cod) ?? { upgrades: 0, paycore: 0 }
+      at.upgrades += n(u.valor)
+      extraFilial.set(cod, at)
+    }
+    for (const u of paycorePorFilial) {
+      const cod = n(u.codCon)
+      const at = extraFilial.get(cod) ?? { upgrades: 0, paycore: 0 }
+      at.paycore += n(u.valor)
+      extraFilial.set(cod, at)
+    }
+
     const filialMetas: Record<number, number> = { 1: META_LIMOEIRO, 2: META_ARACATI }
-    const porFilial = porFilialRaw.map((f: any) => {
-      const cod = n(f.codCon)
-      const val = n(f.valor)
+    const codsFilial = new Set<number>([
+      ...porFilialRaw.map((f: any) => n(f.codCon)),
+      ...extraFilial.keys(),
+    ])
+    const porFilial = [...codsFilial].map((cod) => {
+      const f = porFilialRaw.find((x: any) => n(x.codCon) === cod)
+      const extra = extraFilial.get(cod) ?? { upgrades: 0, paycore: 0 }
+      const novos = n(f?.valor)
+      const val = novos + extra.upgrades + extra.paycore
       const metaF = filialMetas[cod] ?? 0
       return {
-        nome: f.nome ?? `Filial ${cod}`,
+        nome: f?.nome ?? `Filial ${cod}`,
         codCon: cod,
-        qtd: n(f.qtd),
+        qtd: n(f?.qtd),
         valor: val,
+        novos,
+        upgrades: extra.upgrades,
+        paycore: extra.paycore,
         meta: metaF,
         perc: metaF > 0 ? (val / metaF) * 100 : 0,
       }
-    })
+    }).sort((a, b) => b.valor - a.valor)
 
     // Detalhes de clientes novos (apenas NOVO - para simplificar)
     const clientesNovosDetail = await prisma.$queryRaw<any[]>`
@@ -794,11 +876,16 @@ export async function metasRoutes(app: FastifyInstance) {
             AND hb.tipo = 'D'
         `.catch((err) => { console.error('Erro perdidos por motivo:', err); return [] as any[] })
 
+    /** Moeda dentro de textos gerados no servidor. */
+    const brlTexto = (v: number) =>
+      Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
     // ── Quebra por produto, plano e vendedor ──
     // A base própria entra como um produto só: é como o gestor enxerga o Command vendido aqui.
     const produtos: Array<{
       produto: string; servidor: string | null; origem: 'paycore' | 'base'
       itens: number; valor: number; perc: number; percMeta: number
+      composicao?: string
     }> = []
 
     const porProdutoPaycore = new Map<string, { servidor: string; itens: number; valor: number }>()
@@ -820,6 +907,12 @@ export async function metasRoutes(app: FastifyInstance) {
       produtos.push({
         produto: 'Sistema Command (base própria)', servidor: null, origem: 'base',
         itens: qtdNovos + qtdReativados, valor: valorBase, perc: 0, percMeta: 0,
+        // O valor não é só dos clientes novos: diz a composição para ninguém somar errado.
+        composicao: [
+          qtdNovos > 0 ? `${qtdNovos} cliente(s) novo(s): ${brlTexto(valorClientesNovos)}` : null,
+          valorUpgrades > 0 ? `upgrades: ${brlTexto(valorUpgrades)}` : null,
+          qtdReativados > 0 ? `${qtdReativados} reativado(s): ${brlTexto(valorReativados)}` : null,
+        ].filter(Boolean).join(' · '),
       })
     }
     produtos.sort((a, b) => b.valor - a.valor)
@@ -840,22 +933,28 @@ export async function metasRoutes(app: FastifyInstance) {
     }))
 
     // Vendedor: junta upgrades da base com as assinaturas do PayCore.
-    const porVendedor = new Map<string, { upgrades: number; paycore: number; itens: number }>()
-    const somaVend = (nome: string, campo: 'upgrades' | 'paycore', valor: number, itens: number) => {
-      const atual = porVendedor.get(nome) ?? { upgrades: 0, paycore: 0, itens: 0 }
+    type Fonte = 'novos' | 'upgrades' | 'reativados' | 'paycore'
+    const porVendedor = new Map<string, Record<Fonte, number> & { itens: number }>()
+    const somaVend = (nome: string, campo: Fonte, valor: number, itens: number) => {
+      const atual = porVendedor.get(nome)
+        ?? { novos: 0, upgrades: 0, reativados: 0, paycore: 0, itens: 0 }
       atual[campo] += valor
       atual.itens += itens
       porVendedor.set(nome, atual)
     }
-    for (const v of upgradesPorVendedor) somaVend(String(v.vendedor), 'upgrades', n(v.valor), n(v.qtd))
-    for (const v of paycorePorVendedor) somaVend(String(v.vendedor), 'paycore', n(v.valor), n(v.qtd))
+    for (const v of novosPorVendedor)      somaVend(String(v.vendedor), 'novos', n(v.valor), n(v.qtd))
+    for (const v of upgradesPorVendedor)   somaVend(String(v.vendedor), 'upgrades', n(v.valor), n(v.qtd))
+    for (const v of reativadosPorVendedor) somaVend(String(v.vendedor), 'reativados', n(v.valor), n(v.qtd))
+    for (const v of paycorePorVendedor)    somaVend(String(v.vendedor), 'paycore', n(v.valor), n(v.qtd))
 
     const vendedores = [...porVendedor.entries()]
       .map(([nome, v]) => {
-        const total = v.upgrades + v.paycore
+        const total = v.novos + v.upgrades + v.reativados + v.paycore
         return {
           vendedor: nome,
+          novos: v.novos,
           upgrades: v.upgrades,
+          reativados: v.reativados,
           paycore: v.paycore,
           itens: v.itens,
           valor: total,
@@ -931,10 +1030,6 @@ export async function metasRoutes(app: FastifyInstance) {
       fatorNecessario: mediaDiaria > 0 && diasRestantes > 0 ? necessarioPorDia / mediaDiaria : null,
       curva,
     }
-
-    /** Moeda dentro do texto dos insights. */
-    const brlTexto = (v: number) =>
-      Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
     // ── Insights: leitura do período, não repetição dos números ──
     const insights: Array<{ tom: 'bom' | 'alerta' | 'critico' | 'neutro'; titulo: string; texto: string }> = []

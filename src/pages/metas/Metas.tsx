@@ -66,14 +66,15 @@ interface DadosComercial {
     produtos: Array<{
       produto: string; servidor: string | null; origem: 'paycore' | 'base'
       itens: number; valor: number; perc: number; percMeta: number
+      composicao?: string
     }>
     planos: Array<{
       produto: string; plano: string; servidor: string; periodicidade: string | null
       assinaturas: number; valor: number; perc: number; percMeta: number
     }>
     vendedores: Array<{
-      vendedor: string; upgrades: number; paycore: number; itens: number
-      valor: number; perc: number; percMeta: number
+      vendedor: string; novos: number; upgrades: number; reativados: number; paycore: number
+      itens: number; valor: number; perc: number; percMeta: number
     }>
     saudePaycore: Array<{ status: string; assinaturas: number; valor: number }>
     metodos: Array<{
@@ -1089,6 +1090,12 @@ function BoletimComercialTab() {
               Quanto cada produto trouxe de receita nova e o quanto isso representa da meta.
             </p>
             <div className="space-y-3">
+              <div className="flex items-baseline justify-between text-xs pb-2 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-500">Total</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">
+                  {brl(dados.analise!.produtos.reduce((s, pr) => s + pr.valor, 0))}
+                </span>
+              </div>
               {dados.analise!.produtos.map((pr) => (
                 <div key={`${pr.servidor}-${pr.produto}`}>
                   <div className="flex items-baseline justify-between gap-2 text-xs mb-1">
@@ -1103,7 +1110,9 @@ function BoletimComercialTab() {
                   </div>
                   <ProgressBar perc={pr.percMeta} height="h-2" />
                   <p className="text-[10px] text-slate-400 mt-0.5">
-                    {pr.itens} {pr.origem === 'paycore' ? 'assinatura(s)' : 'cliente(s)'} · {pr.perc.toFixed(0)}% do que entrou
+                    {pr.composicao
+                      ? `${pr.composicao} · ${pr.perc.toFixed(0)}% do que entrou`
+                      : `${pr.itens} assinatura(s) · ${pr.perc.toFixed(0)}% do que entrou`}
                   </p>
                 </div>
               ))}
@@ -1121,6 +1130,12 @@ function BoletimComercialTab() {
               <p className="text-xs text-slate-500 py-8 text-center">Nenhuma venda com vendedor no período.</p>
             ) : (
               <div className="space-y-3">
+                <div className="flex items-baseline justify-between text-xs pb-2 border-b border-slate-200 dark:border-slate-700">
+                  <span className="text-slate-500">Total atribuído</span>
+                  <span className="font-semibold text-slate-700 dark:text-slate-300">
+                    {brl(dados.analise!.vendedores.reduce((s, v) => s + v.valor, 0))}
+                  </span>
+                </div>
                 {dados.analise!.vendedores.map((v) => (
                   <div key={v.vendedor}>
                     <div className="flex items-baseline justify-between gap-2 text-xs mb-1">
@@ -1135,7 +1150,9 @@ function BoletimComercialTab() {
                     </div>
                     <ProgressBar perc={v.percMeta} height="h-2" />
                     <p className="text-[10px] text-slate-400 mt-0.5">
-                      {[v.upgrades > 0 ? `${brl(v.upgrades)} em upgrades` : null,
+                      {[v.novos > 0 ? `${brl(v.novos)} em clientes novos` : null,
+                        v.upgrades > 0 ? `${brl(v.upgrades)} em upgrades` : null,
+                        v.reativados > 0 ? `${brl(v.reativados)} em reativados` : null,
                         v.paycore > 0 ? `${brl(v.paycore)} no PayCore` : null]
                         .filter(Boolean).join(' · ') || '—'}
                     </p>
