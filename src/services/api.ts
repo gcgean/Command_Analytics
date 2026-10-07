@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, ConfigRevendas, TesteRevendas, MapaRevendas, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
@@ -795,6 +795,22 @@ export const api = {
     fetchApi<{ resultados: ResultadoSyncPaycore[] }>('/paycore/sincronizar', {
       method: 'POST', body: JSON.stringify({ servidorId }),
     }, 180_000),
+
+  // ─── Revendas (banco externo, sincronização diária) ────────
+  getConfigRevendas: () => fetchApi<ConfigRevendas>('/revendas/config'),
+  salvarConfigRevendas: (dados: {
+    host: string; porta: number; usuario: string; senha?: string; banco: string; ativo: boolean; horaSync: string
+  }) => fetchApi<{ ok: boolean }>('/revendas/config', { method: 'PUT', body: JSON.stringify(dados) }),
+  testarConexaoRevendas: () =>
+    fetchApi<TesteRevendas>('/revendas/testar', { method: 'POST' }, 60_000),
+  mapearBancoRevendas: (filtro?: string) =>
+    fetchApi<MapaRevendas>(`/revendas/mapa${filtro ? `?filtro=${encodeURIComponent(filtro)}` : ''}`, undefined, 120_000),
+  amostraTabelaRevendas: (tabela: string, limite = 20) =>
+    fetchApi<{ tabela: string; linhas: Record<string, unknown>[] }>(
+      `/revendas/amostra?tabela=${encodeURIComponent(tabela)}&limite=${limite}`, undefined, 60_000),
+  sincronizarRevendas: () =>
+    fetchApi<{ revendas: number; clientes: number; faturamento: number; erro?: string }>(
+      '/revendas/sincronizar', { method: 'POST' }, 300_000),
 
   // ─── CRM Cilos (consulta de vendedores e vendas) ───────────
   getConfigCrm: () => fetchApi<ConfigCrm>('/crm-integracao/config'),

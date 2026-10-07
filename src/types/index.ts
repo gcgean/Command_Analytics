@@ -1446,3 +1446,31 @@ export interface FiltrosFunil {
   pagina?: number
   limite?: number
 }
+
+/** Conexão com o banco externo das revendas (MySQL separado, somente leitura). */
+export interface ConfigRevendas {
+  host: string
+  porta: number
+  usuario: string
+  /** A senha nunca volta do backend; isso só diz se existe uma gravada. */
+  temSenha: boolean
+  banco: string
+  ativo: boolean
+  horaSync: string
+  ultimaSync: string | null
+  ultimoErro: string | null
+}
+
+export interface TesteRevendas {
+  ok: boolean
+  versao?: string
+  banco?: string
+  tabelas?: number
+  erro?: string
+}
+
+/** Esquema do banco das revendas, usado para mapear onde estão os dados. */
+export interface MapaRevendas {
+  banco: string | null
+  tabelas: Array<{ tabela: string; linhas: number; colunas: string[] }>
+}

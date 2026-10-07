@@ -46,6 +46,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'tabela-migracao',          label: 'Tabela de Migração',              grupo: 'COMERCIAL' },
   { id: 'paycore-clientes',         label: 'Clientes PayCore',                grupo: 'COMERCIAL' },
   { id: 'crm-integracao',           label: 'CRM Cilos',                       grupo: 'COMERCIAL' },
+  { id: 'revendas',                 label: 'Revendas',                        grupo: 'COMERCIAL' },
   // CERTIFICADOS DIGITAIS
   { id: 'certificados-digitais',    label: 'Controle de Certificados Digitais', grupo: 'CERTIFICADOS DIGITAIS' },
   // RH
