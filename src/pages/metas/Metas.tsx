@@ -1564,6 +1564,8 @@ type MetaCadastroForm = {
   setorResponsavel: Departamento
   valorMeta: string
   competencia: string
+  dataInicio: string
+  dataFim: string
   ativo: boolean
   usuariosVisualizacao: number[]
 }
@@ -1584,6 +1586,8 @@ const emptyMetaCadastroForm = (): MetaCadastroForm => ({
   setorResponsavel: 'Comercial',
   valorMeta: '',
   competencia: '',
+  dataInicio: '',
+  dataFim: '',
   ativo: true,
   usuariosVisualizacao: [],
 })
@@ -1675,6 +1679,8 @@ function MetasPagina({ modo }: { modo: 'cadastro' | 'boletim' }) {
       setorResponsavel: meta.setorResponsavel,
       valorMeta: String(meta.valorMeta ?? ''),
       competencia: meta.competencia || '',
+      dataInicio: meta.dataInicio || '',
+      dataFim: meta.dataFim || '',
       ativo: meta.ativo,
       usuariosVisualizacao: meta.usuariosVisualizacao.map((item) => item.usuarioId),
     })
@@ -1718,6 +1724,8 @@ function MetasPagina({ modo }: { modo: 'cadastro' | 'boletim' }) {
         setorResponsavel: metaForm.setorResponsavel,
         valorMeta: Number(metaForm.valorMeta || 0),
         competencia: metaForm.competencia.trim(),
+        dataInicio: metaForm.dataInicio,
+        dataFim: metaForm.dataFim,
         ativo: metaForm.ativo,
         usuariosVisualizacao: metaForm.usuariosVisualizacao,
       }
@@ -1870,13 +1878,26 @@ function MetasPagina({ modo }: { modo: 'cadastro' | 'boletim' }) {
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Competência</label>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Início do período</label>
                           <input
-                            value={metaForm.competencia}
-                            onChange={(e) => setMetaForm((current) => ({ ...current, competencia: e.target.value }))}
+                            type="date"
+                            value={metaForm.dataInicio}
+                            onChange={(e) => setMetaForm((current) => ({ ...current, dataInicio: e.target.value }))}
                             className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
-                            placeholder="Ex.: 2026-05 ou Maio/2026"
                           />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">Fim do período</label>
+                          <input
+                            type="date"
+                            value={metaForm.dataFim}
+                            min={metaForm.dataInicio || undefined}
+                            onChange={(e) => setMetaForm((current) => ({ ...current, dataFim: e.target.value }))}
+                            className="w-full rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+                          />
+                          {metaForm.dataInicio && metaForm.dataFim && metaForm.dataFim < metaForm.dataInicio && (
+                            <p className="text-xs text-red-500 mt-1">O fim não pode ser antes do início.</p>
+                          )}
                         </div>
                       </div>
 
@@ -1973,7 +1994,11 @@ function MetasPagina({ modo }: { modo: 'cadastro' | 'boletim' }) {
                                 </div>
                                 <div>
                                   <span className="text-slate-400">Competência:</span>{' '}
-                                  <span className="text-slate-700 dark:text-slate-200 font-medium">{meta.competencia || 'Não definida'}</span>
+                                  <span className="text-slate-700 dark:text-slate-200 font-medium">
+                                    {meta.dataInicio && meta.dataFim
+                                      ? `${dataBR(meta.dataInicio)} a ${dataBR(meta.dataFim)}`
+                                      : meta.competencia || 'Não definido'}
+                                  </span>
                                 </div>
                               </div>
                               <div>

@@ -23,6 +23,8 @@ export async function initMetasCadastro(): Promise<void> {
       setor_responsavel VARCHAR(80) NOT NULL,
       valor_meta DECIMAL(15,2) NOT NULL DEFAULT 0,
       competencia VARCHAR(20) NULL,
+      data_inicio DATE NULL,
+      data_fim DATE NULL,
       ativo TINYINT(1) NOT NULL DEFAULT 1,
       criado_em DATETIME NOT NULL DEFAULT NOW(),
       atualizado_em DATETIME NOT NULL DEFAULT NOW(),
@@ -45,4 +47,18 @@ export async function initMetasCadastro(): Promise<void> {
         ON UPDATE CASCADE ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+
+  // A competência era um texto livre ("2026-05"); o período agora tem começo e fim.
+  await garantirColuna('meta_cadastro', 'data_inicio', 'DATE NULL')
+  await garantirColuna('meta_cadastro', 'data_fim', 'DATE NULL')
+}
+
+/** Adiciona a coluna só se ela ainda não existir — o projeto não usa migrations. */
+async function garantirColuna(tabela: string, coluna: string, definicao: string): Promise<void> {
+  const [existe] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COUNT(*) AS q FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`, tabela, coluna)
+  if (Number(existe?.q ?? 0) === 0) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE \`${tabela}\` ADD COLUMN \`${coluna}\` ${definicao}`)
+  }
 }

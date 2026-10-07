@@ -989,6 +989,9 @@ export interface MetaCadastroItem {
   setorResponsavel: Departamento
   valorMeta: number
   competencia: string
+  /** Período da meta. A competência em texto fica só para o que foi cadastrado antes. */
+  dataInicio?: string
+  dataFim?: string
   ativo: boolean
   usuariosVisualizacao: MetaCadastroVisualizacao[]
   criadoEm?: string | null

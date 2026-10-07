@@ -632,6 +632,8 @@ export const api = {
     setorResponsavel?: string
     valorMeta?: number
     competencia?: string
+    dataInicio?: string
+    dataFim?: string
     ativo?: boolean
     usuariosVisualizacao?: number[]
   }) =>
@@ -643,6 +645,8 @@ export const api = {
     setorResponsavel?: string
     valorMeta?: number
     competencia?: string
+    dataInicio?: string
+    dataFim?: string
     ativo?: boolean
     usuariosVisualizacao?: number[]
   }) =>

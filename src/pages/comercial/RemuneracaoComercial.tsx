@@ -427,32 +427,40 @@ export function RemuneracaoComercial() {
           <Card>
             <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Escada de comissão</h3>
             <p className="text-xs text-slate-500 mt-0.5 mb-4">
-              Atingida a faixa, o percentual vale sobre <strong>todo</strong> o faturamento de implantação do mês.
+              Atingida a faixa, o percentual vale sobre <strong>toda</strong> a base do mês. Você digita
+              o piso de cada faixa e o percentual; o "até" vem do degrau seguinte.
             </p>
             <div className="space-y-2">
-              {plano.faixas.map((f, i) => (
+              {[...plano.faixas].map((f, i) => {
+                // O "até" não é digitado: é o degrau seguinte menos um centavo.
+                const proximo = plano.faixas
+                  .filter((x) => x.valorDe > f.valorDe)
+                  .sort((a2, b2) => a2.valorDe - b2.valorDe)[0]
+                return (
                 <div key={i} className="flex items-center gap-2">
-                  <span className="text-xs text-slate-500 w-14">a partir</span>
+                  <span className="text-xs text-slate-500 w-8">de</span>
                   <input type="number" step="0.01" className="input-field flex-1" value={f.valorDe}
                     onChange={(e) => {
                       const faixas = [...plano.faixas]
                       faixas[i] = { ...f, valorDe: Number(e.target.value) }
                       setPlano({ ...plano, faixas })
                     }} />
-                  <input type="number" step="0.001" className="input-field w-24" value={f.percentual}
+                  <span className="text-xs text-slate-500 w-8 text-center">até</span>
+                  <span className="text-xs text-slate-600 dark:text-slate-300 w-28 text-right tabular-nums">
+                    {proximo ? brl(proximo.valorDe - 0.01) : 'em diante'}
+                  </span>
+                  <input type="number" step="0.001" className="input-field w-20" value={f.percentual}
                     onChange={(e) => {
                       const faixas = [...plano.faixas]
                       faixas[i] = { ...f, percentual: Number(e.target.value) }
                       setPlano({ ...plano, faixas })
                     }} />
                   <span className="text-xs text-slate-500">%</span>
-                  <span className="text-xs text-slate-400 w-24 text-right">
-                    {brl((f.valorDe * f.percentual) / 100)}
-                  </span>
                   <button onClick={() => setPlano({ ...plano, faixas: plano.faixas.filter((_, j) => j !== i) })}
                     className="p-1 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
-              ))}
+                )
+              })}
               <Button variant="secondary"
                 onClick={() => setPlano({ ...plano, faixas: [...plano.faixas, { id: 0, valorDe: 0, percentual: 0 }] })}>
                 <Plus className="w-4 h-4" /> Nova faixa

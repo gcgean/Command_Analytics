@@ -98,7 +98,8 @@ export async function metasRoutes(app: FastifyInstance) {
     const metas = await prisma.$queryRaw<any[]>`
       SELECT m.id, m.nome, m.descricao, m.tipo_meta_id AS tipoMetaId, tm.nome AS tipoMetaNome,
              m.setor_responsavel AS setorResponsavel, m.valor_meta AS valorMeta,
-             m.competencia, m.ativo, m.criado_em AS criadoEm, m.atualizado_em AS atualizadoEm
+             m.competencia, m.data_inicio AS dataInicio, m.data_fim AS dataFim,
+             m.ativo, m.criado_em AS criadoEm, m.atualizado_em AS atualizadoEm
         FROM meta_cadastro m
         LEFT JOIN tipo_meta tm ON tm.id = m.tipo_meta_id
        ORDER BY m.ativo DESC, m.setor_responsavel ASC, m.nome ASC
@@ -130,6 +131,8 @@ export async function metasRoutes(app: FastifyInstance) {
       setorResponsavel: row.setorResponsavel,
       valorMeta: n(row.valorMeta),
       competencia: row.competencia || '',
+      dataInicio: row.dataInicio ? String(row.dataInicio).slice(0, 10) : '',
+      dataFim: row.dataFim ? String(row.dataFim).slice(0, 10) : '',
       ativo: Number(row.ativo ?? 0) === 1,
       usuariosVisualizacao: vinculosPorMeta.get(n(row.id)) || [],
       criadoEm: row.criadoEm,
@@ -145,6 +148,8 @@ export async function metasRoutes(app: FastifyInstance) {
       setorResponsavel?: string
       valorMeta?: number
       competencia?: string
+      dataInicio?: string
+      dataFim?: string
       ativo?: boolean
       usuariosVisualizacao?: number[]
     }
@@ -158,7 +163,7 @@ export async function metasRoutes(app: FastifyInstance) {
 
     await prisma.$executeRaw`
       INSERT INTO meta_cadastro (
-        nome, descricao, tipo_meta_id, setor_responsavel, valor_meta, competencia, ativo, criado_em, atualizado_em
+        nome, descricao, tipo_meta_id, setor_responsavel, valor_meta, competencia, data_inicio, data_fim, ativo, criado_em, atualizado_em
       ) VALUES (
         ${nome},
         ${String(body.descricao || '').trim() || null},
@@ -166,6 +171,8 @@ export async function metasRoutes(app: FastifyInstance) {
         ${setorResponsavel},
         ${Number(body.valorMeta || 0)},
         ${String(body.competencia || '').trim() || null},
+        ${String(body.dataInicio || '').trim() || null},
+        ${String(body.dataFim || '').trim() || null},
         ${body.ativo === false ? 0 : 1},
         NOW(),
         NOW()
@@ -201,6 +208,8 @@ export async function metasRoutes(app: FastifyInstance) {
       setorResponsavel?: string
       valorMeta?: number
       competencia?: string
+      dataInicio?: string
+      dataFim?: string
       ativo?: boolean
       usuariosVisualizacao?: number[]
     }
@@ -221,6 +230,8 @@ export async function metasRoutes(app: FastifyInstance) {
              setor_responsavel = ${setorResponsavel},
              valor_meta = ${Number(body.valorMeta || 0)},
              competencia = ${String(body.competencia || '').trim() || null},
+             data_inicio = ${String(body.dataInicio || '').trim() || null},
+             data_fim = ${String(body.dataFim || '').trim() || null},
              ativo = ${body.ativo === false ? 0 : 1},
              atualizado_em = NOW()
        WHERE id = ${id}
