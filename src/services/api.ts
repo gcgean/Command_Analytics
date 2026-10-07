@@ -813,8 +813,9 @@ export const api = {
   }) => fetchApi<{ ok: boolean }>('/comissoes/vendedores', { method: 'POST', body: JSON.stringify(dados) }),
   excluirVendedorComissao: (usuarioId: number) =>
     fetchApi<{ ok: boolean }>(`/comissoes/vendedores/${usuarioId}`, { method: 'DELETE' }),
-  getMeuDesempenho: (competencia: string) =>
-    fetchApi<MeuDesempenhoComissao>(`/comissoes/meu-desempenho?competencia=${competencia}`),
+  getMeuDesempenho: (competencia: string, usuarioId?: number) =>
+    fetchApi<MeuDesempenhoComissao>(
+      `/comissoes/meu-desempenho?competencia=${competencia}${usuarioId ? `&usuarioId=${usuarioId}` : ''}`),
   getApuracaoComissao: (competencia: string) =>
     fetchApi<ApuracaoComissao>(`/comissoes/apuracao?competencia=${competencia}`),
   fecharComissao: (competencia: string, usuarioId?: number) =>

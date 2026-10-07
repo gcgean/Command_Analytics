@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { listarPlanos, apurar, fechar, reabrir } from '../utils/comissoes'
+import { getUserPermissions } from './grupos'
 
 /** Plano de remuneração comercial: planos, faixas, vendedores e apuração mensal. */
 export async function comissoesRoutes(app: FastifyInstance) {
@@ -133,10 +134,20 @@ export async function comissoesRoutes(app: FastifyInstance) {
    * consulta a comissão de outra pessoa por aqui, nem trocando o parâmetro.
    */
   app.get('/meu-desempenho', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request, reply) => {
-    const { competencia } = request.query as { competencia?: string }
+    const { competencia, usuarioId } = request.query as { competencia?: string; usuarioId?: string }
     const comp = competencia || new Date().toISOString().slice(0, 7)
-    const eu = Number((request.user as { id: number } | undefined)?.id ?? 0)
-    if (!eu) return reply.status(401).send({ error: 'Sessão inválida.' })
+    const logado = Number((request.user as { id: number } | undefined)?.id ?? 0)
+    if (!logado) return reply.status(401).send({ error: 'Sessão inválida.' })
+
+    // Só quem administra a remuneração pode abrir o desempenho de outra pessoa. Para todos os
+    // demais vale o usuário do token, mesmo que mandem usuarioId na query.
+    const permissoes = await getUserPermissions(logado).catch(() => [] as string[])
+    const gestor = permissoes.includes('*') || permissoes.includes('remuneracao-comercial')
+    const pedido = Number(usuarioId ?? 0)
+    if (pedido && pedido !== logado && !gestor) {
+      return reply.status(403).send({ error: 'Você só pode ver o seu próprio desempenho.' })
+    }
+    const eu = gestor && pedido ? pedido : logado
 
     let linhas
     try {
@@ -169,8 +180,16 @@ export async function comissoesRoutes(app: FastifyInstance) {
     const planos = await listarPlanos()
     const plano = planos.find((p) => p.id === minha?.planoId) ?? planos[0] ?? null
 
+    // Para o gestor poder trocar de pessoa sem sair da tela.
+    const equipe = gestor
+      ? linhas.map((l) => ({ usuarioId: l.usuarioId, nome: l.nome }))
+      : []
+
     return {
       competencia: comp,
+      gestor,
+      usuarioId: eu,
+      equipe,
       vendedor: minha,
       // Sem vínculo com plano não há comissão a mostrar — a tela diz isso em vez de zerar tudo.
       semPlano: !minha,

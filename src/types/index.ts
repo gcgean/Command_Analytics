@@ -1607,6 +1607,11 @@ export interface ApuracaoComissao {
 /** O que o próprio vendedor vê em "Meu Desempenho". */
 export interface MeuDesempenhoComissao {
   competencia: string
+  /** Quem administra a remuneração pode abrir o desempenho de outra pessoa. */
+  gestor: boolean
+  usuarioId: number
+  /** Só vem preenchida para o gestor. */
+  equipe: Array<{ usuarioId: number; nome: string }>
   vendedor: LinhaComissao | null
   /** Sem vínculo com plano não há comissão a mostrar. */
   semPlano: boolean

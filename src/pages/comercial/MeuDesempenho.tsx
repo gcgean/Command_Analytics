@@ -35,18 +35,20 @@ export function MeuDesempenho() {
   const isDark = useThemeStore((s) => s.theme) === 'dark'
   const [competencia, setCompetencia] = useState(() => new Date().toISOString().slice(0, 7))
   const [dados, setDados] = useState<MeuDesempenhoComissao | null>(null)
+  // Vazio = eu mesmo. Só o gestor consegue mudar.
+  const [verUsuario, setVerUsuario] = useState<number | null>(null)
   const [carregando, setCarregando] = useState(true)
 
   const carregar = useCallback(async () => {
     setCarregando(true)
     try {
-      setDados(await api.getMeuDesempenho(competencia))
+      setDados(await api.getMeuDesempenho(competencia, verUsuario ?? undefined))
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível carregar seu desempenho.')
     } finally {
       setCarregando(false)
     }
-  }, [competencia, toast])
+  }, [competencia, verUsuario, toast])
 
   useEffect(() => { void carregar() }, [carregar])
 
@@ -60,10 +62,25 @@ export function MeuDesempenho() {
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Meu Desempenho</h1>
             <p className="text-slate-600 dark:text-slate-400 text-sm">
-              Seu progresso na meta e quanto você recebe no mês.
+              {dados?.gestor && dados.vendedor && verUsuario && verUsuario !== dados.usuarioId
+                ? `Progresso de ${dados.vendedor.nome} na meta e quanto recebe no mês.`
+                : 'Seu progresso na meta e quanto você recebe no mês.'}
             </p>
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        {dados?.gestor && dados.equipe.length > 0 && (
+          <select className="input-field w-56" value={verUsuario ?? dados.usuarioId}
+            onChange={(e) => setVerUsuario(Number(e.target.value))}>
+            {/* O gestor nem sempre está na equipe: a própria opção precisa existir. */}
+            {!dados.equipe.some((p) => p.usuarioId === dados.usuarioId) && (
+              <option value={dados.usuarioId}>Meu desempenho</option>
+            )}
+            {dados.equipe.map((p) => (
+              <option key={p.usuarioId} value={p.usuarioId}>{p.nome}</option>
+            ))}
+          </select>
+        )}
         <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1">
           <button onClick={() => setCompetencia(mover(competencia, -1))}
             className="p-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"><ChevronLeft className="w-4 h-4" /></button>
@@ -73,15 +90,24 @@ export function MeuDesempenho() {
           <button onClick={() => setCompetencia(mover(competencia, 1))}
             className="p-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"><ChevronRight className="w-4 h-4" /></button>
         </div>
+        </div>
       </div>
+
+      {dados?.gestor && verUsuario !== null && verUsuario !== dados.usuarioId && (
+        <div className="rounded-lg border border-blue-200 dark:border-blue-500/40 bg-blue-50 dark:bg-blue-500/10 p-3 text-xs text-blue-800 dark:text-blue-300">
+          Você está vendo o desempenho de outra pessoa.
+          <button onClick={() => setVerUsuario(null)} className="ml-2 underline">voltar ao meu</button>
+        </div>
+      )}
 
       {carregando && <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-emerald-500" /></div>}
 
       {!carregando && dados?.semPlano && (
         <Card>
           <p className="text-sm text-slate-600 dark:text-slate-300 py-6 text-center">
-            Você ainda não está vinculado a um plano de remuneração. Fale com a gestão comercial
-            para que seu plano, data de admissão e meta sejam cadastrados.
+            {dados?.gestor
+              ? 'Esta pessoa ainda não está vinculada a um plano de remuneração. Cadastre o vínculo em Remuneração Comercial › Vendedores.'
+              : 'Você ainda não está vinculado a um plano de remuneração. Fale com a gestão comercial para que seu plano, data de admissão e meta sejam cadastrados.'}
           </p>
         </Card>
       )}
