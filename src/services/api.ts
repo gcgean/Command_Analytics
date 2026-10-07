@@ -2,7 +2,7 @@ import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
   MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
-  PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
@@ -813,6 +813,8 @@ export const api = {
   }) => fetchApi<{ ok: boolean }>('/comissoes/vendedores', { method: 'POST', body: JSON.stringify(dados) }),
   excluirVendedorComissao: (usuarioId: number) =>
     fetchApi<{ ok: boolean }>(`/comissoes/vendedores/${usuarioId}`, { method: 'DELETE' }),
+  getMeuDesempenho: (competencia: string) =>
+    fetchApi<MeuDesempenhoComissao>(`/comissoes/meu-desempenho?competencia=${competencia}`),
   getApuracaoComissao: (competencia: string) =>
     fetchApi<ApuracaoComissao>(`/comissoes/apuracao?competencia=${competencia}`),
   fecharComissao: (competencia: string, usuarioId?: number) =>

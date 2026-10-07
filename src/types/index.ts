@@ -1603,3 +1603,15 @@ export interface ApuracaoComissao {
   linhas: LinhaComissao[]
   totais: { base: number; variavel: number; fixo: number; total: number }
 }
+
+/** O que o próprio vendedor vê em "Meu Desempenho". */
+export interface MeuDesempenhoComissao {
+  competencia: string
+  vendedor: LinhaComissao | null
+  /** Sem vínculo com plano não há comissão a mostrar. */
+  semPlano: boolean
+  escada: Array<{ id: number; valorDe: number; percentual: number }>
+  /** Posição no mês, sem expor o número dos colegas. */
+  ranking: { posicao: number; total: number } | null
+  historico: Array<{ competencia: string; base: number; percentual: number; variavel: number; total: number }>
+}

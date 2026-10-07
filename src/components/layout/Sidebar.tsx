@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Headphones, Calendar, Monitor,
   Users, BarChart3, GitBranch, Briefcase, BookUser,
   DollarSign, Award, Package,
-  Code2, Tag, Video, Target, Server, Database, Store, Percent,
+  Code2, Tag, Video, Target, Server, Database, Store, Percent, Trophy,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X, Star,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
   ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell, Cable, FolderKanban
@@ -103,7 +103,6 @@ const navGroups: { group: string; items: NavItem[] }[] = [
     group: 'COMERCIAL',
     items: [
       { label: 'Boletim Comercial', icon: <Target className="w-4 h-4" />, to: '/metas', recurso: 'boletim-comercial' },
-      { label: 'Cadastro de Metas', icon: <Target className="w-4 h-4" />, to: '/metas/cadastro', recurso: 'cadastro-metas' },
       // O orçamento é o cálculo que o comercial faz antes de fechar; ficava dentro de Implantação,
       // que é o time que executa depois.
       { label: 'Precificação', icon: <Receipt className="w-4 h-4" />, to: '/implantacao/orcamento', recurso: 'implantacao-orcamento' },
@@ -111,6 +110,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
       { label: 'Clientes PayCore', icon: <CreditCard className="w-4 h-4" />, to: '/comercial/paycore', recurso: 'paycore-clientes' },
       { label: 'CRM Cilos', icon: <Briefcase className="w-4 h-4" />, to: '/comercial/crm', recurso: 'crm-integracao' },
       { label: 'Revendas', icon: <Store className="w-4 h-4" />, to: '/comercial/revendas', recurso: 'revendas' },
+      { label: 'Meu Desempenho', icon: <Trophy className="w-4 h-4" />, to: '/comercial/meu-desempenho', recurso: 'meu-desempenho' },
       { label: 'Remuneração Comercial', icon: <Percent className="w-4 h-4" />, to: '/comercial/remuneracao', recurso: 'remuneracao-comercial' },
     ]
   },

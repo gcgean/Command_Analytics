@@ -128,6 +128,58 @@ export async function comissoesRoutes(app: FastifyInstance) {
     return fechar(b.competencia, b.usuarioId ?? null, quem ? Number(quem) : null)
   })
 
+  /**
+   * "Meu desempenho": o que o próprio vendedor vê. Usa sempre o usuário do token — ninguém
+   * consulta a comissão de outra pessoa por aqui, nem trocando o parâmetro.
+   */
+  app.get('/meu-desempenho', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request, reply) => {
+    const { competencia } = request.query as { competencia?: string }
+    const comp = competencia || new Date().toISOString().slice(0, 7)
+    const eu = Number((request.user as { id: number } | undefined)?.id ?? 0)
+    if (!eu) return reply.status(401).send({ error: 'Sessão inválida.' })
+
+    let linhas
+    try {
+      linhas = await apurar(comp)
+    } catch (e: any) {
+      return reply.status(400).send({ error: String(e?.message ?? e) })
+    }
+    const minha = linhas.find((l) => l.usuarioId === eu) ?? null
+
+    // Os últimos 6 meses, para a pessoa ver a própria evolução e não só a foto do mês.
+    const historico: Array<{ competencia: string; base: number; percentual: number; variavel: number; total: number }> = []
+    const [ano, mes] = comp.split('-').map(Number)
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(ano, mes - 1 - i, 1)
+      const c = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      const l = (await apurar(c)).find((x) => x.usuarioId === eu)
+      historico.push({
+        competencia: c,
+        base: l?.base ?? 0,
+        percentual: l?.percentual ?? 0,
+        variavel: l?.variavel ?? 0,
+        total: l?.total ?? 0,
+      })
+    }
+
+    // Onde a pessoa está no ranking do mês, sem expor o número dos colegas.
+    const ordenado = [...linhas].sort((a, b) => b.base - a.base)
+    const posicao = ordenado.findIndex((l) => l.usuarioId === eu)
+
+    const planos = await listarPlanos()
+    const plano = planos.find((p) => p.id === minha?.planoId) ?? planos[0] ?? null
+
+    return {
+      competencia: comp,
+      vendedor: minha,
+      // Sem vínculo com plano não há comissão a mostrar — a tela diz isso em vez de zerar tudo.
+      semPlano: !minha,
+      escada: plano?.faixas ?? [],
+      ranking: posicao >= 0 ? { posicao: posicao + 1, total: ordenado.length } : null,
+      historico,
+    }
+  })
+
   app.post('/apuracao/reabrir', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request) => {
     const b = request.body as { competencia: string; usuarioId: number }
     return reabrir(b.competencia, Number(b.usuarioId))

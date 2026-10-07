@@ -2169,8 +2169,3 @@ function MetasPagina({ modo }: { modo: 'cadastro' | 'boletim' }) {
 export function Metas() {
   return <MetasPagina modo="boletim" />
 }
-
-/** Rota /metas/cadastro — cadastro de metas e tipos de meta. */
-export function CadastroMetas() {
-  return <MetasPagina modo="cadastro" />
-}
