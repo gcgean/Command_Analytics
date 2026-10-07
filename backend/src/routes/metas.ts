@@ -518,6 +518,108 @@ export async function metasRoutes(app: FastifyInstance) {
       dataIni, dataFim, dataIni, dataFim,
     ).catch(() => [] as any[])
 
+    // Receita nova dia a dia do período: é o que permite comparar o acumulado com o ritmo ideal.
+    const porDiaRaw = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT dia, SUM(valor) AS valor FROM (
+         SELECT DATE(c.DATACADASTRO_CLI) AS dia, c.valor_mensalidade AS valor
+           FROM cliente c
+          WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000 AND c.ATIVO = 'S'
+            AND c.DATACADASTRO_CLI BETWEEN ? AND ?
+            AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
+         UNION ALL
+         SELECT CAST(co.data_venda AS DATE) AS dia, co.Valor_operacao AS valor
+           FROM comissoes_funcionario co
+           INNER JOIN cliente c ON c.cod_cli = co.cod_cli
+          WHERE CAST(co.data_venda AS DATE) BETWEEN ? AND ?
+            AND c.cod_cli NOT IN (1,6,7,8) AND c.cod_cla <> 30
+         UNION ALL
+         SELECT DATE(c.DATA_DESATIVACAO) AS dia, c.valor_mensalidade AS valor
+           FROM cliente c
+          WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000 AND c.ATIVO = 'S'
+            AND c.DATA_DESATIVACAO BETWEEN ? AND ?
+            AND NOT (c.DATACADASTRO_CLI BETWEEN ? AND ?)
+            AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
+         UNION ALL
+         SELECT DATE(a.inicio) AS dia, (a.mensal + a.valor_modulos) AS valor
+           FROM paycore_assinatura a
+           LEFT JOIN paycore_cliente pc
+             ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
+           LEFT JOIN cliente c ON c.cod_cli = pc.cod_cli
+          WHERE DATE(a.inicio) BETWEEN ? AND ?
+            AND (c.cod_cli IS NULL OR DATE(c.DATACADASTRO_CLI) NOT BETWEEN ? AND ?)
+       ) x WHERE dia IS NOT NULL GROUP BY dia ORDER BY dia`,
+      dataIni, dataFim, dataIni, dataFim, dataIni, dataFim, dataIni, dataFim,
+      dataIni, dataFim, dataIni, dataFim,
+    ).catch((err) => { console.error('Erro receita por dia:', err); return [] as any[] })
+
+    // ── Quebras da receita nova: produto, plano e vendedor ──
+    // Tudo medido na mesma unidade da meta (mensalidade nova), para as partes somarem o todo.
+
+    // PayCore por produto e plano. A mesma exclusão de dupla contagem do somatório da meta.
+    const paycorePorPlano = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(s.nome, 'PayCore') AS servidor,
+              COALESCE(a.app_nome, 'Sem produto') AS produto,
+              COALESCE(NULLIF(a.plano, ''), 'Sem plano') AS plano,
+              a.periodicidade,
+              COUNT(*) AS assinaturas,
+              COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+         FROM paycore_assinatura a
+         LEFT JOIN paycore_servidor s ON s.id = a.servidor_id
+         LEFT JOIN paycore_cliente pc
+           ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
+         LEFT JOIN cliente c ON c.cod_cli = pc.cod_cli
+        WHERE DATE(a.inicio) BETWEEN ? AND ?
+          AND (c.cod_cli IS NULL OR DATE(c.DATACADASTRO_CLI) NOT BETWEEN ? AND ?)
+        GROUP BY servidor, produto, plano, a.periodicidade
+        ORDER BY valor DESC`,
+      dataIni, dataFim, dataIni, dataFim,
+    ).catch(() => [] as any[])
+
+    // Vendedor das assinaturas do PayCore (vem do CRM / precificação, via paycore_cliente).
+    const paycorePorVendedor = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(NULLIF(pc.vendedor_nome, ''), 'Sem vendedor') AS vendedor,
+              COUNT(*) AS qtd, COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+         FROM paycore_assinatura a
+         LEFT JOIN paycore_cliente pc
+           ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
+         LEFT JOIN cliente c ON c.cod_cli = pc.cod_cli
+        WHERE DATE(a.inicio) BETWEEN ? AND ?
+          AND (c.cod_cli IS NULL OR DATE(c.DATACADASTRO_CLI) NOT BETWEEN ? AND ?)
+        GROUP BY vendedor`,
+      dataIni, dataFim, dataIni, dataFim,
+    ).catch(() => [] as any[])
+
+    // Upgrades por vendedor — aqui o vendedor é o da própria operação de comissão.
+    const upgradesPorVendedor = await prisma.$queryRaw<any[]>`
+      SELECT COALESCE(NULLIF(u.NOME_USU, ''), 'Sem vendedor') AS vendedor,
+             COUNT(*) AS qtd, COALESCE(SUM(co.Valor_operacao), 0) AS valor
+      FROM comissoes_funcionario co
+      INNER JOIN cliente c ON c.cod_cli = co.cod_cli
+      LEFT JOIN usuario u ON u.COD_USU = co.cod_func
+      WHERE CAST(co.data_venda AS DATE) BETWEEN ${dataIni} AND ${dataFim}
+        AND c.cod_cli NOT IN (1,6,7,8) AND c.cod_cla <> 30
+      GROUP BY vendedor
+    `.catch(() => [] as any[])
+
+    // Receita em risco: assinatura suspensa ainda ocupa a base mas pode nunca mais pagar.
+    const paycoreSaude = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(a.status, 'desconhecido') AS status, COUNT(*) AS qtd,
+              COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+         FROM paycore_assinatura a GROUP BY a.status`,
+    ).catch(() => [] as any[])
+
+    // Como os clientes do PayCore pagam — boleto que atrasa é cobrança manual depois.
+    const paycorePorMetodo = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(metodo, 'não informado') AS metodo, COUNT(*) AS qtd,
+              COALESCE(SUM(valor), 0) AS bruto,
+              SUM(valor_liquido IS NULL) AS sem_liquido,
+              COALESCE(SUM(COALESCE(valor_liquido, valor)), 0) AS liquido
+         FROM paycore_faturamento
+        WHERE status = 'succeeded' AND DATE(pago_em) BETWEEN ? AND ?
+        GROUP BY metodo ORDER BY bruto DESC`,
+      dataIni, dataFim,
+    ).catch(() => [] as any[])
+
     const valorUpgrades      = n(upgRow.valor)
     const valorClientesNovos = n(novosRow.valor)
     const qtdNovos           = n(novosRow.qtd)
@@ -692,6 +794,243 @@ export async function metasRoutes(app: FastifyInstance) {
             AND hb.tipo = 'D'
         `.catch((err) => { console.error('Erro perdidos por motivo:', err); return [] as any[] })
 
+    // ── Quebra por produto, plano e vendedor ──
+    // A base própria entra como um produto só: é como o gestor enxerga o Command vendido aqui.
+    const produtos: Array<{
+      produto: string; servidor: string | null; origem: 'paycore' | 'base'
+      itens: number; valor: number; perc: number; percMeta: number
+    }> = []
+
+    const porProdutoPaycore = new Map<string, { servidor: string; itens: number; valor: number }>()
+    for (const l of paycorePorPlano) {
+      const chave = `${l.servidor}|${l.produto}`
+      const atual = porProdutoPaycore.get(chave) ?? { servidor: l.servidor, itens: 0, valor: 0 }
+      atual.itens += n(l.assinaturas)
+      atual.valor += n(l.valor)
+      porProdutoPaycore.set(chave, atual)
+    }
+    for (const [chave, v] of porProdutoPaycore) {
+      produtos.push({
+        produto: chave.split('|')[1], servidor: v.servidor, origem: 'paycore',
+        itens: v.itens, valor: v.valor, perc: 0, percMeta: 0,
+      })
+    }
+    const valorBase = valorClientesNovos + valorUpgrades + valorReativados
+    if (valorBase > 0 || produtos.length === 0) {
+      produtos.push({
+        produto: 'Sistema Command (base própria)', servidor: null, origem: 'base',
+        itens: qtdNovos + qtdReativados, valor: valorBase, perc: 0, percMeta: 0,
+      })
+    }
+    produtos.sort((a, b) => b.valor - a.valor)
+    for (const p of produtos) {
+      p.perc = receitaNova > 0 ? (p.valor / receitaNova) * 100 : 0
+      p.percMeta = META_GERAL > 0 ? (p.valor / META_GERAL) * 100 : 0
+    }
+
+    const planos = paycorePorPlano.map((l: any) => ({
+      produto: l.produto,
+      plano: l.plano,
+      servidor: l.servidor,
+      periodicidade: l.periodicidade ?? null,
+      assinaturas: n(l.assinaturas),
+      valor: n(l.valor),
+      perc: receitaNova > 0 ? (n(l.valor) / receitaNova) * 100 : 0,
+      percMeta: META_GERAL > 0 ? (n(l.valor) / META_GERAL) * 100 : 0,
+    }))
+
+    // Vendedor: junta upgrades da base com as assinaturas do PayCore.
+    const porVendedor = new Map<string, { upgrades: number; paycore: number; itens: number }>()
+    const somaVend = (nome: string, campo: 'upgrades' | 'paycore', valor: number, itens: number) => {
+      const atual = porVendedor.get(nome) ?? { upgrades: 0, paycore: 0, itens: 0 }
+      atual[campo] += valor
+      atual.itens += itens
+      porVendedor.set(nome, atual)
+    }
+    for (const v of upgradesPorVendedor) somaVend(String(v.vendedor), 'upgrades', n(v.valor), n(v.qtd))
+    for (const v of paycorePorVendedor) somaVend(String(v.vendedor), 'paycore', n(v.valor), n(v.qtd))
+
+    const vendedores = [...porVendedor.entries()]
+      .map(([nome, v]) => {
+        const total = v.upgrades + v.paycore
+        return {
+          vendedor: nome,
+          upgrades: v.upgrades,
+          paycore: v.paycore,
+          itens: v.itens,
+          valor: total,
+          perc: receitaNova > 0 ? (total / receitaNova) * 100 : 0,
+          percMeta: META_GERAL > 0 ? (total / META_GERAL) * 100 : 0,
+        }
+      })
+      .sort((a, b) => b.valor - a.valor)
+
+    // Receita nova que não tem vendedor identificado — não dá para cobrar nem premiar ninguém.
+    const semVendedor = vendedores.find((v) => v.vendedor === 'Sem vendedor')?.valor ?? 0
+
+    const saudePaycore = paycoreSaude.map((s: any) => ({
+      status: String(s.status),
+      assinaturas: n(s.qtd),
+      valor: n(s.valor),
+    }))
+    const suspensas = saudePaycore.find((s) => s.status === 'suspended')
+    const ativasPaycore = saudePaycore.find((s) => s.status === 'active')
+
+    const metodos = paycorePorMetodo.map((m: any) => ({
+      metodo: String(m.metodo),
+      pagamentos: n(m.qtd),
+      bruto: n(m.bruto),
+      liquido: n(m.liquido),
+      semLiquido: n(m.sem_liquido),
+    }))
+    const caixaBruto = metodos.reduce((s, m) => s + m.bruto, 0)
+    const pagamentosSemTaxa = metodos.reduce((s, m) => s + m.semLiquido, 0)
+
+    // ── Ritmo: onde deveríamos estar hoje e onde estamos ──
+    // Dias corridos, igual ao calendário que o comercial usa para cobrar.
+    const diasDecorridosMes = Math.min(lastDay, Math.max(1, lastDay - diasRestantes))
+    const metaDiaria   = META_GERAL / lastDay
+    const esperadoHoje = metaDiaria * diasDecorridosMes
+    const mediaDiaria  = receitaNova / diasDecorridosMes
+    // Onde o mês termina se o ritmo de hoje continuar igual até o último dia.
+    const projecaoFim  = mediaDiaria * lastDay
+    const necessarioPorDia = diasRestantes > 0 ? Math.max(0, META_GERAL - receitaNova) / diasRestantes : 0
+
+    // Acumulado dia a dia, para o gráfico contra a linha do ritmo ideal.
+    const porDia = new Map<string, number>()
+    for (const d of porDiaRaw) porDia.set(String(d.dia).slice(0, 10), n(d.valor))
+    let acumulado = 0
+    const curva: Array<{ dia: string; valor: number; acumulado: number | null; ideal: number }> = []
+    for (let i = 1; i <= lastDay; i++) {
+      const dia = `${ano}-${String(mesNum).padStart(2, '0')}-${String(i).padStart(2, '0')}`
+      const valor = porDia.get(dia) ?? 0
+      acumulado += valor
+      curva.push({
+        dia,
+        valor,
+        // Depois de hoje a linha do realizado não existe — não se desenha futuro como se fosse fato.
+        acumulado: i <= diasDecorridosMes ? acumulado : null,
+        ideal: metaDiaria * i,
+      })
+    }
+
+    const ritmo = {
+      diasNoMes: lastDay,
+      diasDecorridos: diasDecorridosMes,
+      diasRestantes,
+      metaDiaria,
+      esperadoHoje,
+      percEsperadoHoje: META_GERAL > 0 ? (esperadoHoje / META_GERAL) * 100 : 0,
+      mediaDiaria,
+      necessarioPorDia,
+      projecaoFim,
+      percProjecao: META_GERAL > 0 ? (projecaoFim / META_GERAL) * 100 : 0,
+      // Negativo = atrás do que deveria ter vendido até hoje.
+      distanciaRitmo: receitaNova - esperadoHoje,
+      // Quantas vezes o ritmo atual precisa crescer para fechar a meta.
+      fatorNecessario: mediaDiaria > 0 && diasRestantes > 0 ? necessarioPorDia / mediaDiaria : null,
+      curva,
+    }
+
+    /** Moeda dentro do texto dos insights. */
+    const brlTexto = (v: number) =>
+      Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+    // ── Insights: leitura do período, não repetição dos números ──
+    const insights: Array<{ tom: 'bom' | 'alerta' | 'critico' | 'neutro'; titulo: string; texto: string }> = []
+
+    // Ritmo necessário para fechar a meta.
+    if (META_GERAL > 0 && receitaNova < META_GERAL) {
+      const falta = META_GERAL - receitaNova
+      insights.push({
+        tom: ritmo.fatorNecessario !== null && ritmo.fatorNecessario > 2 ? 'critico' : 'alerta',
+        titulo: 'Ritmo para bater a meta',
+        texto: diasRestantes > 0
+          ? `Faltam ${brlTexto(falta)} em ${diasRestantes} dia(s): é preciso fechar ${brlTexto(ritmo.necessarioPorDia)} por dia, contra ${brlTexto(ritmo.mediaDiaria)} por dia no ritmo atual`
+            + (ritmo.fatorNecessario ? ` — ${ritmo.fatorNecessario.toFixed(1)}x o que vem sendo feito.` : '.')
+          : `O período fechou ${brlTexto(falta)} abaixo da meta.`,
+      })
+    } else if (META_GERAL > 0) {
+      insights.push({
+        tom: 'bom',
+        titulo: 'Meta batida',
+        texto: `A meta de ${brlTexto(META_GERAL)} foi superada em ${brlTexto(receitaNova - META_GERAL)}.`,
+      })
+    }
+
+    // Quanto da receita nova o churn comeu.
+    if (receitaPerdida > 0 && receitaNova > 0) {
+      const comido = (receitaPerdida / receitaNova) * 100
+      insights.push({
+        tom: comido >= 100 ? 'critico' : comido >= 50 ? 'alerta' : 'neutro',
+        titulo: 'Peso do churn',
+        texto: `As saídas levaram ${brlTexto(receitaPerdida)}, ou ${comido.toFixed(0)}% de tudo que entrou. `
+          + `Sobraram ${brlTexto(receitaLiquida)} de receita recorrente nova.`,
+      })
+    }
+
+    // Concentração num produto só.
+    if (produtos.length > 1 && produtos[0].perc >= 60) {
+      insights.push({
+        tom: 'alerta',
+        titulo: 'Receita concentrada num produto',
+        texto: `${produtos[0].perc.toFixed(0)}% do que entrou veio de "${produtos[0].produto}". `
+          + `Se esse produto desacelerar, não há outro sustentando a meta.`,
+      })
+    }
+
+    // Concentração num vendedor só.
+    const vendReais = vendedores.filter((v) => v.vendedor !== 'Sem vendedor')
+    if (vendReais.length > 1 && vendReais[0].perc >= 50) {
+      insights.push({
+        tom: 'alerta',
+        titulo: 'Receita concentrada num vendedor',
+        texto: `${vendReais[0].vendedor} responde por ${vendReais[0].perc.toFixed(0)}% da receita nova do período.`,
+      })
+    }
+
+    // Receita sem dono.
+    if (semVendedor > 0 && receitaNova > 0) {
+      insights.push({
+        tom: 'alerta',
+        titulo: 'Receita sem vendedor identificado',
+        texto: `${brlTexto(semVendedor)} (${((semVendedor / receitaNova) * 100).toFixed(0)}% do período) não têm vendedor vinculado. `
+          + `Sem isso não dá para medir desempenho nem calcular comissão.`,
+      })
+    }
+
+    // Assinaturas suspensas: receita que ainda está na base mas parou de entrar.
+    if (suspensas && suspensas.assinaturas > 0) {
+      const totalAssin = saudePaycore.reduce((s, x) => s + x.assinaturas, 0)
+      insights.push({
+        tom: suspensas.assinaturas > (ativasPaycore?.assinaturas ?? 0) ? 'critico' : 'alerta',
+        titulo: 'Assinaturas suspensas no PayCore',
+        texto: `${suspensas.assinaturas} de ${totalAssin} assinaturas estão suspensas, somando ${brlTexto(suspensas.valor)} por mês. `
+          + `É receita que parou de entrar e tende a virar cancelamento se ninguém cobrar.`,
+      })
+    }
+
+    // Boleto exige cobrança ativa.
+    const boleto = metodos.find((m) => m.metodo === 'boleto')
+    if (boleto && caixaBruto > 0 && boleto.bruto / caixaBruto >= 0.3) {
+      insights.push({
+        tom: 'neutro',
+        titulo: 'Dependência de boleto',
+        texto: `${((boleto.bruto / caixaBruto) * 100).toFixed(0)}% do caixa do período veio de boleto. `
+          + `Boleto não renova sozinho: cada mês é uma cobrança a acompanhar.`,
+      })
+    }
+
+    // Taxa de gateway desconhecida distorce a margem.
+    if (pagamentosSemTaxa > 0) {
+      insights.push({
+        tom: 'neutro',
+        titulo: 'Taxas do gateway incompletas',
+        texto: `${pagamentosSemTaxa} pagamento(s) do período vieram sem o valor líquido. `
+          + `O líquido mostrado está otimista: a taxa desses ainda não foi informada pela plataforma.`,
+      })
+    }
+
     const response = {
       periodo: { ano, mes: mesNum, inicio: dataIni, fim: dataFim, diasRestantes, label: labelMes },
       meta: { geral: META_GERAL, limoeiro: META_LIMOEIRO, aracati: META_ARACATI },
@@ -701,6 +1040,16 @@ export async function metasRoutes(app: FastifyInstance) {
         qtdReativados, valorReativados,
         qtdPaycore, valorPaycore,
         receitaNova, receitaLiquida, percMeta,
+      },
+      ritmo,
+      // Quebras da receita nova do período, todas na mesma unidade da meta.
+      analise: {
+        produtos,
+        planos,
+        vendedores,
+        saudePaycore,
+        metodos,
+        insights,
       },
       paycore: {
         assinaturas: qtdPaycore,

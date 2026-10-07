@@ -8,7 +8,7 @@ import {
 import {
   TrendingUp, TrendingDown, Users, Target, ChevronLeft,
   ChevronRight, Zap, Award, AlertTriangle, CheckCircle2,
-  Building2, Loader2, RefreshCw, Save, Plus, Settings2, Layers3, Pencil, CreditCard,
+  Building2, Loader2, RefreshCw, Save, Plus, Settings2, Layers3, Pencil, CreditCard, Lightbulb,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { useToast } from '../../components/ui/Toast'
@@ -54,6 +54,33 @@ interface DadosComercial {
   projecao?: Projecao
   clientesNovos: ClienteNovo[]
   clientesReativados: ClienteReativado[]
+  ritmo?: {
+    diasNoMes: number; diasDecorridos: number; diasRestantes: number
+    metaDiaria: number; esperadoHoje: number; percEsperadoHoje: number
+    mediaDiaria: number; necessarioPorDia: number
+    projecaoFim: number; percProjecao: number
+    distanciaRitmo: number; fatorNecessario: number | null
+    curva: Array<{ dia: string; valor: number; acumulado: number | null; ideal: number }>
+  }
+  analise?: {
+    produtos: Array<{
+      produto: string; servidor: string | null; origem: 'paycore' | 'base'
+      itens: number; valor: number; perc: number; percMeta: number
+    }>
+    planos: Array<{
+      produto: string; plano: string; servidor: string; periodicidade: string | null
+      assinaturas: number; valor: number; perc: number; percMeta: number
+    }>
+    vendedores: Array<{
+      vendedor: string; upgrades: number; paycore: number; itens: number
+      valor: number; perc: number; percMeta: number
+    }>
+    saudePaycore: Array<{ status: string; assinaturas: number; valor: number }>
+    metodos: Array<{
+      metodo: string; pagamentos: number; bruto: number; liquido: number; semLiquido: number
+    }>
+    insights: Array<{ tom: 'bom' | 'alerta' | 'critico' | 'neutro'; titulo: string; texto: string }>
+  }
   paycore?: {
     assinaturas: number
     valor: number
@@ -266,9 +293,22 @@ function BoletimComercialTab() {
             )}
           </div>
         </div>
-        <ProgressBar perc={perc} height="h-4" />
+        <div className="relative">
+          <ProgressBar perc={perc} height="h-4" />
+          {/* Onde a barra deveria estar hoje, se a meta fosse distribuída igualmente no mês. */}
+          {dados.ritmo && dados.ritmo.percEsperadoHoje > 0 && dados.ritmo.percEsperadoHoje < 100 && (
+            <div className="absolute top-0 bottom-0 w-0.5 bg-slate-700 dark:bg-slate-200 rounded"
+              style={{ left: `${Math.min(dados.ritmo.percEsperadoHoje, 100)}%` }}
+              title={`Esperado hoje: ${brl(dados.ritmo.esperadoHoje)}`} />
+          )}
+        </div>
         <div className="flex justify-between mt-1.5">
           <span className="text-xs text-slate-500">R$ 0</span>
+          {dados.ritmo && dados.ritmo.percEsperadoHoje < 100 && (
+            <span className="text-xs text-slate-500">
+              Esperado hoje: <strong>{dados.ritmo.percEsperadoHoje.toFixed(1)}%</strong>
+            </span>
+          )}
           <span className="text-xs text-slate-500">{brl(meta.geral)}</span>
         </div>
 
@@ -921,6 +961,293 @@ function BoletimComercialTab() {
               </tr>
             ))}</tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Ritmo do mês ──────────────────────────────────────────── */}
+      {dados.ritmo && meta.geral > 0 && (() => {
+        const r = dados.ritmo!
+        const atrasado = r.distanciaRitmo < 0
+        return (
+          <>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className={clsx('rounded-xl p-4 border',
+                r.diasRestantes > 0
+                  ? 'bg-amber-50 dark:bg-amber-500/10 border-amber-500/30'
+                  : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700')}>
+                <p className="text-xs text-slate-500">Necessário por dia restante</p>
+                <p className="text-xl font-black text-amber-600 dark:text-amber-400 mt-0.5">
+                  {r.diasRestantes > 0 ? brl(r.necessarioPorDia) : '—'}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {r.diasRestantes > 0 ? `${r.diasRestantes} dia(s) corridos até o fim do mês` : 'período encerrado'}
+                </p>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+                <p className="text-xs text-slate-500">Média diária atual</p>
+                <p className="text-xl font-black text-slate-900 dark:text-slate-100 mt-0.5">{brl(r.mediaDiaria)}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">realizado ÷ {r.diasDecorridos} dia(s)</p>
+              </div>
+
+              <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+                <p className="text-xs text-slate-500">Projeção no ritmo atual</p>
+                <p className="text-xl font-black text-blue-500 mt-0.5">{brl(r.projecaoFim)}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {r.percProjecao.toFixed(1)}% da meta ao fim do mês
+                </p>
+              </div>
+
+              <div className={clsx('rounded-xl p-4 border',
+                atrasado ? 'bg-white dark:bg-slate-800 border-red-500/30' : 'bg-white dark:bg-slate-800 border-emerald-500/30')}>
+                <p className="text-xs text-slate-500">Distância do ritmo ideal</p>
+                <p className={clsx('text-xl font-black mt-0.5', atrasado ? 'text-red-500' : 'text-emerald-500')}>
+                  {atrasado ? '− ' : '+ '}{brl(Math.abs(r.distanciaRitmo))}
+                </p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  esperado hoje: {brl(r.esperadoHoje)} ({r.percEsperadoHoje.toFixed(1)}%)
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+              <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+                <TrendingUp className="w-4 h-4" /> Evolução do resultado
+              </h2>
+              <p className="text-xs text-slate-500 mb-4">
+                Receita nova acumulada ao longo do mês, contra a linha do ritmo ideal.
+              </p>
+              <ResponsiveContainer width="100%" height={280}>
+                <LineChart data={r.curva.map((c) => ({
+                  dia: c.dia.slice(8, 10) + '/' + c.dia.slice(5, 7),
+                  Realizado: c.acumulado,
+                  'Ritmo ideal': c.ideal,
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#e2e8f0'} vertical={false} />
+                  <XAxis dataKey="dia" tick={{ fontSize: 10, fill: isDark ? '#94a3b8' : '#64748b' }} interval={Math.floor(r.diasNoMes / 8)} />
+                  <YAxis tick={{ fontSize: 11, fill: isDark ? '#94a3b8' : '#64748b' }}
+                    tickFormatter={(v) => 'R$ ' + Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 })} width={90} />
+                  <Tooltip formatter={(v) => brl(Number(v))} contentStyle={{
+                    backgroundColor: isDark ? '#1e293b' : '#fff',
+                    border: '1px solid ' + (isDark ? '#334155' : '#e2e8f0'),
+                    borderRadius: 8, fontSize: 12,
+                  }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Line type="monotone" dataKey="Realizado" stroke="#2563eb" strokeWidth={2.5} dot={false} connectNulls={false} />
+                  <Line type="monotone" dataKey="Ritmo ideal" stroke="#94a3b8" strokeWidth={2} strokeDasharray="6 4" dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+              {r.diasRestantes > 0 && r.fatorNecessario !== null && r.fatorNecessario > 1 && (
+                <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-3">
+                  <p className="text-xs text-amber-800 dark:text-amber-300">
+                    <strong>Prioridade do gestor:</strong> o ritmo diário precisa chegar a{' '}
+                    {r.fatorNecessario.toFixed(1)}× a média atual para alcançar a meta nos{' '}
+                    {r.diasRestantes} dia(s) restantes.
+                  </p>
+                </div>
+              )}
+            </div>
+          </>
+        )
+      })()}
+
+      {/* ── Leitura do período ────────────────────────────────────── */}
+      {(dados.analise?.insights.length ?? 0) > 0 && (
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <Lightbulb className="w-4 h-4 text-amber-400" /> Leitura do período
+          </h2>
+          <div className="grid gap-2 md:grid-cols-2">
+            {dados.analise!.insights.map((ins, i) => (
+              <div key={i} className={clsx('rounded-xl border p-3',
+                ins.tom === 'critico' ? 'border-red-500/30 bg-red-50 dark:bg-red-500/10'
+                  : ins.tom === 'alerta' ? 'border-amber-500/30 bg-amber-50 dark:bg-amber-500/10'
+                  : ins.tom === 'bom' ? 'border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10'
+                  : 'border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900/40')}>
+                <p className={clsx('text-xs font-semibold mb-1',
+                  ins.tom === 'critico' ? 'text-red-700 dark:text-red-300'
+                    : ins.tom === 'alerta' ? 'text-amber-700 dark:text-amber-300'
+                    : ins.tom === 'bom' ? 'text-emerald-700 dark:text-emerald-300'
+                    : 'text-slate-600 dark:text-slate-300')}>
+                  {ins.titulo}
+                </p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">{ins.texto}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Contribuição para a meta ──────────────────────────────── */}
+      {(dados.analise?.produtos.length ?? 0) > 0 && (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+            <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+              <Layers3 className="w-4 h-4" /> Contribuição por produto
+            </h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Quanto cada produto trouxe de receita nova e o quanto isso representa da meta.
+            </p>
+            <div className="space-y-3">
+              {dados.analise!.produtos.map((pr) => (
+                <div key={`${pr.servidor}-${pr.produto}`}>
+                  <div className="flex items-baseline justify-between gap-2 text-xs mb-1">
+                    <span className="text-slate-700 dark:text-slate-300 truncate">
+                      {pr.produto}
+                      {pr.servidor && <span className="text-slate-400 ml-1.5">· {pr.servidor}</span>}
+                    </span>
+                    <span className="shrink-0 text-slate-600 dark:text-slate-300">
+                      {brl(pr.valor)}
+                      <span className="text-slate-400 ml-1.5">{pr.percMeta.toFixed(1)}% da meta</span>
+                    </span>
+                  </div>
+                  <ProgressBar perc={pr.percMeta} height="h-2" />
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {pr.itens} {pr.origem === 'paycore' ? 'assinatura(s)' : 'cliente(s)'} · {pr.perc.toFixed(0)}% do que entrou
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+            <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+              <Award className="w-4 h-4" /> Contribuição por vendedor
+            </h2>
+            <p className="text-xs text-slate-500 mb-4">
+              Soma dos upgrades da base com as assinaturas do PayCore atribuídas a cada um.
+            </p>
+            {dados.analise!.vendedores.length === 0 ? (
+              <p className="text-xs text-slate-500 py-8 text-center">Nenhuma venda com vendedor no período.</p>
+            ) : (
+              <div className="space-y-3">
+                {dados.analise!.vendedores.map((v) => (
+                  <div key={v.vendedor}>
+                    <div className="flex items-baseline justify-between gap-2 text-xs mb-1">
+                      <span className={clsx('truncate', v.vendedor === 'Sem vendedor'
+                        ? 'text-amber-600 dark:text-amber-400 italic' : 'text-slate-700 dark:text-slate-300')}>
+                        {v.vendedor}
+                      </span>
+                      <span className="shrink-0 text-slate-600 dark:text-slate-300">
+                        {brl(v.valor)}
+                        <span className="text-slate-400 ml-1.5">{v.percMeta.toFixed(1)}% da meta</span>
+                      </span>
+                    </div>
+                    <ProgressBar perc={v.percMeta} height="h-2" />
+                    <p className="text-[10px] text-slate-400 mt-0.5">
+                      {[v.upgrades > 0 ? `${brl(v.upgrades)} em upgrades` : null,
+                        v.paycore > 0 ? `${brl(v.paycore)} no PayCore` : null]
+                        .filter(Boolean).join(' · ') || '—'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Faturamento por plano ─────────────────────────────────── */}
+      {(dados.analise?.planos.length ?? 0) > 0 && (
+        <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 overflow-x-auto">
+          <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+            <Layers3 className="w-4 h-4" /> Receita nova por plano
+          </h2>
+          <p className="text-xs text-slate-500 mb-3">
+            O produto diz o que foi vendido; o plano diz por quanto. É aqui que se vê qual oferta puxa a meta.
+          </p>
+          <table className="w-full text-sm min-w-[680px]">
+            <thead><tr className="border-b border-slate-200 dark:border-slate-700">
+              <th className="text-left px-3 py-2 text-slate-500 dark:text-slate-400">Produto</th>
+              <th className="text-left px-3 py-2 text-slate-500 dark:text-slate-400">Plano</th>
+              <th className="text-center px-3 py-2 text-slate-500 dark:text-slate-400">Cobrança</th>
+              <th className="text-center px-3 py-2 text-slate-500 dark:text-slate-400">Assinaturas</th>
+              <th className="text-right px-3 py-2 text-slate-500 dark:text-slate-400">Receita nova</th>
+              <th className="text-right px-3 py-2 text-slate-500 dark:text-slate-400">% da meta</th>
+            </tr></thead>
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+              {dados.analise!.planos.map((pl, i) => (
+                <tr key={i} className="hover:bg-slate-100/60 dark:hover:bg-slate-700/30">
+                  <td className="px-3 py-2 text-slate-700 dark:text-slate-200">
+                    {pl.produto}
+                    <span className="block text-[10px] text-slate-400">{pl.servidor}</span>
+                  </td>
+                  <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{pl.plano}</td>
+                  <td className="text-center px-3 py-2 text-slate-500 text-xs">{pl.periodicidade ?? '—'}</td>
+                  <td className="text-center px-3 py-2 text-slate-600 dark:text-slate-300">{pl.assinaturas}</td>
+                  <td className="text-right px-3 py-2 text-violet-400 font-semibold">{brl(pl.valor)}</td>
+                  <td className="text-right px-3 py-2 text-slate-500">{pl.percMeta.toFixed(1)}%</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Saúde da carteira do PayCore ──────────────────────────── */}
+      {((dados.analise?.saudePaycore.length ?? 0) > 0 || (dados.analise?.metodos.length ?? 0) > 0) && (
+        <div className="grid gap-5 lg:grid-cols-2">
+          {(dados.analise?.saudePaycore.length ?? 0) > 0 && (
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+              <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" /> Saúde das assinaturas
+              </h2>
+              <p className="text-xs text-slate-500 mb-4">
+                Carteira inteira do PayCore, não só o período. Suspensa é receita que parou de entrar.
+              </p>
+              <div className="space-y-2">
+                {dados.analise!.saudePaycore.map((s) => (
+                  <div key={s.status} className="flex items-center justify-between gap-3 text-sm">
+                    <span className={clsx('text-xs px-2 py-1 rounded-full font-medium',
+                      s.status === 'active' ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                        : s.status === 'suspended' ? 'bg-red-500/15 text-red-600 dark:text-red-400'
+                        : s.status === 'trial' ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400'
+                        : 'bg-slate-500/15 text-slate-500')}>
+                      {{ active: 'Ativas', suspended: 'Suspensas', trial: 'Em teste', canceled: 'Canceladas' }[s.status] ?? s.status}
+                    </span>
+                    <span className="text-slate-500 text-xs">{s.assinaturas} assinatura(s)</span>
+                    <span className="text-slate-700 dark:text-slate-200 font-semibold">{brl(s.valor)}/mês</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(dados.analise?.metodos.length ?? 0) > 0 && (
+            <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
+              <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1 flex items-center gap-2">
+                <CreditCard className="w-4 h-4" /> Caixa recebido por forma de pagamento
+              </h2>
+              <p className="text-xs text-slate-500 mb-4">
+                Dinheiro que entrou no período. Não é a meta — a meta mede mensalidade nova.
+              </p>
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-slate-200 dark:border-slate-700">
+                  <th className="text-left px-2 py-1.5 text-xs text-slate-500">Forma</th>
+                  <th className="text-center px-2 py-1.5 text-xs text-slate-500">Pagamentos</th>
+                  <th className="text-right px-2 py-1.5 text-xs text-slate-500">Bruto</th>
+                  <th className="text-right px-2 py-1.5 text-xs text-slate-500">Líquido</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                  {dados.analise!.metodos.map((m) => (
+                    <tr key={m.metodo}>
+                      <td className="px-2 py-2 text-slate-700 dark:text-slate-200 capitalize">
+                        {{ boleto: 'Boleto', credit_card: 'Cartão', pix: 'Pix' }[m.metodo] ?? m.metodo}
+                      </td>
+                      <td className="text-center px-2 py-2 text-slate-600 dark:text-slate-300">{m.pagamentos}</td>
+                      <td className="text-right px-2 py-2 text-emerald-400 font-semibold">{brl(m.bruto)}</td>
+                      <td className="text-right px-2 py-2 text-slate-600 dark:text-slate-300">
+                        {brl(m.liquido)}
+                        {m.semLiquido > 0 && (
+                          <span className="block text-[10px] text-amber-500">{m.semLiquido} sem taxa informada</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
