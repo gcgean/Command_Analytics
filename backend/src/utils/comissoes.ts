@@ -6,8 +6,13 @@ import { prisma } from '../database/client'
  * A regra do plano é "faixa cheia": atingida a faixa, o percentual dela vale sobre TODO o
  * faturamento de implantação do mês, não só sobre o que passou do degrau.
  *
- * A base vem de `processo_implantacao_comercial`, que já guarda o vendedor (`id_usu_vendedor`) e
- * o valor da implantação de cada processo.
+ * A base da comissão é tudo que o vendedor fechou no mês:
+ *   implantação + migração (de `processo_implantacao_comercial`, que já guarda o vendedor),
+ *   mensalidade dos clientes novos, upgrades e assinaturas do PayCore atribuídas a ele.
+ *
+ * Isso é diferente do Boletim Comercial, que mede só receita recorrente nova e não inclui
+ * implantação: são duas perguntas distintas — quanto a empresa passou a faturar por mês contra
+ * quanto cada vendedor produziu no período.
  */
 
 /** Escada do plano apresentado: valor mínimo da faixa → percentual. */
@@ -161,9 +166,19 @@ function mesesDesde(admissao: string | Date | null, competencia: string): number
   return (ano - d.getFullYear()) * 12 + (mes - 1 - d.getMonth())
 }
 
+/** De onde veio cada parte da base — o vendedor precisa poder conferir a conta. */
+export interface ComposicaoBase {
+  implantacao: number
+  migracao: number
+  mensalidadeNova: number
+  upgrades: number
+  paycore: number
+}
+
 export interface LinhaApuracao {
   usuarioId: number
   nome: string
+  composicao: ComposicaoBase
   planoId: number
   planoNome: string
   dataAdmissao: string | null
@@ -198,7 +213,7 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
   const porPlano = new Map(planos.map((p) => [p.id, p]))
 
   const vendedores = await prisma.$queryRawUnsafe<any[]>(
-    `SELECT v.*, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS nome
+    `SELECT v.*, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS nome, u.NOME_USU AS nome_usu
        FROM comissao_vendedor v
        LEFT JOIN usuario u ON u.COD_USU = v.usuario_id
       WHERE v.ativo = 1
@@ -214,14 +229,64 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
 
     // A data que define "recebida" vem do plano: hoje o sistema só tem o vencimento da parcela.
     const coluna = plano.baseCalculo === 'processo' ? 'c.data_hora_dados' : 'c.data_venc_implantacao'
+    const usuarioId = Number(v.usuario_id)
+
+    // Implantação e migração do pacote de entrada, pelo vendedor do processo.
     const [b] = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT COUNT(*) AS q, COALESCE(SUM(c.valor_implantacao), 0) AS base
+      `SELECT COUNT(*) AS q,
+              COALESCE(SUM(c.valor_implantacao), 0) AS implantacao,
+              COALESCE(SUM(c.valor_migracao), 0) AS migracao
          FROM processo_implantacao_comercial c
         WHERE c.id_usu_vendedor = ? AND DATE(${coluna}) BETWEEN ? AND ?`,
-      Number(v.usuario_id), inicio, fim,
-    ).catch(() => [{ q: 0, base: 0 }])
+      usuarioId, inicio, fim,
+    ).catch(() => [{ q: 0, implantacao: 0, migracao: 0 }])
 
-    const base = Number(b?.base ?? 0)
+    // Mensalidade dos clientes novos. A tabela `cliente` não guarda vendedor: a atribuição é a
+    // mesma do Boletim — o CRM pelo CNPJ e, na falta dele, quem fez o cadastro.
+    const [mens] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(SUM(c.valor_mensalidade), 0) AS valor
+         FROM cliente c
+         LEFT JOIN usuario u ON u.COD_USU = c.cod_usu_local_Cad
+        WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000 AND c.ATIVO = 'S'
+          AND c.DATACADASTRO_CLI BETWEEN ? AND ?
+          AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
+          AND UPPER(TRIM(COALESCE(
+                (SELECT nn.vendedor_nome FROM crm_negocio nn
+                  WHERE nn.documento = REPLACE(REPLACE(REPLACE(REPLACE(c.CNPJ_CLI,'.',''),'/',''),'-',''),' ','')
+                    AND nn.vendedor_nome IS NOT NULL AND nn.vendedor_nome <> ''
+                  ORDER BY COALESCE(nn.finalizado_em, nn.criado_em, nn.data) DESC, nn.id DESC LIMIT 1),
+                NULLIF(u.NOME_USU, ''), ''))) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))`,
+      inicio, fim, v.nome ?? '', v.nome_usu ?? '',
+    ).catch(() => [{ valor: 0 }])
+
+    const [upg] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(SUM(co.Valor_operacao), 0) AS valor
+         FROM comissoes_funcionario co
+         INNER JOIN cliente c ON c.cod_cli = co.cod_cli
+        WHERE co.cod_func = ? AND CAST(co.data_venda AS DATE) BETWEEN ? AND ?
+          AND c.cod_cli NOT IN (1,6,7,8) AND c.cod_cla <> 30`,
+      usuarioId, inicio, fim,
+    ).catch(() => [{ valor: 0 }])
+
+    // No PayCore o vendedor já vem resolvido para o nosso COD_USU na sincronização.
+    const [pay] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+         FROM paycore_assinatura a
+         INNER JOIN paycore_cliente pc
+           ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
+        WHERE pc.vendedor_id = ? AND DATE(a.inicio) BETWEEN ? AND ?`,
+      usuarioId, inicio, fim,
+    ).catch(() => [{ valor: 0 }])
+
+    const composicao: ComposicaoBase = {
+      implantacao: Number(b?.implantacao ?? 0),
+      migracao: Number(b?.migracao ?? 0),
+      mensalidadeNova: Number(mens?.valor ?? 0),
+      upgrades: Number(upg?.valor ?? 0),
+      paycore: Number(pay?.valor ?? 0),
+    }
+    const base = composicao.implantacao + composicao.migracao
+      + composicao.mensalidadeNova + composicao.upgrades + composicao.paycore
     const faixa = faixaDe(base, plano.faixas)
     const percentual = faixa?.percentual ?? 0
     const variavel = (base * percentual) / 100
@@ -249,8 +314,9 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
     const fechado = fechamentos.find((f) => Number(f.usuario_id) === Number(v.usuario_id))
 
     linhas.push({
-      usuarioId: Number(v.usuario_id),
-      nome: v.nome ?? `Usuário ${v.usuario_id}`,
+      usuarioId,
+      nome: v.nome ?? `Usuário ${usuarioId}`,
+      composicao,
       planoId: plano.id,
       planoNome: plano.nome,
       dataAdmissao: v.data_admissao ? String(v.data_admissao).slice(0, 10) : null,

@@ -206,7 +206,7 @@ export function RemuneracaoComercial() {
 
                     <div className="flex flex-wrap gap-5 text-sm">
                       <div>
-                        <p className="text-[11px] text-slate-500">Implantação</p>
+                        <p className="text-[11px] text-slate-500">Base do mês</p>
                         <p className="font-semibold text-slate-800 dark:text-slate-200">{brl(l.base)}</p>
                         <p className="text-[10px] text-slate-400">{l.processos} processo(s)</p>
                       </div>
@@ -238,6 +238,21 @@ export function RemuneracaoComercial() {
                   </div>
 
                   <div className="px-4 pb-4">
+                    {l.base > 0 && (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-[11px]">
+                        {([
+                          ['Implantação', l.composicao.implantacao],
+                          ['Migração', l.composicao.migracao],
+                          ['Mensalidade nova', l.composicao.mensalidadeNova],
+                          ['Upgrades', l.composicao.upgrades],
+                          ['PayCore', l.composicao.paycore],
+                        ] as const).filter(([, v]) => v > 0).map(([rotulo, v]) => (
+                          <span key={rotulo} className="text-slate-500">
+                            {rotulo}: <strong className="text-slate-700 dark:text-slate-300">{brl(v)}</strong>
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     {l.percMeta !== null && (
                       <>
                         <div className="flex justify-between text-[11px] text-slate-500 mb-1">
@@ -267,8 +282,10 @@ export function RemuneracaoComercial() {
           )}
 
           <p className="text-[11px] text-slate-400">
-            Base de cálculo: implantação de {planos[0]?.baseCalculo === 'processo' ? 'processos abertos' : 'parcelas com vencimento'}
-            {' '}no mês, pelo vendedor do processo de implantação. Fechar congela o valor: mudar o plano depois não altera o que já foi apurado.
+            Base de cálculo: implantação e migração de {planos[0]?.baseCalculo === 'processo' ? 'processos abertos' : 'parcelas com vencimento'}
+            {' '}no mês, mais a mensalidade dos clientes novos, os upgrades e as assinaturas do PayCore
+            {' '}atribuídas ao vendedor. É diferente do Boletim Comercial, que mede só receita recorrente
+            {' '}nova e não inclui implantação. Fechar congela o valor: mudar o plano depois não altera o que já foi apurado.
           </p>
         </div>
       )}

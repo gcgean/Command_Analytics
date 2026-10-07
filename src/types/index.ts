@@ -1562,9 +1562,19 @@ export interface VendedorComissao {
 
 export interface CandidatoComissao { id: number; nome: string; processos: number }
 
+/** De onde veio cada parte da base — o vendedor precisa poder conferir a conta. */
+export interface ComposicaoBaseComissao {
+  implantacao: number
+  migracao: number
+  mensalidadeNova: number
+  upgrades: number
+  paycore: number
+}
+
 export interface LinhaComissao {
   usuarioId: number
   nome: string
+  composicao: ComposicaoBaseComissao
   planoId: number
   planoNome: string
   dataAdmissao: string | null
