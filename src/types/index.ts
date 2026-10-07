@@ -1474,3 +1474,38 @@ export interface MapaRevendas {
   banco: string | null
   tabelas: Array<{ tabela: string; linhas: number; colunas: string[] }>
 }
+
+/** Uma revenda (ponto_revenda) com os números dos clientes ligados a ela. */
+export interface RevendaLinha {
+  codPonto: number
+  nome: string
+  razaoSocial: string | null
+  cnpj: string | null
+  cidade: string | null
+  estado: string | null
+  responsavel: string | null
+  telefone: string | null
+  email: string | null
+  ativa: boolean
+  percentual: number | null
+  clientes: number
+  ativos: number
+  inativos: number
+  novos: number
+  perdidos: number
+  mrr: number
+  ticketMedio: number
+  participacao: number
+}
+
+export interface DashboardRevendas {
+  periodo: { inicio: string; fim: string }
+  resumo: {
+    revendas: number; revendasAtivas: number; clientes: number
+    ativos: number; mrr: number; novos: number; perdidos: number
+  }
+  revendas: RevendaLinha[]
+  /** Clientes sem revenda informada — ficam de fora dos totais por revenda. */
+  semRevenda: { clientes: number; ativos: number; mrr: number }
+  evolucao: Array<{ mes: string; codPonto: number; novos: number; perdidos: number }>
+}

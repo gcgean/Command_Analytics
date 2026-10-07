@@ -1,17 +1,31 @@
 import { useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import {
-  Database, Loader2, Save, PlugZap, Search, Table2, RefreshCw, CheckCircle2, AlertTriangle,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+} from 'recharts'
+import {
+  Store, Loader2, Save, PlugZap, Search, Table2, RefreshCw, CheckCircle2, AlertTriangle,
+  Users, Wallet, TrendingUp,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { useToast } from '../../components/ui/Toast'
-import type { ConfigRevendas, MapaRevendas, TesteRevendas } from '../../types'
+import { useThemeStore } from '../../store/themeStore'
+import type { ConfigRevendas, DashboardRevendas, MapaRevendas, TesteRevendas } from '../../types'
+
+const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const MESES = ['', 'jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']
+const mesBR = (ym: string) => {
+  const [a, m] = ym.split('-')
+  return MESES[Number(m)] + '/' + a.slice(2)
+}
 
 export function Revendas() {
   const { toast } = useToast()
-  const [aba, setAba] = useState<'conexao' | 'mapa'>('conexao')
+  const isDark = useThemeStore((s) => s.theme) === 'dark'
+  const [aba, setAba] = useState<'dashboard' | 'conexao' | 'mapa'>('dashboard')
+  const [painel, setPainel] = useState<DashboardRevendas | null>(null)
   const [config, setConfig] = useState<ConfigRevendas | null>(null)
   const [form, setForm] = useState({ host: '', porta: 3306, usuario: '', senha: '', banco: '', ativo: true, horaSync: '03:00' })
   const [carregando, setCarregando] = useState(true)
@@ -27,8 +41,12 @@ export function Revendas() {
   const carregar = useCallback(async () => {
     setCarregando(true)
     try {
-      const c = await api.getConfigRevendas()
+      const [c, d] = await Promise.all([
+        api.getConfigRevendas(),
+        api.getDashboardRevendas().catch(() => null),
+      ])
       setConfig(c)
+      setPainel(d)
       setForm((f) => ({
         ...f, host: c.host, porta: c.porta, usuario: c.usuario, banco: c.banco,
         ativo: c.ativo, horaSync: c.horaSync, senha: '',
@@ -100,11 +118,11 @@ export function Revendas() {
     <div className="space-y-5 pb-10">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-xl bg-violet-600 text-white"><Database size={22} /></div>
+          <div className="p-2.5 rounded-xl bg-violet-600 text-white"><Store size={22} /></div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">Revendas</h1>
             <p className="text-slate-600 dark:text-slate-400 text-sm">
-              Banco externo das revendas, lido uma vez por dia. O Analytics só lê — nunca grava lá.
+              Clientes e receita de cada ponto de revenda.
             </p>
           </div>
         </div>
@@ -135,7 +153,7 @@ export function Revendas() {
       )}
 
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
-        {([['conexao', 'Conexão'], ['mapa', 'Mapa do banco']] as const).map(([id, rotulo]) => (
+        {([['dashboard', 'Dashboard'], ['conexao', 'Conexão'], ['mapa', 'Mapa do banco']] as const).map(([id, rotulo]) => (
           <button key={id} onClick={() => setAba(id)}
             className={clsx('px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
               aba === id ? 'border-violet-500 text-violet-600 dark:text-violet-400'
@@ -146,6 +164,134 @@ export function Revendas() {
       </div>
 
       {carregando && <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-violet-500" /></div>}
+
+      {!carregando && aba === 'dashboard' && painel && (
+        <div className="space-y-5">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { rotulo: 'Revendas ativas', valor: painel.resumo.revendasAtivas + ' de ' + painel.resumo.revendas, icone: Store, cor: 'text-violet-600 dark:text-violet-400' },
+              { rotulo: 'Clientes ativos', valor: painel.resumo.ativos.toLocaleString('pt-BR'), icone: Users, cor: 'text-blue-600 dark:text-blue-400' },
+              { rotulo: 'Receita mensal', valor: brl(painel.resumo.mrr), icone: Wallet, cor: 'text-emerald-600 dark:text-emerald-400' },
+              { rotulo: 'Novos / perdidos (12m)', valor: painel.resumo.novos + ' / ' + painel.resumo.perdidos, icone: TrendingUp, cor: 'text-amber-600 dark:text-amber-400' },
+            ].map((k) => (
+              <div key={k.rotulo} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs text-slate-500">{k.rotulo}</p>
+                    <p className={clsx('text-xl font-bold mt-0.5 truncate', k.cor)}>{k.valor}</p>
+                  </div>
+                  <k.icone className={clsx('w-4 h-4 shrink-0 mt-1', k.cor)} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {painel.semRevenda.clientes > 0 && (
+            <div className="rounded-lg border border-amber-200 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300 flex gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                <strong>{painel.semRevenda.clientes.toLocaleString('pt-BR')} clientes sem revenda informada</strong>
+                {' '}({painel.semRevenda.ativos.toLocaleString('pt-BR')} ativos, {brl(painel.semRevenda.mrr)} de mensalidade).
+                {' '}Eles não entram em nenhuma linha abaixo: o campo da revenda está vazio no cadastro.
+              </span>
+            </div>
+          )}
+
+          <Card padding="none">
+            <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Receita e clientes por revenda</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Receita mensal = soma da mensalidade dos clientes ativos. Novos e perdidos no último ano.
+              </p>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-900/50">
+                  <tr className="text-left text-slate-600 dark:text-slate-400">
+                    <th className="px-4 py-2.5 font-medium">Revenda</th>
+                    <th className="px-3 py-2.5 font-medium text-center">Clientes</th>
+                    <th className="px-3 py-2.5 font-medium text-center">Ativos</th>
+                    <th className="px-3 py-2.5 font-medium text-center">Novos</th>
+                    <th className="px-3 py-2.5 font-medium text-center">Perdidos</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Ticket médio</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Receita mensal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {painel.revendas.map((r) => (
+                    <tr key={r.codPonto} className="border-t border-slate-200 dark:border-slate-700">
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-slate-800 dark:text-slate-200">{r.nome}</span>
+                          {!r.ativa && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500">inativa</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          {[r.responsavel, [r.cidade, r.estado].filter(Boolean).join('/')].filter(Boolean).join(' · ') || '—'}
+                        </p>
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-slate-600 dark:text-slate-300">{r.clientes}</td>
+                      <td className="px-3 py-2.5 text-center text-slate-800 dark:text-slate-200 font-medium">{r.ativos}</td>
+                      <td className="px-3 py-2.5 text-center text-emerald-600 dark:text-emerald-400">{r.novos || '—'}</td>
+                      <td className="px-3 py-2.5 text-center text-red-500">{r.perdidos || '—'}</td>
+                      <td className="px-4 py-2.5 text-right text-slate-600 dark:text-slate-300">
+                        {r.ativos ? brl(r.ticketMedio) : '—'}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        <span className="text-slate-800 dark:text-slate-200 font-medium">{brl(r.mrr)}</span>
+                        <span className="block text-[11px] text-slate-400">{r.participacao.toFixed(1)}% do total</span>
+                      </td>
+                    </tr>
+                  ))}
+                  {painel.revendas.length === 0 && (
+                    <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={7}>Nenhuma revenda cadastrada.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <Card>
+            <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Entradas e saídas de clientes</h2>
+            <p className="text-xs text-slate-500 mt-0.5 mb-4">
+              Últimos 12 meses, somando todas as revendas e os clientes sem revenda.
+            </p>
+            {(() => {
+              const porMes = new Map<string, { mes: string; novos: number; perdidos: number }>()
+              for (const e of painel.evolucao) {
+                const linha = porMes.get(e.mes) ?? { mes: e.mes, novos: 0, perdidos: 0 }
+                linha.novos += e.novos
+                linha.perdidos += e.perdidos
+                porMes.set(e.mes, linha)
+              }
+              const dados = [...porMes.values()]
+                .sort((a, b) => a.mes.localeCompare(b.mes))
+                .map((d) => ({ ...d, mes: mesBR(d.mes) }))
+              if (dados.length === 0) {
+                return <p className="text-sm text-slate-500 py-10 text-center">Sem movimentação no período.</p>
+              }
+              return (
+                <ResponsiveContainer width="100%" height={260}>
+                  <BarChart data={dados}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#e2e8f0'} vertical={false} />
+                    <XAxis dataKey="mes" tick={{ fontSize: 11, fill: isDark ? '#94a3b8' : '#64748b' }} />
+                    <YAxis tick={{ fontSize: 11, fill: isDark ? '#94a3b8' : '#64748b' }} allowDecimals={false} />
+                    <Tooltip contentStyle={{
+                      backgroundColor: isDark ? '#1e293b' : '#fff',
+                      border: '1px solid ' + (isDark ? '#334155' : '#e2e8f0'),
+                      borderRadius: 8, fontSize: 12,
+                    }} />
+                    <Legend wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="novos" name="Novos" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="perdidos" name="Perdidos" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )
+            })()}
+          </Card>
+        </div>
+      )}
 
       {!carregando && aba === 'conexao' && (
         <div className="max-w-2xl">

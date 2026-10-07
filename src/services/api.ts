@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, ConfigRevendas, TesteRevendas, MapaRevendas, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
@@ -797,6 +797,13 @@ export const api = {
     }, 180_000),
 
   // ─── Revendas (banco externo, sincronização diária) ────────
+  getDashboardRevendas: (inicio?: string, fim?: string) => {
+    const qs = new URLSearchParams()
+    if (inicio) qs.set('inicio', inicio)
+    if (fim) qs.set('fim', fim)
+    const q = qs.toString()
+    return fetchApi<DashboardRevendas>(`/revendas/dashboard${q ? `?${q}` : ''}`)
+  },
   getConfigRevendas: () => fetchApi<ConfigRevendas>('/revendas/config'),
   salvarConfigRevendas: (dados: {
     host: string; porta: number; usuario: string; senha?: string; banco: string; ativo: boolean; horaSync: string
