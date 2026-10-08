@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
 import {
-  Briefcase, Loader2, RefreshCw, Search, Save, Trophy, XCircle, Clock, Users,
+  Briefcase, Loader2, RefreshCw, Search, Save, Trophy, XCircle, Clock, Users, Radio,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { useToast } from '../../components/ui/Toast'
-import type { ConfigCrm, NegocioCrm, VendedorCrm } from '../../types'
+import type { CanalCrm, ConfigCrm, NegocioCrm, VendedorCrm } from '../../types'
 
 const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const dataBR = (v?: string | null) => {
@@ -30,7 +30,7 @@ const SELO_STATUS: Record<string, { rotulo: string; classe: string; icone: typeo
 
 export function CrmIntegracao() {
   const { toast } = useToast()
-  const [aba, setAba] = useState<'negocios' | 'vendedores' | 'config'>('negocios')
+  const [aba, setAba] = useState<'negocios' | 'vendedores' | 'canais' | 'config'>('negocios')
   const [config, setConfig] = useState<ConfigCrm | null>(null)
   const [negocios, setNegocios] = useState<NegocioCrm[]>([])
   const [vendedores, setVendedores] = useState<VendedorCrm[]>([])
@@ -40,30 +40,35 @@ export function CrmIntegracao() {
   const [busca, setBusca] = useState('')
   const [filtroStatus, setFiltroStatus] = useState('')
   const [filtroVendedor, setFiltroVendedor] = useState('')
+  const [filtroCanal, setFiltroCanal] = useState('')
+  const [canais, setCanais] = useState<CanalCrm[]>([])
   const [form, setForm] = useState({ baseUrl: 'https://app.crm.cilos.com.br', email: '', senha: '', ativo: true })
 
   const carregar = useCallback(async () => {
     setCarregando(true)
     try {
-      const [cfg, neg, vend] = await Promise.all([
+      const [cfg, neg, vend, cans] = await Promise.all([
         api.getConfigCrm(),
         api.getNegociosCrm({
           status: filtroStatus || undefined,
           vendedor: filtroVendedor || undefined,
+          canal: filtroCanal || undefined,
           busca: busca.trim() || undefined,
         }).catch(() => []),
         api.getVendedoresCrm().catch(() => []),
+        api.getCanaisCrm().catch(() => []),
       ])
       setConfig(cfg)
       setForm((f) => ({ ...f, baseUrl: cfg.baseUrl || f.baseUrl, email: cfg.email || '', ativo: cfg.ativo }))
       setNegocios(neg)
       setVendedores(vend)
+      setCanais(cans)
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível carregar os dados do CRM.')
     } finally {
       setCarregando(false)
     }
-  }, [toast, filtroStatus, filtroVendedor, busca])
+  }, [toast, filtroStatus, filtroVendedor, filtroCanal, busca])
 
   useEffect(() => { void carregar() }, [carregar])
 
@@ -139,7 +144,7 @@ export function CrmIntegracao() {
       )}
 
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
-        {([['negocios', 'Negócios'], ['vendedores', 'Vendedores'], ['config', 'Configuração']] as const).map(([id, rotulo]) => (
+        {([['negocios', 'Negócios'], ['vendedores', 'Vendedores'], ['canais', 'Canais'], ['config', 'Configuração']] as const).map(([id, rotulo]) => (
           <button key={id} onClick={() => setAba(id)}
             className={clsx('px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
               aba === id ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -172,8 +177,17 @@ export function CrmIntegracao() {
                 <option key={v.vendedor} value={v.vendedor}>{v.vendedor} ({v.negocios})</option>
               ))}
             </select>
-            {(filtroStatus || filtroVendedor || busca) && (
-              <button onClick={() => { setBusca(''); setFiltroStatus(''); setFiltroVendedor('') }}
+            <select className="input-field w-full sm:w-56" value={filtroCanal}
+              onChange={(e) => setFiltroCanal(e.target.value)}>
+              <option value="">Todos os canais</option>
+              {canais.map((c) => (
+                <option key={c.canal} value={c.canal === 'Sem canal' ? '__sem__' : c.canal}>
+                  {c.canal} ({c.negocios})
+                </option>
+              ))}
+            </select>
+            {(filtroStatus || filtroVendedor || filtroCanal || busca) && (
+              <button onClick={() => { setBusca(''); setFiltroStatus(''); setFiltroVendedor(''); setFiltroCanal('') }}
                 className="text-xs px-3 rounded-lg text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700">
                 Limpar filtros
               </button>
@@ -188,6 +202,7 @@ export function CrmIntegracao() {
                     <th className="px-4 py-3">Cliente</th>
                     <th className="px-4 py-3">Negócio</th>
                     <th className="px-4 py-3">Vendedor</th>
+                    <th className="px-4 py-3">Canal</th>
                     <th className="px-4 py-3">Situação</th>
                     <th className="px-4 py-3">Data</th>
                     <th className="px-4 py-3 text-right">Valor</th>
@@ -217,6 +232,15 @@ export function CrmIntegracao() {
                           ) : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-4 py-3">
+                          {n.canal ? (
+                            <button onClick={() => setFiltroCanal(n.canal!)}
+                              title={`Ver só os negócios do canal ${n.canal}`}
+                              className="text-xs text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 hover:underline text-left">
+                              {n.canal}
+                            </button>
+                          ) : <span className="text-xs text-slate-400">—</span>}
+                        </td>
+                        <td className="px-4 py-3">
                           {selo && Icone ? (
                             <span className={clsx('inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full font-medium', selo.classe)}>
                               <Icone className="w-3 h-3" /> {selo.rotulo}
@@ -231,7 +255,7 @@ export function CrmIntegracao() {
                     )
                   })}
                   {negocios.length === 0 && (
-                    <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={6}>
+                    <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={7}>
                       Nenhum negócio sincronizado. Configure o acesso na aba Configuração.
                     </td></tr>
                   )}
@@ -286,6 +310,84 @@ export function CrmIntegracao() {
               )}
             </tbody>
           </table>
+        </Card>
+      )}
+
+      {!carregando && aba === 'canais' && (
+        <Card padding="none">
+          <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+              <Radio className="w-4 h-4" /> Faturamento por canal de aquisição
+            </p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Soma dos negócios ganhos de cada canal. Clique na linha para ver os negócios dele.
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <tr className="text-left text-slate-600 dark:text-slate-400">
+                  <th className="px-4 py-3">Canal</th>
+                  <th className="px-3 py-3 text-center">Negócios</th>
+                  <th className="px-3 py-3 text-center">Ganhos</th>
+                  <th className="px-3 py-3 text-center">Perdidos</th>
+                  <th className="px-3 py-3 text-center">Conversão</th>
+                  <th className="px-4 py-3 text-right">Ticket médio</th>
+                  <th className="px-4 py-3 text-right">Faturamento</th>
+                </tr>
+              </thead>
+              <tbody>
+                {canais.map((c) => (
+                  <tr key={c.canal}
+                    onClick={() => { setFiltroCanal(c.canal === 'Sem canal' ? '__sem__' : c.canal); setAba('negocios') }}
+                    className="border-t border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                    <td className="px-4 py-3 text-slate-800 dark:text-slate-200">{c.canal}</td>
+                    <td className="px-3 py-3 text-center text-slate-600 dark:text-slate-300">{c.negocios}</td>
+                    <td className="px-3 py-3 text-center text-emerald-600 dark:text-emerald-400">{c.ganhos}</td>
+                    <td className="px-3 py-3 text-center text-red-500">{c.perdidos || '—'}</td>
+                    <td className="px-3 py-3 text-center">
+                      {c.conversao === null ? <span className="text-slate-400">—</span> : (
+                        <span className={clsx(c.conversao >= 60 ? 'text-emerald-600 dark:text-emerald-400'
+                          : c.conversao >= 30 ? 'text-amber-600 dark:text-amber-400' : 'text-red-500')}>
+                          {c.conversao.toFixed(0)}%
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right text-slate-600 dark:text-slate-300">
+                      {c.ganhos ? brl(c.ticketMedio) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <span className="text-slate-800 dark:text-slate-200 font-medium">{brl(c.faturamento)}</span>
+                      <span className="block text-[11px] text-slate-400">{c.participacao.toFixed(1)}% do total</span>
+                    </td>
+                  </tr>
+                ))}
+                {canais.length === 0 && (
+                  <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={7}>Sem dados sincronizados.</td></tr>
+                )}
+              </tbody>
+              {canais.length > 0 && (
+                <tfoot className="bg-slate-50 dark:bg-slate-900/50 font-medium">
+                  <tr className="border-t-2 border-slate-200 dark:border-slate-700">
+                    <td className="px-4 py-3 text-slate-700 dark:text-slate-300">Total</td>
+                    <td className="px-3 py-3 text-center text-slate-600 dark:text-slate-300">
+                      {canais.reduce((s, c) => s + c.negocios, 0)}
+                    </td>
+                    <td className="px-3 py-3 text-center text-emerald-600 dark:text-emerald-400">
+                      {canais.reduce((s, c) => s + c.ganhos, 0)}
+                    </td>
+                    <td className="px-3 py-3 text-center text-red-500">
+                      {canais.reduce((s, c) => s + c.perdidos, 0)}
+                    </td>
+                    <td /><td />
+                    <td className="px-4 py-3 text-right text-slate-800 dark:text-slate-200">
+                      {brl(canais.reduce((s, c) => s + c.faturamento, 0))}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
         </Card>
       )}
 

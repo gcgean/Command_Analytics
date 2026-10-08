@@ -25,6 +25,16 @@ export async function initCrmSync(): Promise<void> {
       atualizado_em DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW()
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+  // A coluna canal foi acrescentada depois; o projeto não usa migrations.
+  const [temCanal] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COUNT(*) AS q FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = 'crm_negocio' AND column_name = 'canal'`)
+  if (Number(temCanal?.q ?? 0) === 0) {
+    await prisma.$executeRawUnsafe(`ALTER TABLE crm_negocio ADD COLUMN canal VARCHAR(100) NULL`)
+    await prisma.$executeRawUnsafe(`ALTER TABLE crm_negocio ADD INDEX idx_crm_negocio_canal (canal)`)
+      .catch(() => {})
+  }
+
   const [linha] = await prisma.$queryRawUnsafe<any[]>(`SELECT COUNT(*) AS c FROM crm_config`)
   if (Number(linha?.c ?? 0) === 0) {
     await prisma.$executeRawUnsafe(`INSERT INTO crm_config (base_url) VALUES ('https://app.crm.cilos.com.br')`)
@@ -74,12 +84,14 @@ export async function initCrmSync(): Promise<void> {
       vendedor_nome  VARCHAR(150) NULL,
       vendedor_email VARCHAR(150) NULL,
       etapa          VARCHAR(100) NULL,
+      canal          VARCHAR(100) NULL,
       funil_id       INT NULL,
       motivo_ganho   VARCHAR(150) NULL,
       motivo_perda   VARCHAR(150) NULL,
       criado_em      DATETIME NULL,
       atualizado_em  DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW(),
       INDEX idx_crm_negocio_doc (documento),
+      INDEX idx_crm_negocio_canal (canal),
       INDEX idx_crm_negocio_status (status),
       INDEX idx_crm_negocio_vend (vendedor_id),
       INDEX idx_crm_negocio_lead (lead_id)
@@ -300,6 +312,16 @@ export async function sincronizarCrm(opcoes?: { diasJanela?: number }): Promise<
         resultado.itens += 1
       }
     }
+
+    // O canal é do lead, não do negócio: a exportação de negócios não o traz. Carimbamos depois,
+    // para o dashboard poder agrupar e filtrar por canal sem um JOIN em toda consulta.
+    await prisma.$executeRawUnsafe(
+      `UPDATE crm_negocio n
+         INNER JOIN crm_cliente c ON c.id = n.lead_id
+          SET n.canal = NULLIF(c.canal, '')
+        WHERE n.lead_id IS NOT NULL
+          AND (n.canal IS NULL OR n.canal <> COALESCE(c.canal, ''))`,
+    ).catch((e) => console.warn('⚠ CRM (canal):', e?.message))
 
     // O CRM responde 200 com lista vazia quando o usuário da integração não enxerga
     // os negócios — avisa em vez de deixar a tela em branco sem explicação.

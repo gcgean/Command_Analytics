@@ -68,7 +68,7 @@ export async function crmIntegracaoRoutes(app: FastifyInstance) {
 
   // GET /crm/negocios — consulta dos negócios, com filtro
   app.get('/negocios', { preHandler: authMiddleware, schema: { tags: ['CRM'] } }, async (request) => {
-    const { busca, status, vendedor, limite } = request.query as Record<string, string>
+    const { busca, status, vendedor, canal, limite } = request.query as Record<string, string>
     const condicoes: string[] = []
     const valores: any[] = []
     if (busca) {
@@ -78,6 +78,11 @@ export async function crmIntegracaoRoutes(app: FastifyInstance) {
     }
     if (status) { condicoes.push('n.status = ?'); valores.push(status) }
     if (vendedor) { condicoes.push('n.vendedor_nome = ?'); valores.push(vendedor) }
+    if (canal) {
+      // "Sem canal" é a ausência do dado, não um valor cadastrado.
+      if (canal === '__sem__') condicoes.push("(n.canal IS NULL OR n.canal = '')")
+      else { condicoes.push('n.canal = ?'); valores.push(canal) }
+    }
 
     const linhas = await prisma.$queryRawUnsafe<any[]>(
       `SELECT n.*, (SELECT COUNT(*) FROM crm_negocio_item i WHERE i.negocio_id = n.id) AS itens
@@ -97,12 +102,47 @@ export async function crmIntegracaoRoutes(app: FastifyInstance) {
       leadNome: l.lead_nome,
       documento: l.documento,
       vendedorNome: l.vendedor_nome,
+      canal: l.canal ?? null,
       etapa: l.etapa,
       motivoGanho: l.motivo_ganho,
       motivoPerda: l.motivo_perda,
       itens: Number(l.itens ?? 0),
       codCli: null,
     }))
+  })
+
+  /**
+   * Faturamento por canal de aquisição. O canal é do lead e fica carimbado no negócio na
+   * sincronização, então aqui é só agrupar.
+   */
+  app.get('/canais', { preHandler: authMiddleware, schema: { tags: ['CRM'] } }, async () => {
+    const linhas = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT COALESCE(NULLIF(canal, ''), 'Sem canal') AS canal,
+             COUNT(*) AS negocios,
+             SUM(status = 'won') AS ganhos,
+             SUM(status = 'lost') AS perdidos,
+             COALESCE(SUM(CASE WHEN status = 'won' THEN valor END), 0) AS faturamento
+        FROM crm_negocio
+       GROUP BY canal ORDER BY faturamento DESC`)
+    const total = linhas.reduce((s, l) => s + Number(l.faturamento ?? 0), 0)
+    return linhas.map((l) => {
+      const ganhos = Number(l.ganhos ?? 0)
+      const perdidos = Number(l.perdidos ?? 0)
+      const faturamento = Number(l.faturamento ?? 0)
+      const fechados = ganhos + perdidos
+      return {
+        canal: l.canal as string,
+        negocios: Number(l.negocios ?? 0),
+        ganhos,
+        perdidos,
+        faturamento,
+        // Quanto cada negócio ganho traz, em média, naquele canal.
+        ticketMedio: ganhos ? faturamento / ganhos : 0,
+        // Dos que foram decididos, quantos viraram venda.
+        conversao: fechados ? (ganhos / fechados) * 100 : null,
+        participacao: total ? (faturamento / total) * 100 : 0,
+      }
+    })
   })
 
   // Resumo por vendedor — quem vendeu o quê, segundo o CRM

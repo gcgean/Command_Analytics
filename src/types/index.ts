@@ -1383,6 +1383,8 @@ export interface NegocioCrm {
   leadNome: string | null
   documento: string | null
   vendedorNome: string | null
+  /** Canal de aquisição, vindo do lead no CRM. */
+  canal: string | null
   etapa: string | null
   motivoGanho: string | null
   motivoPerda: string | null
@@ -1635,4 +1637,17 @@ export interface MeuDesempenhoComissao {
   /** Posição no mês, sem expor o número dos colegas. */
   ranking: { posicao: number; total: number } | null
   historico: Array<{ competencia: string; base: number; percentual: number; variavel: number; total: number }>
+}
+
+/** Faturamento por canal de aquisição, do CRM. */
+export interface CanalCrm {
+  canal: string
+  negocios: number
+  ganhos: number
+  perdidos: number
+  faturamento: number
+  ticketMedio: number
+  /** Dos negócios já decididos, quantos viraram venda. */
+  conversao: number | null
+  participacao: number
 }

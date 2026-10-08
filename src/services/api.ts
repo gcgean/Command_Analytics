@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
+  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
@@ -858,16 +858,20 @@ export const api = {
     fetchApi<ResultadoSyncCrm>('/crm-integracao/sincronizar', {
       method: 'POST', body: JSON.stringify({ completa }),
     }, 300_000),
-  getNegociosCrm: (filtros?: { busca?: string; status?: string; vendedor?: string; limite?: number }) => {
+  getNegociosCrm: (filtros?: {
+    busca?: string; status?: string; vendedor?: string; canal?: string; limite?: number
+  }) => {
     const qs = new URLSearchParams()
     if (filtros?.busca) qs.set('busca', filtros.busca)
     if (filtros?.status) qs.set('status', filtros.status)
     if (filtros?.vendedor) qs.set('vendedor', filtros.vendedor)
+    if (filtros?.canal) qs.set('canal', filtros.canal)
     if (filtros?.limite) qs.set('limite', String(filtros.limite))
     const q = qs.toString()
     return fetchApi<NegocioCrm[]>(`/crm-integracao/negocios${q ? `?${q}` : ''}`)
   },
   getVendedoresCrm: () => fetchApi<VendedorCrm[]>('/crm-integracao/vendedores'),
+  getCanaisCrm: () => fetchApi<CanalCrm[]>('/crm-integracao/canais'),
   getVendedorPorDocumento: (documento: string) =>
     fetchApi<{ vendedorId: number | null; vendedorNome: string | null; origem: string | null; negocioId?: number }>(
       `/crm-integracao/vendedor?documento=${encodeURIComponent(documento)}`),
