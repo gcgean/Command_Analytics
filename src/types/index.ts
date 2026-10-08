@@ -1542,6 +1542,11 @@ export interface PlanoComissao {
   id: number
   nome: string
   descricao: string | null
+  /** 'escada' (progressiva sobre o que a pessoa vendeu) ou 'proporcional' (bônus × % da meta da empresa). */
+  tipo: string
+  valorBonus: number
+  /** 'todos' | 'command' | 'cilos' — quais produtos contam na base. */
+  escopoProduto: string
   /** 'vencimento' = parcelas que vencem no mês; 'processo' = processos abertos no mês. */
   baseCalculo: string
   fixoInicial: number
@@ -1579,6 +1584,10 @@ export interface ComposicaoBaseComissao {
 export interface LinhaComissao {
   usuarioId: number
   nome: string
+  tipo: string
+  /** No plano proporcional a base é o resultado da empresa, não o individual. */
+  baseEmpresa: boolean
+  escopoProduto: string
   composicao: ComposicaoBaseComissao
   planoId: number
   planoNome: string

@@ -13,6 +13,7 @@ import type {
 } from '../../types'
 
 const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const ESCOPO_ROTULO: Record<string, string> = { todos: 'todos os produtos', command: 'só produtos Command', cilos: 'só produtos Cilos' }
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
 const rotuloComp = (c: string) => {
@@ -72,6 +73,18 @@ export function RemuneracaoComercial() {
       toast.error(e?.message || 'Não foi possível salvar o plano.')
     } finally {
       setSalvando(false)
+    }
+  }
+
+  async function criarPlano() {
+    const nome = prompt('Nome do novo plano:')
+    if (!nome?.trim()) return
+    try {
+      await api.criarPlanoComissao({ nome: nome.trim(), tipo: 'proporcional', valorBonus: 500, escopoProduto: 'command' })
+      toast.success('Plano criado! Ajuste a meta, o bônus e o escopo abaixo.')
+      void carregar()
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível criar o plano.')
     }
   }
 
@@ -206,19 +219,29 @@ export function RemuneracaoComercial() {
 
                     <div className="flex flex-wrap gap-5 text-sm">
                       <div>
-                        <p className="text-[11px] text-slate-500">Base do mês</p>
+                        <p className="text-[11px] text-slate-500">
+                          {l.baseEmpresa ? 'Resultado da empresa' : 'Base do mês'}
+                        </p>
                         <p className="font-semibold text-slate-800 dark:text-slate-200">{brl(l.base)}</p>
-                        <p className="text-[10px] text-slate-400">{l.processos} processo(s)</p>
-                      </div>
-                      <div>
-                        <p className="text-[11px] text-slate-500">Faixa</p>
-                        <p className="font-semibold text-emerald-600 dark:text-emerald-400">{l.percentual}%</p>
                         <p className="text-[10px] text-slate-400">
-                          {l.faixaDe === null ? 'abaixo da 1ª faixa' : `a partir de ${brl(l.faixaDe)}`}
+                          {l.baseEmpresa
+                            ? ESCOPO_ROTULO[l.escopoProduto] ?? l.escopoProduto
+                            : `${l.processos} processo(s)`}
                         </p>
                       </div>
                       <div>
-                        <p className="text-[11px] text-slate-500">Variável</p>
+                        <p className="text-[11px] text-slate-500">{l.baseEmpresa ? 'Meta atingida' : 'Faixa'}</p>
+                        <p className="font-semibold text-emerald-600 dark:text-emerald-400">
+                          {l.baseEmpresa ? `${(l.percMeta ?? 0).toFixed(0)}%` : `${l.percentual}%`}
+                        </p>
+                        <p className="text-[10px] text-slate-400">
+                          {l.baseEmpresa
+                            ? 'do bônus do plano'
+                            : l.faixaDe === null ? 'abaixo da 1ª faixa' : `a partir de ${brl(l.faixaDe)}`}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[11px] text-slate-500">{l.baseEmpresa ? 'Bônus' : 'Variável'}</p>
                         <p className="font-semibold text-emerald-600 dark:text-emerald-400">{brl(l.variavel)}</p>
                       </div>
                       <div>
@@ -238,7 +261,7 @@ export function RemuneracaoComercial() {
                   </div>
 
                   <div className="px-4 pb-4">
-                    {l.base > 0 && (
+                    {l.base > 0 && !l.baseEmpresa && (
                       <div className="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-[11px]">
                         {([
                           ['Implantação', l.composicao.implantacao],
@@ -373,7 +396,16 @@ export function RemuneracaoComercial() {
       {!carregando && aba === 'plano' && plano && (
         <div className="grid gap-5 lg:grid-cols-2">
           <Card>
-            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-4">Plano</h3>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Plano</h3>
+              <div className="flex gap-2">
+                <select className="input-field w-52" value={plano.id}
+                  onChange={(e) => setPlano(planos.find((x) => x.id === Number(e.target.value)) ?? plano)}>
+                  {planos.map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
+                </select>
+                <Button variant="secondary" onClick={criarPlano}><Plus className="w-4 h-4" /></Button>
+              </div>
+            </div>
             <div className="space-y-4">
               <div>
                 <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Nome</label>
@@ -386,6 +418,37 @@ export function RemuneracaoComercial() {
                   onChange={(e) => setPlano({ ...plano, descricao: e.target.value })} />
               </div>
               <div className="grid sm:grid-cols-2 gap-4">
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Como a comissão é calculada</label>
+                  <select className="input-field" value={plano.tipo}
+                    onChange={(e) => setPlano({ ...plano, tipo: e.target.value })}>
+                    <option value="escada">Escada — percentual sobre o que a própria pessoa vendeu</option>
+                    <option value="proporcional">Proporcional — bônus × % da meta que a empresa bateu</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Quais produtos contam na base</label>
+                  <select className="input-field" value={plano.escopoProduto}
+                    onChange={(e) => setPlano({ ...plano, escopoProduto: e.target.value })}>
+                    <option value="todos">Todos os produtos</option>
+                    <option value="command">Só produtos Command</option>
+                    <option value="cilos">Só produtos Cilos</option>
+                  </select>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Os produtos Cilos são os do servidor PaycoreCilos. Implantação, mensalidade e
+                    upgrades da base própria são sempre Command.
+                  </p>
+                </div>
+                {plano.tipo === 'proporcional' && (
+                  <div className="sm:col-span-2">
+                    <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Valor do bônus (100% da meta)</label>
+                    <input type="number" step="0.01" className="input-field" value={plano.valorBonus}
+                      onChange={(e) => setPlano({ ...plano, valorBonus: Number(e.target.value) })} />
+                    <p className="text-[11px] text-slate-400 mt-1">
+                      Bateu 80% da meta, paga 80% disso; bateu 110%, paga 110%. Não há teto.
+                    </p>
+                  </div>
+                )}
                 <div>
                   <label className="text-xs text-slate-600 dark:text-slate-400 block mb-1">Fixo em treinamento</label>
                   <input type="number" step="0.01" className="input-field" value={plano.fixoInicial}
@@ -424,6 +487,29 @@ export function RemuneracaoComercial() {
             </div>
           </Card>
 
+          {plano.tipo === 'proporcional' ? (
+            <Card>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Como fica o bônus</h3>
+              <p className="text-xs text-slate-500 mt-0.5 mb-4">
+                Simulação sobre a meta de {brl(plano.metaReferencia)} e o bônus de {brl(plano.valorBonus)}.
+              </p>
+              <div className="space-y-1.5">
+                {[50, 70, 80, 90, 100, 110, 130, 150].map((pc) => (
+                  <div key={pc} className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg text-xs odd:bg-slate-50 dark:odd:bg-slate-900/40">
+                    <span className="text-slate-600 dark:text-slate-300">
+                      {pc}% da meta — {brl((plano.metaReferencia * pc) / 100)}
+                    </span>
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                      {brl((plano.valorBonus * pc) / 100)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-3">
+                Este plano não usa escada: o bônus acompanha o resultado da empresa, não o individual.
+              </p>
+            </Card>
+          ) : (
           <Card>
             <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">Escada de comissão</h3>
             <p className="text-xs text-slate-500 mt-0.5 mb-4">
@@ -467,6 +553,7 @@ export function RemuneracaoComercial() {
               </Button>
             </div>
           </Card>
+          )}
         </div>
       )}
     </div>

@@ -13,6 +13,9 @@ import { useThemeStore } from '../../store/themeStore'
 import type { MeuDesempenhoComissao } from '../../types'
 
 const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+const ESCOPO_ROTULO: Record<string, string> = {
+  todos: 'todos os produtos', command: 'só produtos Command', cilos: 'só produtos Cilos',
+}
 const dataBR = (v?: string | null) => {
   if (!v) return '—'
   const [a, m, d] = String(v).slice(0, 10).split('-')
@@ -123,17 +126,25 @@ export function MeuDesempenho() {
           <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-2xl p-5 text-white">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
-                <p className="text-xs uppercase tracking-wider text-emerald-100">Comissão prevista no mês</p>
+                <p className="text-xs uppercase tracking-wider text-emerald-100">
+                  {v.baseEmpresa ? 'Bônus previsto no mês' : 'Comissão prevista no mês'}
+                </p>
                 <p className="text-4xl font-black mt-1">{brl(v.variavel)}</p>
                 <p className="text-sm text-emerald-100 mt-1">
-                  {v.percentual}% sobre {brl(v.base)} que você produziu
+                  {v.baseEmpresa
+                    ? `${(v.percMeta ?? 0).toFixed(0)}% da meta da empresa, sobre ${ESCOPO_ROTULO[v.escopoProduto] ?? v.escopoProduto}`
+                    : `${v.percentual}% sobre ${brl(v.base)} que você produziu`}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-emerald-100">Faixa atingida</p>
-                <p className="text-3xl font-black">{v.percentual}%</p>
+                <p className="text-xs text-emerald-100">{v.baseEmpresa ? 'Meta da empresa' : 'Faixa atingida'}</p>
+                <p className="text-3xl font-black">
+                  {v.baseEmpresa ? `${(v.percMeta ?? 0).toFixed(0)}%` : `${v.percentual}%`}
+                </p>
                 <p className="text-xs text-emerald-100">
-                  {v.faixaDe === null ? 'abaixo da 1ª faixa' : `a partir de ${brl(v.faixaDe)}`}
+                  {v.baseEmpresa
+                    ? `${brl(v.base)} de ${brl(v.meta)}`
+                    : v.faixaDe === null ? 'abaixo da 1ª faixa' : `a partir de ${brl(v.faixaDe)}`}
                 </p>
               </div>
             </div>
@@ -148,7 +159,7 @@ export function MeuDesempenho() {
           <Card>
             <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
-                <Target className="w-4 h-4" /> Minha meta do mês
+                <Target className="w-4 h-4" /> {v.baseEmpresa ? 'Meta da empresa no mês' : 'Minha meta do mês'}
               </h2>
               <span className="text-sm text-slate-600 dark:text-slate-300">
                 <strong>{brl(v.base)}</strong> de {brl(v.meta)}
@@ -161,6 +172,14 @@ export function MeuDesempenho() {
                 style={{ width: `${Math.min(v.percMeta ?? 0, 100)}%` }} />
             </div>
 
+            {v.baseEmpresa && (
+              <p className="text-xs text-slate-500 mt-3">
+                Seu bônus acompanha o resultado de toda a empresa, contando{' '}
+                <strong>{ESCOPO_ROTULO[v.escopoProduto] ?? v.escopoProduto}</strong>. A cada ponto
+                percentual da meta corresponde o mesmo percentual do bônus — sem teto.
+              </p>
+            )}
+            {!v.baseEmpresa && (
             <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-xs">
               {([
                 ['Implantação', v.composicao.implantacao],
@@ -175,6 +194,7 @@ export function MeuDesempenho() {
               ))}
               {v.base === 0 && <span className="text-slate-500">Nenhuma venda registrada neste mês ainda.</span>}
             </div>
+            )}
 
             {v.proximaFaixa && !v.fechado && (
               <div className="mt-4 rounded-xl border border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10 p-3">
@@ -216,6 +236,7 @@ export function MeuDesempenho() {
             </Card>
 
             {/* Escada */}
+            {!v.baseEmpresa && (
             <Card>
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
                 <Wallet className="w-4 h-4" /> Minha escada de comissão
@@ -251,9 +272,10 @@ export function MeuDesempenho() {
                 })}
               </div>
             </Card>
+            )}
           </div>
 
-          {dados.ranking && dados.ranking.total > 1 && (
+          {!v.baseEmpresa && dados.ranking && dados.ranking.total > 1 && (
             <Card>
               <p className="text-sm text-slate-600 dark:text-slate-300 text-center">
                 Você está em <strong className="text-slate-900 dark:text-slate-100">
@@ -264,7 +286,7 @@ export function MeuDesempenho() {
           )}
 
           {/* ── O que entrou na base, item a item ───────────────────── */}
-          {(dados.detalhe.implantacoes.length > 0 || dados.detalhe.clientesNovos.length > 0
+          {!v.baseEmpresa && (dados.detalhe.implantacoes.length > 0 || dados.detalhe.clientesNovos.length > 0
             || dados.detalhe.upgrades.length > 0 || dados.detalhe.assinaturas.length > 0) && (
             <div className="space-y-5">
               <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
@@ -450,6 +472,7 @@ export function MeuDesempenho() {
           )}
 
           <p className="text-[11px] text-slate-400">
+            {v.baseEmpresa ? 'O resultado da empresa soma implantação e migração, mensalidade dos clientes novos, upgrades e assinaturas do PayCore do escopo escolhido. ' : ''}
             Entram na sua meta: implantação e migração dos processos em que você é o vendedor, a
             mensalidade dos clientes novos atribuídos a você, seus upgrades e as assinaturas do
             PayCore no seu nome. Valores do mês em aberto podem mudar até o fechamento.

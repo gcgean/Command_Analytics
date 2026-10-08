@@ -17,10 +17,16 @@ export async function comissoesRoutes(app: FastifyInstance) {
     if (!['vencimento', 'processo'].includes(String(b.baseCalculo))) {
       return reply.status(400).send({ error: 'Base de cálculo inválida.' })
     }
+    const tipo = ['escada', 'proporcional'].includes(String(b.tipo)) ? String(b.tipo) : 'escada'
+    const escopo = ['todos', 'command', 'cilos'].includes(String(b.escopoProduto))
+      ? String(b.escopoProduto) : 'todos'
+
     await prisma.$executeRawUnsafe(
-      `UPDATE comissao_plano SET nome=?, descricao=?, base_calculo=?, fixo_inicial=?,
-         fixo_efetivo=?, meses_fase_inicial=?, meta_referencia=?, ativo=? WHERE id=?`,
-      nome, String(b.descricao ?? '') || null, String(b.baseCalculo),
+      `UPDATE comissao_plano SET nome=?, descricao=?, base_calculo=?, tipo=?, valor_bonus=?,
+         escopo_produto=?, fixo_inicial=?, fixo_efetivo=?, meses_fase_inicial=?,
+         meta_referencia=?, ativo=? WHERE id=?`,
+      nome, String(b.descricao ?? '') || null, String(b.baseCalculo), tipo,
+      Number(b.valorBonus) || 0, escopo,
       Number(b.fixoInicial) || 0, Number(b.fixoEfetivo) || 0,
       Number(b.mesesFaseInicial) || 0, Number(b.metaReferencia) || 0,
       b.ativo === false ? 0 : 1, Number(id),
@@ -39,6 +45,35 @@ export async function comissoesRoutes(app: FastifyInstance) {
         )
       }
     }
+    return { ok: true }
+  })
+
+  app.post('/planos', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request, reply) => {
+    const b = request.body as Record<string, any>
+    const nome = String(b.nome ?? '').trim()
+    if (!nome) return reply.status(400).send({ error: 'Informe o nome do plano.' })
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO comissao_plano
+         (nome, descricao, base_calculo, tipo, valor_bonus, escopo_produto,
+          fixo_inicial, fixo_efetivo, meses_fase_inicial, meta_referencia)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      nome, String(b.descricao ?? '') || null, 'vencimento',
+      ['escada', 'proporcional'].includes(String(b.tipo)) ? String(b.tipo) : 'escada',
+      Number(b.valorBonus) || 0,
+      ['todos', 'command', 'cilos'].includes(String(b.escopoProduto)) ? String(b.escopoProduto) : 'todos',
+      0, 0, 0, Number(b.metaReferencia) || 0,
+    )
+    return reply.status(201).send({ ok: true })
+  })
+
+  app.delete('/planos/:id', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const [uso] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS q FROM comissao_vendedor WHERE plano_id = ?`, Number(id))
+    if (Number(uso?.q ?? 0) > 0) {
+      return reply.status(400).send({ error: 'Há pessoas vinculadas a este plano. Mova-as antes de excluir.' })
+    }
+    await prisma.$executeRawUnsafe(`DELETE FROM comissao_plano WHERE id = ?`, Number(id))
     return { ok: true }
   })
 

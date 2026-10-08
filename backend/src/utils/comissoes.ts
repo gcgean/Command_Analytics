@@ -29,6 +29,12 @@ export async function initComissoes(): Promise<void> {
       descricao           TEXT NULL,
       -- 'vencimento' = implantação com vencimento no mês; 'processo' = pela data do processo.
       base_calculo        VARCHAR(20) NOT NULL DEFAULT 'vencimento',
+      -- 'escada'       = comissão progressiva sobre o que a própria pessoa vendeu;
+      -- 'proporcional' = bônus fixo multiplicado pelo % da meta que a EMPRESA bateu.
+      tipo                VARCHAR(20) NOT NULL DEFAULT 'escada',
+      valor_bonus         DECIMAL(12,2) NOT NULL DEFAULT 0,
+      -- Quais produtos contam na base: 'todos', 'command' ou 'cilos'.
+      escopo_produto      VARCHAR(20) NOT NULL DEFAULT 'todos',
       fixo_inicial        DECIMAL(12,2) NOT NULL DEFAULT 0,
       fixo_efetivo        DECIMAL(12,2) NOT NULL DEFAULT 0,
       meses_fase_inicial  INT NOT NULL DEFAULT 3,
@@ -93,6 +99,20 @@ export async function initComissoes(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 
+  // Colunas acrescentadas depois; o projeto não usa migrations.
+  for (const [coluna, definicao] of [
+    ['tipo', "VARCHAR(20) NOT NULL DEFAULT 'escada'"],
+    ['valor_bonus', 'DECIMAL(12,2) NOT NULL DEFAULT 0'],
+    ['escopo_produto', "VARCHAR(20) NOT NULL DEFAULT 'todos'"],
+  ] as const) {
+    const [existe] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS q FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'comissao_plano' AND column_name = ?`, coluna)
+    if (Number(existe?.q ?? 0) === 0) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE comissao_plano ADD COLUMN \`${coluna}\` ${definicao}`)
+    }
+  }
+
   // Semeia o plano do documento, uma vez só.
   const [c] = await prisma.$queryRawUnsafe<any[]>(`SELECT COUNT(*) AS q FROM comissao_plano`)
   if (Number(c?.q ?? 0) === 0) {
@@ -120,6 +140,11 @@ export interface Plano {
   nome: string
   descricao: string | null
   baseCalculo: string
+  /** 'escada' (individual, progressiva) ou 'proporcional' (bônus × % da meta da empresa). */
+  tipo: string
+  valorBonus: number
+  /** 'todos' | 'command' | 'cilos' — quais produtos contam na base. */
+  escopoProduto: string
   fixoInicial: number
   fixoEfetivo: number
   mesesFaseInicial: number
@@ -137,6 +162,9 @@ export async function listarPlanos(): Promise<Plano[]> {
     nome: p.nome,
     descricao: p.descricao ?? null,
     baseCalculo: p.base_calculo,
+    tipo: p.tipo ?? 'escada',
+    valorBonus: Number(p.valor_bonus ?? 0),
+    escopoProduto: p.escopo_produto ?? 'todos',
     fixoInicial: Number(p.fixo_inicial ?? 0),
     fixoEfetivo: Number(p.fixo_efetivo ?? 0),
     mesesFaseInicial: Number(p.meses_fase_inicial ?? 0),
@@ -178,6 +206,11 @@ export interface ComposicaoBase {
 export interface LinhaApuracao {
   usuarioId: number
   nome: string
+  /** 'escada' ou 'proporcional' — muda o que a base significa. */
+  tipo: string
+  /** No plano proporcional a base é o resultado da EMPRESA, não o individual. */
+  baseEmpresa: boolean
+  escopoProduto: string
   composicao: ComposicaoBase
   planoId: number
   planoNome: string
@@ -268,28 +301,44 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
       usuarioId, inicio, fim,
     ).catch(() => [{ valor: 0 }])
 
+    // Escopo de produto: os produtos Cilos vivem no servidor PaycoreCilos; tudo que vem da nossa
+    // base própria é Command. Por isso o escopo 'cilos' zera as parcelas da base própria.
+    const filtroServidor = plano.escopoProduto === 'command'
+      ? "AND COALESCE(s.nome, '') NOT LIKE '%cilos%'"
+      : plano.escopoProduto === 'cilos' ? "AND COALESCE(s.nome, '') LIKE '%cilos%'" : ''
+
     // No PayCore o vendedor já vem resolvido para o nosso COD_USU na sincronização.
     const [pay] = await prisma.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
          FROM paycore_assinatura a
          INNER JOIN paycore_cliente pc
            ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
-        WHERE pc.vendedor_id = ? AND DATE(a.inicio) BETWEEN ? AND ?`,
+         LEFT JOIN paycore_servidor s ON s.id = a.servidor_id
+        WHERE pc.vendedor_id = ? AND DATE(a.inicio) BETWEEN ? AND ? ${filtroServidor}`,
       usuarioId, inicio, fim,
     ).catch(() => [{ valor: 0 }])
 
+    // Com escopo 'cilos' só o PayCore da Cilos conta: implantação, mensalidade e upgrades são
+    // todos da operação Command.
+    const soCilos = plano.escopoProduto === 'cilos'
     const composicao: ComposicaoBase = {
-      implantacao: Number(b?.implantacao ?? 0),
-      migracao: Number(b?.migracao ?? 0),
-      mensalidadeNova: Number(mens?.valor ?? 0),
-      upgrades: Number(upg?.valor ?? 0),
+      implantacao: soCilos ? 0 : Number(b?.implantacao ?? 0),
+      migracao: soCilos ? 0 : Number(b?.migracao ?? 0),
+      mensalidadeNova: soCilos ? 0 : Number(mens?.valor ?? 0),
+      upgrades: soCilos ? 0 : Number(upg?.valor ?? 0),
       paycore: Number(pay?.valor ?? 0),
     }
-    const base = composicao.implantacao + composicao.migracao
+    let base = composicao.implantacao + composicao.migracao
       + composicao.mensalidadeNova + composicao.upgrades + composicao.paycore
-    const faixa = faixaDe(base, plano.faixas)
+
+    // No plano proporcional a pessoa não é medida pelo que ela mesma vendeu: o que vale é o
+    // quanto a EMPRESA bateu da meta, no mesmo escopo de produto.
+    const proporcional = plano.tipo === 'proporcional'
+    if (proporcional) {
+      base = await baseDaEmpresa(inicio, fim, plano.escopoProduto, coluna)
+    }
+    const faixa = proporcional ? null : faixaDe(base, plano.faixas)
     const percentual = faixa?.percentual ?? 0
-    const variavel = (base * percentual) / 100
 
     const meses = mesesDesde(v.data_admissao, competencia)
     const emFaseInicial = meses !== null && meses < plano.mesesFaseInicial
@@ -298,10 +347,13 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
       : emFaseInicial ? plano.fixoInicial : plano.fixoEfetivo
 
     const meta = v.meta_individual != null ? Number(v.meta_individual) : plano.metaReferencia
+    const atingido = meta > 0 ? base / meta : 0
+    // 110% da meta pagam 110% do bônus: não há teto, é proporcional de verdade.
+    const variavel = proporcional ? plano.valorBonus * atingido : (base * percentual) / 100
 
     // O próximo degrau vale sobre tudo, então o ganho extra não é só sobre a diferença.
-    const acima = [...plano.faixas].sort((a, b2) => a.valorDe - b2.valorDe)
-      .find((f) => f.valorDe > base)
+    const acima = proporcional ? undefined
+      : [...plano.faixas].sort((a, b2) => a.valorDe - b2.valorDe).find((f) => f.valorDe > base)
     const proximaFaixa = acima
       ? {
           valorDe: acima.valorDe,
@@ -316,6 +368,9 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
     linhas.push({
       usuarioId,
       nome: v.nome ?? `Usuário ${usuarioId}`,
+      tipo: plano.tipo,
+      baseEmpresa: proporcional,
+      escopoProduto: plano.escopoProduto,
       composicao,
       planoId: plano.id,
       planoNome: plano.nome,
@@ -337,6 +392,56 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
     })
   }
   return linhas.sort((a, b) => b.base - a.base)
+}
+
+/**
+ * Resultado da EMPRESA no período, usado pelos planos proporcionais. Soma as mesmas parcelas da
+ * base individual, mas de todo mundo, respeitando o escopo de produto.
+ */
+async function baseDaEmpresa(
+  inicio: string, fim: string, escopo: string, colunaData: string,
+): Promise<number> {
+  const soCilos = escopo === 'cilos'
+  const filtroServidor = escopo === 'command'
+    ? "AND COALESCE(s.nome, '') NOT LIKE '%cilos%'"
+    : soCilos ? "AND COALESCE(s.nome, '') LIKE '%cilos%'" : ''
+
+  const [pay] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+       FROM paycore_assinatura a
+       LEFT JOIN paycore_servidor s ON s.id = a.servidor_id
+      WHERE DATE(a.inicio) BETWEEN ? AND ? ${filtroServidor}`,
+    inicio, fim,
+  ).catch(() => [{ valor: 0 }])
+  if (soCilos) return Number(pay?.valor ?? 0)
+
+  const [impl] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COALESCE(SUM(c.valor_implantacao + c.valor_migracao), 0) AS valor
+       FROM processo_implantacao_comercial c
+      WHERE DATE(${colunaData}) BETWEEN ? AND ?`,
+    inicio, fim,
+  ).catch(() => [{ valor: 0 }])
+
+  const [mens] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COALESCE(SUM(c.valor_mensalidade), 0) AS valor
+       FROM cliente c
+      WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000 AND c.ATIVO = 'S'
+        AND c.DATACADASTRO_CLI BETWEEN ? AND ?
+        AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8`,
+    inicio, fim,
+  ).catch(() => [{ valor: 0 }])
+
+  const [upg] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COALESCE(SUM(co.Valor_operacao), 0) AS valor
+       FROM comissoes_funcionario co
+       INNER JOIN cliente c ON c.cod_cli = co.cod_cli
+      WHERE CAST(co.data_venda AS DATE) BETWEEN ? AND ?
+        AND c.cod_cli NOT IN (1,6,7,8) AND c.cod_cla <> 30`,
+    inicio, fim,
+  ).catch(() => [{ valor: 0 }])
+
+  return Number(impl?.valor ?? 0) + Number(mens?.valor ?? 0)
+    + Number(upg?.valor ?? 0) + Number(pay?.valor ?? 0)
 }
 
 /** Congela a apuração da competência, para o que foi pago não mudar depois. */

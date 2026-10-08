@@ -803,6 +803,12 @@ export const api = {
 
   // ─── Remuneração comercial (fixo + comissão por faixa) ─────
   getPlanosComissao: () => fetchApi<PlanoComissao[]>('/comissoes/planos'),
+  criarPlanoComissao: (dados: {
+    nome: string; descricao?: string; tipo: string; valorBonus?: number
+    escopoProduto?: string; metaReferencia?: number
+  }) => fetchApi<{ ok: boolean }>('/comissoes/planos', { method: 'POST', body: JSON.stringify(dados) }),
+  excluirPlanoComissao: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/comissoes/planos/${id}`, { method: 'DELETE' }),
   salvarPlanoComissao: (id: number, dados: PlanoComissao) =>
     fetchApi<{ ok: boolean }>(`/comissoes/planos/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
   getVendedoresComissao: () => fetchApi<VendedorComissao[]>('/comissoes/vendedores'),
