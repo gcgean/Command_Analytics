@@ -46,6 +46,7 @@ import { lembretesFixosRoutes } from './routes/lembretesFixos'
 import { faturamentoRoutes } from './routes/faturamento'
 import { bancoHorasRoutes } from './routes/bancoHoras'
 import { assistenteRoutes } from './routes/assistente'
+import { iaExternaRoutes, initIaExterna } from './routes/iaExterna'
 import { connectionsRoutes } from './routes/connections'
 import { initAuditoria } from './utils/auditoria'
 import { initEtapas } from './utils/etapas'
@@ -231,6 +232,7 @@ app.register(async (api) => {
   api.register(faturamentoRoutes,  { prefix: '/faturamento' })
   api.register(bancoHorasRoutes,   { prefix: '/banco-horas' })
   api.register(assistenteRoutes,   { prefix: '/assistente' })
+  api.register(iaExternaRoutes,    { prefix: '/ia-externa' })
   api.register(emailRoutes,        { prefix: '/email' })
   api.register(metasDevRoutes,     { prefix: '/metas-dev' })
   api.register(orcamentosRoutes,   { prefix: '/orcamentos' })
@@ -276,6 +278,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initCrmSync()
     .then(() => { console.log('✓ Tabelas do CRM verificadas'); startCrmSyncScheduler() })
     .catch(e => console.warn('⚠ CRM init:', e.message))
+  initIaExterna()
+    .then(() => console.log('✓ Tabelas da IA externa verificadas'))
+    .catch(e => console.warn('⚠ IA externa init:', e.message))
   initComissoes()
     .then(() => console.log('✓ Tabelas de comissão verificadas'))
     .catch(e => console.warn('⚠ Comissões init:', e.message))

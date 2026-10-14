@@ -1660,3 +1660,16 @@ export interface CanalCrm {
   conversao: number | null
   participacao: number
 }
+
+/** Sistema externo autorizado a usar a IA do Analytics (hoje o ERP Delphi). */
+export interface ChaveIaExterna {
+  id: number
+  nome: string
+  /** Últimos caracteres, só para reconhecer qual chave é qual. */
+  chaveFinal: string
+  ativo: boolean
+  limiteDia: number
+  usoHoje: number
+  ultimoUso: string | null
+  criadoEm: string
+}

@@ -3,7 +3,7 @@ import { Save, Loader2, Plus, X, CheckCircle, Wifi, Send, Sparkles } from 'lucid
 import { useToast } from '../../components/ui/Toast'
 import { api } from '../../services/api'
 import clsx from 'clsx'
-import type { StatusProcessamentoNotificacaoAgendamento } from '../../types'
+import type { ChaveIaExterna, StatusProcessamentoNotificacaoAgendamento } from '../../types'
 
 type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'assistente' | 'notificacoes' | 'parametros' | 'precificacao'
 
@@ -22,6 +22,11 @@ const mockTokens: TokenWhats[] = [
 export function Configuracoes() {
   const { toast } = useToast()
   const [aba, setAba] = useState<Aba>('geral')
+  const [chavesIa, setChavesIa] = useState<ChaveIaExterna[]>([])
+  const [novaChaveNome, setNovaChaveNome] = useState('')
+  const [novaChaveLimite, setNovaChaveLimite] = useState('')
+  // Fica em memória só até sair da tela: o servidor guarda apenas o hash.
+  const [chaveGerada, setChaveGerada] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   // Geral
@@ -114,6 +119,7 @@ export function Configuracoes() {
   const carregarConfigAssistente = async () => {
     try {
       const config = await api.getAssistenteConfig()
+      api.getChavesIaExterna().then(setChavesIa).catch(() => setChavesIa([]))
       setAssistente(config)
     } catch {
       toast.error('Erro ao carregar configurações do assistente de IA.')
@@ -304,6 +310,41 @@ export function Configuracoes() {
   const removerToken = (id: number) => {
     setTokens(prev => prev.filter(t => t.id !== id))
     toast.info('Token removido.')
+  }
+
+  async function gerarChave() {
+    try {
+      const r = await api.criarChaveIaExterna({
+        nome: novaChaveNome.trim(),
+        limiteDia: novaChaveLimite ? Number(novaChaveLimite) : undefined,
+      })
+      setChaveGerada(r.chave)
+      setNovaChaveNome('')
+      setNovaChaveLimite('')
+      setChavesIa(await api.getChavesIaExterna())
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível gerar a chave.')
+    }
+  }
+
+  async function alternarChave(id: number, ativo: boolean) {
+    try {
+      await api.atualizarChaveIaExterna(id, { ativo })
+      setChavesIa(await api.getChavesIaExterna())
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível alterar a chave.')
+    }
+  }
+
+  async function removerChave(id: number, nome: string) {
+    if (!confirm(`Remover a chave de "${nome}"? O sistema externo perde o acesso na hora.`)) return
+    try {
+      await api.excluirChaveIaExterna(id)
+      setChavesIa(await api.getChavesIaExterna())
+      toast.success('Chave removida.')
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível remover a chave.')
+    }
   }
 
   const abas: { key: Aba; label: string }[] = [
@@ -744,6 +785,81 @@ export function Configuracoes() {
               {salvandoAssistente ? <><Loader2 size={15} className="animate-spin" /> Salvando...</> : <><Save size={15} /> Salvar Configurações</>}
             </button>
           </div>
+
+          {/* ── Chaves para sistemas externos ───────────────────── */}
+          <div className="card space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                Acesso de sistemas externos
+              </h3>
+              <p className="text-xs text-slate-500 mt-1">
+                Uma chave por sistema que vai usar esta IA para explicar relatórios — por exemplo o
+                ERP. O sistema externo nunca recebe a chave do provedor de IA: ele chama o Command
+                Analytics, que chama a IA.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <input className="input-field flex-1 min-w-[12rem]" placeholder="Nome do sistema (ex.: ERP Delphi)"
+                value={novaChaveNome} onChange={(e) => setNovaChaveNome(e.target.value)} />
+              <input type="number" className="input-field w-32" placeholder="Limite/dia"
+                value={novaChaveLimite} onChange={(e) => setNovaChaveLimite(e.target.value)} />
+              <button className="btn-primary" disabled={!novaChaveNome.trim()} onClick={gerarChave}>
+                Gerar chave
+              </button>
+            </div>
+
+            {chaveGerada && (
+              <div className="rounded-lg border border-emerald-500/40 bg-emerald-50 dark:bg-emerald-500/10 p-3">
+                <p className="text-xs text-emerald-800 dark:text-emerald-300 mb-2">
+                  Copie agora — esta chave não será exibida de novo. Só o hash fica guardado.
+                </p>
+                <div className="flex gap-2">
+                  <code className="flex-1 text-xs font-mono bg-white dark:bg-slate-900 rounded px-2 py-1.5 break-all">
+                    {chaveGerada}
+                  </code>
+                  <button className="btn-secondary text-xs"
+                    onClick={() => { void navigator.clipboard.writeText(chaveGerada); toast.success('Chave copiada!') }}>
+                    Copiar
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {chavesIa.length > 0 && (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                    <th className="py-2">Sistema</th>
+                    <th className="py-2">Chave</th>
+                    <th className="py-2 text-center">Uso hoje</th>
+                    <th className="py-2 text-center">Ativa</th>
+                    <th className="py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {chavesIa.map((c) => (
+                    <tr key={c.id} className="border-b border-slate-100 dark:border-slate-700/50">
+                      <td className="py-2 text-slate-700 dark:text-slate-200">{c.nome}</td>
+                      <td className="py-2 text-xs font-mono text-slate-400">…{c.chaveFinal}</td>
+                      <td className="py-2 text-center text-xs text-slate-500">
+                        {c.usoHoje} / {c.limiteDia}
+                      </td>
+                      <td className="py-2 text-center">
+                        <input type="checkbox" className="accent-blue-600" checked={c.ativo}
+                          onChange={(e) => void alternarChave(c.id, e.target.checked)} />
+                      </td>
+                      <td className="py-2 text-right">
+                        <button onClick={() => void removerChave(c.id, c.nome)}
+                          className="text-xs text-slate-400 hover:text-red-500">remover</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
         </div>
       )}
 

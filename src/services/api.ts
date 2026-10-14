@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
+  ChaveIaExterna, MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
@@ -1094,6 +1094,17 @@ export const api = {
     fetchApi<{ ativo: boolean; modelo: string; temApiKey: boolean; modelosDisponiveis: string[] }>('/assistente/config'),
   updateAssistenteConfig: (data: { ativo?: boolean; modelo?: string; apiKey?: string }) =>
     fetchApi<{ ok: boolean }>('/assistente/config', { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ─── IA para sistemas externos (ERP Delphi) ────────────────
+  getChavesIaExterna: () => fetchApi<ChaveIaExterna[]>('/ia-externa/chaves'),
+  criarChaveIaExterna: (dados: { nome: string; limiteDia?: number }) =>
+    fetchApi<{ chave: string; aviso: string }>('/ia-externa/chaves', {
+      method: 'POST', body: JSON.stringify(dados),
+    }),
+  atualizarChaveIaExterna: (id: number, dados: { nome?: string; ativo?: boolean; limiteDia?: number }) =>
+    fetchApi<{ ok: boolean }>(`/ia-externa/chaves/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
+  excluirChaveIaExterna: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/ia-externa/chaves/${id}`, { method: 'DELETE' }),
 
   // ─── Notificações de Agendamento ───────────────────────────
   getNotificacoesAgendamentoConfig: () =>
