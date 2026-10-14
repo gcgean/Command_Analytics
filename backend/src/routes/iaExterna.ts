@@ -39,6 +39,36 @@ export async function initIaExterna(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 
+  /**
+   * Histórico das perguntas, para medir consumo por cliente e ver o que mais perguntam.
+   *
+   * O conteúdo do relatório NÃO é gravado de propósito: são dados financeiros do cliente final e
+   * guardá-los aqui cria uma responsabilidade que não precisamos ter. Fica o tamanho, que já
+   * explica o custo em tokens. A pergunta é gravada porque é ela que diz o que melhorar.
+   */
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ia_cliente_conversa (
+      id             INT AUTO_INCREMENT PRIMARY KEY,
+      cliente_id     INT NOT NULL,
+      cnpj           VARCHAR(20) NULL,
+      cliente_nome   VARCHAR(200) NULL,
+      usuario        VARCHAR(120) NULL,
+      relatorio      VARCHAR(200) NULL,
+      periodo        VARCHAR(60) NULL,
+      pergunta       VARCHAR(500) NULL,
+      tamanho_dados  INT NOT NULL DEFAULT 0,
+      tokens_entrada INT NOT NULL DEFAULT 0,
+      tokens_saida   INT NOT NULL DEFAULT 0,
+      tokens_total   INT NOT NULL DEFAULT 0,
+      duracao_ms     INT NOT NULL DEFAULT 0,
+      erro           VARCHAR(200) NULL,
+      criado_em      DATETIME NOT NULL DEFAULT NOW(),
+      INDEX idx_ia_conv_cliente (cliente_id),
+      INDEX idx_ia_conv_cnpj (cnpj),
+      INDEX idx_ia_conv_data (criado_em)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ia_cliente_uso (
       id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -99,9 +129,22 @@ export async function iaExternaRoutes(app: FastifyInstance) {
     const b = request.body as {
       relatorio?: string; periodo?: string; dados?: unknown
       pergunta?: string; publico?: string
+      cnpj?: string; clienteNome?: string; usuario?: string
     }
     const relatorio = String(b.relatorio ?? '').trim()
     if (!relatorio) return reply.status(400).send({ error: 'Informe o nome do relatório em "relatorio".' })
+
+    // Sem saber de quem é a pergunta não há como medir consumo nem cobrar de quem usa.
+    const cnpj = String(b.cnpj ?? '').replace(/\D/g, '') || null
+    const clienteNome = String(b.clienteNome ?? '').trim() || null
+    if (!cnpj && !clienteNome) {
+      return reply.status(400).send({
+        error: 'Identifique o cliente final em "cnpj" (preferível) ou "clienteNome".',
+      })
+    }
+    if (cnpj && cnpj.length !== 14 && cnpj.length !== 11) {
+      return reply.status(400).send({ error: 'CNPJ/CPF inválido em "cnpj".' })
+    }
     if (b.dados === undefined || b.dados === null || b.dados === '') {
       return reply.status(400).send({ error: 'Informe os dados do relatório em "dados".' })
     }
@@ -142,6 +185,20 @@ export async function iaExternaRoutes(app: FastifyInstance) {
         : 'Explique este relatório em até 5 parágrafos curtos, destacando o que é mais relevante.',
     ].filter((l) => l !== null).join('\n')
 
+    const comecou = Date.now()
+    const registrar = (uso: { entrada: number; saida: number; total: number } | undefined, erro?: string) =>
+      prisma.$executeRawUnsafe(
+        `INSERT INTO ia_cliente_conversa
+           (cliente_id, cnpj, cliente_nome, usuario, relatorio, periodo, pergunta,
+            tamanho_dados, tokens_entrada, tokens_saida, tokens_total, duracao_ms, erro)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        auth.id, cnpj, clienteNome, String(b.usuario ?? '').trim().slice(0, 120) || null,
+        relatorio.slice(0, 200), String(b.periodo ?? '').slice(0, 60) || null,
+        (b.pergunta ?? '').trim().slice(0, 500) || null,
+        dados.length, uso?.entrada ?? 0, uso?.saida ?? 0, uso?.total ?? 0,
+        Date.now() - comecou, erro?.slice(0, 200) ?? null,
+      ).catch((e) => request.log.warn({ err: e }, 'Falha ao registrar conversa da IA externa'))
+
     try {
       const provedor = new ProvedorDeepSeek(config.apiKey, config.modelo)
       // Sem ferramentas: este canal não consulta o banco do Analytics, só interpreta o que veio.
@@ -149,9 +206,16 @@ export async function iaExternaRoutes(app: FastifyInstance) {
         [{ papel: 'system', conteudo: sistema }, { papel: 'user', conteudo: usuario }],
         [],
       )
-      return { resposta: resposta.texto, modelo: config.modelo, cliente: auth.nome }
+      await registrar(resposta.uso)
+      return {
+        resposta: resposta.texto,
+        modelo: config.modelo,
+        cliente: auth.nome,
+        tokens: resposta.uso ?? null,
+      }
     } catch (e: any) {
       request.log.error({ err: e, cliente: auth.nome }, 'Falha na IA externa')
+      await registrar(undefined, String(e?.message ?? e))
       return reply.status(502).send({ error: 'Falha ao consultar a IA. Tente novamente.' })
     }
   })
@@ -175,6 +239,95 @@ export async function iaExternaRoutes(app: FastifyInstance) {
       iaDisponivel: config.ativo && !!config.apiKey,
       usoHoje: Number(uso?.chamadas ?? 0),
       limiteDia: Number(c.limite_dia),
+    }
+  })
+
+  /**
+   * Consumo da IA externa: quem gasta mais e o que mais perguntam. Serve para dimensionar custo
+   * e para decidir o que melhorar na ferramenta.
+   */
+  app.get('/consumo', { preHandler: authMiddleware, schema: { tags: ['IA externa'] } }, async (request) => {
+    const { dias } = request.query as { dias?: string }
+    const janela = Math.min(Math.max(Number(dias) || 30, 1), 365)
+
+    const porCliente = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(c.cnpj, '') AS cnpj,
+              COALESCE(MAX(c.cliente_nome), '') AS nome,
+              COUNT(*) AS perguntas,
+              SUM(c.tokens_total) AS tokens,
+              SUM(c.erro IS NOT NULL) AS erros,
+              ROUND(AVG(c.duracao_ms)) AS media_ms,
+              MAX(c.criado_em) AS ultima,
+              e.nome AS sistema
+         FROM ia_cliente_conversa c
+         LEFT JOIN ia_cliente_externo e ON e.id = c.cliente_id
+        WHERE c.criado_em >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+        GROUP BY c.cnpj, e.nome
+        ORDER BY tokens DESC LIMIT 100`, janela)
+
+    const porRelatorio = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT relatorio, COUNT(*) AS perguntas, SUM(tokens_total) AS tokens,
+              COUNT(DISTINCT cnpj) AS clientes
+         FROM ia_cliente_conversa
+        WHERE criado_em >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND relatorio IS NOT NULL
+        GROUP BY relatorio ORDER BY perguntas DESC LIMIT 30`, janela)
+
+    // Só as que vieram com pergunta escrita: o resumo automático não diz nada sobre dúvidas.
+    const perguntas = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT pergunta, relatorio, cnpj, cliente_nome, criado_em
+         FROM ia_cliente_conversa
+        WHERE criado_em >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+          AND pergunta IS NOT NULL AND pergunta <> ''
+        ORDER BY criado_em DESC LIMIT 100`, janela)
+
+    const porDia = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT DATE(criado_em) AS dia, COUNT(*) AS perguntas, SUM(tokens_total) AS tokens
+         FROM ia_cliente_conversa
+        WHERE criado_em >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+        GROUP BY dia ORDER BY dia`, janela)
+
+    const [tot] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS perguntas, COALESCE(SUM(tokens_total), 0) AS tokens,
+              COUNT(DISTINCT cnpj) AS clientes, SUM(erro IS NOT NULL) AS erros
+         FROM ia_cliente_conversa
+        WHERE criado_em >= DATE_SUB(CURDATE(), INTERVAL ? DAY)`, janela)
+
+    return {
+      dias: janela,
+      resumo: {
+        perguntas: Number(tot?.perguntas ?? 0),
+        tokens: Number(tot?.tokens ?? 0),
+        clientes: Number(tot?.clientes ?? 0),
+        erros: Number(tot?.erros ?? 0),
+      },
+      porCliente: porCliente.map((l) => ({
+        cnpj: l.cnpj || null,
+        nome: l.nome || null,
+        sistema: l.sistema ?? null,
+        perguntas: Number(l.perguntas ?? 0),
+        tokens: Number(l.tokens ?? 0),
+        erros: Number(l.erros ?? 0),
+        mediaMs: Number(l.media_ms ?? 0),
+        ultima: l.ultima ?? null,
+      })),
+      porRelatorio: porRelatorio.map((l) => ({
+        relatorio: l.relatorio,
+        perguntas: Number(l.perguntas ?? 0),
+        tokens: Number(l.tokens ?? 0),
+        clientes: Number(l.clientes ?? 0),
+      })),
+      perguntas: perguntas.map((l) => ({
+        pergunta: l.pergunta,
+        relatorio: l.relatorio ?? null,
+        cnpj: l.cnpj ?? null,
+        cliente: l.cliente_nome ?? null,
+        quando: l.criado_em,
+      })),
+      porDia: porDia.map((l) => ({
+        dia: String(l.dia).slice(0, 10),
+        perguntas: Number(l.perguntas ?? 0),
+        tokens: Number(l.tokens ?? 0),
+      })),
     }
   })
 

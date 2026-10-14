@@ -76,7 +76,15 @@ export class ProvedorDeepSeek implements ProvedorIA {
           })
         : []
 
-      return { texto: escolha.content || '', chamadas }
+      // A API informa o consumo em data.usage; sem isso não há como medir custo por cliente.
+      const u = data?.usage
+      const uso = u ? {
+        entrada: Number(u.prompt_tokens ?? 0),
+        saida: Number(u.completion_tokens ?? 0),
+        total: Number(u.total_tokens ?? 0),
+      } : undefined
+
+      return { texto: escolha.content || '', chamadas, uso }
     } catch (e: any) {
       if (e?.name === 'AbortError' || String(e?.message ?? '').toLowerCase().includes('aborted')) {
         throw new Error(MSG_IA_LENTA)

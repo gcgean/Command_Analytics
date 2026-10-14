@@ -24,9 +24,17 @@ export interface FerramentaDeclarada {
   schemaParametros: Record<string, any> // JSON Schema
 }
 
+export interface UsoTokens {
+  entrada: number
+  saida: number
+  total: number
+}
+
 export interface RespostaIA {
   texto: string
   chamadas: ChamadaFerramenta[]
+  /** Quando o provedor informa. Serve para medir consumo e custo por cliente. */
+  uso?: UsoTokens
 }
 
 export interface ProvedorIA {
