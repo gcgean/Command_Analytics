@@ -3,7 +3,7 @@ import { Save, Loader2, Plus, X, CheckCircle, Wifi, Send, Sparkles } from 'lucid
 import { useToast } from '../../components/ui/Toast'
 import { api } from '../../services/api'
 import clsx from 'clsx'
-import type { ChaveIaExterna, StatusProcessamentoNotificacaoAgendamento } from '../../types'
+import type { ChaveIaExterna, ConsumoIaExterna, StatusProcessamentoNotificacaoAgendamento } from '../../types'
 
 type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'assistente' | 'notificacoes' | 'parametros' | 'precificacao'
 
@@ -27,6 +27,8 @@ export function Configuracoes() {
   const [novaChaveLimite, setNovaChaveLimite] = useState('')
   // Fica em memória só até sair da tela: o servidor guarda apenas o hash.
   const [chaveGerada, setChaveGerada] = useState<string | null>(null)
+  const [consumoIa, setConsumoIa] = useState<ConsumoIaExterna | null>(null)
+  const [diasConsumo, setDiasConsumo] = useState(30)
   const [loading, setLoading] = useState(false)
 
   // Geral
@@ -120,6 +122,7 @@ export function Configuracoes() {
     try {
       const config = await api.getAssistenteConfig()
       api.getChavesIaExterna().then(setChavesIa).catch(() => setChavesIa([]))
+      api.getConsumoIaExterna(diasConsumo).then(setConsumoIa).catch(() => setConsumoIa(null))
       setAssistente(config)
     } catch {
       toast.error('Erro ao carregar configurações do assistente de IA.')
@@ -345,6 +348,14 @@ export function Configuracoes() {
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível remover a chave.')
     }
+  }
+
+  /** CNPJ/CPF legível; o que vier fora do padrão aparece como veio. */
+  function formatarDocumento(doc: string | null): string {
+    const n = String(doc ?? '').replace(/\D/g, '')
+    if (n.length === 14) return n.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5')
+    if (n.length === 11) return n.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')
+    return doc || 'sem documento'
   }
 
   const abas: { key: Aba; label: string }[] = [
@@ -859,6 +870,136 @@ export function Configuracoes() {
               </table>
             )}
           </div>
+
+          {/* ── Consumo da IA pelos sistemas externos ───────────── */}
+          {consumoIa && consumoIa.resumo.perguntas > 0 && (
+            <div className="card space-y-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                    Consumo dos sistemas externos
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Quem mais usa e o que mais perguntam. O conteúdo dos relatórios não é
+                    guardado — só o tamanho, que explica o custo em tokens.
+                  </p>
+                </div>
+                <select className="input-field w-32" value={diasConsumo}
+                  onChange={(e) => {
+                    const d = Number(e.target.value)
+                    setDiasConsumo(d)
+                    api.getConsumoIaExterna(d).then(setConsumoIa).catch(() => undefined)
+                  }}>
+                  <option value={7}>7 dias</option>
+                  <option value={30}>30 dias</option>
+                  <option value={90}>90 dias</option>
+                  <option value={365}>1 ano</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  ['Perguntas', consumoIa.resumo.perguntas.toLocaleString('pt-BR')],
+                  ['Tokens', consumoIa.resumo.tokens.toLocaleString('pt-BR')],
+                  ['Clientes', consumoIa.resumo.clientes.toLocaleString('pt-BR')],
+                  ['Erros', consumoIa.resumo.erros.toLocaleString('pt-BR')],
+                ].map(([rotulo, valor]) => (
+                  <div key={rotulo} className="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-3">
+                    <p className="text-[11px] text-slate-500">{rotulo}</p>
+                    <p className="text-lg font-bold text-slate-800 dark:text-slate-200">{valor}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                  Quem mais consome
+                </p>
+                <div className="overflow-x-auto max-h-64">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-white dark:bg-slate-800">
+                      <tr className="text-left text-xs text-slate-500 border-b border-slate-200 dark:border-slate-700">
+                        <th className="py-2">Cliente</th>
+                        <th className="py-2 text-center">Perguntas</th>
+                        <th className="py-2 text-right">Tokens</th>
+                        <th className="py-2 text-right">Tempo médio</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {consumoIa.porCliente.map((c, i) => (
+                        <tr key={`${c.cnpj}-${i}`} className="border-b border-slate-100 dark:border-slate-700/50">
+                          <td className="py-2">
+                            <span className="text-slate-700 dark:text-slate-200">{c.nome || 'Sem nome'}</span>
+                            <span className="block text-[10px] text-slate-400">
+                              {formatarDocumento(c.cnpj)}{c.sistema ? ` · ${c.sistema}` : ''}
+                              {c.erros > 0 ? ` · ${c.erros} erro(s)` : ''}
+                            </span>
+                          </td>
+                          <td className="py-2 text-center text-slate-600 dark:text-slate-300">{c.perguntas}</td>
+                          <td className="py-2 text-right text-slate-600 dark:text-slate-300">
+                            {c.tokens.toLocaleString('pt-BR')}
+                          </td>
+                          <td className="py-2 text-right text-slate-500 text-xs">
+                            {(c.mediaMs / 1000).toFixed(1)}s
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {consumoIa.porRelatorio.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                    Relatórios que mais geram dúvida
+                  </p>
+                  <p className="text-[11px] text-slate-400 mb-2">
+                    Muita pergunta sobre o mesmo relatório costuma indicar problema no relatório,
+                    não na IA.
+                  </p>
+                  <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                    {consumoIa.porRelatorio.map((r) => {
+                      const maior = Math.max(...consumoIa.porRelatorio.map((x) => x.perguntas), 1)
+                      return (
+                        <div key={r.relatorio}>
+                          <div className="flex items-baseline justify-between text-xs">
+                            <span className="text-slate-700 dark:text-slate-300 truncate">{r.relatorio}</span>
+                            <span className="text-slate-500 shrink-0 ml-2">
+                              {r.perguntas} · {r.clientes} cliente(s)
+                            </span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden mt-0.5">
+                            <div className="h-full bg-blue-500 rounded-full"
+                              style={{ width: `${(r.perguntas / maior) * 100}%` }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {consumoIa.perguntas.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2">
+                    Últimas perguntas ({consumoIa.perguntas.length})
+                  </p>
+                  <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                    {consumoIa.perguntas.map((q, i) => (
+                      <div key={i} className="rounded-lg bg-slate-50 dark:bg-slate-900/40 p-2.5">
+                        <p className="text-xs text-slate-700 dark:text-slate-200">{q.pergunta}</p>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          {[q.relatorio, q.cliente || formatarDocumento(q.cnpj),
+                            new Date(q.quando).toLocaleString('pt-BR')].filter(Boolean).join(' · ')}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
         </div>
       )}

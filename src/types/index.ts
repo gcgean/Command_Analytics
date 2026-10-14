@@ -1673,3 +1673,19 @@ export interface ChaveIaExterna {
   ultimoUso: string | null
   criadoEm: string
 }
+
+/** Consumo da IA pelos sistemas externos, para medir custo e ver o que mais perguntam. */
+export interface ConsumoIaExterna {
+  dias: number
+  resumo: { perguntas: number; tokens: number; clientes: number; erros: number }
+  porCliente: Array<{
+    cnpj: string | null; nome: string | null; sistema: string | null
+    perguntas: number; tokens: number; erros: number; mediaMs: number; ultima: string | null
+  }>
+  porRelatorio: Array<{ relatorio: string; perguntas: number; tokens: number; clientes: number }>
+  perguntas: Array<{
+    pergunta: string; relatorio: string | null; cnpj: string | null
+    cliente: string | null; quando: string
+  }>
+  porDia: Array<{ dia: string; perguntas: number; tokens: number }>
+}
