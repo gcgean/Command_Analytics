@@ -25,6 +25,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
   {
     group: 'OPERACIONAL',
     items: [
+      { label: 'Comunicados', icon: <Megaphone className="w-4 h-4" />, to: '/comunicados', recurso: 'comunicados' },
       { label: 'Dashboard',            icon: <LayoutDashboard className="w-4 h-4" />, to: '/dashboard',      recurso: 'dashboard' },
       {
         label: 'Atendimentos', icon: <Headphones className="w-4 h-4" />, recurso: 'atendimentos', children: [

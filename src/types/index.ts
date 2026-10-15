@@ -1694,3 +1694,29 @@ export interface ConsumoIaExterna {
   }>
   porDia: Array<{ dia: string; perguntas: number; tokens: number }>
 }
+
+/** Usuário elegível a receber comunicado: tem o Telegram vinculado. */
+export interface DestinatarioComunicado {
+  id: number
+  nome: string
+  login: string | null
+  ativo: boolean
+}
+
+export interface ComunicadoHistorico {
+  id: number
+  titulo: string | null
+  mensagem: string
+  autor: string | null
+  destinatarios: number
+  entregues: number
+  falhas: number
+  criadoEm: string
+}
+
+export interface EntregaComunicado {
+  usuarioId: number
+  nome: string
+  entregue: boolean
+  erro: string | null
+}

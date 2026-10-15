@@ -1,7 +1,8 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  ChaveIaExterna, ConsumoIaExterna, MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
+  ChaveIaExterna, ConsumoIaExterna, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
+  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
@@ -1094,6 +1095,17 @@ export const api = {
     fetchApi<{ ativo: boolean; modelo: string; temApiKey: boolean; modelosDisponiveis: string[] }>('/assistente/config'),
   updateAssistenteConfig: (data: { ativo?: boolean; modelo?: string; apiKey?: string }) =>
     fetchApi<{ ok: boolean }>('/assistente/config', { method: 'PUT', body: JSON.stringify(data) }),
+
+  // ─── Comunicados por Telegram ──────────────────────────────
+  getDestinatariosComunicado: () =>
+    fetchApi<DestinatarioComunicado[]>('/comunicados/destinatarios'),
+  enviarComunicado: (dados: { titulo?: string; mensagem: string; usuarios: number[] }) =>
+    fetchApi<{ id: number; destinatarios: number; entregues: number; falhas: number }>(
+      '/comunicados/enviar', { method: 'POST', body: JSON.stringify(dados) }, 300_000),
+  getHistoricoComunicados: () =>
+    fetchApi<ComunicadoHistorico[]>('/comunicados/historico'),
+  getEntregasComunicado: (id: number) =>
+    fetchApi<EntregaComunicado[]>(`/comunicados/historico/${id}`),
 
   // ─── IA para sistemas externos (ERP Delphi) ────────────────
   getChavesIaExterna: () => fetchApi<ChaveIaExterna[]>('/ia-externa/chaves'),
