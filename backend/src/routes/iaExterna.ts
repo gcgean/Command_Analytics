@@ -147,22 +147,6 @@ function excedeuProvisionamento(chaveJanela: string): boolean {
 }
 
 /**
- * A licença pode chegar embrulhada: o ERP envia um valor maior, com prefixo e sufixo em volta
- * da chave (observado: 11 + chave + 6, separados por símbolos). Em vez de obrigar o cliente a
- * desmontar isso, extraímos os trechos que têm cara de chave e testamos cada um.
- *
- * Isso NÃO afrouxa a autorização: o trecho extraído ainda precisa bater com uma licença daquele
- * CNPJ. Só evita recusar uma licença correta por causa do invólucro.
- */
-function candidatosDeLicenca(valor: string): string[] {
-  const limpo = valor.trim()
-  const candidatos = new Set<string>([limpo])
-  // Sequências hexadecimais longas: é esse o formato das chaves em `licencas`.
-  for (const trecho of limpo.match(/[0-9A-Fa-f]{20,}/g) ?? []) candidatos.add(trecho)
-  return [...candidatos]
-}
-
-/**
  * Descreve o FORMATO de uma credencial sem revelar o conteúdo. Quando o valor recebido não
  * confere, é isso que permite descobrir que tipo de credencial o sistema externo está mandando
  * — se é hexadecimal, base64, se tem separadores — sem precisar que alguém cole o segredo.
@@ -395,28 +379,34 @@ export async function iaExternaRoutes(app: FastifyInstance) {
     // A coluna `licencas.chave` usa collation latin1_bin: a comparação é binária e sensível a
     // maiúsculas. As chaves são hexadecimais em caixa alta, e hexadecimal não muda de valor com
     // a caixa — comparar normalizado evita recusar uma licença correta só por isso.
-    const candidatos = candidatosDeLicenca(licenca)
+    // Em vez de adivinhar como o valor foi embrulhado, buscamos as licenças DAQUELE CNPJ e
+    // verificamos se alguma delas está dentro do que chegou. Funciona com qualquer invólucro —
+    // prefixo, sufixo ou símbolos no meio da chave — e não afrouxa nada: a licença comparada é
+    // sempre uma licença daquele cliente.
+    const candidatas = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, chave, vencimento, demo, sistema_id
+         FROM licencas
+        WHERE REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') = ?
+          AND chave IS NOT NULL AND chave <> ''
+        ORDER BY (vencimento IS NULL), vencimento DESC`, cnpj).catch(() => [] as any[])
+
+    const enviadoLimpo = licenca.replace(/[^A-Za-z0-9]/g, '').toUpperCase()
     let lic: any = null
     let extraida = false
-    for (const candidato of candidatos) {
-      const [achada] = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id, vencimento, demo, sistema_id
-           FROM licencas
-          WHERE REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') = ?
-            AND UPPER(TRIM(chave)) = UPPER(TRIM(?))
-          ORDER BY (vencimento IS NULL), vencimento DESC LIMIT 1`,
-        cnpj, candidato,
-      ).catch(() => [null])
-      if (achada) {
-        lic = achada
-        extraida = candidato !== licenca.trim()
-        break
-      }
+    for (const c of candidatas) {
+      const chaveLimpa = String(c.chave).replace(/[^A-Za-z0-9]/g, '').toUpperCase()
+      if (!chaveLimpa) continue
+      if (enviadoLimpo === chaveLimpa) { lic = c; break }
+      if (enviadoLimpo.includes(chaveLimpa)) { lic = c; extraida = true; break }
     }
 
     if (!lic) {
       registrarTentativa(janela)
-      await logar('recusado', 'Chave não confere com nenhuma licença do CNPJ', licencasDoCnpj)
+      await logar(
+        'recusado',
+        `Nenhuma das ${candidatas.length} licença(s) do CNPJ está contida no valor enviado`,
+        licencasDoCnpj,
+      )
       return reply.status(403).send({
         error: `A chave enviada não confere com nenhuma das ${licencasDoCnpj} licença(s) deste CNPJ.`,
       })
