@@ -1720,3 +1720,26 @@ export interface EntregaComunicado {
   entregue: boolean
   erro: string | null
 }
+
+/** Saúde da cobrança no PayCore: separa inadimplência de falha de configuração. */
+export interface SaudeCobrancaPaycore {
+  resumo: {
+    cobrancas: number; pagas: number; vencidas: number; pendentes: number; canceladas: number
+    valorVencido: number
+    /** Assinaturas que nunca geraram cobrança — problema de gateway, não de cliente. */
+    assinaturasSemCobranca: number
+    mensalSemCobranca: number
+  }
+  porStatus: Array<{
+    servidor: string; produto: string; status: string; quantidade: number; valor: number
+  }>
+  semCobranca: Array<{
+    servidor: string; produto: string; status: string; assinaturas: number; mensal: number
+  }>
+  emAberto: Array<{
+    id: string; servidor: string; cliente: string | null; produto: string | null
+    descricao: string | null; valor: number; valorComEncargos: number | null
+    status: string; metodo: string | null; vencimento: string | null
+    link: string | null; diasVencida: number
+  }>
+}

@@ -201,6 +201,98 @@ export async function paycoreRoutes(app: FastifyInstance) {
   })
 
   // Faturamento consolidado por produto e servidor — base para a meta depois.
+  /**
+   * Saúde da cobrança. Responde a pergunta que o churn aparente esconde: o cliente cancelou, ou
+   * a cobrança nunca chegou nele? Assinatura sem nenhuma cobrança emitida é falha de
+   * configuração do gateway, não cliente insatisfeito — e o remédio é outro.
+   */
+  app.get('/saude-cobranca', { preHandler: authMiddleware, schema: { tags: ['PayCore'] } }, async () => {
+    const porStatus = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT COALESCE(s.nome, 'PayCore') AS servidor,
+             COALESCE(c.app_nome, 'Sem produto') AS produto,
+             COALESCE(c.status, 'desconhecido') AS status,
+             COUNT(*) AS quantidade,
+             COALESCE(SUM(c.valor), 0) AS valor
+        FROM paycore_cobranca c
+        LEFT JOIN paycore_servidor s ON s.id = c.servidor_id
+       GROUP BY servidor, produto, status
+       ORDER BY servidor, produto, valor DESC`).catch(() => [])
+
+    // O coração do diagnóstico: assinaturas que nunca geraram cobrança.
+    const semCobranca = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT COALESCE(s.nome, 'PayCore') AS servidor,
+             COALESCE(a.app_nome, 'Sem produto') AS produto,
+             a.status,
+             COUNT(*) AS assinaturas,
+             COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS mensal
+        FROM paycore_assinatura a
+        LEFT JOIN paycore_servidor s ON s.id = a.servidor_id
+       WHERE NOT EXISTS (
+               SELECT 1 FROM paycore_cobranca c
+                WHERE c.servidor_id = a.servidor_id AND c.subscription_id = a.subscription_id)
+       GROUP BY servidor, produto, a.status
+       ORDER BY mensal DESC`).catch(() => [])
+
+    // Vencidas e a vencer: a lista que a cobrança usa para correr atrás.
+    const emAberto = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT c.charge_id, COALESCE(s.nome, 'PayCore') AS servidor, c.cliente_nome, c.app_nome,
+             c.descricao, c.valor, c.valor_com_encargos, c.status, c.metodo, c.vencimento,
+             c.link_pagamento, DATEDIFF(CURDATE(), c.vencimento) AS dias_vencida
+        FROM paycore_cobranca c
+        LEFT JOIN paycore_servidor s ON s.id = c.servidor_id
+       WHERE c.status IN ('pending', 'overdue')
+       ORDER BY c.vencimento`).catch(() => [])
+
+    const [tot] = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT COUNT(*) AS cobrancas,
+             SUM(status = 'paid') AS pagas,
+             SUM(status = 'overdue') AS vencidas,
+             SUM(status = 'pending') AS pendentes,
+             SUM(status = 'canceled') AS canceladas,
+             COALESCE(SUM(CASE WHEN status = 'overdue' THEN valor END), 0) AS valor_vencido
+        FROM paycore_cobranca`).catch(() => [null])
+
+    const linhasSem = semCobranca.map((l) => ({
+      servidor: l.servidor,
+      produto: l.produto,
+      status: l.status,
+      assinaturas: Number(l.assinaturas ?? 0),
+      mensal: Number(l.mensal ?? 0),
+    }))
+
+    return {
+      resumo: {
+        cobrancas: Number(tot?.cobrancas ?? 0),
+        pagas: Number(tot?.pagas ?? 0),
+        vencidas: Number(tot?.vencidas ?? 0),
+        pendentes: Number(tot?.pendentes ?? 0),
+        canceladas: Number(tot?.canceladas ?? 0),
+        valorVencido: Number(tot?.valor_vencido ?? 0),
+        assinaturasSemCobranca: linhasSem.reduce((s, l) => s + l.assinaturas, 0),
+        mensalSemCobranca: linhasSem.reduce((s, l) => s + l.mensal, 0),
+      },
+      porStatus: porStatus.map((l) => ({
+        servidor: l.servidor, produto: l.produto, status: l.status,
+        quantidade: Number(l.quantidade ?? 0), valor: Number(l.valor ?? 0),
+      })),
+      semCobranca: linhasSem,
+      emAberto: emAberto.map((l) => ({
+        id: l.charge_id,
+        servidor: l.servidor,
+        cliente: l.cliente_nome ?? null,
+        produto: l.app_nome ?? null,
+        descricao: l.descricao ?? null,
+        valor: Number(l.valor ?? 0),
+        valorComEncargos: l.valor_com_encargos == null ? null : Number(l.valor_com_encargos),
+        status: l.status,
+        metodo: l.metodo ?? null,
+        vencimento: l.vencimento ? String(l.vencimento).slice(0, 10) : null,
+        link: l.link_pagamento ?? null,
+        diasVencida: Number(l.dias_vencida ?? 0),
+      })),
+    }
+  })
+
   app.get('/faturamento', { preHandler: authMiddleware, schema: { tags: ['PayCore'] } }, async (request) => {
     const { inicio, fim } = request.query as Record<string, string>
     const condicoes: string[] = ["f.status IN ('paid','confirmed','received','succeeded')"]

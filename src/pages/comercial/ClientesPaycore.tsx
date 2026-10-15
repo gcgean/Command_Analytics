@@ -9,7 +9,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { useToast } from '../../components/ui/Toast'
-import type { ClientePaycore, ServidorPaycore, FaturamentoPaycore } from '../../types'
+import type { ClientePaycore, ServidorPaycore, FaturamentoPaycore, SaudeCobrancaPaycore } from '../../types'
 
 const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -25,7 +25,8 @@ const FORM_VAZIO: FormServidor = { id: null, nome: '', baseUrl: '', apiKey: '', 
 
 export function ClientesPaycore() {
   const { toast } = useToast()
-  const [aba, setAba] = useState<'clientes' | 'faturamento' | 'servidores'>('clientes')
+  const [aba, setAba] = useState<'clientes' | 'faturamento' | 'cobranca' | 'servidores'>('clientes')
+  const [saude, setSaude] = useState<SaudeCobrancaPaycore | null>(null)
   const [clientes, setClientes] = useState<ClientePaycore[]>([])
   const [servidores, setServidores] = useState<ServidorPaycore[]>([])
   const [faturamento, setFaturamento] = useState<FaturamentoPaycore | null>(null)
@@ -42,14 +43,16 @@ export function ClientesPaycore() {
   const carregar = useCallback(async () => {
     setCarregando(true)
     try {
-      const [cli, srv, fat] = await Promise.all([
+      const [cli, srv, fat, sau] = await Promise.all([
         api.getClientesPaycore(filtroServidor ? { servidorId: Number(filtroServidor) } : undefined),
         api.getServidoresPaycore(),
         api.getFaturamentoPaycore().catch(() => null),
+        api.getSaudeCobrancaPaycore().catch(() => null),
       ])
       setClientes(cli)
       setServidores(srv)
       setFaturamento(fat)
+      setSaude(sau)
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível carregar os dados do PayCore.')
     } finally {
@@ -152,6 +155,7 @@ export function ClientesPaycore() {
         {([
           ['clientes', 'Clientes'],
           ['faturamento', 'Faturamento por produto'],
+          ['cobranca', 'Saúde da cobrança'],
           ['servidores', `Servidores (${servidores.length})`],
         ] as const).map(([id, rotulo]) => (
           <button key={id} onClick={() => setAba(id)}
@@ -334,6 +338,148 @@ export function ClientesPaycore() {
       )}
 
       {/* ── Servidores ── */}
+      {!carregando && aba === 'cobranca' && saude && (
+        <div className="space-y-5">
+          {saude.resumo.assinaturasSemCobranca > 0 && (
+            <div className="rounded-xl border border-red-300 dark:border-red-500/40 bg-red-50 dark:bg-red-500/10 p-4">
+              <p className="text-sm font-semibold text-red-800 dark:text-red-300">
+                {saude.resumo.assinaturasSemCobranca} assinatura(s) nunca geraram cobrança —
+                {' '}{brl(saude.resumo.mensalSemCobranca)}/mês vendidos e não faturados
+              </p>
+              <p className="text-xs text-red-700 dark:text-red-300/80 mt-1">
+                Isso não é inadimplência: a cobrança nunca chegou a existir. É configuração do
+                gateway na plataforma, e o cliente provavelmente nem sabe que deveria pagar.
+                Cobrar agora, meses depois, costuma custar o cliente — vale decidir caso a caso.
+              </p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            {[
+              { rotulo: 'Cobranças pagas', valor: String(saude.resumo.pagas), cor: 'text-emerald-600 dark:text-emerald-400' },
+              { rotulo: 'A vencer', valor: String(saude.resumo.pendentes), cor: 'text-blue-600 dark:text-blue-400' },
+              { rotulo: 'Vencidas', valor: `${saude.resumo.vencidas} · ${brl(saude.resumo.valorVencido)}`, cor: 'text-red-600 dark:text-red-400' },
+              { rotulo: 'Canceladas', valor: String(saude.resumo.canceladas), cor: 'text-slate-600 dark:text-slate-300' },
+            ].map((k) => (
+              <div key={k.rotulo} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
+                <p className="text-xs text-slate-500">{k.rotulo}</p>
+                <p className={clsx('text-xl font-bold mt-0.5 truncate', k.cor)}>{k.valor}</p>
+              </div>
+            ))}
+          </div>
+
+          {saude.semCobranca.length > 0 && (
+            <Card padding="none">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Assinaturas sem cobrança emitida
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Vendido, ativo na plataforma, e nenhuma cobrança foi gerada.
+                </p>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-900/50">
+                  <tr className="text-left text-slate-600 dark:text-slate-400">
+                    <th className="px-4 py-2.5 font-medium">Servidor</th>
+                    <th className="px-4 py-2.5 font-medium">Produto</th>
+                    <th className="px-4 py-2.5 font-medium">Situação</th>
+                    <th className="px-3 py-2.5 font-medium text-center">Assinaturas</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Mensal não faturado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {saude.semCobranca.map((l, i) => (
+                    <tr key={i} className="border-t border-slate-200 dark:border-slate-700">
+                      <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300 text-xs">{l.servidor}</td>
+                      <td className="px-4 py-2.5 text-slate-800 dark:text-slate-200">{l.produto}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="text-xs px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                          {l.status}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-center text-slate-700 dark:text-slate-200">{l.assinaturas}</td>
+                      <td className="px-4 py-2.5 text-right font-semibold text-red-600 dark:text-red-400">
+                        {brl(l.mensal)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Card>
+          )}
+
+          {saude.emAberto.length > 0 && (
+            <Card padding="none">
+              <div className="p-4 border-b border-slate-200 dark:border-slate-700">
+                <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Cobranças em aberto ({saude.emAberto.length})
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Emitidas e ainda não pagas. O link abre a página de pagamento para reenviar ao cliente.
+                </p>
+              </div>
+              <div className="overflow-x-auto max-h-[32rem]">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50 dark:bg-slate-900/50 sticky top-0">
+                    <tr className="text-left text-slate-600 dark:text-slate-400">
+                      <th className="px-4 py-2.5 font-medium">Cliente</th>
+                      <th className="px-4 py-2.5 font-medium">Cobrança</th>
+                      <th className="px-3 py-2.5 font-medium">Vencimento</th>
+                      <th className="px-4 py-2.5 font-medium text-right">Valor</th>
+                      <th className="px-3 py-2.5" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {saude.emAberto.map((c) => (
+                      <tr key={c.id} className="border-t border-slate-200 dark:border-slate-700">
+                        <td className="px-4 py-2.5">
+                          <p className="text-slate-800 dark:text-slate-200">{c.cliente ?? '—'}</p>
+                          <p className="text-[11px] text-slate-400">{c.produto} · {c.servidor}</p>
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300 text-xs">
+                          {c.descricao ?? '—'}
+                          {c.metodo && <span className="block text-[10px] text-slate-400">{c.metodo}</span>}
+                        </td>
+                        <td className="px-3 py-2.5 whitespace-nowrap">
+                          <span className={clsx('text-xs',
+                            c.status === 'overdue' ? 'text-red-600 dark:text-red-400 font-medium' : 'text-slate-500')}>
+                            {c.vencimento ? c.vencimento.split('-').reverse().join('/') : '—'}
+                          </span>
+                          {c.status === 'overdue' && c.diasVencida > 0 && (
+                            <span className="block text-[10px] text-red-500">{c.diasVencida} dia(s) em atraso</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          <span className="text-slate-800 dark:text-slate-200">{brl(c.valor)}</span>
+                          {c.valorComEncargos != null && c.valorComEncargos > c.valor && (
+                            <span className="block text-[10px] text-amber-600 dark:text-amber-400">
+                              com encargos: {brl(c.valorComEncargos)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          {c.link && (
+                            <a href={c.link} target="_blank" rel="noopener noreferrer"
+                              className="text-xs text-blue-600 dark:text-blue-400 hover:underline">abrir</a>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+
+          {saude.resumo.cobrancas === 0 && (
+            <Card><p className="text-sm text-slate-500 py-8 text-center">
+              Nenhuma cobrança sincronizada ainda. Rode a sincronização para trazer os dados.
+            </p></Card>
+          )}
+        </div>
+      )}
+
       {!carregando && aba === 'servidores' && (
         <div className="space-y-4">
           <div className="flex justify-between items-center">

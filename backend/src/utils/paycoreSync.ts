@@ -131,6 +131,42 @@ export async function initPaycoreSync(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 
+  /**
+   * Cobranças emitidas. Diferente de `paycore_faturamento`, que só tem o que foi PAGO: é aqui
+   * que aparece o que foi cobrado e não entrou — e, principalmente, dá para descobrir a
+   * assinatura que nunca gerou cobrança nenhuma, que é um problema de configuração, não de
+   * cliente inadimplente.
+   */
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS paycore_cobranca (
+      servidor_id     INT NOT NULL,
+      charge_id       VARCHAR(80) NOT NULL,
+      subscription_id VARCHAR(80) NULL,
+      customer_id     VARCHAR(80) NULL,
+      cliente_nome    VARCHAR(200) NULL,
+      app_id          VARCHAR(80) NULL,
+      app_nome        VARCHAR(150) NULL,
+      descricao       VARCHAR(250) NULL,
+      tipo            VARCHAR(30) NULL,
+      valor           DECIMAL(10,2) NOT NULL DEFAULT 0,
+      valor_com_encargos DECIMAL(10,2) NULL,
+      juros           DECIMAL(10,2) NULL,
+      multa           DECIMAL(10,2) NULL,
+      status          VARCHAR(30) NULL,
+      metodo          VARCHAR(30) NULL,
+      gateway         VARCHAR(100) NULL,
+      link_pagamento  VARCHAR(400) NULL,
+      vencimento      DATE NULL,
+      pago_em         DATETIME NULL,
+      criado_em       DATETIME NULL,
+      atualizado_em   DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW(),
+      PRIMARY KEY (servidor_id, charge_id),
+      INDEX idx_paycore_cob_status (status),
+      INDEX idx_paycore_cob_venc (vencimento),
+      INDEX idx_paycore_cob_assin (servidor_id, subscription_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS paycore_faturamento (
       servidor_id     INT NOT NULL,
@@ -302,6 +338,7 @@ async function descobrirVendedor(documento: string) {
 }
 
 export interface ResultadoSync {
+  cobrancas?: number
   servidor: string
   aplicacoes: number
   clientes: number
@@ -376,6 +413,36 @@ export async function sincronizarServidor(servidor: ServidorPaycore): Promise<Re
     }
 
     // ── Pagamentos (o faturamento de fato) ──
+    // ── Cobranças emitidas ──
+    const cobrancas = await buscarTudo(servidor, '/api/v1/charges').catch(() => [] as any[])
+    for (const c of cobrancas) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO paycore_cobranca
+           (servidor_id, charge_id, subscription_id, customer_id, cliente_nome, app_id, app_nome,
+            descricao, tipo, valor, valor_com_encargos, juros, multa, status, metodo, gateway,
+            link_pagamento, vencimento, pago_em, criado_em)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+         ON DUPLICATE KEY UPDATE
+           subscription_id=VALUES(subscription_id), customer_id=VALUES(customer_id),
+           cliente_nome=VALUES(cliente_nome), app_id=VALUES(app_id), app_nome=VALUES(app_nome),
+           descricao=VALUES(descricao), tipo=VALUES(tipo), valor=VALUES(valor),
+           valor_com_encargos=VALUES(valor_com_encargos), juros=VALUES(juros), multa=VALUES(multa),
+           status=VALUES(status), metodo=VALUES(metodo), gateway=VALUES(gateway),
+           link_pagamento=VALUES(link_pagamento), vencimento=VALUES(vencimento),
+           pago_em=VALUES(pago_em)`,
+        servidor.id, texto(c.id, 80), texto(c.subscriptionId, 80), texto(c.clientId, 80),
+        texto(c.company ?? c.client, 200), texto(c.appId, 80), texto(c.app, 150),
+        texto(c.description, 250), texto(c.type, 30),
+        numero(c.amount), numero(c.amountWithAdjustments), numero(c.interestAmount), numero(c.fineAmount),
+        texto(c.status, 30), texto(c.paymentMethod, 30), texto(c.gateway, 100),
+        texto(c.paymentUrl ?? c.boletoUrl, 400),
+        c.dueDate ? String(c.dueDate).slice(0, 10) : null,
+        c.paidAt ? new Date(c.paidAt) : null,
+        c.createdAt ? new Date(c.createdAt) : null,
+      )
+      resultado.cobrancas = (resultado.cobrancas ?? 0) + 1
+    }
+
     const pagamentos = await buscarTudo(servidor, '/api/v1/payments')
     for (const p of pagamentos) {
       await prisma.$executeRawUnsafe(

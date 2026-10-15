@@ -2,7 +2,7 @@ import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
   ChaveIaExterna, ConsumoIaExterna, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
-  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
+  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
@@ -787,6 +787,8 @@ export const api = {
     const q = qs.toString()
     return fetchApi<FaturamentoPaycore>(`/paycore/faturamento${q ? `?${q}` : ''}`)
   },
+  getSaudeCobrancaPaycore: () =>
+    fetchApi<SaudeCobrancaPaycore>('/paycore/saude-cobranca'),
   getServidoresPaycore: () => fetchApi<ServidorPaycore[]>('/paycore/servidores'),
   criarServidorPaycore: (dados: { nome: string; baseUrl: string; apiKey?: string; ativo?: boolean }) =>
     fetchApi<{ ok: boolean }>('/paycore/servidores', { method: 'POST', body: JSON.stringify(dados) }),
