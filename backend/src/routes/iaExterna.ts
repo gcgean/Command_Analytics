@@ -147,6 +147,22 @@ function excedeuProvisionamento(chaveJanela: string): boolean {
 }
 
 /**
+ * A licença pode chegar embrulhada: o ERP envia um valor maior, com prefixo e sufixo em volta
+ * da chave (observado: 11 + chave + 6, separados por símbolos). Em vez de obrigar o cliente a
+ * desmontar isso, extraímos os trechos que têm cara de chave e testamos cada um.
+ *
+ * Isso NÃO afrouxa a autorização: o trecho extraído ainda precisa bater com uma licença daquele
+ * CNPJ. Só evita recusar uma licença correta por causa do invólucro.
+ */
+function candidatosDeLicenca(valor: string): string[] {
+  const limpo = valor.trim()
+  const candidatos = new Set<string>([limpo])
+  // Sequências hexadecimais longas: é esse o formato das chaves em `licencas`.
+  for (const trecho of limpo.match(/[0-9A-Fa-f]{20,}/g) ?? []) candidatos.add(trecho)
+  return [...candidatos]
+}
+
+/**
  * Descreve o FORMATO de uma credencial sem revelar o conteúdo. Quando o valor recebido não
  * confere, é isso que permite descobrir que tipo de credencial o sistema externo está mandando
  * — se é hexadecimal, base64, se tem separadores — sem precisar que alguém cole o segredo.
@@ -379,14 +395,24 @@ export async function iaExternaRoutes(app: FastifyInstance) {
     // A coluna `licencas.chave` usa collation latin1_bin: a comparação é binária e sensível a
     // maiúsculas. As chaves são hexadecimais em caixa alta, e hexadecimal não muda de valor com
     // a caixa — comparar normalizado evita recusar uma licença correta só por isso.
-    const [lic] = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT id, vencimento, demo, sistema_id
-         FROM licencas
-        WHERE REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') = ?
-          AND UPPER(TRIM(chave)) = UPPER(TRIM(?))
-        ORDER BY (vencimento IS NULL), vencimento DESC LIMIT 1`,
-      cnpj, licenca,
-    ).catch(() => [null])
+    const candidatos = candidatosDeLicenca(licenca)
+    let lic: any = null
+    let extraida = false
+    for (const candidato of candidatos) {
+      const [achada] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id, vencimento, demo, sistema_id
+           FROM licencas
+          WHERE REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') = ?
+            AND UPPER(TRIM(chave)) = UPPER(TRIM(?))
+          ORDER BY (vencimento IS NULL), vencimento DESC LIMIT 1`,
+        cnpj, candidato,
+      ).catch(() => [null])
+      if (achada) {
+        lic = achada
+        extraida = candidato !== licenca.trim()
+        break
+      }
+    }
 
     if (!lic) {
       registrarTentativa(janela)
@@ -427,7 +453,10 @@ export async function iaExternaRoutes(app: FastifyInstance) {
       )
     }
 
-    await logar('provisionado', null, licencasDoCnpj)
+    // Registra quando a licença veio embrulhada: é sinal de que o ERP manda um valor composto,
+    // e vale saber disso sem precisar abrir chamado.
+    await logar(extraida ? 'provisionado (licença extraída do valor enviado)' : 'provisionado',
+      null, licencasDoCnpj)
 
     const config = await obterConfigIA()
     return {

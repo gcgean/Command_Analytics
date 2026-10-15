@@ -140,8 +140,11 @@ Erros:
 | 429 | Muitas tentativas para o mesmo CNPJ (10 a cada 15 min) |
 
 A chave da licença é hexadecimal de 52 caracteres. A comparação ignora caixa e espaços nas
-bordas, mas **não** aceita a chave com qualquer outra alteração — envie exatamente o que o ERP
-tem gravado.
+bordas e, se o valor enviado vier com prefixo/sufixo em volta da chave, o servidor extrai a
+licença de dentro — então pode mandar o `DM.Key` como está, sem desmontar.
+
+A autorização continua a mesma: o trecho extraído precisa bater com uma licença **daquele**
+CNPJ. Licença de outro cliente, mesmo embrulhada igual, é recusada.
 
 Quando der 403, consulte `GET /api/ia-externa/diagnostico?cnpj=...` (autenticado, no Analytics):
 ele diz quantas licenças o CNPJ tem, se estão vigentes e, se a chave for enviada, se ela casa —
