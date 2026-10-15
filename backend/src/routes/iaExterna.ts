@@ -87,6 +87,26 @@ export async function initIaExterna(): Promise<void> {
     }
   }
 
+  /**
+   * Tentativas de provisionamento. Um 403 sem registro é indepurável: não dá para dizer qual
+   * regra recusou. A licença nunca é gravada — só o que é preciso para diagnosticar.
+   */
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ia_provisionamento_log (
+      id            INT AUTO_INCREMENT PRIMARY KEY,
+      cnpj          VARCHAR(20) NULL,
+      instalacao    VARCHAR(80) NULL,
+      sistema       VARCHAR(60) NULL,
+      resultado     VARCHAR(30) NOT NULL,
+      motivo        VARCHAR(200) NULL,
+      licencas_cnpj INT NOT NULL DEFAULT 0,
+      tamanho_chave INT NOT NULL DEFAULT 0,
+      criado_em     DATETIME NOT NULL DEFAULT NOW(),
+      INDEX idx_prov_log_cnpj (cnpj),
+      INDEX idx_prov_log_data (criado_em)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ia_cliente_uso (
       id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -293,21 +313,51 @@ export async function iaExternaRoutes(app: FastifyInstance) {
       return reply.status(429).send({ error: 'Muitas tentativas. Aguarde alguns minutos.' })
     }
 
-    // O CNPJ em `licencas` vem formatado; comparamos só os dígitos dos dois lados.
+    /** Registra a tentativa: sem isso um 403 não tem como ser investigado depois. */
+    const logar = (resultado: string, motivo: string | null, licencasDoCnpj: number) =>
+      prisma.$executeRawUnsafe(
+        `INSERT INTO ia_provisionamento_log
+           (cnpj, instalacao, sistema, resultado, motivo, licencas_cnpj, tamanho_chave)
+         VALUES (?,?,?,?,?,?,?)`,
+        cnpj, instalacao, String(b.sistema ?? '').slice(0, 60) || null,
+        resultado, motivo, licencasDoCnpj, licenca.length,
+      ).catch(() => {})
+
+    // Quantas licenças esse CNPJ tem, independentemente da chave. Separa "CNPJ desconhecido"
+    // de "chave não confere" — são problemas diferentes e a mensagem precisa dizer qual é.
+    const [cont] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS q FROM licencas
+        WHERE REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') = ?`,
+      cnpj).catch(() => [{ q: 0 }])
+    const licencasDoCnpj = Number(cont?.q ?? 0)
+
+    if (licencasDoCnpj === 0) {
+      registrarTentativa(janela)
+      await logar('recusado', 'CNPJ sem licença cadastrada', 0)
+      return reply.status(403).send({ error: 'Nenhuma licença cadastrada para este CNPJ.' })
+    }
+
+    // A coluna `licencas.chave` usa collation latin1_bin: a comparação é binária e sensível a
+    // maiúsculas. As chaves são hexadecimais em caixa alta, e hexadecimal não muda de valor com
+    // a caixa — comparar normalizado evita recusar uma licença correta só por isso.
     const [lic] = await prisma.$queryRawUnsafe<any[]>(
       `SELECT id, vencimento, demo, sistema_id
          FROM licencas
         WHERE REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') = ?
-          AND chave = ?
-        ORDER BY vencimento DESC LIMIT 1`,
+          AND UPPER(TRIM(chave)) = UPPER(TRIM(?))
+        ORDER BY (vencimento IS NULL), vencimento DESC LIMIT 1`,
       cnpj, licenca,
     ).catch(() => [null])
 
     if (!lic) {
       registrarTentativa(janela)
-      return reply.status(403).send({ error: 'Licença não confere com o CNPJ informado.' })
+      await logar('recusado', 'Chave não confere com nenhuma licença do CNPJ', licencasDoCnpj)
+      return reply.status(403).send({
+        error: `A chave enviada não confere com nenhuma das ${licencasDoCnpj} licença(s) deste CNPJ.`,
+      })
     }
     if (lic.vencimento && new Date(lic.vencimento) < new Date(new Date().toDateString())) {
+      await logar('recusado', 'Licença vencida', licencasDoCnpj)
       return reply.status(403).send({
         error: 'Licença vencida. Regularize a licença para usar o assistente.',
       })
@@ -337,6 +387,8 @@ export async function iaExternaRoutes(app: FastifyInstance) {
         nome, hash(chave), chave.slice(-6), LIMITE_PADRAO_DIA, cnpj, instalacao,
       )
     }
+
+    await logar('provisionado', null, licencasDoCnpj)
 
     const config = await obterConfigIA()
     return {
@@ -456,6 +508,69 @@ export async function iaExternaRoutes(app: FastifyInstance) {
         dia: String(l.dia).slice(0, 10),
         perguntas: Number(l.perguntas ?? 0),
         tokens: Number(l.tokens ?? 0),
+      })),
+    }
+  })
+
+  /**
+   * Diagnóstico de provisionamento, para suporte. Responde se o CNPJ tem licença e, quando a
+   * chave é enviada, se ela casa — sem devolver a licença nem a chave de IA.
+   */
+  app.get('/diagnostico', { preHandler: authMiddleware, schema: { tags: ['IA externa'] } }, async (request) => {
+    const { cnpj: cnpjBruto, licenca } = request.query as { cnpj?: string; licenca?: string }
+    const cnpj = String(cnpjBruto ?? '').replace(/\D/g, '')
+    if (!cnpj) return { erro: 'Informe o cnpj.' }
+
+    const licencas = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, sistema_id, vencimento, demo, LENGTH(chave) AS tamanho_chave,
+              (vencimento IS NULL OR vencimento >= CURDATE()) AS vigente
+         FROM licencas
+        WHERE REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') = ?
+        ORDER BY (vencimento IS NULL), vencimento DESC`, cnpj).catch(() => [])
+
+    let confere: boolean | null = null
+    let confereIgnorandoCaixa: boolean | null = null
+    if (licenca) {
+      const [exato] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT COUNT(*) AS q FROM licencas
+          WHERE REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') = ? AND chave = ?`,
+        cnpj, licenca).catch(() => [{ q: 0 }])
+      const [normalizado] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT COUNT(*) AS q FROM licencas
+          WHERE REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') = ?
+            AND UPPER(TRIM(chave)) = UPPER(TRIM(?))`,
+        cnpj, licenca).catch(() => [{ q: 0 }])
+      confere = Number(exato?.q ?? 0) > 0
+      confereIgnorandoCaixa = Number(normalizado?.q ?? 0) > 0
+    }
+
+    const tentativas = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT resultado, motivo, instalacao, sistema, licencas_cnpj, tamanho_chave, criado_em
+         FROM ia_provisionamento_log WHERE cnpj = ? ORDER BY criado_em DESC LIMIT 20`,
+      cnpj).catch(() => [])
+
+    return {
+      cnpj,
+      licencas: licencas.map((l) => ({
+        id: Number(l.id),
+        sistemaId: Number(l.sistema_id ?? 0),
+        vencimento: l.vencimento ? String(l.vencimento).slice(0, 10) : null,
+        vigente: Number(l.vigente ?? 0) === 1,
+        demo: String(l.demo ?? 'N') === 'S',
+        // Só o tamanho: a licença em si nunca sai daqui.
+        tamanhoChave: Number(l.tamanho_chave ?? 0),
+      })),
+      chaveEnviada: licenca
+        ? { tamanho: licenca.length, confereExato: confere, confereIgnorandoCaixa }
+        : null,
+      tentativas: tentativas.map((l) => ({
+        resultado: l.resultado,
+        motivo: l.motivo ?? null,
+        instalacao: l.instalacao ?? null,
+        sistema: l.sistema ?? null,
+        licencasDoCnpj: Number(l.licencas_cnpj ?? 0),
+        tamanhoChave: Number(l.tamanho_chave ?? 0),
+        quando: l.criado_em,
       })),
     }
   })
