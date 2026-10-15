@@ -33,6 +33,10 @@ export async function initIaExterna(): Promise<void> {
       chave_final   VARCHAR(8) NOT NULL,
       ativo         TINYINT(1) NOT NULL DEFAULT 1,
       limite_dia    INT NOT NULL DEFAULT ${LIMITE_PADRAO_DIA},
+      -- Preenchidos quando a chave nasce de um provisionamento automático pelo ERP.
+      cnpj          VARCHAR(20) NULL,
+      instalacao    VARCHAR(80) NULL,
+      origem        VARCHAR(20) NOT NULL DEFAULT 'manual',
       ultimo_uso    DATETIME NULL,
       criado_em     DATETIME NOT NULL DEFAULT NOW(),
       UNIQUE KEY uk_ia_cliente_chave (chave_hash)
@@ -69,6 +73,20 @@ export async function initIaExterna(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 
+  // Colunas acrescentadas depois; o projeto não usa migrations.
+  for (const [coluna, definicao] of [
+    ['cnpj', 'VARCHAR(20) NULL'],
+    ['instalacao', 'VARCHAR(80) NULL'],
+    ['origem', "VARCHAR(20) NOT NULL DEFAULT 'manual'"],
+  ] as const) {
+    const [existe] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS q FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'ia_cliente_externo' AND column_name = ?`, coluna)
+    if (Number(existe?.q ?? 0) === 0) {
+      await prisma.$executeRawUnsafe(`ALTER TABLE ia_cliente_externo ADD COLUMN \`${coluna}\` ${definicao}`)
+    }
+  }
+
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS ia_cliente_uso (
       id          INT AUTO_INCREMENT PRIMARY KEY,
@@ -81,6 +99,27 @@ export async function initIaExterna(): Promise<void> {
 }
 
 const hash = (chave: string) => crypto.createHash('sha256').update(chave).digest('hex')
+
+/**
+ * Tentativas de provisionamento por CNPJ, em memória. Segura força bruta em cima das licenças;
+ * reiniciar o processo zera, o que é aceitável para o que isso protege.
+ */
+const MAX_TENTATIVAS = 10
+const JANELA_TENTATIVAS_MS = 15 * 60 * 1000
+const tentativas = new Map<string, number[]>()
+
+function excedeuProvisionamento(chaveJanela: string): boolean {
+  const agora = Date.now()
+  const recentes = (tentativas.get(chaveJanela) ?? []).filter((t) => agora - t < JANELA_TENTATIVAS_MS)
+  tentativas.set(chaveJanela, recentes)
+  return recentes.length >= MAX_TENTATIVAS
+}
+
+function registrarTentativa(chaveJanela: string): void {
+  const lista = tentativas.get(chaveJanela) ?? []
+  lista.push(Date.now())
+  tentativas.set(chaveJanela, lista)
+}
 
 /** Identifica o sistema externo pela chave e já contabiliza a chamada do dia. */
 async function autorizar(chave: string | undefined): Promise<
@@ -220,6 +259,96 @@ export async function iaExternaRoutes(app: FastifyInstance) {
     }
   })
 
+  /**
+   * POST /api/ia-externa/provisionar
+   *
+   * O ERP troca a licença que ele já tem pela chave de IA daquela instalação, sem ninguém
+   * digitar nada. Quem autoriza é a LICENÇA, não o CNPJ: o CNPJ é público e sozinho não prova
+   * nada. A licença é conferida na tabela `licencas`, que é a mesma fonte usada para liberar o
+   * próprio ERP.
+   *
+   * Uma chave por INSTALAÇÃO, não por cliente: o mesmo cliente pode ter várias máquinas, e
+   * revogar uma não pode derrubar as outras.
+   */
+  app.post('/provisionar', { schema: { tags: ['IA externa'] } }, async (request, reply) => {
+    const b = request.body as {
+      cnpj?: string; licenca?: string; instalacao?: string; sistema?: string
+    }
+    const cnpj = String(b.cnpj ?? '').replace(/\D/g, '')
+    const licenca = String(b.licenca ?? '').trim()
+    const instalacao = String(b.instalacao ?? '').trim().slice(0, 80)
+
+    if (!cnpj || !licenca) {
+      return reply.status(400).send({ error: 'Informe "cnpj" e "licenca".' })
+    }
+    if (!instalacao) {
+      return reply.status(400).send({
+        error: 'Informe "instalacao": um identificador estável da máquina/instalação.',
+      })
+    }
+
+    // Tentativas erradas são limitadas: sem isso dá para varrer licenças por força bruta.
+    const janela = `prov:${cnpj}`
+    if (excedeuProvisionamento(janela)) {
+      return reply.status(429).send({ error: 'Muitas tentativas. Aguarde alguns minutos.' })
+    }
+
+    // O CNPJ em `licencas` vem formatado; comparamos só os dígitos dos dois lados.
+    const [lic] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, vencimento, demo, sistema_id
+         FROM licencas
+        WHERE REPLACE(REPLACE(REPLACE(REPLACE(cnpj,'.',''),'/',''),'-',''),' ','') = ?
+          AND chave = ?
+        ORDER BY vencimento DESC LIMIT 1`,
+      cnpj, licenca,
+    ).catch(() => [null])
+
+    if (!lic) {
+      registrarTentativa(janela)
+      return reply.status(403).send({ error: 'Licença não confere com o CNPJ informado.' })
+    }
+    if (lic.vencimento && new Date(lic.vencimento) < new Date(new Date().toDateString())) {
+      return reply.status(403).send({
+        error: 'Licença vencida. Regularize a licença para usar o assistente.',
+      })
+    }
+
+    const [cli] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT NOME_FANTASIA AS nome FROM cliente
+        WHERE REPLACE(REPLACE(REPLACE(REPLACE(CNPJ_CLI,'.',''),'/',''),'-',''),' ','') = ?
+        LIMIT 1`, cnpj).catch(() => [null])
+    const nome = `${cli?.nome || 'Cliente'} · ${String(b.sistema ?? 'ERP').slice(0, 30)}`.slice(0, 120)
+
+    // Reprovisionar a MESMA instalação troca a chave dela e só dela.
+    const chave = `ca_${crypto.randomBytes(24).toString('hex')}`
+    const [jaTem] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id FROM ia_cliente_externo WHERE cnpj = ? AND instalacao = ?`, cnpj, instalacao)
+
+    if (jaTem) {
+      await prisma.$executeRawUnsafe(
+        `UPDATE ia_cliente_externo SET chave_hash = ?, chave_final = ?, nome = ?, ativo = 1 WHERE id = ?`,
+        hash(chave), chave.slice(-6), nome, Number(jaTem.id),
+      )
+    } else {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO ia_cliente_externo
+           (nome, chave_hash, chave_final, limite_dia, cnpj, instalacao, origem)
+         VALUES (?,?,?,?,?,?,'erp')`,
+        nome, hash(chave), chave.slice(-6), LIMITE_PADRAO_DIA, cnpj, instalacao,
+      )
+    }
+
+    const config = await obterConfigIA()
+    return {
+      chave,
+      cliente: nome,
+      limiteDia: LIMITE_PADRAO_DIA,
+      iaDisponivel: config.ativo && !!config.apiKey,
+      aviso: 'Guarde esta chave: ela não é devolvida de novo. Provisionar outra vez gera uma nova '
+        + 'e invalida esta, apenas para esta instalação.',
+    }
+  })
+
   /** Teste de vida para o ERP conferir chave e disponibilidade sem gastar uma chamada de IA. */
   app.get('/status', { schema: { tags: ['IA externa'] } }, async (request, reply) => {
     const chave = request.headers['x-api-key'] as string | undefined
@@ -335,6 +464,7 @@ export async function iaExternaRoutes(app: FastifyInstance) {
   app.get('/chaves', { preHandler: authMiddleware, schema: { tags: ['IA externa'] } }, async () => {
     const linhas = await prisma.$queryRawUnsafe<any[]>(`
       SELECT e.id, e.nome, e.chave_final, e.ativo, e.limite_dia, e.ultimo_uso, e.criado_em,
+             e.cnpj, e.instalacao, e.origem,
              COALESCE((SELECT u.chamadas FROM ia_cliente_uso u
                         WHERE u.cliente_id = e.id AND u.dia = CURDATE()), 0) AS uso_hoje
         FROM ia_cliente_externo e ORDER BY e.ativo DESC, e.nome`)
@@ -342,6 +472,9 @@ export async function iaExternaRoutes(app: FastifyInstance) {
       id: Number(l.id),
       nome: l.nome,
       chaveFinal: l.chave_final,
+      cnpj: l.cnpj ?? null,
+      instalacao: l.instalacao ?? null,
+      origem: l.origem ?? 'manual',
       ativo: !!l.ativo,
       limiteDia: Number(l.limite_dia),
       usoHoje: Number(l.uso_hoje ?? 0),

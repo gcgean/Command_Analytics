@@ -851,7 +851,14 @@ export function Configuracoes() {
                 <tbody>
                   {chavesIa.map((c) => (
                     <tr key={c.id} className="border-b border-slate-100 dark:border-slate-700/50">
-                      <td className="py-2 text-slate-700 dark:text-slate-200">{c.nome}</td>
+                      <td className="py-2">
+                        <span className="text-slate-700 dark:text-slate-200">{c.nome}</span>
+                        <span className="block text-[10px] text-slate-400">
+                          {c.origem === 'erp' ? 'provisionada pelo ERP' : 'gerada aqui'}
+                          {c.cnpj ? ` · ${formatarDocumento(c.cnpj)}` : ''}
+                          {c.instalacao ? ` · ${c.instalacao}` : ''}
+                        </span>
+                      </td>
                       <td className="py-2 text-xs font-mono text-slate-400">…{c.chaveFinal}</td>
                       <td className="py-2 text-center text-xs text-slate-500">
                         {c.usoHoje} / {c.limiteDia}

@@ -94,6 +94,69 @@ X-API-Key: ca_xxxx
 
 Use na abertura do sistema para decidir se mostra ou esconde o botão da IA.
 
+## 3.1. Provisionamento automático da chave
+
+O ERP não precisa que ninguém digite a chave. Ele troca a licença que já tem pela chave de IA:
+
+```
+POST https://controle.cilos.com.br/api/ia-externa/provisionar
+Content-Type: application/json; charset=utf-8
+```
+
+```json
+{
+  "cnpj": "40581011000127",
+  "licenca": "<DM.Key — a mesma chave de licença do ERP>",
+  "instalacao": "MAQ-7F3A9C21",
+  "sistema": "Command Server"
+}
+```
+
+| Campo | Obrigatório | Observação |
+|---|---|---|
+| `cnpj` | sim | Só dígitos |
+| `licenca` | sim | A chave de licença do ERP, conferida na tabela `licencas` |
+| `instalacao` | sim | Identificador **estável** da máquina/instalação |
+| `sistema` | não | Nome do sistema, só para identificar a chave na listagem |
+
+Resposta `200`:
+
+```json
+{
+  "chave": "ca_xxxxxxxxxxxxxxxxxxxxxxxx",
+  "cliente": "FLORES VIDRAÇARIA · Command Server",
+  "limiteDia": 500,
+  "iaDisponivel": true,
+  "aviso": "Guarde esta chave: ela não é devolvida de novo."
+}
+```
+
+Erros:
+
+| Código | Significado |
+|---|---|
+| 400 | Falta `cnpj`, `licenca` ou `instalacao` |
+| 403 | Licença não confere com o CNPJ, ou está vencida |
+| 429 | Muitas tentativas para o mesmo CNPJ (10 a cada 15 min) |
+
+**Quem autoriza é a licença, não o CNPJ.** CNPJ é público e sozinho não prova nada; a licença é
+o segredo que o cliente já tem e é validada contra a mesma tabela que libera o próprio ERP.
+
+**Uma chave por instalação.** O `instalacao` precisa ser estável entre execuções — serial do
+disco, UUID da placa-mãe ou um GUID gerado na primeira execução e gravado localmente. Se mudar a
+cada abertura, o ERP cria uma chave nova toda vez e polui a listagem.
+
+**Reprovisionar troca a chave daquela instalação** e invalida a anterior — das outras máquinas do
+mesmo cliente, não. Então chame o provisionamento só quando a chave local estiver **ausente** ou
+tiver sido recusada com 401/403, nunca a cada abertura.
+
+Fluxo na inicialização:
+
+1. Tem chave gravada? Se não, provisiona.
+2. `GET /status`. Se `401`/`403`, provisiona de novo uma vez e repete o `/status`.
+3. `ativo && iaDisponivel` → mostra a bolinha. Caso contrário, esconde.
+4. Qualquer falha de rede: o ERP abre normalmente, sem a bolinha. A IA nunca impede o uso.
+
 ## 4. Chave de acesso — uma por cliente
 
 A chave fica dentro da instalação do cliente, então **não distribua uma chave única no

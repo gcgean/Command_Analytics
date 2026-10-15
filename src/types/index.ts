@@ -1667,6 +1667,11 @@ export interface ChaveIaExterna {
   nome: string
   /** Últimos caracteres, só para reconhecer qual chave é qual. */
   chaveFinal: string
+  cnpj: string | null
+  /** Identificador da máquina, quando a chave veio de provisionamento automático. */
+  instalacao: string | null
+  /** 'manual' (gerada na tela) ou 'erp' (provisionada pelo sistema externo). */
+  origem: string
   ativo: boolean
   limiteDia: number
   usoHoje: number
