@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  ChaveIaExterna, ConsumoIaExterna, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
+  ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
   MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
@@ -1111,6 +1111,16 @@ export const api = {
 
   // ─── IA para sistemas externos (ERP Delphi) ────────────────
   getChavesIaExterna: () => fetchApi<ChaveIaExterna[]>('/ia-externa/chaves'),
+  getInstalacoesPendentesIa: () =>
+    fetchApi<InstalacaoPendenteIa[]>('/ia-externa/instalacoes-pendentes'),
+  autorizarInstalacaoIa: (dados: { cnpj: string; instalacao: string; observacao?: string }) =>
+    fetchApi<{ ok: boolean }>('/ia-externa/instalacoes-autorizadas', {
+      method: 'POST', body: JSON.stringify(dados),
+    }),
+  revogarInstalacaoIa: (cnpj: string, instalacao: string) =>
+    fetchApi<{ ok: boolean }>(
+      `/ia-externa/instalacoes-autorizadas?cnpj=${encodeURIComponent(cnpj)}`
+      + `&instalacao=${encodeURIComponent(instalacao)}`, { method: 'DELETE' }),
   getConsumoIaExterna: (dias = 30) =>
     fetchApi<ConsumoIaExterna>(`/ia-externa/consumo?dias=${dias}`),
   criarChaveIaExterna: (dados: { nome: string; limiteDia?: number }) =>

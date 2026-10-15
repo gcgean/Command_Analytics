@@ -3,7 +3,7 @@ import { Save, Loader2, Plus, X, CheckCircle, Wifi, Send, Sparkles } from 'lucid
 import { useToast } from '../../components/ui/Toast'
 import { api } from '../../services/api'
 import clsx from 'clsx'
-import type { ChaveIaExterna, ConsumoIaExterna, StatusProcessamentoNotificacaoAgendamento } from '../../types'
+import type { ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, StatusProcessamentoNotificacaoAgendamento } from '../../types'
 
 type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'assistente' | 'notificacoes' | 'parametros' | 'precificacao'
 
@@ -29,6 +29,7 @@ export function Configuracoes() {
   const [chaveGerada, setChaveGerada] = useState<string | null>(null)
   const [consumoIa, setConsumoIa] = useState<ConsumoIaExterna | null>(null)
   const [diasConsumo, setDiasConsumo] = useState(30)
+  const [pendentes, setPendentes] = useState<InstalacaoPendenteIa[]>([])
   const [loading, setLoading] = useState(false)
 
   // Geral
@@ -123,6 +124,7 @@ export function Configuracoes() {
       const config = await api.getAssistenteConfig()
       api.getChavesIaExterna().then(setChavesIa).catch(() => setChavesIa([]))
       api.getConsumoIaExterna(diasConsumo).then(setConsumoIa).catch(() => setConsumoIa(null))
+      api.getInstalacoesPendentesIa().then(setPendentes).catch(() => setPendentes([]))
       setAssistente(config)
     } catch {
       toast.error('Erro ao carregar configurações do assistente de IA.')
@@ -313,6 +315,25 @@ export function Configuracoes() {
   const removerToken = (id: number) => {
     setTokens(prev => prev.filter(t => t.id !== id))
     toast.info('Token removido.')
+  }
+
+  async function alternarAutorizacao(p: InstalacaoPendenteIa) {
+    try {
+      if (p.autorizada) {
+        if (!confirm(`Revogar a liberação de ${p.cliente ?? p.cnpj}?`)) return
+        await api.revogarInstalacaoIa(p.cnpj, p.instalacao)
+        toast.success('Liberação revogada.')
+      } else {
+        if (!confirm(`Liberar a IA para ${p.cliente ?? p.cnpj}?\n\n`
+          + 'Esta instalação passará a ativar sem apresentar licença. '
+          + 'Só confirme se souber de quem é a máquina.')) return
+        await api.autorizarInstalacaoIa({ cnpj: p.cnpj, instalacao: p.instalacao })
+        toast.success('Instalação liberada. O sistema ativa na próxima tentativa.')
+      }
+      setPendentes(await api.getInstalacoesPendentesIa())
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível alterar a liberação.')
+    }
   }
 
   async function gerarChave() {
@@ -796,6 +817,50 @@ export function Configuracoes() {
               {salvandoAssistente ? <><Loader2 size={15} className="animate-spin" /> Salvando...</> : <><Save size={15} /> Salvar Configurações</>}
             </button>
           </div>
+
+          {/* ── Ativações recusadas, aguardando decisão ─────────── */}
+          {pendentes.length > 0 && (
+            <div className="card space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Ativações recusadas ({pendentes.length})
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Instalações que tentaram ativar a IA e não apresentaram uma licença que o
+                  sistema reconheça. Liberar aqui faz aquela máquina — e só ela — ativar na
+                  próxima tentativa, sem precisar da licença.
+                </p>
+              </div>
+              <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
+                {pendentes.map((p) => (
+                  <div key={`${p.cnpj}-${p.instalacao}`}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                    <div className="min-w-0">
+                      <p className="text-sm text-slate-800 dark:text-slate-200">
+                        {p.cliente ?? 'Cliente não identificado'}
+                        {p.autorizada && (
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                            liberada
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-slate-400 break-all">
+                        {formatarDocumento(p.cnpj)} · {p.instalacao}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        {p.tentativas} tentativa(s) · última em {new Date(p.ultima).toLocaleString('pt-BR')}
+                        {p.sistema ? ` · ${p.sistema}` : ''}
+                      </p>
+                    </div>
+                    <button onClick={() => void alternarAutorizacao(p)}
+                      className={p.autorizada ? 'btn-secondary text-xs' : 'btn-primary text-xs'}>
+                      {p.autorizada ? 'Revogar' : 'Liberar'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Chaves para sistemas externos ───────────────────── */}
           <div className="card space-y-3">

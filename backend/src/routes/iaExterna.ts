@@ -98,6 +98,26 @@ export async function initIaExterna(): Promise<void> {
   }
 
   /**
+   * Instalações liberadas na mão por um usuário do Analytics.
+   *
+   * Existe para o caso em que o sistema externo não consegue enviar a licença que sabemos
+   * validar. Em vez de afrouxar a regra para todo mundo, uma pessoa autoriza AQUELA instalação
+   * daquele CNPJ, e só ela passa a provisionar sem a licença.
+   */
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ia_instalacao_autorizada (
+      id           INT AUTO_INCREMENT PRIMARY KEY,
+      cnpj         VARCHAR(20) NOT NULL,
+      instalacao   VARCHAR(80) NOT NULL,
+      observacao   VARCHAR(200) NULL,
+      autorizado_por INT NULL,
+      usado_em     DATETIME NULL,
+      criado_em    DATETIME NOT NULL DEFAULT NOW(),
+      UNIQUE KEY uk_ia_instalacao (cnpj, instalacao)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
+  /**
    * Tentativas de provisionamento. Um 403 sem registro é indepurável: não dá para dizer qual
    * regra recusou. A licença nunca é gravada — só o que é preciso para diagnosticar.
    */
@@ -400,7 +420,20 @@ export async function iaExternaRoutes(app: FastifyInstance) {
       if (enviadoLimpo.includes(chaveLimpa)) { lic = c; extraida = true; break }
     }
 
+    // Sem licença reconhecida, ainda resta a liberação manual daquela instalação.
+    let autorizadaNaMao = false
     if (!lic) {
+      const [aut] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id FROM ia_instalacao_autorizada WHERE cnpj = ? AND instalacao = ?`,
+        cnpj, instalacao).catch(() => [null])
+      if (aut) {
+        autorizadaNaMao = true
+        await prisma.$executeRawUnsafe(
+          `UPDATE ia_instalacao_autorizada SET usado_em = NOW() WHERE id = ?`, Number(aut.id)).catch(() => {})
+      }
+    }
+
+    if (!lic && !autorizadaNaMao) {
       registrarTentativa(janela)
       await logar(
         'recusado',
@@ -411,7 +444,7 @@ export async function iaExternaRoutes(app: FastifyInstance) {
         error: `A chave enviada não confere com nenhuma das ${licencasDoCnpj} licença(s) deste CNPJ.`,
       })
     }
-    if (lic.vencimento && new Date(lic.vencimento) < new Date(new Date().toDateString())) {
+    if (lic?.vencimento && new Date(lic.vencimento) < new Date(new Date().toDateString())) {
       await logar('recusado', 'Licença vencida', licencasDoCnpj)
       return reply.status(403).send({
         error: 'Licença vencida. Regularize a licença para usar o assistente.',
@@ -445,7 +478,10 @@ export async function iaExternaRoutes(app: FastifyInstance) {
 
     // Registra quando a licença veio embrulhada: é sinal de que o ERP manda um valor composto,
     // e vale saber disso sem precisar abrir chamado.
-    await logar(extraida ? 'provisionado (licença extraída do valor enviado)' : 'provisionado',
+    await logar(
+      autorizadaNaMao ? 'provisionado (instalação liberada manualmente)'
+        : extraida ? 'provisionado (licença extraída do valor enviado)'
+        : 'provisionado',
       null, licencasDoCnpj)
 
     const config = await obterConfigIA()
@@ -633,6 +669,67 @@ export async function iaExternaRoutes(app: FastifyInstance) {
         quando: l.criado_em,
       })),
     }
+  })
+
+  /** Instalações que falharam a validação e aguardam decisão de alguém. */
+  app.get('/instalacoes-pendentes', { preHandler: authMiddleware, schema: { tags: ['IA externa'] } }, async () => {
+    const linhas = await prisma.$queryRawUnsafe<any[]>(`
+      SELECT l.cnpj, l.instalacao, MAX(l.criado_em) AS ultima, COUNT(*) AS tentativas,
+             MAX(l.sistema) AS sistema, MAX(l.motivo) AS motivo,
+             (SELECT c.NOME_FANTASIA FROM cliente c
+               WHERE REPLACE(REPLACE(REPLACE(REPLACE(c.CNPJ_CLI,'.',''),'/',''),'-',''),' ','') = l.cnpj
+               LIMIT 1) AS cliente,
+             EXISTS(SELECT 1 FROM ia_instalacao_autorizada a
+                     WHERE a.cnpj = l.cnpj AND a.instalacao = l.instalacao) AS autorizada
+        FROM ia_provisionamento_log l
+       WHERE l.resultado = 'recusado' AND l.instalacao IS NOT NULL
+       GROUP BY l.cnpj, l.instalacao
+       ORDER BY ultima DESC LIMIT 100`).catch(() => [])
+    return linhas.map((l) => ({
+      cnpj: l.cnpj,
+      cliente: l.cliente ?? null,
+      instalacao: l.instalacao,
+      sistema: l.sistema ?? null,
+      motivo: l.motivo ?? null,
+      tentativas: Number(l.tentativas ?? 0),
+      ultima: l.ultima,
+      autorizada: Number(l.autorizada ?? 0) === 1,
+    }))
+  })
+
+  /**
+   * Libera uma instalação específica. Só faça isso quando souber de quem é a máquina: a partir
+   * daqui ela provisiona sem apresentar licença.
+   */
+  app.post('/instalacoes-autorizadas', { preHandler: authMiddleware, schema: { tags: ['IA externa'] } }, async (request, reply) => {
+    const b = request.body as { cnpj?: string; instalacao?: string; observacao?: string }
+    const cnpj = String(b.cnpj ?? '').replace(/\D/g, '')
+    const instalacao = String(b.instalacao ?? '').trim().slice(0, 80)
+    if (!cnpj || !instalacao) {
+      return reply.status(400).send({ error: 'Informe o cnpj e a instalação.' })
+    }
+    // Mesmo na liberação manual, o CNPJ precisa ser de um cliente conhecido.
+    const [cli] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT cod_cli FROM cliente
+        WHERE REPLACE(REPLACE(REPLACE(REPLACE(CNPJ_CLI,'.',''),'/',''),'-',''),' ','') = ? LIMIT 1`, cnpj)
+    if (!cli) return reply.status(400).send({ error: 'CNPJ não encontrado na base de clientes.' })
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO ia_instalacao_autorizada (cnpj, instalacao, observacao, autorizado_por)
+       VALUES (?,?,?,?)
+       ON DUPLICATE KEY UPDATE observacao = VALUES(observacao), autorizado_por = VALUES(autorizado_por)`,
+      cnpj, instalacao, String(b.observacao ?? '').slice(0, 200) || null,
+      Number((request.user as { id: number } | undefined)?.id ?? 0) || null,
+    )
+    return reply.status(201).send({ ok: true })
+  })
+
+  app.delete('/instalacoes-autorizadas', { preHandler: authMiddleware, schema: { tags: ['IA externa'] } }, async (request) => {
+    const { cnpj, instalacao } = request.query as { cnpj?: string; instalacao?: string }
+    await prisma.$executeRawUnsafe(
+      `DELETE FROM ia_instalacao_autorizada WHERE cnpj = ? AND instalacao = ?`,
+      String(cnpj ?? '').replace(/\D/g, ''), String(instalacao ?? '').trim())
+    return { ok: true }
   })
 
   // ── Administração das chaves (usuário logado no Analytics) ──

@@ -1743,3 +1743,15 @@ export interface SaudeCobrancaPaycore {
     link: string | null; diasVencida: number
   }>
 }
+
+/** Instalação de sistema externo que tentou ativar a IA e foi recusada. */
+export interface InstalacaoPendenteIa {
+  cnpj: string
+  cliente: string | null
+  instalacao: string
+  sistema: string | null
+  motivo: string | null
+  tentativas: number
+  ultima: string
+  autorizada: boolean
+}
