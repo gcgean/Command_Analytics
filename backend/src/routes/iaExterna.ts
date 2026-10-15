@@ -110,12 +110,47 @@ export async function initIaExterna(): Promise<void> {
       cnpj         VARCHAR(20) NOT NULL,
       instalacao   VARCHAR(80) NOT NULL,
       observacao   VARCHAR(200) NULL,
+      -- Uma linha pode liberar OU bloquear: com a liberação automática ligada, apagar a linha
+      -- não impede nada, é preciso um bloqueio explícito.
+      bloqueada    TINYINT(1) NOT NULL DEFAULT 0,
+      origem       VARCHAR(20) NOT NULL DEFAULT 'manual',
       autorizado_por INT NULL,
       usado_em     DATETIME NULL,
       criado_em    DATETIME NOT NULL DEFAULT NOW(),
       UNIQUE KEY uk_ia_instalacao (cnpj, instalacao)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+
+  for (const [coluna, definicao] of [
+    ['bloqueada', 'TINYINT(1) NOT NULL DEFAULT 0'],
+    ['origem', "VARCHAR(20) NOT NULL DEFAULT 'manual'"],
+  ] as const) {
+    const [existe] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS q FROM information_schema.columns
+        WHERE table_schema = DATABASE() AND table_name = 'ia_instalacao_autorizada'
+          AND column_name = ?`, coluna)
+    if (Number(existe?.q ?? 0) === 0) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE ia_instalacao_autorizada ADD COLUMN \`${coluna}\` ${definicao}`).catch(() => {})
+    }
+  }
+
+  // Política de provisionamento. Uma linha só.
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS ia_provisionamento_config (
+      id                    INT AUTO_INCREMENT PRIMARY KEY,
+      -- Liberar sozinho qualquer instalação cujo CNPJ seja um cliente nosso.
+      auto_clientes         TINYINT(1) NOT NULL DEFAULT 0,
+      -- Se o cliente precisa estar ativo, e não só existir na base.
+      exigir_cliente_ativo  TINYINT(1) NOT NULL DEFAULT 1,
+      atualizado_em         DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW()
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+  const [temCfg] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COUNT(*) AS q FROM ia_provisionamento_config`)
+  if (Number(temCfg?.q ?? 0) === 0) {
+    await prisma.$executeRawUnsafe(`INSERT INTO ia_provisionamento_config (auto_clientes) VALUES (0)`)
+  }
 
   /**
    * Tentativas de provisionamento. Um 403 sem registro é indepurável: não dá para dizer qual
@@ -420,20 +455,48 @@ export async function iaExternaRoutes(app: FastifyInstance) {
       if (enviadoLimpo.includes(chaveLimpa)) { lic = c; extraida = true; break }
     }
 
-    // Sem licença reconhecida, ainda resta a liberação manual daquela instalação.
-    let autorizadaNaMao = false
-    if (!lic) {
-      const [aut] = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id FROM ia_instalacao_autorizada WHERE cnpj = ? AND instalacao = ?`,
-        cnpj, instalacao).catch(() => [null])
-      if (aut) {
-        autorizadaNaMao = true
-        await prisma.$executeRawUnsafe(
-          `UPDATE ia_instalacao_autorizada SET usado_em = NOW() WHERE id = ?`, Number(aut.id)).catch(() => {})
+    // A decisão explícita vale mais que tudo: um bloqueio recusa mesmo com licença válida,
+    // porque é a forma de cortar o acesso de uma máquina específica.
+    const [decisao] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, bloqueada FROM ia_instalacao_autorizada WHERE cnpj = ? AND instalacao = ?`,
+      cnpj, instalacao).catch(() => [null])
+
+    if (decisao && Number(decisao.bloqueada) === 1) {
+      await logar('recusado', 'Instalação bloqueada manualmente', licencasDoCnpj)
+      return reply.status(403).send({ error: 'Esta instalação está bloqueada. Fale com o suporte.' })
+    }
+
+    let liberadaPor: string | null = null
+    if (!lic && decisao) liberadaPor = 'liberação manual'
+
+    // Liberação automática: vale para quem é cliente nosso, quando a política estiver ligada.
+    if (!lic && !liberadaPor) {
+      const [cfg] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT auto_clientes, exigir_cliente_ativo FROM ia_provisionamento_config ORDER BY id LIMIT 1`)
+      if (Number(cfg?.auto_clientes ?? 0) === 1) {
+        const exigirAtivo = Number(cfg?.exigir_cliente_ativo ?? 1) === 1
+        const [cli] = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT cod_cli, COALESCE(ATIVO,'S') AS ativo FROM cliente
+            WHERE REPLACE(REPLACE(REPLACE(REPLACE(CNPJ_CLI,'.',''),'/',''),'-',''),' ','') = ?
+            ORDER BY CASE WHEN COALESCE(ATIVO,'S')='S' THEN 0 ELSE 1 END LIMIT 1`, cnpj)
+        if (cli && (!exigirAtivo || String(cli.ativo) === 'S')) {
+          liberadaPor = 'cliente Command (liberação automática)'
+          // Registra para a instalação aparecer na lista e poder ser revogada depois.
+          await prisma.$executeRawUnsafe(
+            `INSERT IGNORE INTO ia_instalacao_autorizada (cnpj, instalacao, origem, observacao)
+             VALUES (?,?,'automatico','Liberada pela política de clientes Command')`,
+            cnpj, instalacao).catch(() => {})
+        }
       }
     }
 
-    if (!lic && !autorizadaNaMao) {
+    if (decisao || liberadaPor) {
+      await prisma.$executeRawUnsafe(
+        `UPDATE ia_instalacao_autorizada SET usado_em = NOW() WHERE cnpj = ? AND instalacao = ?`,
+        cnpj, instalacao).catch(() => {})
+    }
+
+    if (!lic && !liberadaPor) {
       registrarTentativa(janela)
       await logar(
         'recusado',
@@ -479,7 +542,7 @@ export async function iaExternaRoutes(app: FastifyInstance) {
     // Registra quando a licença veio embrulhada: é sinal de que o ERP manda um valor composto,
     // e vale saber disso sem precisar abrir chamado.
     await logar(
-      autorizadaNaMao ? 'provisionado (instalação liberada manualmente)'
+      liberadaPor ? `provisionado (${liberadaPor})`
         : extraida ? 'provisionado (licença extraída do valor enviado)'
         : 'provisionado',
       null, licencasDoCnpj)
@@ -671,6 +734,29 @@ export async function iaExternaRoutes(app: FastifyInstance) {
     }
   })
 
+  app.get('/politica', { preHandler: authMiddleware, schema: { tags: ['IA externa'] } }, async () => {
+    const [c] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT auto_clientes, exigir_cliente_ativo FROM ia_provisionamento_config ORDER BY id LIMIT 1`)
+    const [n] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT SUM(bloqueada = 0) AS liberadas, SUM(bloqueada = 1) AS bloqueadas
+         FROM ia_instalacao_autorizada`).catch(() => [null])
+    return {
+      autoClientes: Number(c?.auto_clientes ?? 0) === 1,
+      exigirClienteAtivo: Number(c?.exigir_cliente_ativo ?? 1) === 1,
+      liberadas: Number(n?.liberadas ?? 0),
+      bloqueadas: Number(n?.bloqueadas ?? 0),
+    }
+  })
+
+  app.put('/politica', { preHandler: authMiddleware, schema: { tags: ['IA externa'] } }, async (request) => {
+    const b = request.body as { autoClientes?: boolean; exigirClienteAtivo?: boolean }
+    await prisma.$executeRawUnsafe(
+      `UPDATE ia_provisionamento_config SET auto_clientes = ?, exigir_cliente_ativo = ? ORDER BY id LIMIT 1`,
+      b.autoClientes ? 1 : 0, b.exigirClienteAtivo === false ? 0 : 1,
+    )
+    return { ok: true }
+  })
+
   /** Instalações que falharam a validação e aguardam decisão de alguém. */
   app.get('/instalacoes-pendentes', { preHandler: authMiddleware, schema: { tags: ['IA externa'] } }, async () => {
     const linhas = await prisma.$queryRawUnsafe<any[]>(`
@@ -679,10 +765,12 @@ export async function iaExternaRoutes(app: FastifyInstance) {
              (SELECT c.NOME_FANTASIA FROM cliente c
                WHERE REPLACE(REPLACE(REPLACE(REPLACE(c.CNPJ_CLI,'.',''),'/',''),'-',''),' ','') = l.cnpj
                LIMIT 1) AS cliente,
-             EXISTS(SELECT 1 FROM ia_instalacao_autorizada a
-                     WHERE a.cnpj = l.cnpj AND a.instalacao = l.instalacao) AS autorizada
+             (SELECT a.bloqueada FROM ia_instalacao_autorizada a
+               WHERE a.cnpj = l.cnpj AND a.instalacao = l.instalacao) AS bloqueada,
+             (SELECT a.origem FROM ia_instalacao_autorizada a
+               WHERE a.cnpj = l.cnpj AND a.instalacao = l.instalacao) AS origem_decisao
         FROM ia_provisionamento_log l
-       WHERE l.resultado = 'recusado' AND l.instalacao IS NOT NULL
+       WHERE l.instalacao IS NOT NULL
        GROUP BY l.cnpj, l.instalacao
        ORDER BY ultima DESC LIMIT 100`).catch(() => [])
     return linhas.map((l) => ({
@@ -693,7 +781,9 @@ export async function iaExternaRoutes(app: FastifyInstance) {
       motivo: l.motivo ?? null,
       tentativas: Number(l.tentativas ?? 0),
       ultima: l.ultima,
-      autorizada: Number(l.autorizada ?? 0) === 1,
+      autorizada: l.bloqueada != null && Number(l.bloqueada) === 0,
+      bloqueada: Number(l.bloqueada ?? 0) === 1,
+      origemDecisao: l.origem_decisao ?? null,
     }))
   })
 
@@ -724,11 +814,37 @@ export async function iaExternaRoutes(app: FastifyInstance) {
     return reply.status(201).send({ ok: true })
   })
 
+  /**
+   * Revogar grava um BLOQUEIO, em vez de apagar a liberação. Com a liberação automática ligada,
+   * apagar a linha faria a instalação ser liberada de novo na tentativa seguinte.
+   */
   app.delete('/instalacoes-autorizadas', { preHandler: authMiddleware, schema: { tags: ['IA externa'] } }, async (request) => {
-    const { cnpj, instalacao } = request.query as { cnpj?: string; instalacao?: string }
+    const { cnpj: cnpjBruto, instalacao: inst } = request.query as { cnpj?: string; instalacao?: string }
+    const cnpj = String(cnpjBruto ?? '').replace(/\D/g, '')
+    const instalacao = String(inst ?? '').trim()
     await prisma.$executeRawUnsafe(
-      `DELETE FROM ia_instalacao_autorizada WHERE cnpj = ? AND instalacao = ?`,
-      String(cnpj ?? '').replace(/\D/g, ''), String(instalacao ?? '').trim())
+      `INSERT INTO ia_instalacao_autorizada (cnpj, instalacao, bloqueada, origem, observacao)
+       VALUES (?,?,1,'manual','Bloqueada manualmente')
+       ON DUPLICATE KEY UPDATE bloqueada = 1, observacao = 'Bloqueada manualmente'`,
+      cnpj, instalacao)
+    // A chave que já estava na máquina para de funcionar na hora.
+    await prisma.$executeRawUnsafe(
+      `UPDATE ia_cliente_externo SET ativo = 0 WHERE cnpj = ? AND instalacao = ?`,
+      cnpj, instalacao).catch(() => {})
+    return { ok: true }
+  })
+
+  /** Desfaz o bloqueio, devolvendo a instalação à política vigente. */
+  app.post('/instalacoes-autorizadas/desbloquear', { preHandler: authMiddleware, schema: { tags: ['IA externa'] } }, async (request) => {
+    const b = request.body as { cnpj?: string; instalacao?: string }
+    const cnpj = String(b.cnpj ?? '').replace(/\D/g, '')
+    const instalacao = String(b.instalacao ?? '').trim()
+    await prisma.$executeRawUnsafe(
+      `UPDATE ia_instalacao_autorizada SET bloqueada = 0 WHERE cnpj = ? AND instalacao = ?`,
+      cnpj, instalacao)
+    await prisma.$executeRawUnsafe(
+      `UPDATE ia_cliente_externo SET ativo = 1 WHERE cnpj = ? AND instalacao = ?`,
+      cnpj, instalacao).catch(() => {})
     return { ok: true }
   })
 

@@ -1,7 +1,7 @@
 import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
-  ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
+  ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, PoliticaProvisionamentoIa, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
   MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
@@ -1111,6 +1111,14 @@ export const api = {
 
   // ─── IA para sistemas externos (ERP Delphi) ────────────────
   getChavesIaExterna: () => fetchApi<ChaveIaExterna[]>('/ia-externa/chaves'),
+  getPoliticaProvisionamentoIa: () =>
+    fetchApi<PoliticaProvisionamentoIa>('/ia-externa/politica'),
+  salvarPoliticaProvisionamentoIa: (dados: { autoClientes: boolean; exigirClienteAtivo: boolean }) =>
+    fetchApi<{ ok: boolean }>('/ia-externa/politica', { method: 'PUT', body: JSON.stringify(dados) }),
+  desbloquearInstalacaoIa: (cnpj: string, instalacao: string) =>
+    fetchApi<{ ok: boolean }>('/ia-externa/instalacoes-autorizadas/desbloquear', {
+      method: 'POST', body: JSON.stringify({ cnpj, instalacao }),
+    }),
   getInstalacoesPendentesIa: () =>
     fetchApi<InstalacaoPendenteIa[]>('/ia-externa/instalacoes-pendentes'),
   autorizarInstalacaoIa: (dados: { cnpj: string; instalacao: string; observacao?: string }) =>

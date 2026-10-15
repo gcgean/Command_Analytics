@@ -168,6 +168,18 @@ Fluxo na inicialização:
 3. `ativo && iaDisponivel` → mostra a bolinha. Caso contrário, esconde.
 4. Qualquer falha de rede: o ERP abre normalmente, sem a bolinha. A IA nunca impede o uso.
 
+### Quando a licença não é reconhecida
+
+Se o valor enviado não casar com nenhuma licença, o Analytics ainda pode liberar pela política
+configurada em *Configurações › Assistente IA › Quem pode ativar a IA*:
+
+- **liberação automática para clientes Command** — basta o CNPJ existir na base de clientes
+  (opcionalmente, estar ativo);
+- **liberação manual** de uma instalação específica, pela lista de instalações.
+
+Um **bloqueio** de instalação tem precedência sobre tudo, inclusive sobre uma licença válida, e
+desativa na hora a chave que já estava naquela máquina.
+
 ## 4. Chave de acesso — uma por cliente
 
 A chave fica dentro da instalação do cliente, então **não distribua uma chave única no

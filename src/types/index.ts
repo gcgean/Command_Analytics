@@ -1754,4 +1754,15 @@ export interface InstalacaoPendenteIa {
   tentativas: number
   ultima: string
   autorizada: boolean
+  bloqueada: boolean
+  /** 'manual' ou 'automatico', quando já houve decisão para esta instalação. */
+  origemDecisao: string | null
+}
+
+/** Política de liberação automática do provisionamento. */
+export interface PoliticaProvisionamentoIa {
+  autoClientes: boolean
+  exigirClienteAtivo: boolean
+  liberadas: number
+  bloqueadas: number
 }

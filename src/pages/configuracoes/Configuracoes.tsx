@@ -3,7 +3,7 @@ import { Save, Loader2, Plus, X, CheckCircle, Wifi, Send, Sparkles } from 'lucid
 import { useToast } from '../../components/ui/Toast'
 import { api } from '../../services/api'
 import clsx from 'clsx'
-import type { ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, StatusProcessamentoNotificacaoAgendamento } from '../../types'
+import type { ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, PoliticaProvisionamentoIa, StatusProcessamentoNotificacaoAgendamento } from '../../types'
 
 type Aba = 'geral' | 'whatsapp' | 'email' | 'telegram' | 'assistente' | 'notificacoes' | 'parametros' | 'precificacao'
 
@@ -30,6 +30,7 @@ export function Configuracoes() {
   const [consumoIa, setConsumoIa] = useState<ConsumoIaExterna | null>(null)
   const [diasConsumo, setDiasConsumo] = useState(30)
   const [pendentes, setPendentes] = useState<InstalacaoPendenteIa[]>([])
+  const [politicaIa, setPoliticaIa] = useState<PoliticaProvisionamentoIa | null>(null)
   const [loading, setLoading] = useState(false)
 
   // Geral
@@ -125,6 +126,7 @@ export function Configuracoes() {
       api.getChavesIaExterna().then(setChavesIa).catch(() => setChavesIa([]))
       api.getConsumoIaExterna(diasConsumo).then(setConsumoIa).catch(() => setConsumoIa(null))
       api.getInstalacoesPendentesIa().then(setPendentes).catch(() => setPendentes([]))
+      api.getPoliticaProvisionamentoIa().then(setPoliticaIa).catch(() => setPoliticaIa(null))
       setAssistente(config)
     } catch {
       toast.error('Erro ao carregar configurações do assistente de IA.')
@@ -317,12 +319,33 @@ export function Configuracoes() {
     toast.info('Token removido.')
   }
 
+  async function salvarPoliticaIa(mudanca: Partial<PoliticaProvisionamentoIa>) {
+    if (!politicaIa) return
+    const nova = { ...politicaIa, ...mudanca }
+    if (mudanca.autoClientes === true
+      && !confirm('Liberar automaticamente a IA para toda instalação cujo CNPJ seja cliente Command?\n\n'
+        + 'Instalações bloqueadas continuam bloqueadas, e você pode revogar qualquer uma depois.')) return
+    try {
+      await api.salvarPoliticaProvisionamentoIa({
+        autoClientes: nova.autoClientes, exigirClienteAtivo: nova.exigirClienteAtivo,
+      })
+      setPoliticaIa(nova)
+      toast.success('Política salva.')
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível salvar a política.')
+    }
+  }
+
   async function alternarAutorizacao(p: InstalacaoPendenteIa) {
     try {
-      if (p.autorizada) {
-        if (!confirm(`Revogar a liberação de ${p.cliente ?? p.cnpj}?`)) return
+      if (p.bloqueada) {
+        await api.desbloquearInstalacaoIa(p.cnpj, p.instalacao)
+        toast.success('Bloqueio removido.')
+      } else if (p.autorizada) {
+        if (!confirm(`Bloquear a IA para ${p.cliente ?? p.cnpj}?\n\n`
+          + 'A chave que está naquela máquina para de funcionar na hora.')) return
         await api.revogarInstalacaoIa(p.cnpj, p.instalacao)
-        toast.success('Liberação revogada.')
+        toast.success('Instalação bloqueada.')
       } else {
         if (!confirm(`Liberar a IA para ${p.cliente ?? p.cnpj}?\n\n`
           + 'Esta instalação passará a ativar sem apresentar licença. '
@@ -818,17 +841,63 @@ export function Configuracoes() {
             </button>
           </div>
 
+          {/* ── Política de liberação ───────────────────────────── */}
+          {politicaIa && (
+            <div className="card space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                  Quem pode ativar a IA
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Instalações que apresentam uma licença válida sempre ativam. A chave abaixo
+                  decide o que fazer com as que não conseguem apresentar.
+                </p>
+              </div>
+
+              <label className="flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300">
+                <input type="checkbox" className="accent-blue-600 mt-0.5" checked={politicaIa.autoClientes}
+                  onChange={(e) => void salvarPoliticaIa({ autoClientes: e.target.checked })} />
+                <span>
+                  Liberar automaticamente quem é cliente Command
+                  <span className="block text-[11px] text-slate-400">
+                    O CNPJ precisa existir na nossa base de clientes. Quem não for cliente
+                    continua sendo recusado.
+                  </span>
+                </span>
+              </label>
+
+              {politicaIa.autoClientes && (
+                <label className="flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300 pl-6">
+                  <input type="checkbox" className="accent-blue-600 mt-0.5"
+                    checked={politicaIa.exigirClienteAtivo}
+                    onChange={(e) => void salvarPoliticaIa({ exigirClienteAtivo: e.target.checked })} />
+                  <span>
+                    Só clientes ativos
+                    <span className="block text-[11px] text-slate-400">
+                      Desmarcado, cliente desativado também ativa a IA.
+                    </span>
+                  </span>
+                </label>
+              )}
+
+              <p className="text-[11px] text-slate-400">
+                {politicaIa.liberadas} instalação(ões) liberada(s)
+                {politicaIa.bloqueadas > 0 && ` · ${politicaIa.bloqueadas} bloqueada(s)`}.
+                Bloquear uma instalação tem precedência sobre tudo, inclusive sobre a licença.
+              </p>
+            </div>
+          )}
+
           {/* ── Ativações recusadas, aguardando decisão ─────────── */}
           {pendentes.length > 0 && (
             <div className="card space-y-3">
               <div>
                 <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
-                  Ativações recusadas ({pendentes.length})
+                  Instalações ({pendentes.length})
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  Instalações que tentaram ativar a IA e não apresentaram uma licença que o
-                  sistema reconheça. Liberar aqui faz aquela máquina — e só ela — ativar na
-                  próxima tentativa, sem precisar da licença.
+                  Quem já tentou ativar a IA. Liberar faz aquela máquina ativar na próxima
+                  tentativa; bloquear corta o acesso na hora, mesmo com licença válida.
                 </p>
               </div>
               <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
@@ -838,9 +907,13 @@ export function Configuracoes() {
                     <div className="min-w-0">
                       <p className="text-sm text-slate-800 dark:text-slate-200">
                         {p.cliente ?? 'Cliente não identificado'}
-                        {p.autorizada && (
+                        {p.bloqueada ? (
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 dark:bg-red-500/20 text-red-700 dark:text-red-300">
+                            bloqueada
+                          </span>
+                        ) : p.autorizada && (
                           <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
-                            liberada
+                            liberada{p.origemDecisao === 'automatico' ? ' (automática)' : ''}
                           </span>
                         )}
                       </p>
@@ -853,8 +926,8 @@ export function Configuracoes() {
                       </p>
                     </div>
                     <button onClick={() => void alternarAutorizacao(p)}
-                      className={p.autorizada ? 'btn-secondary text-xs' : 'btn-primary text-xs'}>
-                      {p.autorizada ? 'Revogar' : 'Liberar'}
+                      className={p.bloqueada || !p.autorizada ? 'btn-primary text-xs' : 'btn-secondary text-xs'}>
+                      {p.bloqueada ? 'Desbloquear' : p.autorizada ? 'Bloquear' : 'Liberar'}
                     </button>
                   </div>
                 ))}
