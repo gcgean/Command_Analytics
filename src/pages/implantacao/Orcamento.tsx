@@ -113,7 +113,9 @@ const PASSOS = [
  * histórico e sem gravar nada. O cálculo é o mesmo — é justamente o ponto de reaproveitar esta
  * tela em vez de manter duas que podem divergir.
  */
-export function Orcamento({ tokenPublico }: { tokenPublico?: string } = {}) {
+export function Orcamento(
+  { tokenPublico, revendaNome }: { tokenPublico?: string; revendaNome?: string | null } = {},
+) {
   const publico = !!tokenPublico
   const { toast } = useToast()
   const topoRef = useRef<HTMLDivElement | null>(null)
@@ -406,6 +408,7 @@ export function Orcamento({ tokenPublico }: { tokenPublico?: string } = {}) {
           <h1 style={{ fontSize: 18, fontWeight: 700, marginBottom: 2 }}>Precificação de Implantação</h1>
           <p style={{ fontSize: 11, color: '#475569', marginBottom: 14 }}>
             {nomeCliente || 'Sem cliente informado'} · emitido em {new Date().toLocaleString('pt-BR')}
+            {revendaNome ? ` · por ${revendaNome}` : ''}
           </p>
 
           <p style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>Custos apurados</p>
@@ -473,7 +476,9 @@ export function Orcamento({ tokenPublico }: { tokenPublico?: string } = {}) {
           )}
 
           <p style={{ fontSize: 10, color: '#64748b', borderTop: '1px solid #e2e8f0', paddingTop: 8 }}>
-            Documento interno de precificação — contém custo e margem. Não enviar ao cliente.
+            {publico
+              ? 'Uso interno da revenda — contém custo e margem. Não enviar ao cliente final.'
+              : 'Documento interno de precificação — contém custo e margem. Não enviar ao cliente.'}
           </p>
         </div>
       </div>
@@ -787,7 +792,17 @@ export function Orcamento({ tokenPublico }: { tokenPublico?: string } = {}) {
 
                 {semPreco ? (
                   <div className="rounded-lg border border-amber-200 dark:border-amber-500/40 bg-amber-50 dark:bg-amber-500/10 p-4 text-sm text-amber-800 dark:text-amber-300">
-                    Defina o preço da implantação e a mensalidade no passo anterior para ver o resultado.
+                    <p>Falta definir o preço da implantação para ver o resultado e imprimir.</p>
+                    {sugestaoImplantacao > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <Button size="sm" onClick={() => { aplicarSugestoes(); irPara(3) }}>
+                          Usar o preço sugerido ({brl(Math.ceil(sugestaoImplantacao))})
+                        </Button>
+                        <Button size="sm" variant="secondary" onClick={() => irPara(2)}>
+                          Definir eu mesmo
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -836,12 +851,17 @@ export function Orcamento({ tokenPublico }: { tokenPublico?: string } = {}) {
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      <Button disabled={salvando} onClick={salvar}>
-                        {salvando
-                          ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
-                          : <><Save className="w-4 h-4" /> {editandoId ? `Salvar alterações (#${editandoId})` : 'Salvar precificação'}</>}
+                      {/* Salvar não existe no link público: nada de lá entra no nosso banco. */}
+                      {!publico && (
+                        <Button disabled={salvando} onClick={salvar}>
+                          {salvando
+                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Salvando...</>
+                            : <><Save className="w-4 h-4" /> {editandoId ? `Salvar alterações (#${editandoId})` : 'Salvar precificação'}</>}
+                        </Button>
+                      )}
+                      <Button variant={publico ? 'primary' : 'secondary'} onClick={() => window.print()}>
+                        <Printer className="w-4 h-4" /> Imprimir
                       </Button>
-                      <Button variant="secondary" onClick={() => window.print()}><Printer className="w-4 h-4" /> Imprimir</Button>
                     </div>
                   </>
                 )}
@@ -1086,7 +1106,7 @@ export function PrecificacaoPublica() {
         </div>
       </header>
       <main className="max-w-6xl mx-auto p-5">
-        <Orcamento tokenPublico={token} />
+        <Orcamento tokenPublico={token} revendaNome={revenda} />
         <p className="text-[11px] text-slate-400 text-center mt-6">
           Esta simulação não é gravada. Ao sair ou recarregar a página, os valores se perdem.
         </p>
