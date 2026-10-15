@@ -21,7 +21,7 @@ async function main() {
 
   if (!cnpj) {
     const linhas = await prisma.$queryRawUnsafe(
-      `SELECT cnpj, sistema, resultado, motivo, licencas_cnpj, tamanho_chave, criado_em
+      `SELECT cnpj, sistema, resultado, motivo, licencas_cnpj, tamanho_chave, formato_chave, criado_em
          FROM ia_provisionamento_log ORDER BY criado_em DESC LIMIT 20`)
     console.log('\n=== Últimas 20 tentativas de ativação ===\n')
     if (linhas.length === 0) console.log('  Nenhuma tentativa registrada ainda.')
@@ -68,13 +68,16 @@ async function main() {
   }
 
   const tentativas = await prisma.$queryRawUnsafe(
-    `SELECT resultado, motivo, instalacao, sistema, licencas_cnpj, tamanho_chave, criado_em
+    `SELECT resultado, motivo, instalacao, sistema, licencas_cnpj, tamanho_chave,
+              formato_chave, criado_em
        FROM ia_provisionamento_log WHERE cnpj = ? ORDER BY criado_em DESC LIMIT 15`, cnpj)
   console.log(`\n--- Tentativas de ativação: ${tentativas.length} ---`)
   for (const t of tentativas) {
     console.log(`  ${data(t.criado_em)}  ${t.resultado.toUpperCase()}  ${t.motivo ?? 'ok'}`)
     console.log(`     instalação: ${t.instalacao ?? '—'} · sistema: ${t.sistema ?? '—'}`
-      + ` · chave enviada: ${n(t.tamanho_chave)} caracteres`)
+      + ` · chave enviada: ${n(t.tamanho_chave)} caracteres`
+      + (t.formato_chave ? `
+     formato recebido: ${t.formato_chave}` : ''))
   }
 
   // O diagnóstico que mais resolve: o tamanho bate com o que o banco espera?

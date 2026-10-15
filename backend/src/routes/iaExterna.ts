@@ -74,6 +74,16 @@ export async function initIaExterna(): Promise<void> {
   `)
 
   // Colunas acrescentadas depois; o projeto não usa migrations.
+  // Coluna acrescentada depois, para descobrir o formato do que o ERP envia.
+  const [temFormato] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COUNT(*) AS q FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = 'ia_provisionamento_log'
+        AND column_name = 'formato_chave'`)
+  if (Number(temFormato?.q ?? 0) === 0) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE ia_provisionamento_log ADD COLUMN formato_chave VARCHAR(120) NULL`).catch(() => {})
+  }
+
   for (const [coluna, definicao] of [
     ['cnpj', 'VARCHAR(20) NULL'],
     ['instalacao', 'VARCHAR(80) NULL'],
@@ -101,6 +111,7 @@ export async function initIaExterna(): Promise<void> {
       motivo        VARCHAR(200) NULL,
       licencas_cnpj INT NOT NULL DEFAULT 0,
       tamanho_chave INT NOT NULL DEFAULT 0,
+      formato_chave VARCHAR(120) NULL,
       criado_em     DATETIME NOT NULL DEFAULT NOW(),
       INDEX idx_prov_log_cnpj (cnpj),
       INDEX idx_prov_log_data (criado_em)
@@ -133,6 +144,32 @@ function excedeuProvisionamento(chaveJanela: string): boolean {
   const recentes = (tentativas.get(chaveJanela) ?? []).filter((t) => agora - t < JANELA_TENTATIVAS_MS)
   tentativas.set(chaveJanela, recentes)
   return recentes.length >= MAX_TENTATIVAS
+}
+
+/**
+ * Descreve o FORMATO de uma credencial sem revelar o conteúdo. Quando o valor recebido não
+ * confere, é isso que permite descobrir que tipo de credencial o sistema externo está mandando
+ * — se é hexadecimal, base64, se tem separadores — sem precisar que alguém cole o segredo.
+ */
+function formatoDe(valor: string): string {
+  const partes: string[] = []
+  if (/^[0-9A-Fa-f]+$/.test(valor)) partes.push('hexadecimal')
+  else if (/^[A-Za-z0-9+/]+=*$/.test(valor)) partes.push('base64')
+  else if (/^[A-Za-z0-9]+$/.test(valor)) partes.push('alfanumérico')
+  else partes.push('misto')
+
+  if (/[a-z]/.test(valor) && /[A-Z]/.test(valor)) partes.push('maiúsc+minúsc')
+  else if (/[a-z]/.test(valor)) partes.push('minúsculas')
+  else if (/[A-Z]/.test(valor)) partes.push('maiúsculas')
+
+  // Separadores revelam a estrutura (UUID, JWT, campos concatenados) sem revelar o valor.
+  const simbolos = [...new Set(valor.replace(/[A-Za-z0-9]/g, '').split(''))]
+  if (simbolos.length) {
+    partes.push(`símbolos: ${simbolos.join('')}`)
+    const sep = simbolos.find((s) => valor.split(s).length > 1)
+    if (sep) partes.push(`segmentos: ${valor.split(sep).map((p) => p.length).join('-')}`)
+  }
+  return partes.join(' · ').slice(0, 120)
 }
 
 function registrarTentativa(chaveJanela: string): void {
@@ -317,10 +354,12 @@ export async function iaExternaRoutes(app: FastifyInstance) {
     const logar = (resultado: string, motivo: string | null, licencasDoCnpj: number) =>
       prisma.$executeRawUnsafe(
         `INSERT INTO ia_provisionamento_log
-           (cnpj, instalacao, sistema, resultado, motivo, licencas_cnpj, tamanho_chave)
-         VALUES (?,?,?,?,?,?,?)`,
+           (cnpj, instalacao, sistema, resultado, motivo, licencas_cnpj, tamanho_chave, formato_chave)
+         VALUES (?,?,?,?,?,?,?,?)`,
         cnpj, instalacao, String(b.sistema ?? '').slice(0, 60) || null,
         resultado, motivo, licencasDoCnpj, licenca.length,
+        // Só a forma, nunca o valor — é o que identifica a credencial errada.
+        resultado === 'provisionado' ? null : formatoDe(licenca),
       ).catch(() => {})
 
     // Quantas licenças esse CNPJ tem, independentemente da chave. Separa "CNPJ desconhecido"
@@ -545,7 +584,8 @@ export async function iaExternaRoutes(app: FastifyInstance) {
     }
 
     const tentativas = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT resultado, motivo, instalacao, sistema, licencas_cnpj, tamanho_chave, criado_em
+      `SELECT resultado, motivo, instalacao, sistema, licencas_cnpj, tamanho_chave,
+              formato_chave, criado_em
          FROM ia_provisionamento_log WHERE cnpj = ? ORDER BY criado_em DESC LIMIT 20`,
       cnpj).catch(() => [])
 
@@ -570,6 +610,7 @@ export async function iaExternaRoutes(app: FastifyInstance) {
         sistema: l.sistema ?? null,
         licencasDoCnpj: Number(l.licencas_cnpj ?? 0),
         tamanhoChave: Number(l.tamanho_chave ?? 0),
+        formatoChave: l.formato_chave ?? null,
         quando: l.criado_em,
       })),
     }
