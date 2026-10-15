@@ -2,7 +2,8 @@ import type {
   Cliente, Atendimento, AgendaItem, Plano, Assinatura, PipelineItem,
   Negocio, Lead, AnaliseFinanceira, AnaliseFaturamento, LancamentoBancoHoras, TipoMovimentoBancoHoras, Comissao, Tarefa, Video, Meta,
   ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, PoliticaProvisionamentoIa, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
-  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
+  MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada,
+  PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
@@ -896,6 +897,21 @@ export const api = {
     fetchApi<{ ok: boolean }>(`/orcamentos/migracoes/${id}`, { method: 'DELETE' }),
 
   // ─── Parâmetros de precificação (custos padrão) ────────────
+  // ─── Precificação por link aberto (revendas) ───────────────
+  getPrecificacaoPublica: (token: string) =>
+    fetchApi<PrecificacaoPublicaResposta>(`/precificacao-publica/parametros/${token}`),
+  getLinksPrecificacao: () => fetchApi<LinkPrecificacao[]>('/precificacao-publica/links'),
+  criarLinkPrecificacao: (nome: string) =>
+    fetchApi<{ token: string }>('/precificacao-publica/links', {
+      method: 'POST', body: JSON.stringify({ nome }),
+    }),
+  atualizarLinkPrecificacao: (id: number, dados: { nome?: string; ativo?: boolean }) =>
+    fetchApi<{ ok: boolean }>(`/precificacao-publica/links/${id}`, {
+      method: 'PUT', body: JSON.stringify(dados),
+    }),
+  excluirLinkPrecificacao: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/precificacao-publica/links/${id}`, { method: 'DELETE' }),
+
   getParametrosPrecificacao: () => fetchApi<ParametrosPrecificacao>('/orcamentos/parametros'),
   salvarParametrosPrecificacao: (dados: ParametrosPrecificacao) =>
     fetchApi<ParametrosPrecificacao>('/orcamentos/parametros', { method: 'PUT', body: JSON.stringify(dados) }),

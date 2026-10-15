@@ -48,6 +48,7 @@ import { bancoHorasRoutes } from './routes/bancoHoras'
 import { assistenteRoutes } from './routes/assistente'
 import { iaExternaRoutes, initIaExterna } from './routes/iaExterna'
 import { comunicadosRoutes, initComunicados } from './routes/comunicados'
+import { precificacaoPublicaRoutes, initPrecificacaoPublica } from './routes/precificacaoPublica'
 import { connectionsRoutes } from './routes/connections'
 import { initAuditoria } from './utils/auditoria'
 import { initEtapas } from './utils/etapas'
@@ -235,6 +236,7 @@ app.register(async (api) => {
   api.register(assistenteRoutes,   { prefix: '/assistente' })
   api.register(iaExternaRoutes,    { prefix: '/ia-externa' })
   api.register(comunicadosRoutes,  { prefix: '/comunicados' })
+  api.register(precificacaoPublicaRoutes, { prefix: '/precificacao-publica' })
   api.register(emailRoutes,        { prefix: '/email' })
   api.register(metasDevRoutes,     { prefix: '/metas-dev' })
   api.register(orcamentosRoutes,   { prefix: '/orcamentos' })
@@ -280,6 +282,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initCrmSync()
     .then(() => { console.log('✓ Tabelas do CRM verificadas'); startCrmSyncScheduler() })
     .catch(e => console.warn('⚠ CRM init:', e.message))
+  initPrecificacaoPublica()
+    .then(() => console.log('✓ Tabela de links de precificação verificada'))
+    .catch(e => console.warn('⚠ Precificação pública init:', e.message))
   initComunicados()
     .then(() => console.log('✓ Tabelas de comunicados verificadas'))
     .catch(e => console.warn('⚠ Comunicados init:', e.message))

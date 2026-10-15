@@ -1766,3 +1766,21 @@ export interface PoliticaProvisionamentoIa {
   liberadas: number
   bloqueadas: number
 }
+
+/** Resposta do link público de precificação: parâmetros de cálculo, sem dado de cliente. */
+export interface PrecificacaoPublicaResposta {
+  revenda: string
+  parametros: ParametrosPrecificacao
+  migracoes: MigracaoTabelada[]
+}
+
+/** Link aberto de precificação, entregue a uma revenda. */
+export interface LinkPrecificacao {
+  id: number
+  nome: string
+  token: string
+  ativo: boolean
+  acessos: number
+  ultimoUso: string | null
+  criadoEm: string
+}

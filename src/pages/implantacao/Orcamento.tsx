@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   Calculator, Car, GraduationCap, Database, Percent, FileText, BedDouble,
@@ -10,7 +11,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Input } from '../../components/ui/Input'
 import { useToast } from '../../components/ui/Toast'
-import type { ImplantacaoCliente, ImplantacaoPainel, PropostaOrcamento, MigracaoTabelada, ParametrosPrecificacao } from '../../types'
+import type { ImplantacaoCliente, ImplantacaoPainel, PropostaOrcamento, MigracaoTabelada, ParametrosPrecificacao, LinkPrecificacao } from '../../types'
 
 function normalizarBusca(value?: string | null) {
   return String(value || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim()
@@ -107,7 +108,13 @@ const PASSOS = [
   { id: 3, titulo: 'Resultado', icone: TrendingUp },
 ] as const
 
-export function Orcamento() {
+/**
+ * `tokenPublico` liga o modo aberto por link, usado pelas revendas: sem lista de clientes, sem
+ * histórico e sem gravar nada. O cálculo é o mesmo — é justamente o ponto de reaproveitar esta
+ * tela em vez de manter duas que podem divergir.
+ */
+export function Orcamento({ tokenPublico }: { tokenPublico?: string } = {}) {
+  const publico = !!tokenPublico
   const { toast } = useToast()
   const topoRef = useRef<HTMLDivElement | null>(null)
 
@@ -125,37 +132,83 @@ export function Orcamento() {
   const [editandoId, setEditandoId] = useState<number | null>(null)
   const [migracoes, setMigracoes] = useState<MigracaoTabelada[]>([])
   const [repasseMigracao, setRepasseMigracao] = useState(30)
+  const [links, setLinks] = useState<LinkPrecificacao[]>([])
+  const [nomeRevenda, setNomeRevenda] = useState('')
 
   const set = <K extends keyof Form>(campo: K, valor: Form[K]) => setForm((f) => ({ ...f, [campo]: valor }))
 
   useEffect(() => {
+    if (publico) return
     setLoadingClientes(true)
     api.getImplantacaoPainel().then(setPainel)
       .catch(() => toast.error('Não foi possível carregar a lista de clientes.'))
       .finally(() => setLoadingClientes(false))
-  }, [toast])
+  }, [toast, publico])
 
   const carregarHistorico = useCallback(() => {
+    if (publico) return
     api.getPropostas().then(setHistorico).catch(() => setHistorico([]))
-  }, [])
+    api.getLinksPrecificacao().then(setLinks).catch(() => setLinks([]))
+  }, [publico])
+
+  async function criarLink() {
+    if (!nomeRevenda.trim()) return toast.error('Informe o nome da revenda.')
+    try {
+      await api.criarLinkPrecificacao(nomeRevenda.trim())
+      setNomeRevenda('')
+      setLinks(await api.getLinksPrecificacao())
+      toast.success('Link criado!')
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível criar o link.')
+    }
+  }
+
+  async function alternarLink(l: LinkPrecificacao) {
+    try {
+      await api.atualizarLinkPrecificacao(l.id, { ativo: !l.ativo })
+      setLinks(await api.getLinksPrecificacao())
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível alterar o link.')
+    }
+  }
+
+  async function excluirLink(l: LinkPrecificacao) {
+    if (!confirm(`Excluir o link de ${l.nome}? Quem tiver o endereço perde o acesso na hora.`)) return
+    try {
+      await api.excluirLinkPrecificacao(l.id)
+      setLinks(await api.getLinksPrecificacao())
+      toast.success('Link excluído.')
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível excluir.')
+    }
+  }
   useEffect(() => { carregarHistorico() }, [carregarHistorico])
 
   // Custos padrão vêm de Configurações > Precificação: o vendedor não precisa saber de cor.
   useEffect(() => {
-    api.getParametrosPrecificacao()
-      .then((p: ParametrosPrecificacao) => {
-        setRepasseMigracao(p.migracaoRepassePerc ?? 30)
-        setForm((f) => ({
-          ...f,
-          custoKm: p.custoKm, custoHoraTecnica: p.custoHoraTecnica,
-          custoHospedagem: p.custoHospedagem, custoAlimentacao: p.custoAlimentacao,
-          refeicoesPorDia: p.refeicoesDia, horasTreinamento: p.horasTreinamento,
-          margemAlvo: p.margemAlvo, impostosPerc: p.impostosPerc, comissaoPerc: p.comissaoPerc,
-        }))
-      })
-      .catch(() => {})
+    const aplicar = (p: ParametrosPrecificacao) => {
+      setRepasseMigracao(p.migracaoRepassePerc ?? 30)
+      setForm((f) => ({
+        ...f,
+        custoKm: p.custoKm, custoHoraTecnica: p.custoHoraTecnica,
+        custoHospedagem: p.custoHospedagem, custoAlimentacao: p.custoAlimentacao,
+        refeicoesPorDia: p.refeicoesDia, horasTreinamento: p.horasTreinamento,
+        margemAlvo: p.margemAlvo, impostosPerc: p.impostosPerc, comissaoPerc: p.comissaoPerc,
+      }))
+    }
+
+    if (tokenPublico) {
+      api.getPrecificacaoPublica(tokenPublico)
+        .then((r) => {
+          aplicar(r.parametros as ParametrosPrecificacao)
+          setMigracoes(r.migracoes)
+        })
+        .catch(() => {})
+      return
+    }
+    api.getParametrosPrecificacao().then(aplicar).catch(() => {})
     api.getMigracoes().then(setMigracoes).catch(() => setMigracoes([]))
-  }, [])
+  }, [tokenPublico])
 
   const irPara = (destino: number) => {
     setPasso(Math.max(0, Math.min(PASSOS.length - 1, destino)))
@@ -276,6 +329,8 @@ export function Orcamento() {
   }
 
   async function salvar() {
+    // Nada do modo público chega ao nosso banco — é a premissa do link aberto.
+    if (publico) return
     setSalvando(true)
     try {
       const corpo = {
@@ -493,7 +548,9 @@ export function Orcamento() {
                 <div>
                   <h2 className="text-base font-semibold text-slate-800 dark:text-slate-100">Para qual cliente é a negociação?</h2>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    Só para identificar a precificação no histórico. Pode ser um cliente do cadastro ou um nome novo.
+                    {publico
+                      ? 'Só para identificar esta simulação na tela. Nada é gravado.'
+                      : 'Só para identificar a precificação no histórico. Pode ser um cliente do cadastro ou um nome novo.'}
                   </p>
                 </div>
                 <div className="relative">
@@ -503,10 +560,10 @@ export function Orcamento() {
                     onFocus={() => setAutocompleteAberto(true)}
                     onChange={(e) => { setBuscaCliente(e.target.value); setAutocompleteAberto(true) }}
                     onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); usarNomeDigitado() } }}
-                    placeholder="Digite o nome do cliente — cadastrado ou não"
+                    placeholder={publico ? 'Nome do cliente' : 'Digite o nome do cliente — cadastrado ou não'}
                     data-enter-proprio="true"
                   />
-                  {autocompleteAberto && buscaCliente.trim().length >= 2 && (
+                  {!publico && autocompleteAberto && buscaCliente.trim().length >= 2 && (
                     <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
                       {loadingClientes ? (
                         <div className="px-3 py-2 text-xs text-slate-500">Carregando...</div>
@@ -865,7 +922,65 @@ export function Orcamento() {
         </div>
       </div>
 
-      {/* Histórico */}
+      {/* Links abertos para revendas */}
+      {!publico && (
+        <Card>
+          <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+            Links de precificação para revendas
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5 mb-4">
+            Quem abrir o link usa esta mesma calculadora sem precisar de conta. Não vê clientes,
+            não vê o histórico e nada do que ele fizer é gravado aqui.
+          </p>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <Input value={nomeRevenda} onChange={(e) => setNomeRevenda(e.target.value)}
+              placeholder="Nome da revenda" className="flex-1 min-w-[14rem]" />
+            <Button onClick={criarLink} disabled={!nomeRevenda.trim()}>Gerar link</Button>
+          </div>
+          {links.length === 0 ? (
+            <p className="text-xs text-slate-500">Nenhum link criado ainda.</p>
+          ) : (
+            <div className="space-y-2">
+              {links.map((l) => {
+                const url = `${window.location.origin}/precificacao/${l.token}`
+                return (
+                  <div key={l.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                    <div className="min-w-0">
+                      <p className="text-sm text-slate-800 dark:text-slate-200">
+                        {l.nome}
+                        {!l.ativo && (
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-500">
+                            desativado
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-slate-400 break-all">{url}</p>
+                      <p className="text-[11px] text-slate-400">
+                        {l.acessos} acesso(s)
+                        {l.ultimoUso && ` · último em ${new Date(l.ultimoUso).toLocaleString('pt-BR')}`}
+                      </p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="secondary"
+                        onClick={() => { void navigator.clipboard.writeText(url); toast.success('Link copiado!') }}>
+                        Copiar
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => alternarLink(l)}>
+                        {l.ativo ? 'Desativar' : 'Reativar'}
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => excluirLink(l)}>Excluir</Button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Histórico — não existe no link público: nada é gravado lá. */}
+      {!publico && (
       <Card padding="none">
         <div className="p-4 border-b border-slate-200 dark:border-slate-700">
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">Precificações salvas</p>
@@ -912,6 +1027,70 @@ export function Orcamento() {
           </table>
         </div>
       </Card>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Rota pública /precificacao/:token — a mesma calculadora, aberta por link para as revendas.
+ * Monta só o cabeçalho próprio e delega o resto; o modo público cuida de esconder clientes,
+ * histórico e gravação.
+ */
+export function PrecificacaoPublica() {
+  const { token } = useParams<{ token: string }>()
+  const [estado, setEstado] = useState<'carregando' | 'ok' | 'invalido'>('carregando')
+  const [revenda, setRevenda] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!token) return setEstado('invalido')
+    api.getPrecificacaoPublica(token)
+      .then((r) => { setRevenda(r.revenda); setEstado('ok') })
+      .catch(() => setEstado('invalido'))
+  }, [token])
+
+  if (estado === 'carregando') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+      </div>
+    )
+  }
+
+  if (estado === 'invalido') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-900 p-6">
+        <Card className="max-w-md text-center">
+          <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100">Link indisponível</h1>
+          <p className="text-sm text-slate-500 mt-2">
+            Este link de precificação não existe ou foi desativado. Peça um novo à Command System.
+          </p>
+        </Card>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+      <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+        <div className="max-w-6xl mx-auto px-5 py-3 flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-slate-800 dark:text-slate-100">Precificação de Implantação</p>
+            <p className="text-xs text-slate-500">Command System</p>
+          </div>
+          {revenda && (
+            <span className="text-xs px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-500/15 text-blue-700 dark:text-blue-300">
+              {revenda}
+            </span>
+          )}
+        </div>
+      </header>
+      <main className="max-w-6xl mx-auto p-5">
+        <Orcamento tokenPublico={token} />
+        <p className="text-[11px] text-slate-400 text-center mt-6">
+          Esta simulação não é gravada. Ao sair ou recarregar a página, os valores se perdem.
+        </p>
+      </main>
     </div>
   )
 }

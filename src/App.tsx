@@ -8,6 +8,7 @@ import type { Usuario } from './types'
 // Auth
 import { Login } from './pages/auth/Login'
 import { SolicitacaoDemanda } from './pages/publico/SolicitacaoDemanda'
+import { PrecificacaoPublica } from './pages/implantacao/Orcamento'
 import { MetasPeriodo } from './pages/metas/MetasPeriodo'
 import { TabelaMigracao } from './pages/comercial/TabelaMigracao'
 import { ClientesPaycore } from './pages/comercial/ClientesPaycore'
@@ -199,6 +200,8 @@ export default function App() {
 
       {/* Link público de demandas — sem login, é o endereço que vai pro cliente. */}
       <Route path="/demanda" element={<SolicitacaoDemanda />} />
+      {/* Precificação aberta por link — é o endereço que vai para a revenda. */}
+      <Route path="/precificacao/:token" element={<PrecificacaoPublica />} />
 
       {/* Alterar senha — standalone page (sem layout de sidebar) */}
       <Route path="/alterar-senha" element={<ProtectedRoute><AlterarSenha /></ProtectedRoute>} />
