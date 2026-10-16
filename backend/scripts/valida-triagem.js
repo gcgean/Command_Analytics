@@ -63,7 +63,7 @@ async function main() {
 
   const casos = {
     'duvida delivery com SmartPOS': { ...base, motivo: motivo(iDuvida), assunto_duvida: tema(0), ja_integrado: 'Sim', equipamento: equip(2), modelo_smartpos: 'P2', serie_smartpos: '123', adquirente: 'Cielo' },
-    'erro de transacao com TEF': { ...base, motivo: motivo(iErro), ja_integrado: 'Sim', equipamento: equip(3), ec_tef: '999', logico_tef: '001', adquirente: 'Rede', erro_data: '2026-10-15', erro_valor: '120,00', erro_documento: 'Não emitido' },
+    'erro de transacao com TEF': { ...base, motivo: motivo(iErro), ja_integrado: 'Sim', equipamento: equip(3), tem_dados_tef: 'Sim', ec_tef: '999', logico_tef: '001', adquirente: 'Rede', erro_data: '2026-10-15', erro_valor: '120,00', erro_documento: 'Não emitido' },
     'maquina adicional': { ...base, motivo: motivo(iAdicional), ja_integrado: 'Sim', equipamento: equip(2), modelo_smartpos: 'P2', serie_smartpos: '456', adquirente: 'Cielo' },
     'contratar com SmartPOS': { ...base, motivo: motivo(iContratar), ja_integrado: 'Não', equipamento: equip(2), modelo_smartpos: 'P2', serie_smartpos: '789', adquirente: 'Stone' },
     'contratar sem equipamento': { ...base, motivo: motivo(iContratar), ja_integrado: 'Não', equipamento: equip(0), adquirente: 'A definir' },

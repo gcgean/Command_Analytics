@@ -237,7 +237,19 @@ export async function triagemRoutes(app: FastifyInstance) {
       })
     }
 
-    const etapa = cenario.etapaDestino ?? modelo.etapaInicial ?? null
+    // status_atual é NOT NULL no Pipeline. Sem etapa resolvida o INSERT quebra, então cai
+    // para a primeira etapa ativa do quadro — e, se nem isso existir, avisa em vez de falhar.
+    let etapa = cenario.etapaDestino ?? modelo.etapaInicial ?? null
+    if (etapa == null) {
+      const [primeira] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id FROM cadastro_etapas WHERE ativo = 1 ORDER BY ordem, id LIMIT 1`)
+      etapa = primeira ? Number(primeira.id) : null
+    }
+    if (etapa == null) {
+      return reply.status(400).send({
+        error: 'Nenhuma etapa cadastrada no Pipeline para receber o processo.',
+      })
+    }
     const titulo = `${modelo.nome} — ${cenario.nome}`
 
     const fotos = await listarAnexos(Number(id))
@@ -248,7 +260,7 @@ export async function triagemRoutes(app: FastifyInstance) {
          (cliente_id, tipo, titulo, servico_nome, status_atual, observacao,
           processo_principal, criado_em, atualizado_em, criado_por, atualizado_por)
        VALUES (?,?,?,?,?,?,0, UTC_TIMESTAMP(), UTC_TIMESTAMP(), ?, ?)`,
-      Number(a.cliente_id), modelo.tipoProcesso, titulo.slice(0, 200), cenario.nome.slice(0, 120),
+      Number(a.cliente_id), modelo.tipoProcesso, titulo.slice(0, 160), cenario.nome.slice(0, 120),
       etapa, resumo.observacao, usuarioId, usuarioId,
     )
     const [p] = await prisma.$queryRawUnsafe<any[]>(

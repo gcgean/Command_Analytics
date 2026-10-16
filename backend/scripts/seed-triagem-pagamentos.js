@@ -130,15 +130,25 @@ const PERGUNTAS = [
   },
 
   // ── TEF/PinPad ──
+  // EC e número lógico quem fornece é a adquirente. O cliente raramente tem isso em mãos na
+  // hora da ligação, então não podem travar a triagem: viram pendência dentro do processo.
   {
-    chave: 'ec_tef', texto: 'Código de estabelecimento (EC)', tipo: 'texto',
+    chave: 'tem_dados_tef', texto: 'Já tem o EC e o número lógico da adquirente?', tipo: 'sim_nao',
+    ajuda: 'Esses dois dados são fornecidos pela adquirente. Se ainda não tiver, orientamos como pedir.',
     grupo: 'TEF/PinPad', obrigatoria: 1, publico: 'ambos',
     condicao: { chave: 'equipamento', operador: 'igual', valor: 'TEF/PinPad' },
   },
   {
+    chave: 'ec_tef', texto: 'Código de estabelecimento (EC)', tipo: 'texto',
+    ajuda: 'Fornecido pela adquirente.',
+    grupo: 'TEF/PinPad', publico: 'ambos',
+    condicao: { chave: 'tem_dados_tef', operador: 'igual', valor: 'Sim' },
+  },
+  {
     chave: 'logico_tef', texto: 'Número lógico', tipo: 'texto',
-    grupo: 'TEF/PinPad', obrigatoria: 1, publico: 'ambos',
-    condicao: { chave: 'equipamento', operador: 'igual', valor: 'TEF/PinPad' },
+    ajuda: 'Fornecido pela adquirente, junto com o EC.',
+    grupo: 'TEF/PinPad', publico: 'ambos',
+    condicao: { chave: 'tem_dados_tef', operador: 'igual', valor: 'Sim' },
   },
 
   // ── Erro de transação ──
@@ -277,6 +287,8 @@ const CENARIOS = [
     passos: [
       'Coletar CNPJ, razão social, nome fantasia, telefone, e-mail e quantidade de caixas',
       'Identificar a adquirente e coletar o código de estabelecimento (EC) e o número lógico',
+      'Sem o EC e o número lógico, orientar o cliente a pedi-los à adquirente e combinar o '
+        + 'retorno — o cadastro no fornecedor TEF não anda sem esses dados',
       'Encaminhar o cadastro ao fornecedor TEF',
       'Aguardar a aprovação do fornecedor',
       'Agendar a instalação e preparar o acesso remoto (https://tef.net.br/multicanal/)',
@@ -315,15 +327,27 @@ const CHECKLIST = {
   ],
 }
 
+// Etapa em que o processo nasce no Pipeline. O nome é procurado no cadastro de etapas:
+// o id muda de ambiente, o nome não.
+const ETAPA_INICIAL = 'Aguardando Instalação'
+
 async function main() {
+  const [etapa] = await prisma.$queryRawUnsafe(
+    `SELECT id FROM cadastro_etapas WHERE nome = ? AND ativo = 1 LIMIT 1`, ETAPA_INICIAL)
+  const etapaId = etapa ? Number(etapa.id) : null
+  if (!etapaId) {
+    console.warn(`AVISO: etapa "${ETAPA_INICIAL}" não encontrada; o processo vai nascer na `
+      + 'primeira etapa ativa do quadro.')
+  }
+
   await prisma.$executeRawUnsafe(
-    `INSERT INTO triagem_modelo (nome, slug, descricao, tipo_processo, permite_link)
-     VALUES (?,?,?,?,1)
+    `INSERT INTO triagem_modelo (nome, slug, descricao, tipo_processo, etapa_inicial, permite_link)
+     VALUES (?,?,?,?,?,1)
      ON DUPLICATE KEY UPDATE nome = VALUES(nome), descricao = VALUES(descricao),
-       tipo_processo = VALUES(tipo_processo)`,
+       tipo_processo = VALUES(tipo_processo), etapa_inicial = VALUES(etapa_inicial)`,
     'Integração de Meios de Pagamento', SLUG,
     'Triagem guiada para integrar maquininhas e meios de pagamento ao Command.',
-    'triagem_pagamentos',
+    'triagem_pagamentos', etapaId,
   )
   const [m] = await prisma.$queryRawUnsafe(`SELECT id FROM triagem_modelo WHERE slug = ?`, SLUG)
   const modeloId = Number(m.id)
