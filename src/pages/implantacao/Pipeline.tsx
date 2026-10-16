@@ -177,6 +177,12 @@ function clienteCorrespondeDataCadastro(cliente: ImplantacaoCliente, dataInicial
 }
 
 // Filtra pelo responsável atual do processo (não considera quem lançou/criou).
+function clienteCorrespondeServico(cliente: ImplantacaoCliente, servicoFiltro: string) {
+  if (servicoFiltro === 'all') return true
+  if (servicoFiltro === 'sem-servico') return !cliente.servicoId
+  return String(cliente.servicoId ?? '') === servicoFiltro
+}
+
 function clienteCorrespondePessoa(cliente: ImplantacaoCliente, pessoaFiltro: string) {
   if (pessoaFiltro === 'all') return true
   if (pessoaFiltro === 'sem-responsavel') return !cliente.responsavelId
@@ -334,6 +340,7 @@ export function Pipeline() {
   const [dataCadastroInicial, setDataCadastroInicial] = useState(() => searchParams.get('dataInicial') || '')
   const [dataCadastroFinal, setDataCadastroFinal] = useState(() => searchParams.get('dataFinal') || '')
   const [pessoaFiltro, setPessoaFiltro] = useState(() => searchParams.get('pessoa') || 'all')
+  const [servicoFiltro, setServicoFiltro] = useState(() => searchParams.get('servico') || 'all')
   const [filtroPrazo, setFiltroPrazo] = useState<'todos' | 'atrasados' | 'em-dia'>(() => {
     if (searchParams.get('atrasados') === '1') return 'atrasados'
     if (searchParams.get('emDia') === '1') return 'em-dia'
@@ -438,15 +445,27 @@ export function Pipeline() {
       .sort((a, b) => a.nome.localeCompare(b.nome))
   }, [clientesBase])
 
+  // As opções saem dos processos carregados: oferecer o catálogo inteiro encheria a lista de
+  // serviços que não têm nenhum processo aberto.
+  const servicosDisponiveis = useMemo(() => {
+    const mapa = new Map<number, string>()
+    for (const c of clientesBase) {
+      if (c.servicoId) mapa.set(Number(c.servicoId), c.servicoNome || `Serviço ${c.servicoId}`)
+    }
+    return [...mapa.entries()].map(([id, nome]) => ({ id, nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [clientesBase])
+
   const clientesFiltrados = useMemo(
     () => clientesBase.filter((cliente) =>
       clienteCorrespondeBusca(cliente, search) &&
       clienteCorrespondeTempoUltimaVenda(cliente, ultimaVendaFiltro) &&
       clienteCorrespondeDataCadastro(cliente, dataCadastroInicial, dataCadastroFinal) &&
       clienteCorrespondePessoa(cliente, pessoaFiltro) &&
+      clienteCorrespondeServico(cliente, servicoFiltro) &&
       (filtroPrazo === 'todos' || (filtroPrazo === 'atrasados' ? cliente.emAtraso : !cliente.emAtraso))
     ),
-    [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, filtroPrazo],
+    [clientesBase, search, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, servicoFiltro, filtroPrazo],
   )
 
   const clientesVisiveis = useMemo(
@@ -528,11 +547,12 @@ export function Pipeline() {
     if (dataCadastroInicial) next.set('dataInicial', dataCadastroInicial)
     if (dataCadastroFinal) next.set('dataFinal', dataCadastroFinal)
     if (pessoaFiltro !== 'all') next.set('pessoa', pessoaFiltro)
+    if (servicoFiltro !== 'all') next.set('servico', servicoFiltro)
     if (filtroPrazo === 'atrasados') next.set('atrasados', '1')
     if (filtroPrazo === 'em-dia') next.set('emDia', '1')
     if (viewMode !== 'kanban') next.set('view', viewMode)
     setSearchParams(next, { replace: true })
-  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, filtroPrazo, viewMode, setSearchParams])
+  }, [search, status, ultimaVendaFiltro, dataCadastroInicial, dataCadastroFinal, pessoaFiltro, servicoFiltro, filtroPrazo, viewMode, setSearchParams])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -1135,6 +1155,20 @@ export function Pipeline() {
               ))}
             </select>
           </div>
+          <div className="md:col-span-3">
+            <select
+              value={servicoFiltro}
+              onChange={(e) => setServicoFiltro(e.target.value)}
+              className="h-7 sm:h-8 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-[11px] sm:text-xs px-2.5"
+              title="Filtrar pelo serviço do processo"
+            >
+              <option value="all">Serviço: todos</option>
+              <option value="sem-servico">Sem serviço definido</option>
+              {servicosDisponiveis.map((servico) => (
+                <option key={servico.id} value={String(servico.id)}>{servico.nome}</option>
+              ))}
+            </select>
+          </div>
           <div className="md:col-span-2">
             <input
               type="date"
@@ -1153,7 +1187,7 @@ export function Pipeline() {
               title="Filtrar por data de cadastro final"
             />
           </div>
-          <div className="md:col-span-4 flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden h-7 sm:h-8">
+          <div className="md:col-span-2 flex rounded-lg border border-slate-300 dark:border-slate-700 overflow-hidden h-7 sm:h-8">
             <button className={clsx('flex-1 text-[11px] sm:text-xs flex items-center justify-center gap-1.5', viewMode === 'lista' ? 'bg-blue-600 text-white' : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300')} onClick={() => setViewMode('lista')}>
               <LayoutList className="w-3.5 h-3.5" /> Lista
             </button>
