@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   AlertTriangle, ArrowLeft, Check, CheckCircle2, Copy, Link2, ListChecks, Loader2,
-  Target, Trash2, ExternalLink, Save, Pencil, Building2,
+  Target, Trash2, ExternalLink, Save, Pencil, Building2, MailCheck,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
@@ -221,6 +221,16 @@ export function TriagemDetalhe() {
           )}
         </div>
       </div>
+
+      {dados.situacao === 'respondido' && (
+        <div className="rounded-xl border border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 p-4 flex gap-3">
+          <MailCheck className="w-5 h-5 text-violet-600 shrink-0 mt-0.5" />
+          <p className="text-sm text-violet-900 dark:text-violet-200">
+            O cliente preencheu e enviou pelo link. Confira as respostas e, se estiver tudo certo,
+            abra o processo.
+          </p>
+        </div>
+      )}
 
       {concluido && (
         <div className="rounded-xl border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 p-4 flex gap-3">

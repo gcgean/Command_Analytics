@@ -62,6 +62,9 @@ export async function initTriagem(): Promise<void> {
     CREATE TABLE IF NOT EXISTS triagem_cenario (
       id            INT AUTO_INCREMENT PRIMARY KEY,
       modelo_id     INT NOT NULL,
+      -- Chave estável: sem ela, recadastrar os cenários troca os ids e os atendimentos
+      -- antigos passam a apontar para cenário que não existe mais.
+      chave         VARCHAR(60) NULL,
       nome          VARCHAR(160) NOT NULL,
       descricao     VARCHAR(600) NULL,
       -- Condições que identificam o cenário. JSON: [{chave, operador, valor}] — todas precisam bater.
@@ -147,6 +150,17 @@ export async function initTriagem(): Promise<void> {
       INDEX idx_triagem_anexo_chave (atendimento_id, chave)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+
+  // Bancos que já tinham as tabelas antes destas colunas existirem.
+  const [colChave] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'triagem_cenario' AND COLUMN_NAME = 'chave'`)
+  if (!Number(colChave?.total ?? 0)) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE triagem_cenario ADD COLUMN chave VARCHAR(60) NULL`).catch(() => {})
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE triagem_cenario ADD UNIQUE KEY uk_triagem_cenario (modelo_id, chave)`).catch(() => {})
+  }
 
   // Bancos que já tinham a tabela antes de 'origem' existir.
   const [col] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`

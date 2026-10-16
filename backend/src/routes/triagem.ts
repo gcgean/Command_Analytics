@@ -49,15 +49,38 @@ export async function triagemRoutes(app: FastifyInstance) {
       val.push(termo, termo, termo)
     }
     const linhas = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT a.*, m.nome AS modelo_nome, m.slug AS modelo_slug, c.nome AS cenario_nome,
-              c.prioridade, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS atendente
+      `SELECT a.*, m.nome AS modelo_nome, m.slug AS modelo_slug,
+              COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS atendente,
+              (SELECT COUNT(*) FROM triagem_anexo x WHERE x.atendimento_id = a.id) AS fotos
          FROM triagem_atendimento a
          INNER JOIN triagem_modelo m ON m.id = a.modelo_id
-         LEFT JOIN triagem_cenario c ON c.id = a.cenario_id
          LEFT JOIN usuario u ON u.COD_USU = a.atendente_id
         ${cond.length ? `WHERE ${cond.join(' AND ')}` : ''}
         ORDER BY a.atualizado_em DESC LIMIT 200`, ...val)
-    return linhas.map(formatarAtendimento)
+
+    // O cenário é recalculado aqui, e não lido de cenario_id: o id guardado envelhece quando
+    // os cenários são recadastrados, e o que vale é o que as respostas dizem agora.
+    const cache = new Map<number, Awaited<ReturnType<typeof carregarModelo>>>()
+    const saida = []
+    for (const a of linhas) {
+      const idModelo = Number(a.modelo_id)
+      if (!cache.has(idModelo)) cache.set(idModelo, await carregarModelo(idModelo))
+      const modelo = cache.get(idModelo) ?? null
+      const respostas = JSON.parse(a.respostas || '{}')
+      const cenario = modelo ? identificarCenario(modelo, respostas) : null
+      const faltando = modelo ? pendencias(modelo, respostas).length : 0
+      saida.push({
+        ...formatarAtendimento(a),
+        cenarioId: cenario?.id ?? null,
+        cenario: cenario?.nome ?? null,
+        prioridade: cenario?.prioridade ?? 'normal',
+        fotos: Number(a.fotos ?? 0),
+        pendentes: faltando,
+        // O que a tela precisa saber para oferecer (ou não) o botão de abrir o processo.
+        prontoParaProcesso: !a.processo_id && !!a.cliente_id && !!cenario && faltando === 0,
+      })
+    }
+    return saida
   })
 
   app.get('/atendimentos/:id', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request, reply) => {
@@ -217,14 +240,16 @@ export async function triagemRoutes(app: FastifyInstance) {
     const etapa = cenario.etapaDestino ?? modelo.etapaInicial ?? null
     const titulo = `${modelo.nome} — ${cenario.nome}`
 
+    const fotos = await listarAnexos(Number(id))
+    const resumo = montarResumo(modelo, respostas, cenario, fotos, Number(id))
+
     await prisma.$executeRawUnsafe(
       `INSERT INTO implantacao_processos
          (cliente_id, tipo, titulo, servico_nome, status_atual, observacao,
           processo_principal, criado_em, atualizado_em, criado_por, atualizado_por)
        VALUES (?,?,?,?,?,?,0, UTC_TIMESTAMP(), UTC_TIMESTAMP(), ?, ?)`,
       Number(a.cliente_id), modelo.tipoProcesso, titulo.slice(0, 200), cenario.nome.slice(0, 120),
-      etapa, cenario.passos.length ? cenario.passos.map((p, i) => `${i + 1}. ${p}`).join('\n') : null,
-      usuarioId, usuarioId,
+      etapa, resumo.observacao, usuarioId, usuarioId,
     )
     const [p] = await prisma.$queryRawUnsafe<any[]>(
       `SELECT id FROM implantacao_processos WHERE cliente_id = ? ORDER BY id DESC LIMIT 1`,
@@ -239,6 +264,17 @@ export async function triagemRoutes(app: FastifyInstance) {
       Number(a.cliente_id), processoId, etapa,
       `Aberto pela triagem "${modelo.nome}" — cenário: ${cenario.nome}`, usuarioId,
     ).catch(() => {})
+
+    // O processo precisa carregar o que o cliente respondeu, senão quem pega depois tem que
+    // voltar na triagem para entender o caso. observacao é varchar(2000), então vai em partes.
+    for (const bloco of resumo.blocos) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO implantacao_movimentacoes
+           (cliente_id, processo_id, tipo, observacao, usuario_id, data_hora)
+         VALUES (?,?, 'observacao', ?, ?, UTC_TIMESTAMP())`,
+        Number(a.cliente_id), processoId, bloco, usuarioId,
+      ).catch(() => {})
+    }
 
     await prisma.$executeRawUnsafe(
       `UPDATE triagem_atendimento SET processo_id = ?, situacao = 'concluido', cenario_id = ?
@@ -346,7 +382,8 @@ export async function triagemRoutes(app: FastifyInstance) {
               situacao = ?, token = CASE WHEN ? THEN NULL ELSE token END
         WHERE id = ?`,
       JSON.stringify(novas), cenario?.id ?? null,
-      b.finalizar ? 'em_triagem' : a.situacao, b.finalizar ? 1 : 0, Number(a.id),
+      // 'respondido' é um estado próprio: o atendente precisa ver que a bola voltou para ele.
+      b.finalizar ? 'respondido' : a.situacao, b.finalizar ? 1 : 0, Number(a.id),
     )
 
     return {
@@ -607,6 +644,63 @@ async function receberArquivos(request: any, atendimentoId: number, chave: strin
   }
 
   return { aceitos, recusados }
+}
+
+/**
+ * Transcreve a triagem para o processo. O que o cliente respondeu tem que viajar junto —
+ * quem pega o processo depois não deveria precisar abrir a triagem para entender o caso.
+ */
+function montarResumo(
+  modelo: any, respostas: Record<string, any>, cenario: any,
+  fotos: Array<{ chave: string; nome: string; enviadoPor: string }>, triagemId: number,
+) {
+  const valor = (v: any) => (Array.isArray(v) ? v.join(', ') : String(v ?? '')).trim()
+
+  const linhas: string[] = []
+  let grupoAtual = ''
+  for (const p of modelo.perguntas as any[]) {
+    const texto = valor(respostas[p.chave])
+    if (texto === '') continue
+    const grupo = p.grupo || 'Informações'
+    if (grupo !== grupoAtual) { linhas.push(`[${grupo}]`); grupoAtual = grupo }
+    linhas.push(`${p.texto}: ${texto}`)
+  }
+  if (fotos.length > 0) {
+    linhas.push('[Arquivos]')
+    for (const f of fotos) {
+      linhas.push(`${f.nome} (enviado pelo ${f.enviadoPor}) — ver na triagem #${triagemId}`)
+    }
+  }
+
+  const cabecalho = [
+    `Triagem #${triagemId} — ${modelo.nome}`,
+    `Cenário: ${cenario.nome}`,
+    cenario.alerta ? `Atenção: ${cenario.alerta}` : '',
+  ].filter(Boolean).join('\n')
+
+  const roteiro = cenario.passos.length
+    ? ['Roteiro do cenário:', ...cenario.passos.map((x: string, i: number) => `${i + 1}. ${x}`)].join('\n')
+    : ''
+
+  // A observação do processo é o resumo curto; o detalhe completo vai nas movimentações,
+  // porque as duas colunas são varchar(2000).
+  const observacao = [cabecalho, roteiro].filter(Boolean).join('\n\n').slice(0, 2000)
+
+  const blocos: string[] = []
+  let atual = ['Respostas da triagem:']
+  let tamanho = atual[0].length
+  for (const l of linhas) {
+    if (tamanho + l.length + 1 > 1900) {
+      blocos.push(atual.join('\n'))
+      atual = ['(continuação)']
+      tamanho = atual[0].length
+    }
+    atual.push(l)
+    tamanho += l.length + 1
+  }
+  if (atual.length > 1) blocos.push(atual.join('\n'))
+
+  return { observacao, blocos }
 }
 
 /** Itens do checklist que o cenário exige. O cadastro é o mesmo que o Pipeline usa. */

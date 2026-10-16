@@ -176,6 +176,10 @@ const PERGUNTAS = [
   },
 ]
 
+/** Slug ASCII estável, para a chave do cenário não depender de acento nem de maiúscula. */
+const chaveDe = (texto) => texto.normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50)
+
 // Ordem = prioridade: o primeiro que casar vence.
 //
 // Os cenários guiados pelo MOTIVO vêm antes dos guiados pelo EQUIPAMENTO. Quem liga com erro de
@@ -183,6 +187,7 @@ const PERGUNTAS = [
 // porque é o aparelho que ele usa.
 const CENARIOS = [
   {
+    chave: 'erro-sem-confirmacao',
     nome: 'D — Pagamento aprovado sem confirmação no sistema',
     descricao: 'A transação foi aprovada na maquininha, mas o Command não confirmou.',
     prioridade: 'alta',
@@ -215,6 +220,7 @@ const CENARIOS = [
       'Não recomendar o uso habitual de maquininha sem integração como solução alternativa.'],
     ['Obrigatoriedade e enquadramento', 'Obrigatoriedade e enquadramento', null],
   ].map(([assunto, rotulo, alerta]) => ({
+    chave: `duvida-${chaveDe(assunto)}`,
     nome: `Dúvida — ${rotulo} (pendente de validação)`,
     descricao: 'Sem regra operacional aprovada. Registrar a dúvida e encaminhar ao responsável.',
     prioridade: 'normal',
@@ -230,6 +236,7 @@ const CENARIOS = [
   })),
 
   {
+    chave: 'maquina-adicional',
     nome: 'Inclusão de máquina adicional',
     checklist: true,
     descricao: 'Cliente já integrado quer somar outro equipamento.',
@@ -245,6 +252,7 @@ const CENARIOS = [
 
   // ── Por equipamento: só valem quando o motivo não define o fluxo ──
   {
+    chave: 'smartpos',
     nome: 'B — Cliente com SmartPOS',
     checklist: true,
     descricao: 'Cliente usa SmartPOS e precisa integrar ao Command.',
@@ -261,6 +269,7 @@ const CENARIOS = [
       + 'O prazo de 48 horas da habilitação é referência operacional, não garantia.',
   },
   {
+    chave: 'tef-pinpad',
     nome: 'C — Cliente com TEF/PinPad',
     checklist: true,
     descricao: 'Cliente usa TEF com PinPad e precisa do cadastro junto ao fornecedor.',
@@ -275,6 +284,7 @@ const CENARIOS = [
     ],
   },
   {
+    chave: 'sem-integracao',
     nome: 'A — Cliente sem integração',
     descricao: 'Cliente ainda não tem meio de pagamento integrado ao Command.',
     condicoes: [{ chave: 'ja_integrado', operador: 'igual', valor: 'Não' }],
@@ -357,16 +367,22 @@ async function main() {
     checklistId = Number(novo.id)
   }
 
-  // Cenário não tem chave natural: recria o conjunto para refletir o arquivo.
-  await prisma.$executeRawUnsafe(`DELETE FROM triagem_cenario WHERE modelo_id = ?`, modeloId)
+  // Cenários são atualizados pela chave. Apagar e recriar trocaria os ids e deixaria os
+  // atendimentos já abertos apontando para cenário inexistente.
+  await prisma.$executeRawUnsafe(
+    `UPDATE triagem_cenario SET ativo = 0 WHERE modelo_id = ?`, modeloId)
   let oc = 0
   for (const c of CENARIOS) {
     oc += 10
     await prisma.$executeRawUnsafe(
       `INSERT INTO triagem_cenario
-         (modelo_id, nome, descricao, condicoes, passos, alerta, prioridade, checklist_id, ordem, ativo)
-       VALUES (?,?,?,?,?,?,?,?,?,1)`,
-      modeloId, c.nome, c.descricao ?? null,
+         (modelo_id, chave, nome, descricao, condicoes, passos, alerta, prioridade, checklist_id, ordem, ativo)
+       VALUES (?,?,?,?,?,?,?,?,?,?,1)
+       ON DUPLICATE KEY UPDATE nome=VALUES(nome), descricao=VALUES(descricao),
+         condicoes=VALUES(condicoes), passos=VALUES(passos), alerta=VALUES(alerta),
+         prioridade=VALUES(prioridade), checklist_id=VALUES(checklist_id),
+         ordem=VALUES(ordem), ativo=1`,
+      modeloId, c.chave, c.nome, c.descricao ?? null,
       JSON.stringify(c.condicoes ?? []), JSON.stringify(c.passos ?? []),
       c.alerta ?? null, c.prioridade ?? 'normal', c.checklist ? checklistId : null, oc,
     )

@@ -1881,6 +1881,10 @@ export interface AtendimentoTriagem {
   atendente: string | null
   criadoEm: string
   atualizadoEm: string
+  /** Só na listagem: calculados na hora pelo servidor. */
+  fotos?: number
+  pendentes?: number
+  prontoParaProcesso?: boolean
 }
 
 export interface AtendimentoTriagemDetalhe extends AtendimentoTriagem {

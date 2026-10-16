@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ClipboardList, Loader2, Plus, Search, AlertTriangle, ExternalLink, Clock,
-  CheckCircle2, Link2, Users,
+  CheckCircle2, Link2, Users, Camera, MailCheck,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
@@ -16,6 +16,7 @@ const SITUACAO: Record<string, { rotulo: string; classe: string }> = {
   rascunho: { rotulo: 'Rascunho', classe: 'bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-300' },
   em_triagem: { rotulo: 'Em triagem', classe: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' },
   aguardando_cliente: { rotulo: 'Aguardando cliente', classe: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
+  respondido: { rotulo: 'Cliente respondeu', classe: 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300' },
   concluido: { rotulo: 'Processo aberto', classe: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' },
 }
 
@@ -37,6 +38,7 @@ export function Triagem() {
   const [filtroSituacao, setFiltroSituacao] = useState('')
   const [filtroModelo, setFiltroModelo] = useState('')
   const [abrindo, setAbrindo] = useState(false)
+  const [gerando, setGerando] = useState<number | null>(null)
   const [novo, setNovo] = useState<
     { modelo: string; clienteId: string; clienteNome: string; contato: string; telefone: string } | null>(null)
 
@@ -67,7 +69,12 @@ export function Triagem() {
     return [
       { rotulo: 'Em triagem', valor: conta('em_triagem'), icone: ClipboardList, cor: 'text-blue-600 dark:text-blue-400' },
       { rotulo: 'Aguardando cliente', valor: conta('aguardando_cliente'), icone: Clock, cor: 'text-amber-600 dark:text-amber-400' },
-      { rotulo: 'Processos abertos', valor: conta('concluido'), icone: CheckCircle2, cor: 'text-emerald-600 dark:text-emerald-400' },
+      { rotulo: 'Cliente respondeu', valor: conta('respondido'), icone: MailCheck, cor: 'text-violet-600 dark:text-violet-400' },
+      {
+        rotulo: 'Prontas p/ processo',
+        valor: atendimentos.filter((a) => a.prontoParaProcesso).length,
+        icone: CheckCircle2, cor: 'text-emerald-600 dark:text-emerald-400',
+      },
       {
         rotulo: 'Prioridade alta',
         valor: atendimentos.filter((a) => a.prioridade === 'alta' && a.situacao !== 'concluido').length,
@@ -96,6 +103,19 @@ export function Triagem() {
     }
   }
 
+  async function abrirProcesso(a: AtendimentoTriagem) {
+    setGerando(a.id)
+    try {
+      const r = await api.concluirTriagem(a.id)
+      toast.success(`Processo #${r.processoId} aberto — ${r.cenario}.`)
+      await carregar()
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível abrir o processo.')
+    } finally {
+      setGerando(null)
+    }
+  }
+
   return (
     <div className="space-y-5 pb-10">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -113,7 +133,7 @@ export function Triagem() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {indicadores.map((k) => (
           <div key={k.rotulo} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
             <div className="flex items-start justify-between gap-2">
@@ -221,6 +241,14 @@ export function Triagem() {
                           {a.cenario}
                         </span>
                       ) : <span className="text-xs text-slate-400">a identificar</span>}
+                      <span className="block text-[10px] text-slate-400 mt-0.5">
+                        {(a.fotos ?? 0) > 0 && (
+                          <span className="inline-flex items-center gap-0.5 mr-2 text-slate-500">
+                            <Camera className="w-3 h-3" /> {a.fotos}
+                          </span>
+                        )}
+                        {(a.pendentes ?? 0) > 0 && `${a.pendentes} obrigatória(s) em aberto`}
+                      </span>
                     </td>
                     <td className="px-4 py-2.5">
                       <span className={clsx('text-xs px-2 py-1 rounded-full font-medium',
@@ -235,14 +263,22 @@ export function Triagem() {
                       {dataHora(a.atualizadoEm)}
                       {a.atendente && <span className="block text-[10px] text-slate-400">{a.atendente}</span>}
                     </td>
-                    <td className="px-4 py-2.5 text-right">
-                      {a.processoId && (
+                    <td className="px-4 py-2.5 text-right whitespace-nowrap">
+                      {a.processoId ? (
                         <a href={`/implantacao/pipeline?processo=${a.processoId}`}
                           onClick={(e) => e.stopPropagation()}
                           className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">
                           Processo #{a.processoId} <ExternalLink className="w-3 h-3" />
                         </a>
-                      )}
+                      ) : a.prontoParaProcesso ? (
+                        <Button size="sm" disabled={gerando === a.id}
+                          onClick={(e) => { e.stopPropagation(); void abrirProcesso(a) }}>
+                          {gerando === a.id
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <CheckCircle2 className="w-3.5 h-3.5" />}
+                          Abrir processo
+                        </Button>
+                      ) : null}
                     </td>
                   </tr>
                 ))}
