@@ -45,8 +45,19 @@ export default defineConfig({
         // SKIP_WAITING). Assumir sozinha trocaria os arquivos por baixo de uma página já aberta.
         skipWaiting: false,
         clientsClaim: false,
-        globPatterns: ['**/*.{js,css,html,svg,ico}'],
-        navigateFallback: 'index.html',
+        // O index.html fica FORA do precache e a navegação vai sempre à rede.
+        //
+        // Com ele precachado e skipWaiting desligado, a versão nova ficava esperando enquanto
+        // o service worker antigo continuava servindo o index.html antigo — que aponta para o
+        // JS antigo. Recarregar não trocava nada, nem com Ctrl+Shift+R, e quem tivesse
+        // dispensado o aviso ficava preso na versão velha sem saída.
+        //
+        // O custo é não abrir sem rede. Para este sistema isso quase não existe: toda tela
+        // depende da API, então sem rede não há o que mostrar de qualquer jeito.
+        globPatterns: ['**/*.{js,css,svg,ico}'],
+        // Sem isto o plugin registra a rota de navegação apontando para um index.html que
+        // não está mais no precache, e aí nenhuma navegação carrega.
+        navigateFallback: null,
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.pathname.startsWith('/api') || url.port === '3333',

@@ -630,10 +630,19 @@ export function Pipeline() {
   const [editarAoCarregar, setEditarAoCarregar] = useState<number | null>(
     () => (location.state as any)?.editarProcessoId ?? null)
 
+  const [avisoProcessoNaoAchado, setAvisoProcessoNaoAchado] = useState<number | null>(null)
+
   useEffect(() => {
     if (!editarAoCarregar || !painel) return
     const alvo = (painel.clientes || []).find((c) => c.processoId === editarAoCarregar)
-    if (!alvo) return
+    if (!alvo) {
+      // O processo existe, mas algum filtro ativo o deixou fora do quadro. Avisar é melhor
+      // do que não abrir nada e deixar a pessoa achando que a criação falhou.
+      setAvisoProcessoNaoAchado(editarAoCarregar)
+      setEditarAoCarregar(null)
+      navigate(location.pathname + location.search, { replace: true, state: null })
+      return
+    }
     setEditarAoCarregar(null)
     navigate(location.pathname + location.search, { replace: true, state: null })
     void abrirEdicaoCliente(alvo)
@@ -1064,6 +1073,18 @@ export function Pipeline() {
       </div>
 
       <Card padding="sm">
+        {avisoProcessoNaoAchado !== null && (
+          <div className="mb-2 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-900 dark:text-amber-200 flex-1">
+              O processo #{avisoProcessoNaoAchado} foi criado, mas não apareceu com os filtros
+              atuais do quadro. Limpe os filtros para encontrá-lo.
+            </p>
+            <button onClick={() => setAvisoProcessoNaoAchado(null)} className="text-amber-700 dark:text-amber-300">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
           <div className="md:col-span-4">
             <Input

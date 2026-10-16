@@ -59,12 +59,12 @@ export function PwaUpdateBanner() {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-            {needRefresh ? 'Nova versão disponível' : 'Aplicativo pronto para uso offline'}
+            {needRefresh ? 'Nova versão disponível' : 'Aplicativo instalado'}
           </p>
           <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-400">
             {needRefresh
               ? 'Clique em "Atualizar agora" para carregar a versão mais recente sem precisar limpar cache.'
-              : 'Você pode continuar usando normalmente, mesmo com instabilidade de rede.'}
+              : 'As telas já ficam em cache: a navegação fica mais rápida nos próximos acessos.'}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {needRefresh && (
