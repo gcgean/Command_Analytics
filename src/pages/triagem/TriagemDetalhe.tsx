@@ -147,6 +147,7 @@ export function TriagemDetalhe() {
       if (sujo) await salvar(respostas)
       const r = await api.concluirTriagem(Number(id))
       toast.success(`Processo #${r.processoId} aberto no Pipeline.`)
+      if (r.efeito) toast.info(r.efeito)
       navegar('/implantacao', { state: { editarProcessoId: r.processoId } })
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível concluir.')

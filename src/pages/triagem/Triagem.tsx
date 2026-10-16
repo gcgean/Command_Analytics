@@ -108,6 +108,7 @@ export function Triagem() {
     try {
       const r = await api.concluirTriagem(a.id)
       toast.success(`Processo #${r.processoId} aberto — ${r.cenario}.`)
+      if (r.efeito) toast.info(r.efeito)
       // Leva direto para a edição do processo: o que a triagem definiu é ponto de partida,
       // etapa, responsável, prazo e checklist ainda são decisão de quem vai tocar.
       navegar('/implantacao', { state: { editarProcessoId: r.processoId } })

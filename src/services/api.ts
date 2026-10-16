@@ -946,7 +946,7 @@ export const api = {
       method: 'PUT', body: JSON.stringify({ respostas }),
     }),
   concluirTriagem: (id: number) =>
-    fetchApi<{ processoId: number; cenario: string; etapa: number | null }>(
+    fetchApi<{ processoId: number; cenario: string; etapa: number | null; efeito?: string | null }>(
       `/triagem/atendimentos/${id}/concluir`, { method: 'POST' }),
   gerarLinkTriagem: (id: number) =>
     fetchApi<{ token: string }>(`/triagem/atendimentos/${id}/link`, { method: 'POST' }),

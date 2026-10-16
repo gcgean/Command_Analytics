@@ -24,23 +24,24 @@ const MOTIVOS = [
   'Outro assunto',
 ]
 
-// Lista fechada evita a mesma operadora escrita de cinco jeitos, o que quebra qualquer
-// contagem depois. Quem não estiver aqui escolhe "Outra" e escreve o nome no campo seguinte.
-const ADQUIRENTES = [
-  'Cielo',
-  'Rede',
-  'Getnet',
-  'Stone',
-  'PagBank',
-  'Mercado Pago',
-  'SafraPay',
-  'SumUp',
-  'Vero',
-  'Bin',
-  'Outra',
-]
+// As opções saem do catálogo de operadoras — o mesmo que o cadastro de maquininhas usa.
+// Duas listas paralelas divergiriam, e aí a resposta da triagem não encontraria a operadora
+// na hora de registrar a maquininha do cliente.
+let ADQUIRENTES = []
 
-const PERGUNTAS = [
+async function carregarAdquirentes() {
+  const linhas = await prisma.$queryRawUnsafe(
+    `SELECT nome FROM cadastro_operadoras WHERE ativo = 1 ORDER BY ordem, nome`)
+  // "Outra" por último, qualquer que seja a ordem do catálogo: é a saída, não uma opção
+  // no meio da lista.
+  ADQUIRENTES = linhas.map((l) => l.nome)
+    .sort((a, b) => (a === 'Outra' ? 1 : b === 'Outra' ? -1 : 0))
+  if (ADQUIRENTES.length === 0) {
+    throw new Error('Catálogo de operadoras vazio. Suba a API uma vez para ele ser semeado.')
+  }
+}
+
+const montarPerguntas = () => [
   // ── Identificação ──
   // O que o cadastro já sabe vem com `origem` e nasce preenchido. O responsável e o telefone
   // são de quem está ligando agora, então vêm do próprio atendimento, não da ficha do cliente.
@@ -89,6 +90,12 @@ const PERGUNTAS = [
     ajuda: 'Informe o nome como aparece na sua maquininha ou no extrato.',
     grupo: 'Perfil operacional', obrigatoria: 1, publico: 'ambos',
     condicao: { chave: 'adquirente', operador: 'igual', valor: 'Outra' },
+  },
+  {
+    // Alimenta a quantidade no cadastro de maquininhas do cliente.
+    chave: 'qtd_maquininhas', texto: 'Quantas maquininhas desse tipo?', tipo: 'numero',
+    grupo: 'Perfil operacional', publico: 'ambos',
+    condicao: { chave: 'equipamento', operador: 'diferente', valor: 'Nenhum' },
   },
   {
     chave: 'recebimento', texto: 'Onde recebe os pagamentos?', tipo: 'opcao',
@@ -332,6 +339,8 @@ const CHECKLIST = {
 const ETAPA_INICIAL = 'Aguardando Instalação'
 
 async function main() {
+  await carregarAdquirentes()
+
   const [etapa] = await prisma.$queryRawUnsafe(
     `SELECT id FROM cadastro_etapas WHERE nome = ? AND ativo = 1 LIMIT 1`, ETAPA_INICIAL)
   const etapaId = etapa ? Number(etapa.id) : null
@@ -341,19 +350,21 @@ async function main() {
   }
 
   await prisma.$executeRawUnsafe(
-    `INSERT INTO triagem_modelo (nome, slug, descricao, tipo_processo, etapa_inicial, permite_link)
-     VALUES (?,?,?,?,?,1)
+    `INSERT INTO triagem_modelo
+       (nome, slug, descricao, tipo_processo, etapa_inicial, acao_conclusao, permite_link)
+     VALUES (?,?,?,?,?,?,1)
      ON DUPLICATE KEY UPDATE nome = VALUES(nome), descricao = VALUES(descricao),
-       tipo_processo = VALUES(tipo_processo), etapa_inicial = VALUES(etapa_inicial)`,
+       tipo_processo = VALUES(tipo_processo), etapa_inicial = VALUES(etapa_inicial),
+       acao_conclusao = VALUES(acao_conclusao)`,
     'Integração de Meios de Pagamento', SLUG,
     'Triagem guiada para integrar maquininhas e meios de pagamento ao Command.',
-    'triagem_pagamentos', etapaId,
+    'triagem_pagamentos', etapaId, 'maquininha',
   )
   const [m] = await prisma.$queryRawUnsafe(`SELECT id FROM triagem_modelo WHERE slug = ?`, SLUG)
   const modeloId = Number(m.id)
 
   let ordem = 0
-  for (const p of PERGUNTAS) {
+  for (const p of montarPerguntas()) {
     ordem += 10
     await prisma.$executeRawUnsafe(
       `INSERT INTO triagem_pergunta

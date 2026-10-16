@@ -25,6 +25,8 @@ export async function initTriagem(): Promise<void> {
       etapa_inicial INT NULL,
       -- Permite que o próprio cliente responda por link.
       permite_link  TINYINT(1) NOT NULL DEFAULT 1,
+      -- Rotina opcional rodada ao concluir, além de abrir o processo. Hoje: 'maquininha'.
+      acao_conclusao VARCHAR(40) NULL,
       ativo         TINYINT(1) NOT NULL DEFAULT 1,
       criado_em     DATETIME NOT NULL DEFAULT NOW(),
       atualizado_em DATETIME NOT NULL DEFAULT NOW() ON UPDATE NOW(),
@@ -151,6 +153,14 @@ export async function initTriagem(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 
+  const [colAcao] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'triagem_modelo' AND COLUMN_NAME = 'acao_conclusao'`)
+  if (!Number(colAcao?.total ?? 0)) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE triagem_modelo ADD COLUMN acao_conclusao VARCHAR(40) NULL`).catch(() => {})
+  }
+
   // Bancos que já tinham as tabelas antes destas colunas existirem.
   const [colChave] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
     SELECT COUNT(*) AS total FROM information_schema.COLUMNS
@@ -264,6 +274,7 @@ export async function carregarModelo(slugOuId: string | number) {
     slug: m.slug as string,
     descricao: (m.descricao ?? null) as string | null,
     tipoProcesso: m.tipo_processo as string,
+    acaoConclusao: (m.acao_conclusao ?? null) as string | null,
     etapaInicial: m.etapa_inicial == null ? null : Number(m.etapa_inicial),
     permiteLink: !!m.permite_link,
     perguntas: perguntas.map((p): PerguntaTriagem => ({

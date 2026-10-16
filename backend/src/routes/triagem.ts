@@ -292,7 +292,23 @@ export async function triagemRoutes(app: FastifyInstance) {
       `UPDATE triagem_atendimento SET processo_id = ?, situacao = 'concluido', cenario_id = ?
         WHERE id = ?`, processoId, cenario.id, Number(id))
 
-    return { processoId, cenario: cenario.nome, etapa }
+    // Depois do processo: o processo é o que importa, e uma falha aqui não pode desfazê-lo.
+    let efeito: string | null = null
+    if (modelo.acaoConclusao) {
+      efeito = await executarAcaoConclusao(
+        modelo.acaoConclusao, respostas, Number(a.cliente_id), Number(id), usuarioId,
+      ).catch(() => null)
+      if (efeito) {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO implantacao_movimentacoes
+             (cliente_id, processo_id, tipo, observacao, usuario_id, data_hora)
+           VALUES (?,?, 'observacao', ?, ?, UTC_TIMESTAMP())`,
+          Number(a.cliente_id), processoId, efeito, usuarioId,
+        ).catch(() => {})
+      }
+    }
+
+    return { processoId, cenario: cenario.nome, etapa, efeito }
   })
 
   // ── Link para o cliente responder ──
@@ -668,6 +684,72 @@ async function receberArquivos(request: any, atendimentoId: number, chave: strin
   }
 
   return { aceitos, recusados }
+}
+
+/**
+ * Rotinas rodadas ao concluir, além de abrir o processo. O modelo diz qual rodar
+ * (`acao_conclusao`), então o motor segue sem conhecer as perguntas de cada triagem.
+ *
+ * Toda ação é tolerante: se as respostas esperadas não existirem, ela não faz nada e a
+ * conclusão segue. Nenhuma delas pode derrubar a abertura do processo.
+ */
+async function executarAcaoConclusao(
+  acao: string, respostas: Record<string, any>, clienteId: number,
+  triagemId: number, usuarioId: number | null,
+): Promise<string | null> {
+  if (acao !== 'maquininha') return null
+
+  // O cadastro de maquininhas só conhece TEF e SmartPOS. Maquininha avulsa e "nenhum"
+  // ficam de fora — registrar como um dos dois seria inventar informação.
+  const equipamento = String(respostas.equipamento ?? '')
+  const tipo = equipamento === 'SmartPOS' ? 'SMARTPOS' : equipamento === 'TEF/PinPad' ? 'TEF' : null
+  if (!tipo) return null
+
+  const nomeOperadora = String(respostas.adquirente ?? '').trim()
+  const operadoraLivre = String(respostas.adquirente_outra ?? '').trim()
+  if (nomeOperadora === '') return null
+
+  // O nome tem que bater com o catálogo; "Outra" cai na entrada própria do catálogo.
+  const [op] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT id FROM cadastro_operadoras WHERE nome = ? AND ativo = 1 LIMIT 1`, nomeOperadora)
+  if (!op) return null
+
+  const quantidade = Math.max(1, Number(respostas.qtd_maquininhas ?? 1) || 1)
+  const integrado = String(respostas.ja_integrado ?? '') === 'Sim'
+  const status = integrado ? 'INTEGRADO' : 'EM_IMPLANTACAO'
+
+  const detalhes = [
+    operadoraLivre ? `Operadora informada: ${operadoraLivre}` : '',
+    respostas.modelo_smartpos ? `Modelo: ${respostas.modelo_smartpos}` : '',
+    respostas.serie_smartpos ? `Série: ${respostas.serie_smartpos}` : '',
+    respostas.ec_tef ? `EC: ${respostas.ec_tef}` : '',
+    respostas.logico_tef ? `Número lógico: ${respostas.logico_tef}` : '',
+    `Registrado pela triagem #${triagemId}.`,
+  ].filter(Boolean).join(' | ').slice(0, 2000)
+
+  // Mesmo cliente, mesma operadora e mesmo tipo: atualiza em vez de criar uma segunda linha.
+  const [existente] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT id FROM cliente_maquininhas
+      WHERE cliente_id = ? AND operadora_id = ? AND tipo = ? LIMIT 1`,
+    clienteId, Number(op.id), tipo)
+
+  if (existente) {
+    await prisma.$executeRawUnsafe(
+      `UPDATE cliente_maquininhas
+          SET quantidade = ?, status_integracao = ?, observacao = ?,
+              atualizado_em = NOW(), atualizado_por = ?
+        WHERE id = ?`,
+      quantidade, status, detalhes, usuarioId, Number(existente.id))
+    return `Maquininha ${tipo} / ${nomeOperadora} atualizada no cadastro do cliente.`
+  }
+
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO cliente_maquininhas
+       (cliente_id, operadora_id, tipo, quantidade, status_integracao, observacao,
+        criado_por, atualizado_por)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    clienteId, Number(op.id), tipo, quantidade, status, detalhes, usuarioId, usuarioId)
+  return `Maquininha ${tipo} / ${nomeOperadora} cadastrada para o cliente.`
 }
 
 /**
