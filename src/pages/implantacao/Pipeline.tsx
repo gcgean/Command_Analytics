@@ -642,8 +642,14 @@ export function Pipeline() {
 
   // Chegando da triagem, que acabou de abrir o processo: já escancara a edição dele, para o
   // atendente ajustar etapa, responsável, prazo e checklist e salvar sem procurar o card.
-  const [editarAoCarregar, setEditarAoCarregar] = useState<number | null>(
-    () => (location.state as any)?.editarProcessoId ?? null)
+  // Vem pela URL (?editar=123). Pelo state do router também funciona, mas o state se perde
+  // num F5 e não dá para conferir olhando o endereço — e foi justamente o que precisei
+  // depurar. O efeito colateral bom: o link é compartilhável.
+  const [editarAoCarregar, setEditarAoCarregar] = useState<number | null>(() => {
+    const daUrl = Number(searchParams.get('editar') || 0)
+    if (daUrl > 0) return daUrl
+    return (location.state as any)?.editarProcessoId ?? null
+  })
 
   const [avisoProcessoNaoAchado, setAvisoProcessoNaoAchado] = useState<number | null>(null)
 
@@ -655,11 +661,11 @@ export function Pipeline() {
       // do que não abrir nada e deixar a pessoa achando que a criação falhou.
       setAvisoProcessoNaoAchado(editarAoCarregar)
       setEditarAoCarregar(null)
-      navigate(location.pathname + location.search, { replace: true, state: null })
       return
     }
     setEditarAoCarregar(null)
-    navigate(location.pathname + location.search, { replace: true, state: null })
+    // A URL se limpa sozinha: o efeito que espelha os filtros reescreve a query sem o
+    // "editar". Navegar aqui também competiria com ele.
     void abrirEdicaoCliente(alvo)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editarAoCarregar, painel])

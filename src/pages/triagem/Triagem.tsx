@@ -111,7 +111,7 @@ export function Triagem() {
       if (r.efeito) toast.info(r.efeito)
       // Leva direto para a edição do processo: o que a triagem definiu é ponto de partida,
       // etapa, responsável, prazo e checklist ainda são decisão de quem vai tocar.
-      navegar('/implantacao', { state: { editarProcessoId: r.processoId } })
+      navegar(`/implantacao?editar=${r.processoId}`)
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível abrir o processo.')
     } finally {
