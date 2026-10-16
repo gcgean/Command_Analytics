@@ -373,13 +373,14 @@ export function Pipeline() {
   const [editEtapa, setEditEtapa] = useState<number>(1)
   const [editResponsavel, setEditResponsavel] = useState<string>('none')
   const [editChecklistIds, setEditChecklistIds] = useState<number[]>([])
+  const [editMostrarTodosChecklists, setEditMostrarTodosChecklists] = useState(false)
   const [editChecklists, setEditChecklists] = useState<ImplantacaoChecklistOpcao[]>([])
   const [editResponsaveis, setEditResponsaveis] = useState<Array<{ id: number; nome: string }>>([])
   const [editEtapasDisponiveis, setEditEtapasDisponiveis] = useState<ImplantacaoEtapa[]>([])
   const [editObs, setEditObs] = useState('')
   const [editDataLimite, setEditDataLimite] = useState('')
   const [editErro, setEditErro] = useState('')
-  const [editServicos, setEditServicos] = useState<Array<{ id: number; nome: string }>>([])
+  const [editServicos, setEditServicos] = useState<Array<{ id: number; nome: string; checklistIds?: number[] }>>([])
   const [editServicoId, setEditServicoId] = useState<string>('')
   const [editServicoInicial, setEditServicoInicial] = useState<string>('')
   const [editItems, setEditItems] = useState<TransitionItem[]>([])
@@ -393,6 +394,10 @@ export function Pipeline() {
   // Fotos da triagem que abriu este processo. Ficam guardadas lá; aqui só são exibidas.
   const [anexosTriagem, setAnexosTriagem] = useState<AnexoTriagem[]>([])
   const [triagemOrigem, setTriagemOrigem] = useState<number | null>(null)
+  const [triagemRespostas, setTriagemRespostas] = useState<
+    Array<{ chave: string; grupo: string; texto: string; valor: string }>>([])
+  const [triagemCenario, setTriagemCenario] = useState<
+    { nome: string; alerta: string | null; passos: string[] } | null>(null)
   const [miniaturasTriagem, setMiniaturasTriagem] = useState<Record<number, string>>({})
 
   const [createOpen, setCreateOpen] = useState(false)
@@ -455,6 +460,16 @@ export function Pipeline() {
     return [...mapa.entries()].map(([id, nome]) => ({ id, nome }))
       .sort((a, b) => a.nome.localeCompare(b.nome))
   }, [clientesBase])
+
+  // O serviço já diz quais checklists valem para ele. Mostrar os 30 do cadastro obriga a
+  // procurar — e convida a marcar o errado. Os já marcados nunca somem da lista.
+  const checklistsDoServico = useMemo(() => {
+    const servico = editServicos.find((x) => String(x.id) === editServicoId)
+    const ids = servico?.checklistIds ?? []
+    if (editMostrarTodosChecklists || ids.length === 0) return editChecklists
+    const permitidos = new Set([...ids, ...editChecklistIds])
+    return editChecklists.filter((c) => permitidos.has(c.id))
+  }, [editChecklists, editServicos, editServicoId, editChecklistIds, editMostrarTodosChecklists])
 
   const clientesFiltrados = useMemo(
     () => clientesBase.filter((cliente) =>
@@ -776,10 +791,33 @@ export function Pipeline() {
     }
   }
 
+  async function carregarOrigemTriagem(processoId: number | null | undefined) {
+    setAnexosTriagem([])
+    setTriagemOrigem(null)
+    setTriagemRespostas([])
+    setTriagemCenario(null)
+    setMiniaturasTriagem({})
+    if (!processoId) return
+    const r = await api.getTriagemDoProcesso(processoId).catch(() => null)
+    if (!r?.triagemId) return
+    setTriagemOrigem(r.triagemId)
+    setAnexosTriagem(r.anexos)
+    setTriagemRespostas(r.respostas)
+    setTriagemCenario(r.cenario)
+    // A rota do arquivo pede token, então a miniatura vem por blob.
+    for (const a of r.anexos) {
+      if (!a.mimeType.startsWith('image/')) continue
+      const blob = await api.getAnexoTriagemBlob(a.id).catch(() => null)
+      if (blob) setMiniaturasTriagem((m) => ({ ...m, [a.id]: URL.createObjectURL(blob) }))
+    }
+  }
+
   async function abrirEdicaoCliente(cliente: ImplantacaoCliente) {
     setEditOpen(true)
     setEditLoading(true)
     setEditCliente(cliente)
+    setEditMostrarTodosChecklists(false)
+    void carregarOrigemTriagem(cliente.processoId)
     setEditObs('')
     setEditDataLimite('')
     setEditErro('')
@@ -887,25 +925,12 @@ export function Pipeline() {
     setHistoryOpen(true)
     setHistoryLoading(true)
     setHistoryCliente(cliente)
-    setAnexosTriagem([])
-    setTriagemOrigem(null)
-    setMiniaturasTriagem({})
+    void carregarOrigemTriagem(cliente.processoId)
     try {
       const data = await api.getImplantacaoChecklist(cliente.clienteId, undefined, cliente.processoId)
       setHistoryData(data)
     } finally {
       setHistoryLoading(false)
-    }
-    if (!cliente.processoId) return
-    const r = await api.getAnexosDoProcesso(cliente.processoId).catch(() => null)
-    if (!r?.anexos?.length) return
-    setTriagemOrigem(r.triagemId)
-    setAnexosTriagem(r.anexos)
-    // A rota do arquivo pede token, então a miniatura vem por blob.
-    for (const a of r.anexos) {
-      if (!a.mimeType.startsWith('image/')) continue
-      const blob = await api.getAnexoTriagemBlob(a.id).catch(() => null)
-      if (blob) setMiniaturasTriagem((m) => ({ ...m, [a.id]: URL.createObjectURL(blob) }))
     }
   }
 
@@ -1934,12 +1959,23 @@ export function Pipeline() {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Checklist(s) do Cliente</label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide">Checklist(s) do Cliente</label>
+                {checklistsDoServico.length !== editChecklists.length || editMostrarTodosChecklists ? (
+                  <button type="button"
+                    onClick={() => setEditMostrarTodosChecklists((v) => !v)}
+                    className="text-[11px] text-blue-600 dark:text-blue-400 hover:underline">
+                    {editMostrarTodosChecklists
+                      ? 'Mostrar só os do serviço'
+                      : `Mostrar todos (${editChecklists.length})`}
+                  </button>
+                ) : null}
+              </div>
               <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 max-h-64 overflow-y-auto space-y-2">
-                {editChecklists.length === 0 ? (
+                {checklistsDoServico.length === 0 ? (
                   <p className="text-sm text-slate-500">Nenhum checklist de implantação cadastrado.</p>
                 ) : (
-                  editChecklists.map((checklist) => {
+                  checklistsDoServico.map((checklist) => {
                     const marcado = editChecklistIds.includes(checklist.id)
                     return (
                       <label key={checklist.id} className="flex items-start gap-2 text-sm cursor-pointer">
@@ -1964,6 +2000,53 @@ export function Pipeline() {
                 Se nenhum checklist for selecionado, o sistema usa automaticamente o(s) checklist(s) vinculado(s) ao serviço do processo.
               </p>
             </div>
+
+            {triagemOrigem !== null && (
+              <details className="rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/50 dark:bg-indigo-900/10" open>
+                <summary className="cursor-pointer px-3 py-2 text-xs font-semibold text-indigo-700 dark:text-indigo-300 uppercase tracking-wide">
+                  Veio da triagem #{triagemOrigem}
+                  {triagemCenario ? ` — ${triagemCenario.nome}` : ''}
+                </summary>
+                <div className="px-3 pb-3 space-y-3">
+                  {triagemCenario?.alerta && (
+                    <p className="text-xs text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-2">
+                      {triagemCenario.alerta}
+                    </p>
+                  )}
+                  {triagemRespostas.length > 0 && (
+                    <dl className="grid gap-x-6 gap-y-1 sm:grid-cols-2">
+                      {triagemRespostas.map((r) => (
+                        <div key={r.chave}>
+                          <dt className="text-[10px] uppercase tracking-wide text-slate-400">{r.grupo}</dt>
+                          <dd className="text-xs text-slate-700 dark:text-slate-200">
+                            <span className="text-slate-500">{r.texto.replace(/[?:]$/, '')}:</span> {r.valor}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                  {anexosTriagem.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {anexosTriagem.map((a) => (
+                        <div key={a.id} className="w-24">
+                          {miniaturasTriagem[a.id] ? (
+                            <a href={miniaturasTriagem[a.id]} target="_blank" rel="noreferrer">
+                              <img src={miniaturasTriagem[a.id]} alt={a.nome}
+                                className="w-24 h-24 object-cover rounded-lg border border-slate-200 dark:border-slate-700" />
+                            </a>
+                          ) : (
+                            <div className="w-24 h-24 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-400">
+                              <Paperclip className="w-4 h-4" />
+                            </div>
+                          )}
+                          <p className="text-[10px] text-slate-400 mt-0.5 truncate" title={a.nome}>{a.nome}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </details>
+            )}
 
             <div>
               <div className="flex items-center justify-between mb-2">

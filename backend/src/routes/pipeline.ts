@@ -2153,7 +2153,7 @@ export async function pipelineRoutes(app: FastifyInstance) {
 
     // Serviços ativos para permitir a troca do serviço do processo já criado.
     const servicos = await prisma.$queryRaw<Array<{ id: number; nome: string }>>`
-      SELECT id, nome FROM cadastro_servicos WHERE ativo = 1 ORDER BY nome ASC
+      SELECT id, nome, checklist_ids FROM cadastro_servicos WHERE ativo = 1 ORDER BY nome ASC
     `
 
     return {
@@ -2168,7 +2168,14 @@ export async function pipelineRoutes(app: FastifyInstance) {
         itensQuantidade: c.itens.length,
       })),
       checklistIdsSelecionados,
-      servicos: servicos.map((s) => ({ id: Number(s.id), nome: s.nome })),
+      // checklistIds vai junto para a tela mostrar só os checklists do serviço escolhido.
+      servicos: servicos.map((s: any) => ({
+        id: Number(s.id),
+        nome: s.nome,
+        checklistIds: (() => {
+          try { return (JSON.parse(s.checklist_ids || '[]') as any[]).map(Number) } catch { return [] }
+        })(),
+      })),
       servicoIdAtual: contexto.servicoId === null || contexto.servicoId === undefined ? null : Number(contexto.servicoId),
     }
   })

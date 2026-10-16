@@ -537,9 +537,30 @@ export async function triagemRoutes(app: FastifyInstance) {
   app.get('/por-processo/:processoId', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request) => {
     const { processoId } = request.params as { processoId: string }
     const [a] = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT id FROM triagem_atendimento WHERE processo_id = ? LIMIT 1`, Number(processoId))
-    if (!a) return { triagemId: null, anexos: [] }
-    return { triagemId: Number(a.id), anexos: await listarAnexos(Number(a.id)) }
+      `SELECT * FROM triagem_atendimento WHERE processo_id = ? LIMIT 1`, Number(processoId))
+    if (!a) return { triagemId: null, modelo: null, cenario: null, respostas: [], anexos: [] }
+
+    const modelo = await carregarModelo(Number(a.modelo_id))
+    const respostas = JSON.parse(a.respostas || '{}')
+    const cenario = modelo ? identificarCenario(modelo, respostas) : null
+
+    // Já vai montado para a tela: rótulo, grupo e valor legível, na ordem do cadastro.
+    const itens = (modelo?.perguntas ?? [])
+      .filter((p) => !TIPOS_ARQUIVO.has(p.tipo))
+      .map((p) => {
+        const bruto = respostas[p.chave]
+        const valor = (Array.isArray(bruto) ? bruto.join(', ') : String(bruto ?? '')).trim()
+        return { chave: p.chave, grupo: p.grupo ?? 'Informações', texto: p.texto, valor }
+      })
+      .filter((x) => x.valor !== '')
+
+    return {
+      triagemId: Number(a.id),
+      modelo: modelo?.nome ?? null,
+      cenario: cenario ? { nome: cenario.nome, alerta: cenario.alerta, passos: cenario.passos } : null,
+      respostas: itens,
+      anexos: await listarAnexos(Number(a.id)),
+    }
   })
 
   // ── Biblioteca de respostas ──

@@ -420,9 +420,25 @@ export function TriagemDetalhe() {
           {!concluido && (
             <Card>
               {pendentes.length > 0 && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
-                  {pendentes.length} resposta(s) obrigatória(s) em aberto.
-                </p>
+                <div className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+                  <p className="font-medium">Falta responder:</p>
+                  <ul className="mt-1 space-y-0.5">
+                    {pendentes.map((chave) => {
+                      const p = perguntas.find((x) => x.chave === chave)
+                      return (
+                        <li key={chave}>
+                          {/* clicar leva até o campo, em vez de obrigar a procurar na tela */}
+                          <button type="button"
+                            onClick={() => document.getElementById(`campo-${chave}`)
+                              ?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                            className="text-left hover:underline">
+                            • {(p?.texto ?? chave).replace(/[?:]$/, '')}
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
               )}
               {!dados.clienteId && (
                 <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">

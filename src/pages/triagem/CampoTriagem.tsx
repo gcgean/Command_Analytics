@@ -144,7 +144,8 @@ export function CampoTriagem({ pergunta, valor, pendente, onChange, anexos, onEn
   }
 
   return (
-    <div>
+    // id para a tela conseguir rolar até o campo que falta responder
+    <div id={`campo-${p.chave}`} className="scroll-mt-24">
       <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
         {p.texto}
         {p.obrigatoria && <span className="text-red-500 ml-1">*</span>}
@@ -153,6 +154,18 @@ export function CampoTriagem({ pergunta, valor, pendente, onChange, anexos, onEn
       {campo()}
     </div>
   )
+}
+
+/** Obrigatórias ainda sem resposta, na ordem em que aparecem na tela. */
+export function perguntasEmAberto(
+  perguntas: PerguntaTriagem[], respostas: Record<string, any>,
+): PerguntaTriagem[] {
+  return perguntas.filter((p) => {
+    if (!p.obrigatoria) return false
+    const v = respostas[p.chave]
+    const texto = Array.isArray(v) ? v.join('') : String(v ?? '')
+    return texto.trim() === ''
+  })
 }
 
 /** Agrupa as perguntas visíveis pelo grupo do cadastro, mantendo a ordem. */

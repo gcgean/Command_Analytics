@@ -996,9 +996,14 @@ export const api = {
   removerAnexoTriagemPublica: (token: string, anexoId: number) =>
     fetchApi<{ ok: boolean }>(`/triagem/publico/${token}/anexos/${anexoId}`, { method: 'DELETE' }),
 
-  getAnexosDoProcesso: (processoId: number) =>
-    fetchApi<{ triagemId: number | null; anexos: AnexoTriagem[] }>(
-      `/triagem/por-processo/${processoId}`),
+  getTriagemDoProcesso: (processoId: number) =>
+    fetchApi<{
+      triagemId: number | null
+      modelo: string | null
+      cenario: { nome: string; alerta: string | null; passos: string[] } | null
+      respostas: Array<{ chave: string; grupo: string; texto: string; valor: string }>
+      anexos: AnexoTriagem[]
+    }>(`/triagem/por-processo/${processoId}`),
 
   getRespostasProntasTriagem: (filtros?: { busca?: string; categoria?: string; modelo?: string }) => {
     const q = new URLSearchParams()

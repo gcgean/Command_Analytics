@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, Loader2, Send } from 'lucide-react'
 import { api } from '../../services/api'
-import { CampoTriagem, agruparPerguntas } from '../triagem/CampoTriagem'
+import { CampoTriagem, agruparPerguntas, perguntasEmAberto } from '../triagem/CampoTriagem'
 import type { AnexoTriagem, PerguntaTriagem } from '../../types'
 
 /**
@@ -51,6 +51,11 @@ export function TriagemCliente() {
   async function responder(chave: string, valor: any) {
     const novas = { ...respostas, [chave]: valor }
     setRespostas(novas)
+    if (pendentes.includes(chave)) {
+      const faltando = perguntasEmAberto(perguntas, novas)
+      setPendentes(faltando.map((p) => p.chave))
+      if (faltando.length === 0) setErro('')
+    }
     if (!token) return
     try {
       const r = await api.salvarTriagemPublica(token, { [chave]: valor })
@@ -84,17 +89,35 @@ export function TriagemCliente() {
     setAnexos((lista) => lista.filter((a) => a.id !== anexoId))
   }
 
+  // Dizer "responda os obrigatórios" sem dizer quais obriga a pessoa a caçar na tela.
+  function avisarPendentes(faltando: PerguntaTriagem[]) {
+    setPendentes(faltando.map((p) => p.chave))
+    const nomes = faltando.map((p) => p.texto.replace(/[?:]$/, ''))
+    const lista = nomes.length > 3
+      ? `${nomes.slice(0, 3).join(', ')} e mais ${nomes.length - 3}`
+      : nomes.join(', ')
+    setErro(faltando.length === 1
+      ? `Falta responder: ${lista}.`
+      : `Faltam ${faltando.length} respostas: ${lista}.`)
+    document.getElementById(`campo-${faltando[0].chave}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
   async function enviar() {
     if (!token) return
+    // Confere antes de mandar: o servidor também confere, mas aqui dá para apontar o campo.
+    const faltando = perguntasEmAberto(perguntas, respostas)
+    if (faltando.length > 0) return avisarPendentes(faltando)
+
     setEnviando(true)
     setErro('')
     try {
       await api.salvarTriagemPublica(token, respostas, true)
       setEnviado(true)
     } catch (e: any) {
-      setErro(e?.message || 'Responda os campos obrigatórios antes de enviar.')
-      setPendentes(perguntas.filter((p) => p.obrigatoria
-        && String(respostas[p.chave] ?? '').trim() === '').map((p) => p.chave))
+      const aindaFaltando = perguntasEmAberto(perguntas, respostas)
+      if (aindaFaltando.length > 0) avisarPendentes(aindaFaltando)
+      else setErro(e?.message || 'Não foi possível enviar agora. Tente de novo.')
     } finally {
       setEnviando(false)
     }
