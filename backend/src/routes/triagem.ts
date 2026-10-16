@@ -514,6 +514,18 @@ export async function triagemRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
+  /**
+   * Os arquivos da triagem que originou um processo. O Pipeline consulta por aqui em vez de
+   * receber uma cópia dos arquivos: um lugar só guarda a foto, e ela não se duplica.
+   */
+  app.get('/por-processo/:processoId', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request) => {
+    const { processoId } = request.params as { processoId: string }
+    const [a] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id FROM triagem_atendimento WHERE processo_id = ? LIMIT 1`, Number(processoId))
+    if (!a) return { triagemId: null, anexos: [] }
+    return { triagemId: Number(a.id), anexos: await listarAnexos(Number(a.id)) }
+  })
+
   // ── Biblioteca de respostas ──
   app.get('/respostas', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request) => {
     const { busca, categoria, modelo } = request.query as Record<string, string>
@@ -668,49 +680,62 @@ function montarResumo(
 ) {
   const valor = (v: any) => (Array.isArray(v) ? v.join(', ') : String(v ?? '')).trim()
 
+  // Agrupado como na tela, com uma linha em branco entre blocos: no histórico do Pipeline
+  // isso é lido por gente, não por máquina.
   const linhas: string[] = []
   let grupoAtual = ''
   for (const p of modelo.perguntas as any[]) {
+    // Pergunta de arquivo tem seção própria: repetir os nomes aqui só ocupa linha.
+    if (TIPOS_ARQUIVO.has(p.tipo)) continue
     const texto = valor(respostas[p.chave])
     if (texto === '') continue
     const grupo = p.grupo || 'Informações'
-    if (grupo !== grupoAtual) { linhas.push(`[${grupo}]`); grupoAtual = grupo }
-    linhas.push(`${p.texto}: ${texto}`)
+    if (grupo !== grupoAtual) {
+      if (linhas.length > 0) linhas.push('')
+      linhas.push(`${grupo.toUpperCase()}`)
+      grupoAtual = grupo
+    }
+    // Muitas perguntas já terminam em "?"; "?:" fica feio.
+    const rotulo = /[?:]$/.test(p.texto) ? p.texto : `${p.texto}:`
+    linhas.push(`• ${rotulo} ${texto}`)
   }
   if (fotos.length > 0) {
-    linhas.push('[Arquivos]')
+    linhas.push('')
+    linhas.push('ARQUIVOS')
     for (const f of fotos) {
-      linhas.push(`${f.nome} (enviado pelo ${f.enviadoPor}) — ver na triagem #${triagemId}`)
+      linhas.push(`• ${f.nome} — enviado pelo ${f.enviadoPor}`)
     }
+    linhas.push(`(as imagens aparecem no histórico deste processo)`)
   }
 
   const cabecalho = [
-    `Triagem #${triagemId} — ${modelo.nome}`,
+    `TRIAGEM #${triagemId} — ${modelo.nome}`,
     `Cenário: ${cenario.nome}`,
-    cenario.alerta ? `Atenção: ${cenario.alerta}` : '',
+    cenario.alerta ? `` : '',
+    cenario.alerta ? `ATENÇÃO: ${cenario.alerta}` : '',
   ].filter(Boolean).join('\n')
 
   const roteiro = cenario.passos.length
-    ? ['Roteiro do cenário:', ...cenario.passos.map((x: string, i: number) => `${i + 1}. ${x}`)].join('\n')
+    ? ['', 'ROTEIRO DO CENÁRIO', ...cenario.passos.map((x: string, i: number) => `${i + 1}. ${x}`)].join('\n')
     : ''
 
   // A observação do processo é o resumo curto; o detalhe completo vai nas movimentações,
   // porque as duas colunas são varchar(2000).
-  const observacao = [cabecalho, roteiro].filter(Boolean).join('\n\n').slice(0, 2000)
+  const observacao = (cabecalho + roteiro).slice(0, 2000)
 
   const blocos: string[] = []
-  let atual = ['Respostas da triagem:']
-  let tamanho = atual[0].length
+  let atual = [`RESPOSTAS DA TRIAGEM #${triagemId}`, '']
+  let tamanho = 40
   for (const l of linhas) {
     if (tamanho + l.length + 1 > 1900) {
       blocos.push(atual.join('\n'))
-      atual = ['(continuação)']
-      tamanho = atual[0].length
+      atual = [`RESPOSTAS DA TRIAGEM #${triagemId} (continuação)`, '']
+      tamanho = 50
     }
     atual.push(l)
     tamanho += l.length + 1
   }
-  if (atual.length > 1) blocos.push(atual.join('\n'))
+  if (atual.length > 2) blocos.push(atual.join('\n'))
 
   return { observacao, blocos }
 }

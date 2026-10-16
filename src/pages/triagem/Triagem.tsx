@@ -108,7 +108,9 @@ export function Triagem() {
     try {
       const r = await api.concluirTriagem(a.id)
       toast.success(`Processo #${r.processoId} aberto — ${r.cenario}.`)
-      await carregar()
+      // Leva direto para a edição do processo: o que a triagem definiu é ponto de partida,
+      // etapa, responsável, prazo e checklist ainda são decisão de quem vai tocar.
+      navegar('/implantacao', { state: { editarProcessoId: r.processoId } })
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível abrir o processo.')
     } finally {
@@ -265,7 +267,7 @@ export function Triagem() {
                     </td>
                     <td className="px-4 py-2.5 text-right whitespace-nowrap">
                       {a.processoId ? (
-                        <a href={`/implantacao/pipeline?processo=${a.processoId}`}
+                        <a href={`/implantacao?processo=${a.processoId}`}
                           onClick={(e) => e.stopPropagation()}
                           className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">
                           Processo #{a.processoId} <ExternalLink className="w-3 h-3" />

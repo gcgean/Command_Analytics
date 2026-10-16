@@ -147,7 +147,7 @@ export function TriagemDetalhe() {
       if (sujo) await salvar(respostas)
       const r = await api.concluirTriagem(Number(id))
       toast.success(`Processo #${r.processoId} aberto no Pipeline.`)
-      await carregar()
+      navegar('/implantacao', { state: { editarProcessoId: r.processoId } })
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível concluir.')
     } finally {
@@ -214,7 +214,7 @@ export function TriagemDetalhe() {
             </Button>
           )}
           {dados.processoId && (
-            <a href={`/implantacao/pipeline?processo=${dados.processoId}`}
+            <a href={`/implantacao?processo=${dados.processoId}`}
               className="inline-flex items-center gap-1.5 text-sm px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700">
               Processo #{dados.processoId} <ExternalLink className="w-3.5 h-3.5" />
             </a>

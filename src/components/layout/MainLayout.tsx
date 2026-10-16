@@ -3,7 +3,6 @@ import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { PermissionsProvider } from '../../contexts/PermissionsContext'
-import { PwaUpdateBanner } from '../ui/PwaUpdateBanner'
 import { PwaInstallPrompt } from '../ui/PwaInstallPrompt'
 import { AssistenteChat } from '../ui/AssistenteChat'
 import clsx from 'clsx'
@@ -40,7 +39,6 @@ export function MainLayout() {
             <Outlet />
           </main>
         </div>
-        <PwaUpdateBanner />
         <PwaInstallPrompt />
         <AssistenteChat />
       </div>

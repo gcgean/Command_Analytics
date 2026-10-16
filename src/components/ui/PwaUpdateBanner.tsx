@@ -4,9 +4,14 @@ import { useRegisterSW } from 'virtual:pwa-register/react'
 import { Button } from './Button'
 
 const UPDATE_CHECK_INTERVAL_MS = 5 * 60 * 1000
+// "Depois" adia, não desiste. Com skipWaiting desligado, a versão nova fica esperando e
+// nem recarregar a página troca os arquivos — só o clique em "Atualizar agora" resolve.
+// Dispensar para sempre deixaria a pessoa presa na versão antiga sem saber por quê.
+const SNOOZE_MS = 10 * 60 * 1000
 
 export function PwaUpdateBanner() {
   const [registration, setRegistration] = useState<ServiceWorkerRegistration | null>(null)
+  const [adiado, setAdiado] = useState(false)
   const {
     needRefresh: [needRefresh, setNeedRefresh],
     offlineReady: [offlineReady, setOfflineReady],
@@ -28,11 +33,18 @@ export function PwaUpdateBanner() {
     return () => window.clearInterval(intervalId)
   }, [registration])
 
-  if (!needRefresh && !offlineReady) return null
+  // Reaparece depois da soneca enquanto a atualização continuar pendente.
+  useEffect(() => {
+    if (!adiado) return
+    const id = window.setTimeout(() => setAdiado(false), SNOOZE_MS)
+    return () => window.clearTimeout(id)
+  }, [adiado])
+
+  if (adiado || (!needRefresh && !offlineReady)) return null
 
   const close = () => {
-    setNeedRefresh(false)
-    setOfflineReady(false)
+    if (needRefresh) setAdiado(true)
+    else setOfflineReady(false)
   }
 
   return (

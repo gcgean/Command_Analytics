@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   GripVertical, LayoutList, Loader2, RefreshCcw, Search,
-  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen, Ban, X, AlertTriangle, CheckCircle2
+  SlidersHorizontal, Users, KanbanSquare, MoveRight, Pencil, History, NotebookPen, Ban, X, AlertTriangle, CheckCircle2, Paperclip
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
@@ -13,7 +13,8 @@ import { Modal } from '../../components/ui/Modal'
 import { SearchableSelect } from '../../components/ui/SearchableSelect'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import type {
-  ImplantacaoChecklistOpcao, ImplantacaoCliente, ImplantacaoEtapa, ImplantacaoPainel, ServicoCadastro, ChecklistCadastro, Cliente
+  ImplantacaoChecklistOpcao, ImplantacaoCliente, ImplantacaoEtapa, ImplantacaoPainel, ServicoCadastro, ChecklistCadastro, Cliente,
+  AnexoTriagem
 } from '../../types'
 
 type ViewMode = 'lista' | 'kanban'
@@ -382,6 +383,10 @@ export function Pipeline() {
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyData, setHistoryData] = useState<any | null>(null)
   const [historyCliente, setHistoryCliente] = useState<ImplantacaoCliente | null>(null)
+  // Fotos da triagem que abriu este processo. Ficam guardadas lá; aqui só são exibidas.
+  const [anexosTriagem, setAnexosTriagem] = useState<AnexoTriagem[]>([])
+  const [triagemOrigem, setTriagemOrigem] = useState<number | null>(null)
+  const [miniaturasTriagem, setMiniaturasTriagem] = useState<Record<number, string>>({})
 
   const [createOpen, setCreateOpen] = useState(false)
   const [createSaving, setCreateSaving] = useState(false)
@@ -599,6 +604,21 @@ export function Pipeline() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Chegando da triagem, que acabou de abrir o processo: já escancara a edição dele, para o
+  // atendente ajustar etapa, responsável, prazo e checklist e salvar sem procurar o card.
+  const [editarAoCarregar, setEditarAoCarregar] = useState<number | null>(
+    () => (location.state as any)?.editarProcessoId ?? null)
+
+  useEffect(() => {
+    if (!editarAoCarregar || !painel) return
+    const alvo = (painel.clientes || []).find((c) => c.processoId === editarAoCarregar)
+    if (!alvo) return
+    setEditarAoCarregar(null)
+    navigate(location.pathname + location.search, { replace: true, state: null })
+    void abrirEdicaoCliente(alvo)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editarAoCarregar, painel])
 
   function selecionarClienteCriacao(cliente: Cliente) {
     setCreateClienteId(String(cliente.id))
@@ -838,11 +858,25 @@ export function Pipeline() {
     setHistoryOpen(true)
     setHistoryLoading(true)
     setHistoryCliente(cliente)
+    setAnexosTriagem([])
+    setTriagemOrigem(null)
+    setMiniaturasTriagem({})
     try {
       const data = await api.getImplantacaoChecklist(cliente.clienteId, undefined, cliente.processoId)
       setHistoryData(data)
     } finally {
       setHistoryLoading(false)
+    }
+    if (!cliente.processoId) return
+    const r = await api.getAnexosDoProcesso(cliente.processoId).catch(() => null)
+    if (!r?.anexos?.length) return
+    setTriagemOrigem(r.triagemId)
+    setAnexosTriagem(r.anexos)
+    // A rota do arquivo pede token, então a miniatura vem por blob.
+    for (const a of r.anexos) {
+      if (!a.mimeType.startsWith('image/')) continue
+      const blob = await api.getAnexoTriagemBlob(a.id).catch(() => null)
+      if (blob) setMiniaturasTriagem((m) => ({ ...m, [a.id]: URL.createObjectURL(blob) }))
     }
   }
 
@@ -1953,6 +1987,34 @@ export function Pipeline() {
               </div>
             </div>
 
+            {anexosTriagem.length > 0 && (
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  Fotos e arquivos da triagem{triagemOrigem ? ` #${triagemOrigem}` : ''}
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  {anexosTriagem.map((a) => (
+                    <div key={a.id} className="w-28">
+                      {miniaturasTriagem[a.id] ? (
+                        <a href={miniaturasTriagem[a.id]} target="_blank" rel="noreferrer">
+                          <img src={miniaturasTriagem[a.id]} alt={a.nome}
+                            className="w-28 h-28 object-cover rounded-lg border border-slate-200 dark:border-slate-700" />
+                        </a>
+                      ) : (
+                        <div className="w-28 h-28 rounded-lg border border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-slate-400">
+                          <Paperclip className="w-5 h-5" />
+                        </div>
+                      )}
+                      <p className="text-[10px] text-slate-500 mt-1 truncate" title={a.nome}>{a.nome}</p>
+                      <p className="text-[10px] text-slate-400">
+                        {a.enviadoPor === 'cliente' ? 'enviado pelo cliente' : 'enviado pela equipe'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="rounded-lg border border-slate-200 dark:border-slate-700">
               <div className="p-3 border-b border-slate-200 dark:border-slate-700">
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Timeline completa (cronológica)</p>
@@ -2004,8 +2066,9 @@ export function Pipeline() {
                             Responsável: {evento.responsavelNome || 'Não definido'}
                           </p>
                         ) : null}
+                        {/* whitespace-pre-line: o resumo da triagem vem em linhas. */}
                         {evento.observacao ? (
-                          <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">{evento.observacao}</p>
+                          <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 whitespace-pre-line">{evento.observacao}</p>
                         ) : null}
                         <p className="text-[11px] text-slate-500 mt-1">
                           Usuário: {evento.usuarioNome || 'Sistema'}

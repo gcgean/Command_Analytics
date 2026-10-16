@@ -9,6 +9,7 @@ import type { Usuario } from './types'
 import { Login } from './pages/auth/Login'
 import { SolicitacaoDemanda } from './pages/publico/SolicitacaoDemanda'
 import { PrecificacaoPublica } from './pages/implantacao/Orcamento'
+import { PwaUpdateBanner } from './components/ui/PwaUpdateBanner'
 import { Triagem } from './pages/triagem/Triagem'
 import { TriagemDetalhe } from './pages/triagem/TriagemDetalhe'
 import { TriagemCliente } from './pages/publico/TriagemCliente'
@@ -197,8 +198,12 @@ export default function App() {
   }, [isAuthenticated, refreshSession, logout])
 
   return (
-    <Routes>
-      {/* Public routes */}
+    <>
+      {/* Fora do layout logado de propósito: quem abre um link público também precisa
+          conseguir sair de uma versão antiga presa no cache. */}
+      <PwaUpdateBanner />
+      <Routes>
+        {/* Public routes */}
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
 
       {/* Link público de demandas — sem login, é o endereço que vai pro cliente. */}
@@ -286,6 +291,7 @@ export default function App() {
 
       {/* 404 */}
       <Route path="*" element={<NotFound />} />
-    </Routes>
+      </Routes>
+    </>
   )
 }
