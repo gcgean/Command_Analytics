@@ -24,6 +24,22 @@ const MOTIVOS = [
   'Outro assunto',
 ]
 
+// Lista fechada evita a mesma operadora escrita de cinco jeitos, o que quebra qualquer
+// contagem depois. Quem não estiver aqui escolhe "Outra" e escreve o nome no campo seguinte.
+const ADQUIRENTES = [
+  'Cielo',
+  'Rede',
+  'Getnet',
+  'Stone',
+  'PagBank',
+  'Mercado Pago',
+  'SafraPay',
+  'SumUp',
+  'Vero',
+  'Bin',
+  'Outra',
+]
+
 const PERGUNTAS = [
   // ── Identificação ──
   // O que o cadastro já sabe vem com `origem` e nasce preenchido. O responsável e o telefone
@@ -64,7 +80,16 @@ const PERGUNTAS = [
     opcoes: ['Nenhum', 'Maquininha avulsa (sem integração)', 'SmartPOS', 'TEF/PinPad'],
     grupo: 'Perfil operacional', obrigatoria: 1, publico: 'ambos',
   },
-  { chave: 'adquirente', texto: 'Qual é a adquirente ou operadora?', tipo: 'texto', grupo: 'Perfil operacional', obrigatoria: 1, publico: 'ambos' },
+  {
+    chave: 'adquirente', texto: 'Qual é a adquirente ou operadora?', tipo: 'opcao',
+    opcoes: ADQUIRENTES, grupo: 'Perfil operacional', obrigatoria: 1, publico: 'ambos',
+  },
+  {
+    chave: 'adquirente_outra', texto: 'Qual adquirente ou operadora?', tipo: 'texto',
+    ajuda: 'Informe o nome como aparece na sua maquininha ou no extrato.',
+    grupo: 'Perfil operacional', obrigatoria: 1, publico: 'ambos',
+    condicao: { chave: 'adquirente', operador: 'igual', valor: 'Outra' },
+  },
   {
     chave: 'recebimento', texto: 'Onde recebe os pagamentos?', tipo: 'opcao',
     opcoes: ['No estabelecimento', 'Em delivery', 'Nos dois'], grupo: 'Perfil operacional', publico: 'ambos',
@@ -83,6 +108,8 @@ const PERGUNTAS = [
     // compatibilidade na hora, em vez de pedir o dado de novo depois.
     chave: 'foto_equipamento', texto: 'Foto da etiqueta atrás da maquininha', tipo: 'foto',
     ajuda: 'Vire o aparelho e fotografe a etiqueta com o modelo e o número de série. '
+      + 'Se a etiqueta estiver apagada ou não existir, abra o menu "Sobre" no sistema da '
+      + 'própria maquininha: o número de série aparece lá, e a foto dessa tela serve. '
       + 'Se tiver mais de uma maquininha, envie uma foto de cada.',
     // Não é obrigatória: cliente sem o aparelho em mãos não pode ficar travado na triagem.
     grupo: 'Perfil operacional', publico: 'ambos',
