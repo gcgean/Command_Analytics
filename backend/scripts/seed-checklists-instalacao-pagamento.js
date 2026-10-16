@@ -16,35 +16,27 @@ const prisma = new PrismaClient()
 
 const TELAS = ['implantacao', 'triagem']
 
+// O mínimo para dar a integração por funcionando. Cada item é um impedimento real:
+// sem ele, ou a instalação não anda, ou ela "termina" sem estar pronta.
 const CHECKLISTS = [
   {
     nome: 'INSTALAÇÃO TEF/PinPad — Técnico',
-    descricao: 'O que o técnico confere na instalação do TEF com PinPad.',
+    descricao: 'O mínimo para a integração TEF funcionar.',
     itens: [
       'Cadastro aprovado pelo fornecedor TEF',
-      'PinPad instalado e reconhecido pelo sistema',
-      'Formas de pagamento e PDV configurados no Command',
-      'Venda teste no crédito e no débito aprovadas',
-      'Retorno da transação recebido no Command',
+      'PinPad reconhecido e formas de pagamento configuradas no Command',
+      'Venda teste aprovada, com o retorno recebido no Command',
       'Comprovante da venda teste enviado ao fornecedor TEF',
-      'Estorno de teste confirmado nos dois lados',
-      'Fechamento de caixa com a venda teste batendo',
-      'Maquininha registrada no cadastro do cliente',
     ],
   },
   {
     nome: 'INSTALAÇÃO SmartPOS — Técnico',
-    descricao: 'O que o técnico confere na integração do SmartPOS ao Command.',
+    descricao: 'O mínimo para a integração SmartPOS funcionar.',
     itens: [
-      'Modelo compatível confirmado e habilitação MobTEF concluída',
-      'MPM+ atualizado e aparelho conectado à internet',
-      'Aparelho respondendo ao comando de venda do Command',
-      'Formas de pagamento e PDV configurados no Command',
+      'Habilitação MobTEF concluída e MPM+ no aparelho',
+      'Aparelho pareado e formas de pagamento configuradas no Command',
       'Venda teste aprovada, com o valor correto no aparelho',
       'Retorno da transação recebido sem o operador digitar nada',
-      'Estorno de teste confirmado nos dois lados',
-      'Fechamento de caixa com a venda teste batendo',
-      'Maquininha registrada no cadastro do cliente',
     ],
   },
 ]
