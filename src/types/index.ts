@@ -1784,3 +1784,118 @@ export interface LinkPrecificacao {
   ultimoUso: string | null
   criadoEm: string
 }
+
+// ─── Triagem guiada ──────────────────────────────────────────
+// O questionário e os cenários são cadastro, não código: estes tipos descrevem a forma
+// genérica que o motor devolve, qualquer que seja a triagem.
+
+export interface CondicaoTriagem {
+  chave: string
+  operador: string
+  valor?: string | number
+}
+
+export interface PerguntaTriagem {
+  id: number
+  chave: string
+  texto: string
+  ajuda: string | null
+  tipo: string
+  opcoes: string[]
+  obrigatoria: boolean
+  publico: string
+  condicao: CondicaoTriagem | null
+  grupo: string | null
+  ordem: number
+}
+
+export interface CenarioTriagem {
+  id: number
+  nome: string
+  descricao: string | null
+  condicoes: CondicaoTriagem[]
+  passos: string[]
+  alerta: string | null
+  prioridade: string
+  etapaDestino: number | null
+  checklistId: number | null
+}
+
+export interface ModeloTriagem {
+  id: number
+  nome: string
+  slug: string
+  descricao: string | null
+  tipoProcesso: string
+  etapaInicial: number | null
+  permiteLink: boolean
+  perguntas?: number | PerguntaTriagem[]
+  cenarios?: number | CenarioTriagem[]
+  atendimentos?: number
+}
+
+export interface ModeloTriagemCompleto extends Omit<ModeloTriagem, 'perguntas' | 'cenarios'> {
+  perguntas: PerguntaTriagem[]
+  cenarios: CenarioTriagem[]
+}
+
+export interface ChecklistTriagem {
+  id: number
+  nome: string
+  descricao: string | null
+  itens: string[]
+}
+
+export interface AtendimentoTriagem {
+  id: number
+  modelo: string | null
+  modeloSlug: string | null
+  processoId: number | null
+  clienteId: number | null
+  cnpj: string | null
+  clienteNome: string | null
+  contato: string | null
+  telefone: string | null
+  cenarioId: number | null
+  cenario: string | null
+  prioridade: string
+  respostas: Record<string, any>
+  situacao: string
+  token: string | null
+  tokenExpira: string | null
+  respondidoPor: string | null
+  atendente: string | null
+  criadoEm: string
+  atualizadoEm: string
+}
+
+export interface AtendimentoTriagemDetalhe extends AtendimentoTriagem {
+  modeloCompleto: ModeloTriagemCompleto
+  cenarioAtual: CenarioTriagem | null
+  checklist: ChecklistTriagem | null
+  perguntas: PerguntaTriagem[]
+  pendencias: string[]
+}
+
+export interface TriagemPublica {
+  titulo: string
+  descricao: string | null
+  cliente: string | null
+  respostas: Record<string, any>
+  perguntas: PerguntaTriagem[]
+}
+
+export interface RespostaProntaTriagem {
+  id: number
+  categoria: string | null
+  pergunta: string
+  respostaCliente: string | null
+  orientacao: string | null
+  proximaAcao: string | null
+  setor: string | null
+  fonte: string | null
+  impactoFiscal: boolean
+  aprovada: boolean
+  revisadoEm: string | null
+  modeloSlug: string | null
+}

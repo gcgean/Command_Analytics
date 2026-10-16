@@ -59,6 +59,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
           { label: 'Encerrados',     icon: <Archive className="w-4 h-4" />,      to: '/implantacao/encerrados',       recurso: 'implantacao-concluidos' },
         ]
       },
+      { label: 'Triagem Guiada', icon: <ListChecks className="w-4 h-4" />, to: '/triagem', recurso: 'triagem' },
       {
         label: 'CRM / Negócios', icon: <Briefcase className="w-4 h-4" />, children: [
           { label: 'Negócios',          icon: <TrendingUp className="w-4 h-4" />, to: '/crm',       recurso: 'crm' },

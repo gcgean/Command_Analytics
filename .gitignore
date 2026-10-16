@@ -31,3 +31,4 @@ Thumbs.db
 .idea/
 *.suo
 *.user
+backend/scripts/.valida-triagem.txt

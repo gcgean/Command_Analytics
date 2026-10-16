@@ -65,7 +65,21 @@ export async function triagemRoutes(app: FastifyInstance) {
         WHERE a.id = ?`, Number(id))
     if (!a) return reply.status(404).send({ error: 'Atendimento não encontrado.' })
     const modelo = await carregarModelo(Number(a.modelo_id))
-    return { ...formatarAtendimento(a), modelo }
+    if (!modelo) return reply.status(404).send({ error: 'Modelo indisponível.' })
+
+    const respostas = JSON.parse(a.respostas || '{}')
+    const cenario = identificarCenario(modelo, respostas)
+    return {
+      ...formatarAtendimento(a),
+      // Chave própria: 'modelo' no resumo é o nome, aqui vai a definição inteira.
+      modeloCompleto: modelo,
+      // A tela do atendente precisa do cenário inteiro — roteiro, alerta e checklist —,
+      // não só do nome gravado.
+      cenarioAtual: cenario,
+      checklist: await carregarChecklist(cenario?.checklistId ?? null),
+      perguntas: perguntasVisiveis(modelo, respostas),
+      pendencias: pendencias(modelo, respostas).map((pg) => pg.chave),
+    }
   })
 
   app.post('/atendimentos', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request, reply) => {
@@ -124,7 +138,8 @@ export async function triagemRoutes(app: FastifyInstance) {
     )
     return {
       respostas,
-      cenario,
+      cenarioAtual: cenario,
+      checklist: await carregarChecklist(cenario?.checklistId ?? null),
       perguntas: perguntasVisiveis(modelo, respostas),
       pendencias: pendencias(modelo, respostas).map((p) => p.chave),
     }
@@ -340,6 +355,22 @@ export async function triagemRoutes(app: FastifyInstance) {
       modeloSlug: r.modelo_slug ?? null,
     }))
   })
+}
+
+/** Itens do checklist que o cenário exige. O cadastro é o mesmo que o Pipeline usa. */
+async function carregarChecklist(id: number | null) {
+  if (!id) return null
+  const [c] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT id, nome, descricao, itens FROM cadastro_checklists WHERE id = ? AND ativo = 1`, id)
+  if (!c) return null
+  let itens: string[] = []
+  try { itens = JSON.parse(c.itens || '[]') } catch { itens = [] }
+  return {
+    id: Number(c.id),
+    nome: c.nome as string,
+    descricao: (c.descricao ?? null) as string | null,
+    itens: itens.map((i: any) => (typeof i === 'string' ? i : String(i?.texto ?? i?.nome ?? ''))),
+  }
 }
 
 function formatarAtendimento(a: any) {

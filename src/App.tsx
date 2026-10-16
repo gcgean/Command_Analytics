@@ -9,6 +9,9 @@ import type { Usuario } from './types'
 import { Login } from './pages/auth/Login'
 import { SolicitacaoDemanda } from './pages/publico/SolicitacaoDemanda'
 import { PrecificacaoPublica } from './pages/implantacao/Orcamento'
+import { Triagem } from './pages/triagem/Triagem'
+import { TriagemDetalhe } from './pages/triagem/TriagemDetalhe'
+import { TriagemCliente } from './pages/publico/TriagemCliente'
 import { MetasPeriodo } from './pages/metas/MetasPeriodo'
 import { TabelaMigracao } from './pages/comercial/TabelaMigracao'
 import { ClientesPaycore } from './pages/comercial/ClientesPaycore'
@@ -202,6 +205,8 @@ export default function App() {
       <Route path="/demanda" element={<SolicitacaoDemanda />} />
       {/* Precificação aberta por link — é o endereço que vai para a revenda. */}
       <Route path="/precificacao/:token" element={<PrecificacaoPublica />} />
+      {/* Triagem respondida pelo próprio cliente — é o endereço que o atendente envia. */}
+      <Route path="/triagem-cliente/:token" element={<TriagemCliente />} />
 
       {/* Alterar senha — standalone page (sem layout de sidebar) */}
       <Route path="/alterar-senha" element={<ProtectedRoute><AlterarSenha /></ProtectedRoute>} />
@@ -239,6 +244,8 @@ export default function App() {
         <Route path="planos" element={<PermissionRoute recurso="planos"><Planos /></PermissionRoute>} />
         <Route path="planos/assinaturas" element={<PermissionRoute recurso="planos"><AssinaturaCliente /></PermissionRoute>} />
 
+        <Route path="triagem" element={<PermissionRoute recurso="triagem"><Triagem /></PermissionRoute>} />
+        <Route path="triagem/:id" element={<PermissionRoute recurso="triagem"><TriagemDetalhe /></PermissionRoute>} />
         <Route path="implantacao" element={<PermissionRoute recurso="implantacao"><Pipeline /></PermissionRoute>} />
         <Route path="implantacao/dashboard" element={<PermissionRoute recurso="implantacao"><DashboardImplantacao /></PermissionRoute>} />
         <Route path="implantacao/orcamento" element={<PermissionRoute recurso="implantacao-orcamento"><Orcamento /></PermissionRoute>} />

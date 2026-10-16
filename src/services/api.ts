@@ -7,6 +7,8 @@ import type {
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
+  ModeloTriagem, ModeloTriagemCompleto, AtendimentoTriagem, AtendimentoTriagemDetalhe,
+  PerguntaTriagem, CenarioTriagem, ChecklistTriagem, TriagemPublica, RespostaProntaTriagem,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
   DashboardMensalidadesAbc, DashboardMensalidadesAgrupamento, DashboardMensalidadesConcentracao,
   DashboardMensalidadesEstatisticas, DashboardMensalidadesFaixa, DashboardMensalidadesFiltros,
@@ -911,6 +913,61 @@ export const api = {
     }),
   excluirLinkPrecificacao: (id: number) =>
     fetchApi<{ ok: boolean }>(`/precificacao-publica/links/${id}`, { method: 'DELETE' }),
+
+  // ─── Triagem guiada ────────────────────────────────────────
+  getModelosTriagem: () => fetchApi<ModeloTriagem[]>('/triagem/modelos'),
+  getModeloTriagem: (slug: string) => fetchApi<ModeloTriagemCompleto>(`/triagem/modelos/${slug}`),
+
+  getAtendimentosTriagem: (filtros?: { modelo?: string; situacao?: string; busca?: string }) => {
+    const q = new URLSearchParams()
+    if (filtros?.modelo) q.set('modelo', filtros.modelo)
+    if (filtros?.situacao) q.set('situacao', filtros.situacao)
+    if (filtros?.busca) q.set('busca', filtros.busca)
+    const s = q.toString()
+    return fetchApi<AtendimentoTriagem[]>(`/triagem/atendimentos${s ? `?${s}` : ''}`)
+  },
+  getAtendimentoTriagem: (id: number) =>
+    fetchApi<AtendimentoTriagemDetalhe>(`/triagem/atendimentos/${id}`),
+  criarAtendimentoTriagem: (dados: {
+    modelo: string; cnpj?: string; clienteId?: number; clienteNome?: string
+    contato?: string; telefone?: string
+  }) => fetchApi<{ id: number }>('/triagem/atendimentos', {
+    method: 'POST', body: JSON.stringify(dados),
+  }),
+  salvarRespostasTriagem: (id: number, respostas: Record<string, any>) =>
+    fetchApi<{
+      respostas: Record<string, any>
+      cenarioAtual: CenarioTriagem | null
+      checklist: ChecklistTriagem | null
+      perguntas: PerguntaTriagem[]
+      pendencias: string[]
+    }>(`/triagem/atendimentos/${id}/respostas`, {
+      method: 'PUT', body: JSON.stringify({ respostas }),
+    }),
+  concluirTriagem: (id: number) =>
+    fetchApi<{ processoId: number; cenario: string; etapa: number | null }>(
+      `/triagem/atendimentos/${id}/concluir`, { method: 'POST' }),
+  gerarLinkTriagem: (id: number) =>
+    fetchApi<{ token: string }>(`/triagem/atendimentos/${id}/link`, { method: 'POST' }),
+  revogarLinkTriagem: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/triagem/atendimentos/${id}/link`, { method: 'DELETE' }),
+
+  // Sem autenticação: é o formulário que o cliente abre pelo link.
+  getTriagemPublica: (token: string) => fetchApi<TriagemPublica>(`/triagem/publico/${token}`),
+  salvarTriagemPublica: (token: string, respostas: Record<string, any>, finalizar = false) =>
+    fetchApi<{ ok: boolean; finalizado: boolean; perguntas: PerguntaTriagem[] }>(
+      `/triagem/publico/${token}`, {
+        method: 'PUT', body: JSON.stringify({ respostas, finalizar }),
+      }),
+
+  getRespostasProntasTriagem: (filtros?: { busca?: string; categoria?: string; modelo?: string }) => {
+    const q = new URLSearchParams()
+    if (filtros?.busca) q.set('busca', filtros.busca)
+    if (filtros?.categoria) q.set('categoria', filtros.categoria)
+    if (filtros?.modelo) q.set('modelo', filtros.modelo)
+    const s = q.toString()
+    return fetchApi<RespostaProntaTriagem[]>(`/triagem/respostas${s ? `?${s}` : ''}`)
+  },
 
   getParametrosPrecificacao: () => fetchApi<ParametrosPrecificacao>('/orcamentos/parametros'),
   salvarParametrosPrecificacao: (dados: ParametrosPrecificacao) =>
