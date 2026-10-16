@@ -948,6 +948,16 @@ export const api = {
   concluirTriagem: (id: number) =>
     fetchApi<{ processoId: number; cenario: string; etapa: number | null; efeito?: string | null }>(
       `/triagem/atendimentos/${id}/concluir`, { method: 'POST' }),
+  cancelarTriagem: (id: number, motivo?: string) =>
+    fetchApi<{ ok: boolean }>(`/triagem/atendimentos/${id}/cancelar`, {
+      method: 'POST', body: JSON.stringify({ motivo }),
+    }),
+  reabrirTriagem: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/triagem/atendimentos/${id}/reabrir`, { method: 'POST' }),
+  excluirTriagem: (id: number) =>
+    fetchApi<{ ok: boolean; arquivosRemovidos: number }>(`/triagem/atendimentos/${id}`, {
+      method: 'DELETE',
+    }),
   gerarLinkTriagem: (id: number) =>
     fetchApi<{ token: string }>(`/triagem/atendimentos/${id}/link`, { method: 'POST' }),
   revogarLinkTriagem: (id: number) =>

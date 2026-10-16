@@ -3,12 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ClipboardList, Loader2, Plus, Search, AlertTriangle, ExternalLink, Clock,
-  CheckCircle2, Link2, Users, Camera, MailCheck,
+  CheckCircle2, Link2, Users, Camera, MailCheck, Ban, Trash2, RotateCcw,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { ClienteSearch } from '../../components/ui/ClienteSearch'
 import { Button } from '../../components/ui/Button'
+import { Modal } from '../../components/ui/Modal'
 import { useToast } from '../../components/ui/Toast'
 import type { AtendimentoTriagem, ModeloTriagem } from '../../types'
 
@@ -17,6 +18,7 @@ const SITUACAO: Record<string, { rotulo: string; classe: string }> = {
   em_triagem: { rotulo: 'Em triagem', classe: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' },
   aguardando_cliente: { rotulo: 'Aguardando cliente', classe: 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300' },
   respondido: { rotulo: 'Cliente respondeu', classe: 'bg-violet-100 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300' },
+  cancelado: { rotulo: 'Cancelada', classe: 'bg-slate-200 text-slate-600 dark:bg-slate-700 dark:text-slate-400' },
   concluido: { rotulo: 'Processo aberto', classe: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300' },
 }
 
@@ -39,6 +41,10 @@ export function Triagem() {
   const [filtroModelo, setFiltroModelo] = useState('')
   const [abrindo, setAbrindo] = useState(false)
   const [gerando, setGerando] = useState<number | null>(null)
+  const [encerrar, setEncerrar] = useState<
+    { atendimento: AtendimentoTriagem; modo: 'cancelar' | 'excluir' } | null>(null)
+  const [motivo, setMotivo] = useState('')
+  const [encerrando, setEncerrando] = useState(false)
   const [novo, setNovo] = useState<
     { modelo: string; clienteId: string; clienteNome: string; contato: string; telefone: string } | null>(null)
 
@@ -116,6 +122,39 @@ export function Triagem() {
       toast.error(e?.message || 'Não foi possível abrir o processo.')
     } finally {
       setGerando(null)
+    }
+  }
+
+  async function confirmarEncerramento() {
+    if (!encerrar) return
+    setEncerrando(true)
+    try {
+      if (encerrar.modo === 'cancelar') {
+        await api.cancelarTriagem(encerrar.atendimento.id, motivo.trim() || undefined)
+        toast.success('Triagem cancelada.')
+      } else {
+        const r = await api.excluirTriagem(encerrar.atendimento.id)
+        toast.success(r.arquivosRemovidos > 0
+          ? `Triagem excluída, com ${r.arquivosRemovidos} arquivo(s).`
+          : 'Triagem excluída.')
+      }
+      setEncerrar(null)
+      setMotivo('')
+      await carregar()
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível concluir a ação.')
+    } finally {
+      setEncerrando(false)
+    }
+  }
+
+  async function reabrir(a: AtendimentoTriagem) {
+    try {
+      await api.reabrirTriagem(a.id)
+      toast.success('Triagem reaberta.')
+      await carregar()
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível reabrir.')
     }
   }
 
@@ -273,15 +312,37 @@ export function Triagem() {
                           className="text-xs text-indigo-600 dark:text-indigo-400 hover:underline inline-flex items-center gap-1">
                           Processo #{a.processoId} <ExternalLink className="w-3 h-3" />
                         </a>
-                      ) : a.prontoParaProcesso ? (
-                        <Button size="sm" disabled={gerando === a.id}
-                          onClick={(e) => { e.stopPropagation(); void abrirProcesso(a) }}>
-                          {gerando === a.id
-                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            : <CheckCircle2 className="w-3.5 h-3.5" />}
-                          Abrir processo
-                        </Button>
-                      ) : null}
+                      ) : (
+                        <div className="flex items-center justify-end gap-1">
+                          {a.prontoParaProcesso && (
+                            <Button size="sm" disabled={gerando === a.id}
+                              onClick={(e) => { e.stopPropagation(); void abrirProcesso(a) }}>
+                              {gerando === a.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <CheckCircle2 className="w-3.5 h-3.5" />}
+                              Abrir processo
+                            </Button>
+                          )}
+                          {a.situacao === 'cancelado' ? (
+                            <button title="Reabrir triagem"
+                              onClick={(e) => { e.stopPropagation(); void reabrir(a) }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700">
+                              <RotateCcw className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <button title="Cancelar triagem"
+                              onClick={(e) => { e.stopPropagation(); setMotivo(''); setEncerrar({ atendimento: a, modo: 'cancelar' }) }}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-600 hover:bg-slate-100 dark:hover:bg-slate-700">
+                              <Ban className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          <button title="Excluir triagem"
+                            onClick={(e) => { e.stopPropagation(); setMotivo(''); setEncerrar({ atendimento: a, modo: 'excluir' }) }}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-slate-100 dark:hover:bg-slate-700">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -296,6 +357,44 @@ export function Triagem() {
           </div>
         </Card>
       )}
+
+      <Modal isOpen={!!encerrar} onClose={() => !encerrando && setEncerrar(null)}
+        title={encerrar?.modo === 'excluir' ? 'Excluir triagem' : 'Cancelar triagem'} size="sm">
+        {encerrar && (
+          <div className="space-y-3">
+            <p className="text-sm text-slate-700 dark:text-slate-200">
+              {encerrar.atendimento.clienteNome || 'Cliente sem nome'} ·{' '}
+              {encerrar.atendimento.modelo}
+            </p>
+            {encerrar.modo === 'excluir' ? (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                A triagem e os arquivos enviados são apagados definitivamente. Não dá para
+                desfazer. Se a intenção é só tirar da lista, cancele em vez de excluir.
+              </p>
+            ) : (
+              <>
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  A triagem sai da lista e o link do cliente deixa de valer. O registro
+                  continua no sistema e pode ser reaberto.
+                </p>
+                <textarea className="input-field w-full min-h-[4rem]" value={motivo}
+                  onChange={(e) => setMotivo(e.target.value)}
+                  placeholder="Motivo (opcional): desistiu, duplicada, trote..." />
+              </>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="secondary" onClick={() => setEncerrar(null)} disabled={encerrando}>
+                Voltar
+              </Button>
+              <Button variant={encerrar.modo === 'excluir' ? 'danger' : 'primary'}
+                onClick={confirmarEncerramento} disabled={encerrando}>
+                {encerrando && <Loader2 className="w-4 h-4 animate-spin" />}
+                {encerrar.modo === 'excluir' ? 'Excluir definitivamente' : 'Cancelar triagem'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }

@@ -42,7 +42,9 @@ export async function triagemRoutes(app: FastifyInstance) {
     const cond: string[] = []
     const val: any[] = []
     if (modelo) { cond.push('m.slug = ?'); val.push(modelo) }
+    // Cancelada não suja a lista do dia a dia, mas continua acessível pelo filtro.
     if (situacao) { cond.push('a.situacao = ?'); val.push(situacao) }
+    else cond.push("a.situacao <> 'cancelado'")
     if (busca) {
       cond.push('(a.cliente_nome LIKE ? OR a.cnpj LIKE ? OR a.contato LIKE ?)')
       const termo = `%${busca}%`
@@ -309,6 +311,69 @@ export async function triagemRoutes(app: FastifyInstance) {
     }
 
     return { processoId, cenario: cenario.nome, etapa, efeito }
+  })
+
+  /**
+   * Cancelar em vez de apagar: a triagem é registro de atendimento, e saber que alguém
+   * ligou e desistiu vale mais do que a linha sumir. Reversível.
+   */
+  app.post('/atendimentos/:id/cancelar', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const b = request.body as { motivo?: string }
+    const [a] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, processo_id, situacao, respostas FROM triagem_atendimento WHERE id = ?`, Number(id))
+    if (!a) return reply.status(404).send({ error: 'Atendimento não encontrado.' })
+    if (a.processo_id) {
+      return reply.status(400).send({
+        error: 'Esta triagem já gerou um processo no Pipeline. Cancele o processo por lá.',
+      })
+    }
+
+    const respostas = JSON.parse(a.respostas || '{}')
+    const motivo = String(b?.motivo ?? '').trim()
+    if (motivo) respostas.__cancelamento = motivo
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE triagem_atendimento
+          SET situacao = 'cancelado', token = NULL, token_expira = NULL, respostas = ?
+        WHERE id = ?`, JSON.stringify(respostas), Number(id))
+    return { ok: true }
+  })
+
+  app.post('/atendimentos/:id/reabrir', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const [a] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, situacao FROM triagem_atendimento WHERE id = ?`, Number(id))
+    if (!a) return reply.status(404).send({ error: 'Atendimento não encontrado.' })
+    if (a.situacao !== 'cancelado') return reply.status(400).send({ error: 'Esta triagem não está cancelada.' })
+    await prisma.$executeRawUnsafe(
+      `UPDATE triagem_atendimento SET situacao = 'em_triagem' WHERE id = ?`, Number(id))
+    return { ok: true }
+  })
+
+  /** Apagar de vez, com os arquivos. Só o que nunca virou processo. */
+  app.delete('/atendimentos/:id', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const [a] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, processo_id FROM triagem_atendimento WHERE id = ?`, Number(id))
+    if (!a) return reply.status(404).send({ error: 'Atendimento não encontrado.' })
+    if (a.processo_id) {
+      return reply.status(400).send({
+        error: 'Esta triagem gerou o processo #' + Number(a.processo_id)
+          + ' e não pode ser apagada — é o registro de como ele nasceu.',
+      })
+    }
+
+    // Os arquivos saem do disco junto: deixá-los órfãos só ocuparia espaço para sempre.
+    const anexos = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT stored_name FROM triagem_anexo WHERE atendimento_id = ?`, Number(id))
+    for (const x of anexos) {
+      const caminho = path.join(pastaAnexos(), String(x.stored_name))
+      if (dentroDe(pastaAnexos(), caminho)) await fs.unlink(caminho).catch(() => {})
+    }
+    await prisma.$executeRawUnsafe(`DELETE FROM triagem_anexo WHERE atendimento_id = ?`, Number(id))
+    await prisma.$executeRawUnsafe(`DELETE FROM triagem_atendimento WHERE id = ?`, Number(id))
+    return { ok: true, arquivosRemovidos: anexos.length }
   })
 
   // ── Link para o cliente responder ──
