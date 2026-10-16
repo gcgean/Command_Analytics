@@ -1,4 +1,9 @@
 import type { FastifyInstance } from 'fastify'
+import type { MultipartFile } from '@fastify/multipart'
+import { pipeline } from 'node:stream/promises'
+import { createReadStream, createWriteStream, promises as fs } from 'node:fs'
+import path from 'node:path'
+import { randomUUID } from 'node:crypto'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import {
@@ -79,6 +84,7 @@ export async function triagemRoutes(app: FastifyInstance) {
       checklist: await carregarChecklist(cenario?.checklistId ?? null),
       perguntas: perguntasVisiveis(modelo, respostas),
       pendencias: pendencias(modelo, respostas).map((pg) => pg.chave),
+      anexos: await listarAnexos(Number(a.id)),
     }
   })
 
@@ -294,6 +300,7 @@ export async function triagemRoutes(app: FastifyInstance) {
       cliente: a.cliente_nome ?? null,
       respostas,
       perguntas: perguntasVisiveis(modelo, respostas, true),
+      anexos: (await listarAnexos(Number(a.id))).filter((x) => x.enviadoPor === 'cliente'),
     }
   })
 
@@ -349,6 +356,115 @@ export async function triagemRoutes(app: FastifyInstance) {
     }
   })
 
+  // ── Fotos: do atendente e do cliente ──
+  app.post('/atendimentos/:id/anexos', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { chave } = request.query as { chave?: string }
+    const [a] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, modelo_id, situacao FROM triagem_atendimento WHERE id = ?`, Number(id))
+    if (!a) return reply.status(404).send({ error: 'Atendimento não encontrado.' })
+    if (a.situacao === 'concluido') {
+      return reply.status(400).send({ error: 'Atendimento concluído não aceita novos arquivos.' })
+    }
+
+    const modelo = await carregarModelo(Number(a.modelo_id))
+    const pergunta = modelo?.perguntas.find((p) => p.chave === chave)
+    if (!pergunta || !TIPOS_ARQUIVO.has(pergunta.tipo)) {
+      return reply.status(400).send({ error: 'Esta pergunta não recebe arquivos.' })
+    }
+
+    const r = await receberArquivos(request, Number(id), pergunta.chave, 'tecnico')
+    if (r.aceitos === 0) {
+      return reply.status(400).send({
+        error: r.recusados[0] ?? 'Nenhum arquivo aceito.', recusados: r.recusados,
+      })
+    }
+    const respostas = await sincronizarRespostaAnexo(Number(id), pergunta.chave)
+    return { ok: true, aceitos: r.aceitos, recusados: r.recusados, respostas, anexos: await listarAnexos(Number(id)) }
+  })
+
+  app.get('/anexos/:anexoId/arquivo', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request, reply) => {
+    const { anexoId } = request.params as { anexoId: string }
+    const [a] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM triagem_anexo WHERE id = ?`, Number(anexoId))
+    if (!a) return reply.status(404).send({ error: 'Arquivo não encontrado.' })
+
+    const dir = pastaAnexos()
+    const caminho = path.join(dir, String(a.stored_name))
+    // O nome vem do banco, mas conferir o caminho é barato e fecha a porta para '..'.
+    if (!dentroDe(dir, caminho)) return reply.status(400).send({ error: 'Caminho inválido.' })
+    if (!(await fs.stat(caminho).catch(() => null))) {
+      return reply.status(404).send({ error: 'Arquivo não está mais no servidor.' })
+    }
+    const baixar = (request.query as any)?.download === '1'
+    reply.header('Content-Type', String(a.mime_type))
+    reply.header('Content-Disposition',
+      `${baixar ? 'attachment' : 'inline'}; filename="${String(a.original_name).replace(/"/g, '')}"`)
+    return reply.send(createReadStream(caminho))
+  })
+
+  app.delete('/anexos/:anexoId', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request, reply) => {
+    const { anexoId } = request.params as { anexoId: string }
+    const [a] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM triagem_anexo WHERE id = ?`, Number(anexoId))
+    if (!a) return reply.status(404).send({ error: 'Arquivo não encontrado.' })
+    const caminho = path.join(pastaAnexos(), String(a.stored_name))
+    if (dentroDe(pastaAnexos(), caminho)) await fs.unlink(caminho).catch(() => {})
+    await prisma.$executeRawUnsafe(`DELETE FROM triagem_anexo WHERE id = ?`, Number(anexoId))
+    await sincronizarRespostaAnexo(Number(a.atendimento_id), String(a.chave))
+    return { ok: true }
+  })
+
+  app.post('/publico/:token/anexos', { schema: { tags: ['Triagem'] } }, async (request, reply) => {
+    const { token } = request.params as { token: string }
+    const { chave } = request.query as { chave?: string }
+    const [a] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM triagem_atendimento WHERE token = ?`, token)
+    if (!a) return reply.status(404).send({ error: 'Link inválido.' })
+    if (a.token_expira && new Date(a.token_expira) < new Date()) {
+      return reply.status(410).send({ error: 'Este link expirou.' })
+    }
+    if (a.situacao === 'concluido') {
+      return reply.status(410).send({ error: 'Este atendimento já foi concluído.' })
+    }
+
+    const modelo = await carregarModelo(Number(a.modelo_id))
+    const pergunta = modelo?.perguntas.find((p) => p.chave === chave)
+    // Mesma regra das respostas: o cliente só envia arquivo para pergunta que é dele.
+    if (!pergunta || !TIPOS_ARQUIVO.has(pergunta.tipo) || pergunta.publico === 'tecnico') {
+      return reply.status(400).send({ error: 'Esta pergunta não recebe arquivos.' })
+    }
+
+    const r = await receberArquivos(request, Number(a.id), pergunta.chave, 'cliente')
+    if (r.aceitos === 0) {
+      return reply.status(400).send({
+        error: r.recusados[0] ?? 'Nenhum arquivo aceito.', recusados: r.recusados,
+      })
+    }
+    await sincronizarRespostaAnexo(Number(a.id), pergunta.chave)
+    return { ok: true, aceitos: r.aceitos, recusados: r.recusados, anexos: await listarAnexos(Number(a.id)) }
+  })
+
+  app.delete('/publico/:token/anexos/:anexoId', { schema: { tags: ['Triagem'] } }, async (request, reply) => {
+    const { token, anexoId } = request.params as { token: string; anexoId: string }
+    const [a] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, token_expira, situacao FROM triagem_atendimento WHERE token = ?`, token)
+    if (!a) return reply.status(404).send({ error: 'Link inválido.' })
+    if (a.token_expira && new Date(a.token_expira) < new Date()) {
+      return reply.status(410).send({ error: 'Este link expirou.' })
+    }
+    // Só o que o próprio cliente mandou por este link: foto do técnico não sai daqui.
+    const [anexo] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT * FROM triagem_anexo WHERE id = ? AND atendimento_id = ? AND enviado_por = 'cliente'`,
+      Number(anexoId), Number(a.id))
+    if (!anexo) return reply.status(404).send({ error: 'Arquivo não encontrado.' })
+    const caminho = path.join(pastaAnexos(), String(anexo.stored_name))
+    if (dentroDe(pastaAnexos(), caminho)) await fs.unlink(caminho).catch(() => {})
+    await prisma.$executeRawUnsafe(`DELETE FROM triagem_anexo WHERE id = ?`, Number(anexoId))
+    await sincronizarRespostaAnexo(Number(a.id), String(anexo.chave))
+    return { ok: true }
+  })
+
   // ── Biblioteca de respostas ──
   app.get('/respostas', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request) => {
     const { busca, categoria, modelo } = request.query as Record<string, string>
@@ -381,6 +497,116 @@ export async function triagemRoutes(app: FastifyInstance) {
       modeloSlug: r.modelo_slug ?? null,
     }))
   })
+}
+
+// ── Fotos da triagem ──
+// O caso que motivou isto: a etiqueta atrás da maquininha diz o modelo, e é com ela que o
+// suporte confere a compatibilidade. Pedir a foto na triagem evita a ida e volta.
+
+const TIPOS_ARQUIVO = new Set(['foto', 'arquivo'])
+const MIME_ANEXO = new Set([
+  'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif', 'application/pdf',
+])
+const MAX_ANEXO_BYTES = 15 * 1024 * 1024
+const MAX_ANEXOS_POR_PERGUNTA = 6
+
+const pastaAnexos = () => path.resolve(process.cwd(), 'uploads', 'triagem')
+
+const dentroDe = (pai: string, filho: string) => {
+  const rel = path.relative(pai, filho)
+  return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel)
+}
+
+async function esvaziar(stream: NodeJS.ReadableStream) {
+  for await (const _c of stream as any) void _c
+}
+
+async function listarAnexos(atendimentoId: number) {
+  const linhas = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT id, chave, original_name, mime_type, size_bytes, enviado_por, criado_em
+       FROM triagem_anexo WHERE atendimento_id = ? ORDER BY id`, atendimentoId)
+  return linhas.map((a) => ({
+    id: Number(a.id),
+    chave: a.chave as string,
+    nome: a.original_name as string,
+    mimeType: a.mime_type as string,
+    tamanho: Number(a.size_bytes ?? 0),
+    enviadoPor: a.enviado_por as string,
+    criadoEm: a.criado_em,
+  }))
+}
+
+/**
+ * A resposta da pergunta passa a ser a lista de arquivos. Assim o motor continua genérico:
+ * 'preenchido', obrigatoriedade e condições funcionam sem saber que ali tem foto.
+ */
+async function sincronizarRespostaAnexo(atendimentoId: number, chave: string) {
+  const nomes = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT original_name FROM triagem_anexo WHERE atendimento_id = ? AND chave = ? ORDER BY id`,
+    atendimentoId, chave)
+  const [a] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT respostas FROM triagem_atendimento WHERE id = ?`, atendimentoId)
+  const respostas = JSON.parse(a?.respostas || '{}')
+  if (nomes.length === 0) delete respostas[chave]
+  else respostas[chave] = nomes.map((n) => String(n.original_name))
+  await prisma.$executeRawUnsafe(
+    `UPDATE triagem_atendimento SET respostas = ? WHERE id = ?`,
+    JSON.stringify(respostas), atendimentoId)
+  return respostas
+}
+
+/** Recebe os arquivos da requisição e grava os que passam nas regras. */
+async function receberArquivos(request: any, atendimentoId: number, chave: string, quem: string) {
+  const dir = pastaAnexos()
+  await fs.mkdir(dir, { recursive: true })
+
+  const [{ total }] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COUNT(*) AS total FROM triagem_anexo WHERE atendimento_id = ? AND chave = ?`,
+    atendimentoId, chave)
+  let jaTem = Number(total ?? 0)
+  let aceitos = 0
+  const recusados: string[] = []
+
+  for await (const part of request.parts()) {
+    if ((part as any).type !== 'file') continue
+    const arquivo = part as MultipartFile
+    const nomeBruto = String((arquivo as any).filename || 'arquivo')
+
+    if (jaTem >= MAX_ANEXOS_POR_PERGUNTA) {
+      await esvaziar(arquivo.file as any)
+      recusados.push(`${nomeBruto}: limite de ${MAX_ANEXOS_POR_PERGUNTA} arquivos`)
+      continue
+    }
+    const mimeType = String((arquivo as any).mimetype || '')
+    if (!MIME_ANEXO.has(mimeType)) {
+      await esvaziar(arquivo.file as any)
+      recusados.push(`${nomeBruto}: formato não aceito`)
+      continue
+    }
+
+    const original = nomeBruto.replace(/[^a-zA-Z0-9._\-\s]/g, '').trim()
+      .replace(/\s+/g, ' ').slice(0, 180) || 'arquivo'
+    const guardado = `${randomUUID()}${path.extname(original).slice(0, 10)}`
+    const caminho = path.join(dir, guardado)
+    await pipeline(arquivo.file, createWriteStream(caminho))
+
+    const stat = await fs.stat(caminho)
+    if (stat.size > MAX_ANEXO_BYTES) {
+      await fs.unlink(caminho).catch(() => {})
+      recusados.push(`${original}: acima de 15 MB`)
+      continue
+    }
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO triagem_anexo
+         (atendimento_id, chave, original_name, stored_name, mime_type, size_bytes, enviado_por)
+       VALUES (?,?,?,?,?,?,?)`,
+      atendimentoId, chave, original, guardado, mimeType, Number(stat.size), quem)
+    jaTem += 1
+    aceitos += 1
+  }
+
+  return { aceitos, recusados }
 }
 
 /** Itens do checklist que o cenário exige. O cadastro é o mesmo que o Pipeline usa. */

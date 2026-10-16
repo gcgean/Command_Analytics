@@ -9,6 +9,7 @@ import type {
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   ModeloTriagem, ModeloTriagemCompleto, AtendimentoTriagem, AtendimentoTriagemDetalhe,
   PerguntaTriagem, CenarioTriagem, ChecklistTriagem, TriagemPublica, RespostaProntaTriagem,
+  AnexoTriagem,
   StatusProcessamentoNotificacaoAgendamento, TipoMetaCadastro, MetaCadastroItem, CertificadoDigitalItem, CertificadoDigitalGraficoItem,
   DashboardMensalidadesAbc, DashboardMensalidadesAgrupamento, DashboardMensalidadesConcentracao,
   DashboardMensalidadesEstatisticas, DashboardMensalidadesFaixa, DashboardMensalidadesFiltros,
@@ -959,6 +960,41 @@ export const api = {
       `/triagem/publico/${token}`, {
         method: 'PUT', body: JSON.stringify({ respostas, finalizar }),
       }),
+
+  // Fotos da triagem. Multipart vai direto no fetch, fora do fetchApi (que serializa JSON).
+  enviarAnexoTriagem: async (id: number, chave: string, arquivos: File[]) => {
+    const fd = new FormData()
+    for (const f of arquivos) fd.append('files', f)
+    const token = getToken()
+    const res = await fetch(
+      `${BASE_URL}/triagem/atendimentos/${id}/anexos?chave=${encodeURIComponent(chave)}`,
+      { method: 'POST', body: fd, headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    const corpo = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(corpo?.error || `HTTP ${res.status}`)
+    return corpo as { aceitos: number; recusados: string[]; respostas: Record<string, any>; anexos: AnexoTriagem[] }
+  },
+  removerAnexoTriagem: (anexoId: number) =>
+    fetchApi<{ ok: boolean }>(`/triagem/anexos/${anexoId}`, { method: 'DELETE' }),
+  getAnexoTriagemBlob: async (anexoId: number) => {
+    const token = getToken()
+    const res = await fetch(`${BASE_URL}/triagem/anexos/${anexoId}/arquivo`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.blob()
+  },
+
+  enviarAnexoTriagemPublica: async (token: string, chave: string, arquivos: File[]) => {
+    const fd = new FormData()
+    for (const f of arquivos) fd.append('files', f)
+    const res = await fetch(
+      `${BASE_URL}/triagem/publico/${token}/anexos?chave=${encodeURIComponent(chave)}`,
+      { method: 'POST', body: fd })
+    const corpo = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(corpo?.error || `HTTP ${res.status}`)
+    return corpo as { aceitos: number; recusados: string[]; anexos: AnexoTriagem[] }
+  },
+  removerAnexoTriagemPublica: (token: string, anexoId: number) =>
+    fetchApi<{ ok: boolean }>(`/triagem/publico/${token}/anexos/${anexoId}`, { method: 'DELETE' }),
 
   getRespostasProntasTriagem: (filtros?: { busca?: string; categoria?: string; modelo?: string }) => {
     const q = new URLSearchParams()

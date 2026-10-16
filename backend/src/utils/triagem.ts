@@ -131,6 +131,23 @@ export async function initTriagem(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS triagem_anexo (
+      id             INT AUTO_INCREMENT PRIMARY KEY,
+      atendimento_id INT NOT NULL,
+      -- A pergunta a que a foto responde, para o suporte saber o que está olhando.
+      chave          VARCHAR(60) NOT NULL,
+      original_name  VARCHAR(200) NOT NULL,
+      stored_name    VARCHAR(120) NOT NULL,
+      mime_type      VARCHAR(120) NOT NULL,
+      size_bytes     INT NOT NULL DEFAULT 0,
+      enviado_por    VARCHAR(20) NOT NULL DEFAULT 'tecnico',
+      criado_em      DATETIME NOT NULL DEFAULT NOW(),
+      INDEX idx_triagem_anexo_atend (atendimento_id),
+      INDEX idx_triagem_anexo_chave (atendimento_id, chave)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
   // Bancos que já tinham a tabela antes de 'origem' existir.
   const [col] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
     SELECT COUNT(*) AS total FROM information_schema.COLUMNS
@@ -179,7 +196,7 @@ export function condicaoAtende(c: Condicao, respostas: Record<string, any>): boo
   switch (c.operador) {
     case 'preenchido': return !vazio
     case 'vazio': return vazio
-    case 'diferente': return texto !== String(c.valor ?? '')
+    case 'diferente': return !vazio && texto !== String(c.valor ?? '')
     case 'contem': return !vazio && texto.toLowerCase().includes(String(c.valor ?? '').toLowerCase())
     case 'maior': return !vazio && Number(texto) > Number(c.valor ?? 0)
     case 'menor': return !vazio && Number(texto) < Number(c.valor ?? 0)

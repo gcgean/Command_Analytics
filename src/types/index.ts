@@ -1841,6 +1841,18 @@ export interface ModeloTriagemCompleto extends Omit<ModeloTriagem, 'perguntas' |
   cenarios: CenarioTriagem[]
 }
 
+export interface AnexoTriagem {
+  id: number
+  chave: string
+  nome: string
+  mimeType: string
+  tamanho: number
+  enviadoPor: string
+  criadoEm: string
+  /** Montada no cliente: a rota autenticada precisa do token na própria URL. */
+  url?: string
+}
+
 export interface ChecklistTriagem {
   id: number
   nome: string
@@ -1877,6 +1889,7 @@ export interface AtendimentoTriagemDetalhe extends AtendimentoTriagem {
   checklist: ChecklistTriagem | null
   perguntas: PerguntaTriagem[]
   pendencias: string[]
+  anexos: AnexoTriagem[]
 }
 
 export interface TriagemPublica {
@@ -1885,6 +1898,7 @@ export interface TriagemPublica {
   cliente: string | null
   respostas: Record<string, any>
   perguntas: PerguntaTriagem[]
+  anexos: AnexoTriagem[]
 }
 
 export interface RespostaProntaTriagem {

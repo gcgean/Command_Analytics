@@ -11,7 +11,7 @@ import { Button } from '../../components/ui/Button'
 import { useToast } from '../../components/ui/Toast'
 import { CampoTriagem, agruparPerguntas } from './CampoTriagem'
 import type {
-  AtendimentoTriagemDetalhe, CenarioTriagem, ChecklistTriagem, PerguntaTriagem,
+  AnexoTriagem, AtendimentoTriagemDetalhe, CenarioTriagem, ChecklistTriagem, PerguntaTriagem,
 } from '../../types'
 
 export function TriagemDetalhe() {
@@ -31,6 +31,9 @@ export function TriagemDetalhe() {
   const [marcados, setMarcados] = useState<Record<number, boolean>>({})
   const [sujo, setSujo] = useState(false)
   const [editarCadastro, setEditarCadastro] = useState(false)
+  const [anexos, setAnexos] = useState<AnexoTriagem[]>([])
+  // A rota do arquivo é autenticada, então a miniatura vem por blob, não por src direto.
+  const [miniaturas, setMiniaturas] = useState<Record<number, string>>({})
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const carregar = useCallback(async () => {
@@ -44,6 +47,7 @@ export function TriagemDetalhe() {
       setCenario(d.cenarioAtual ?? null)
       setChecklist(d.checklist ?? null)
       setPendentes(d.pendencias ?? [])
+      setAnexos(d.anexos ?? [])
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível abrir a triagem.')
       navegar('/triagem')
@@ -53,6 +57,46 @@ export function TriagemDetalhe() {
   }, [id, toast, navegar])
 
   useEffect(() => { void carregar() }, [carregar])
+
+  useEffect(() => {
+    let vivo = true
+    const criadas: string[] = []
+    void (async () => {
+      for (const a of anexos) {
+        if (!a.mimeType.startsWith('image/') || miniaturas[a.id]) continue
+        const blob = await api.getAnexoTriagemBlob(a.id).catch(() => null)
+        if (!blob || !vivo) continue
+        const url = URL.createObjectURL(blob)
+        criadas.push(url)
+        setMiniaturas((m) => ({ ...m, [a.id]: url }))
+      }
+    })()
+    return () => { vivo = false; criadas.forEach((u) => URL.revokeObjectURL(u)) }
+    // miniaturas fora das dependências de propósito: ele se realimentaria a cada blob novo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [anexos])
+
+  const anexosDe = (chave: string) => anexos
+    .filter((a) => a.chave === chave)
+    .map((a) => ({ ...a, url: miniaturas[a.id] }))
+
+  async function enviarAnexo(chave: string, lista: FileList) {
+    if (!id) return
+    try {
+      const r = await api.enviarAnexoTriagem(Number(id), chave, Array.from(lista))
+      setAnexos(r.anexos)
+      setRespostas(r.respostas)
+      if (r.recusados?.length) toast.error(r.recusados.join(' · '))
+      await salvar(r.respostas)
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível enviar o arquivo.')
+    }
+  }
+
+  async function removerAnexo(anexoId: number) {
+    await api.removerAnexoTriagem(anexoId).catch(() => {})
+    await carregar()
+  }
 
   const salvar = useCallback(async (novas: Record<string, any>) => {
     if (!id) return
@@ -238,6 +282,9 @@ export function TriagemDetalhe() {
                 {lista.map((p) => (
                   <CampoTriagem key={p.chave} pergunta={p} valor={respostas[p.chave]}
                     pendente={faltando.has(p.chave)}
+                    anexos={anexosDe(p.chave)}
+                    onEnviar={concluido ? undefined : (l) => enviarAnexo(p.chave, l)}
+                    onRemover={concluido ? undefined : removerAnexo}
                     onChange={(v) => { if (!concluido) responder(p.chave, v) }} />
                 ))}
               </div>

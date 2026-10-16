@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, Loader2, Send } from 'lucide-react'
 import { api } from '../../services/api'
 import { CampoTriagem, agruparPerguntas } from '../triagem/CampoTriagem'
-import type { PerguntaTriagem } from '../../types'
+import type { AnexoTriagem, PerguntaTriagem } from '../../types'
 
 /**
  * Formulário que o cliente abre pelo link do atendente. Sem login e sem acesso a nada além
@@ -17,6 +17,10 @@ export function TriagemCliente() {
   const [cliente, setCliente] = useState<string | null>(null)
   const [perguntas, setPerguntas] = useState<PerguntaTriagem[]>([])
   const [respostas, setRespostas] = useState<Record<string, any>>({})
+  const [anexos, setAnexos] = useState<AnexoTriagem[]>([])
+  // Prévia local do que a pessoa acabou de enviar: a leitura do arquivo no servidor é
+  // autenticada, e o cliente não tem (nem deve ter) credencial.
+  const [previas, setPrevias] = useState<Record<string, string>>({})
   const [carregando, setCarregando] = useState(true)
   const [enviando, setEnviando] = useState(false)
   const [erro, setErro] = useState('')
@@ -32,6 +36,7 @@ export function TriagemCliente() {
       setCliente(d.cliente)
       setPerguntas(d.perguntas)
       setRespostas(d.respostas ?? {})
+      setAnexos(d.anexos ?? [])
     } catch (e: any) {
       setErro(e?.message || 'Não foi possível abrir este formulário.')
     } finally {
@@ -53,6 +58,30 @@ export function TriagemCliente() {
     } catch {
       /* mantém o que a pessoa digitou; o envio final tenta de novo */
     }
+  }
+
+  async function enviarArquivos(chave: string, lista: FileList) {
+    if (!token) return
+    try {
+      const r = await api.enviarAnexoTriagemPublica(token, chave, Array.from(lista))
+      setAnexos(r.anexos)
+      if (r.recusados?.length) setErro(r.recusados.join(' · '))
+      else setErro('')
+      for (const f of Array.from(lista)) {
+        if (f.type.startsWith('image/')) {
+          const nome = f.name.replace(/[^a-zA-Z0-9._\-\s]/g, '').trim().replace(/\s+/g, ' ')
+          setPrevias((p) => ({ ...p, [nome]: URL.createObjectURL(f) }))
+        }
+      }
+    } catch (e: any) {
+      setErro(e?.message || 'Não foi possível enviar a foto.')
+    }
+  }
+
+  async function removerArquivo(anexoId: number) {
+    if (!token) return
+    await api.removerAnexoTriagemPublica(token, anexoId).catch(() => {})
+    setAnexos((lista) => lista.filter((a) => a.id !== anexoId))
   }
 
   async function enviar() {
@@ -130,6 +159,10 @@ export function TriagemCliente() {
               {lista.map((p) => (
                 <CampoTriagem key={p.chave} pergunta={p} valor={respostas[p.chave]}
                   pendente={faltando.has(p.chave)}
+                  anexos={anexos.filter((a) => a.chave === p.chave)
+                    .map((a) => ({ ...a, url: previas[a.nome] }))}
+                  onEnviar={(l) => enviarArquivos(p.chave, l)}
+                  onRemover={removerArquivo}
                   onChange={(v) => void responder(p.chave, v)} />
               ))}
             </div>

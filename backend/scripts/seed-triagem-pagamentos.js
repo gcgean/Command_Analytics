@@ -78,6 +78,16 @@ const PERGUNTAS = [
     chave: 'ja_integrado', texto: 'Já possui integração com o Command?', tipo: 'sim_nao',
     grupo: 'Perfil operacional', obrigatoria: 1, publico: 'ambos',
   },
+  {
+    // A etiqueta atrás do aparelho traz modelo e série. Com a foto, o suporte confere a
+    // compatibilidade na hora, em vez de pedir o dado de novo depois.
+    chave: 'foto_equipamento', texto: 'Foto da etiqueta atrás da maquininha', tipo: 'foto',
+    ajuda: 'Vire o aparelho e fotografe a etiqueta com o modelo e o número de série. '
+      + 'Se tiver mais de uma maquininha, envie uma foto de cada.',
+    // Não é obrigatória: cliente sem o aparelho em mãos não pode ficar travado na triagem.
+    grupo: 'Perfil operacional', publico: 'ambos',
+    condicao: { chave: 'equipamento', operador: 'diferente', valor: 'Nenhum' },
+  },
 
   // ── SmartPOS ──
   {
