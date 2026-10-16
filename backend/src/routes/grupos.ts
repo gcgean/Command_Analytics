@@ -50,6 +50,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'remuneracao-comercial',    label: 'Remuneração Comercial',           grupo: 'COMERCIAL' },
   // CERTIFICADOS DIGITAIS
   { id: 'comunicados',              label: 'Comunicados',                     grupo: 'OPERACIONAL' },
+  { id: 'triagem',                  label: 'Triagem Guiada',                  grupo: 'OPERACIONAL' },
   { id: 'certificados-digitais',    label: 'Controle de Certificados Digitais', grupo: 'CERTIFICADOS DIGITAIS' },
   // RH
   { id: 'banco-horas',              label: 'Banco de Horas',                  grupo: 'RH' },
