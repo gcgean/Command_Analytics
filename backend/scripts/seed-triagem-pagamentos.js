@@ -26,12 +26,14 @@ const MOTIVOS = [
 
 const PERGUNTAS = [
   // ── Identificação ──
-  { chave: 'cnpj', texto: 'CNPJ', tipo: 'cnpj', grupo: 'Identificação', obrigatoria: 1, publico: 'ambos' },
-  { chave: 'razao_social', texto: 'Razão social', tipo: 'texto', grupo: 'Identificação', obrigatoria: 1, publico: 'ambos' },
-  { chave: 'nome_fantasia', texto: 'Nome fantasia', tipo: 'texto', grupo: 'Identificação', publico: 'ambos' },
-  { chave: 'responsavel', texto: 'Responsável pelo contato', tipo: 'texto', grupo: 'Identificação', obrigatoria: 1, publico: 'ambos' },
-  { chave: 'telefone', texto: 'Telefone ou WhatsApp', tipo: 'telefone', grupo: 'Identificação', obrigatoria: 1, publico: 'ambos' },
-  { chave: 'email', texto: 'E-mail', tipo: 'texto', grupo: 'Identificação', publico: 'ambos' },
+  // O que o cadastro já sabe vem com `origem` e nasce preenchido. O responsável e o telefone
+  // são de quem está ligando agora, então vêm do próprio atendimento, não da ficha do cliente.
+  { chave: 'cnpj', texto: 'CNPJ', tipo: 'cnpj', grupo: 'Identificação', obrigatoria: 1, publico: 'ambos', origem: 'cliente.cnpj' },
+  { chave: 'razao_social', texto: 'Razão social', tipo: 'texto', grupo: 'Identificação', obrigatoria: 1, publico: 'ambos', origem: 'cliente.razao_social' },
+  { chave: 'nome_fantasia', texto: 'Nome fantasia', tipo: 'texto', grupo: 'Identificação', publico: 'ambos', origem: 'cliente.nome_fantasia' },
+  { chave: 'responsavel', texto: 'Quem está falando', ajuda: 'Nome da pessoa que entrou em contato.', tipo: 'texto', grupo: 'Identificação', obrigatoria: 1, publico: 'ambos', origem: 'contato.nome' },
+  { chave: 'telefone', texto: 'WhatsApp do contato', tipo: 'telefone', grupo: 'Identificação', obrigatoria: 1, publico: 'ambos', origem: 'contato.telefone' },
+  { chave: 'email', texto: 'E-mail', tipo: 'texto', grupo: 'Identificação', publico: 'ambos', origem: 'cliente.email' },
 
   // ── Necessidade ──
   {
@@ -284,14 +286,15 @@ async function main() {
     ordem += 10
     await prisma.$executeRawUnsafe(
       `INSERT INTO triagem_pergunta
-         (modelo_id, chave, texto, ajuda, tipo, opcoes, obrigatoria, publico, condicao, grupo, ordem, ativo)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,1)
+         (modelo_id, chave, texto, ajuda, tipo, opcoes, obrigatoria, publico, condicao, grupo, origem, ordem, ativo)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,1)
        ON DUPLICATE KEY UPDATE texto=VALUES(texto), ajuda=VALUES(ajuda), tipo=VALUES(tipo),
          opcoes=VALUES(opcoes), obrigatoria=VALUES(obrigatoria), publico=VALUES(publico),
-         condicao=VALUES(condicao), grupo=VALUES(grupo), ordem=VALUES(ordem), ativo=1`,
+         condicao=VALUES(condicao), grupo=VALUES(grupo), origem=VALUES(origem),
+         ordem=VALUES(ordem), ativo=1`,
       modeloId, p.chave, p.texto, p.ajuda ?? null, p.tipo,
       JSON.stringify(p.opcoes ?? []), p.obrigatoria ?? 0, p.publico ?? 'ambos',
-      p.condicao ? JSON.stringify(p.condicao) : null, p.grupo ?? null, ordem,
+      p.condicao ? JSON.stringify(p.condicao) : null, p.grupo ?? null, p.origem ?? null, ordem,
     )
   }
 

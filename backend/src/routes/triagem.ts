@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import {
-  carregarModelo, perguntasVisiveis, identificarCenario, pendencias, gerarToken,
+  carregarModelo, perguntasVisiveis, identificarCenario, pendencias, gerarToken, ORIGENS,
 } from '../utils/triagem'
 
 /** Triagem guiada: questionário por cadastro, atendimento virando processo no Pipeline. */
@@ -87,26 +87,52 @@ export async function triagemRoutes(app: FastifyInstance) {
     const modelo = await carregarModelo(String(b.modelo ?? ''))
     if (!modelo) return reply.status(400).send({ error: 'Informe um modelo de triagem válido.' })
 
-    const cnpj = String(b.cnpj ?? '').replace(/\D/g, '') || null
+    let cnpj = String(b.cnpj ?? '').replace(/\D/g, '') || null
     let clienteId = b.clienteId ? Number(b.clienteId) : null
     let clienteNome = String(b.clienteNome ?? '').trim() || null
+    const contato = String(b.contato ?? '').trim() || null
+    const telefone = String(b.telefone ?? '').trim() || null
 
     // Reaproveita o cadastro quando o CNPJ já é nosso — a spec pede não duplicar cliente.
-    if (!clienteId && cnpj) {
-      const [c] = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT cod_cli, NOME_FANTASIA AS nome FROM cliente
+    let cadastro: any = null
+    if (clienteId) {
+      ;[cadastro] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT * FROM cliente WHERE cod_cli = ?`, clienteId)
+    } else if (cnpj) {
+      ;[cadastro] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT * FROM cliente
           WHERE REPLACE(REPLACE(REPLACE(REPLACE(CNPJ_CLI,'.',''),'/',''),'-',''),' ','') = ?
           ORDER BY CASE WHEN COALESCE(ATIVO,'S')='S' THEN 0 ELSE 1 END LIMIT 1`, cnpj)
-      if (c) { clienteId = Number(c.cod_cli); clienteNome = clienteNome || c.nome }
+      if (cadastro) clienteId = Number(cadastro.cod_cli)
+    }
+    if (cadastro) {
+      clienteNome = clienteNome || cadastro.NOME_FANTASIA || cadastro.NOME_CLI || null
+      cnpj = cnpj || String(cadastro.CNPJ_CLI ?? '').replace(/\D/g, '') || null
+    }
+
+    // O atendente não deve redigitar o que o cadastro já tem: as perguntas marcadas com
+    // `origem` nascem preenchidas. Quem fala e por qual WhatsApp continua sendo digitado,
+    // porque é a pessoa do contato, não o cliente.
+    const respostas: Record<string, any> = { ...(b.respostas ?? {}) }
+    for (const p of modelo.perguntas) {
+      if (!p.origem || respostas[p.chave] != null) continue
+      const o = ORIGENS[p.origem]
+      if (!o) continue
+      const valor = o.fonte === 'cliente'
+        ? cadastro?.[o.coluna]
+        : (o.coluna === 'contato' ? contato : telefone)
+      const texto = String(valor ?? '').trim()
+      // Campo do legado costuma guardar a máscara vazia (".   .   /    -"): sem nenhuma letra
+      // ou número não é dado, e preencher isso daria uma obrigatória por respondida.
+      if (texto !== '' && /[A-Za-z0-9]/.test(texto)) respostas[p.chave] = texto
     }
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO triagem_atendimento
          (modelo_id, cliente_id, cnpj, cliente_nome, contato, telefone, respostas, situacao, atendente_id)
        VALUES (?,?,?,?,?,?,?, 'em_triagem', ?)`,
-      modelo.id, clienteId, cnpj, clienteNome,
-      String(b.contato ?? '').trim() || null, String(b.telefone ?? '').trim() || null,
-      JSON.stringify(b.respostas ?? {}),
+      modelo.id, clienteId, cnpj, clienteNome, contato, telefone,
+      JSON.stringify(respostas),
       Number((request.user as { id: number } | undefined)?.id ?? 0) || null,
     )
     const [novo] = await prisma.$queryRawUnsafe<any[]>(`SELECT LAST_INSERT_ID() AS id`)

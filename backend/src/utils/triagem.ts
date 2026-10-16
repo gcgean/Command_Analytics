@@ -50,6 +50,8 @@ export async function initTriagem(): Promise<void> {
       condicao    TEXT NULL,
       grupo       VARCHAR(80) NULL,
       ordem       INT NOT NULL DEFAULT 0,
+      -- Preenchida sozinha a partir do cadastro: 'cliente.cnpj', 'contato.nome' etc.
+      origem      VARCHAR(40) NULL,
       ativo       TINYINT(1) NOT NULL DEFAULT 1,
       INDEX idx_triagem_pergunta_modelo (modelo_id),
       UNIQUE KEY uk_triagem_pergunta (modelo_id, chave)
@@ -128,6 +130,29 @@ export async function initTriagem(): Promise<void> {
       INDEX idx_resposta_categoria (categoria)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+
+  // Bancos que já tinham a tabela antes de 'origem' existir.
+  const [col] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'triagem_pergunta' AND COLUMN_NAME = 'origem'`)
+  if (!Number(col?.total ?? 0)) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE triagem_pergunta ADD COLUMN origem VARCHAR(40) NULL`).catch(() => {})
+  }
+}
+
+/**
+ * De onde cada resposta pode vir automaticamente. É uma lista fechada de propósito: o campo
+ * `origem` é cadastro, e cadastro não deve conseguir apontar para uma coluna qualquer.
+ */
+export const ORIGENS: Record<string, { fonte: 'cliente' | 'contato'; coluna: string }> = {
+  'cliente.cnpj':          { fonte: 'cliente', coluna: 'CNPJ_CLI' },
+  'cliente.razao_social':  { fonte: 'cliente', coluna: 'NOME_CLI' },
+  'cliente.nome_fantasia': { fonte: 'cliente', coluna: 'NOME_FANTASIA' },
+  'cliente.email':         { fonte: 'cliente', coluna: 'EMAIL_CLI' },
+  'cliente.telefone':      { fonte: 'cliente', coluna: 'TELRES_CLI' },
+  'contato.nome':          { fonte: 'contato', coluna: 'contato' },
+  'contato.telefone':      { fonte: 'contato', coluna: 'telefone' },
 }
 
 const json = <T>(v: unknown, padrao: T): T => {
@@ -175,6 +200,8 @@ export interface PerguntaTriagem {
   condicao: Condicao | null
   grupo: string | null
   ordem: number
+  /** Quando preenchida pelo cadastro, a chave de ORIGENS que a alimenta. */
+  origem: string | null
 }
 
 export interface CenarioTriagem {
@@ -220,6 +247,7 @@ export async function carregarModelo(slugOuId: string | number) {
       condicao: json<Condicao | null>(p.condicao, null),
       grupo: p.grupo ?? null,
       ordem: Number(p.ordem ?? 0),
+      origem: p.origem ?? null,
     })),
     cenarios: cenarios.map((c): CenarioTriagem => ({
       id: Number(c.id),

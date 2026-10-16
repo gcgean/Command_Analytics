@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   AlertTriangle, ArrowLeft, Check, CheckCircle2, Copy, Link2, ListChecks, Loader2,
-  Target, Trash2, ExternalLink, Save,
+  Target, Trash2, ExternalLink, Save, Pencil, Building2,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
@@ -30,6 +30,7 @@ export function TriagemDetalhe() {
   const [concluindo, setConcluindo] = useState(false)
   const [marcados, setMarcados] = useState<Record<number, boolean>>({})
   const [sujo, setSujo] = useState(false)
+  const [editarCadastro, setEditarCadastro] = useState(false)
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const carregar = useCallback(async () => {
@@ -82,8 +83,18 @@ export function TriagemDetalhe() {
   }
 
   const concluido = dados?.situacao === 'concluido'
-  const grupos = useMemo(() => agruparPerguntas(perguntas), [perguntas])
   const faltando = useMemo(() => new Set(pendentes), [pendentes])
+
+  // O que veio do cadastro não vira formulário: aparece como resumo, e só vira campo se o
+  // atendente mandar corrigir. Redigitar CNPJ e razão social de um cliente que já é nosso
+  // é trabalho sem ganho — e sujeito a erro.
+  const doCadastro = useMemo(
+    () => perguntas.filter((p) => p.origem && String(respostas[p.chave] ?? '').trim() !== ''),
+    [perguntas, respostas])
+  const chavesCadastro = useMemo(() => new Set(doCadastro.map((p) => p.chave)), [doCadastro])
+  const grupos = useMemo(
+    () => agruparPerguntas(editarCadastro ? perguntas : perguntas.filter((p) => !chavesCadastro.has(p.chave))),
+    [perguntas, chavesCadastro, editarCadastro])
 
   async function concluir() {
     if (!id) return
@@ -183,6 +194,43 @@ export function TriagemDetalhe() {
       <div className="grid gap-5 lg:grid-cols-3">
         {/* Questionário */}
         <div className="lg:col-span-2 space-y-4">
+          {doCadastro.length > 0 && !editarCadastro && (
+            <Card>
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <div className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-slate-400" />
+                  <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                    Dados do cadastro
+                  </h2>
+                </div>
+                {!concluido && (
+                  <button onClick={() => setEditarCadastro(true)}
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center gap-1">
+                    <Pencil className="w-3 h-3" /> Corrigir
+                  </button>
+                )}
+              </div>
+              <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
+                {doCadastro.map((p) => (
+                  <div key={p.chave}>
+                    <dt className="text-[11px] uppercase tracking-wide text-slate-400">{p.texto}</dt>
+                    <dd className="text-sm text-slate-800 dark:text-slate-200">
+                      {String(respostas[p.chave])}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </Card>
+          )}
+          {editarCadastro && (
+            <p className="text-xs text-slate-500">
+              Corrigindo os dados do cadastro.{' '}
+              <button onClick={() => setEditarCadastro(false)}
+                className="text-blue-600 dark:text-blue-400 hover:underline">
+                Voltar ao resumo
+              </button>
+            </p>
+          )}
           {grupos.map(([grupo, lista]) => (
             <Card key={grupo}>
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3">{grupo}</h2>

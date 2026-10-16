@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
+import { ClienteSearch } from '../../components/ui/ClienteSearch'
 import { Button } from '../../components/ui/Button'
 import { useToast } from '../../components/ui/Toast'
 import type { AtendimentoTriagem, ModeloTriagem } from '../../types'
@@ -36,7 +37,8 @@ export function Triagem() {
   const [filtroSituacao, setFiltroSituacao] = useState('')
   const [filtroModelo, setFiltroModelo] = useState('')
   const [abrindo, setAbrindo] = useState(false)
-  const [novo, setNovo] = useState<{ modelo: string; cnpj: string; clienteNome: string; contato: string; telefone: string } | null>(null)
+  const [novo, setNovo] = useState<
+    { modelo: string; clienteId: string; clienteNome: string; contato: string; telefone: string } | null>(null)
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -76,14 +78,12 @@ export function Triagem() {
 
   async function abrirTriagem() {
     if (!novo?.modelo) return toast.error('Escolha o tipo de triagem.')
-    if (!novo.cnpj.trim() && !novo.clienteNome.trim()) {
-      return toast.error('Informe o CNPJ ou o nome do cliente.')
-    }
+    if (!novo.clienteId) return toast.error('Escolha o cliente na base.')
     setAbrindo(true)
     try {
       const r = await api.criarAtendimentoTriagem({
         modelo: novo.modelo,
-        cnpj: novo.cnpj.trim() || undefined,
+        clienteId: Number(novo.clienteId),
         clienteNome: novo.clienteNome.trim() || undefined,
         contato: novo.contato.trim() || undefined,
         telefone: novo.telefone.trim() || undefined,
@@ -108,7 +108,7 @@ export function Triagem() {
             </p>
           </div>
         </div>
-        <Button onClick={() => setNovo({ modelo: modelos[0]?.slug ?? '', cnpj: '', clienteNome: '', contato: '', telefone: '' })}>
+        <Button onClick={() => setNovo({ modelo: modelos[0]?.slug ?? '', clienteId: '', clienteNome: '', contato: '', telefone: '' })}>
           <Plus className="w-4 h-4" /> Nova triagem
         </Button>
       </div>
@@ -130,28 +130,36 @@ export function Triagem() {
       {novo && (
         <Card>
           <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3">Nova triagem</h2>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-            <select className="input-field" value={novo.modelo}
-              onChange={(e) => setNovo({ ...novo, modelo: e.target.value })}>
-              <option value="">Tipo de triagem...</option>
-              {modelos.map((m) => <option key={m.slug} value={m.slug}>{m.nome}</option>)}
-            </select>
-            <input className="input-field" placeholder="CNPJ do cliente"
-              value={novo.cnpj} onChange={(e) => setNovo({ ...novo, cnpj: e.target.value })} />
-            <input className="input-field" placeholder="Nome do cliente"
-              value={novo.clienteNome} onChange={(e) => setNovo({ ...novo, clienteNome: e.target.value })} />
-            <input className="input-field" placeholder="Contato"
-              value={novo.contato} onChange={(e) => setNovo({ ...novo, contato: e.target.value })} />
-            <div className="flex gap-2">
-              <input className="input-field" placeholder="Telefone"
-                value={novo.telefone} onChange={(e) => setNovo({ ...novo, telefone: e.target.value })} />
-              <Button disabled={abrindo} onClick={abrirTriagem}>
-                {abrindo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Abrir'}
-              </Button>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Tipo de triagem</label>
+              <select className="input-field w-full" value={novo.modelo}
+                onChange={(e) => setNovo({ ...novo, modelo: e.target.value })}>
+                <option value="">Selecione...</option>
+                {modelos.map((m) => <option key={m.slug} value={m.slug}>{m.nome}</option>)}
+              </select>
+            </div>
+            <ClienteSearch label="Cliente" value={novo.clienteId}
+              onChange={(id, c) => setNovo({ ...novo, clienteId: id, clienteNome: c?.nome || c?.nomeRazao || '' })} />
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Quem está falando</label>
+              <input className="input-field w-full" placeholder="Nome de quem entrou em contato"
+                value={novo.contato} onChange={(e) => setNovo({ ...novo, contato: e.target.value })} />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">WhatsApp do contato</label>
+              <div className="flex gap-2">
+                <input className="input-field w-full" placeholder="(00) 00000-0000"
+                  value={novo.telefone} onChange={(e) => setNovo({ ...novo, telefone: e.target.value })} />
+                <Button disabled={abrindo} onClick={abrirTriagem}>
+                  {abrindo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Abrir'}
+                </Button>
+              </div>
             </div>
           </div>
           <p className="text-[11px] text-slate-400 mt-2">
-            Informando o CNPJ, o cliente do cadastro é localizado automaticamente — sem duplicar cadastro.
+            CNPJ, razão social, nome fantasia e e-mail vêm do cadastro do cliente. Só o nome de
+            quem ligou e o WhatsApp dele precisam ser digitados.
           </p>
         </Card>
       )}

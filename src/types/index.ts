@@ -1807,6 +1807,8 @@ export interface PerguntaTriagem {
   condicao: CondicaoTriagem | null
   grupo: string | null
   ordem: number
+  /** Preenchida pelo cadastro do cliente ou pelos dados do contato. */
+  origem: string | null
 }
 
 export interface CenarioTriagem {
