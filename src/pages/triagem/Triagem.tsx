@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import {
   ClipboardList, Loader2, Plus, Search, AlertTriangle, ExternalLink, Clock,
-  CheckCircle2, Link2, Users, Camera, MailCheck, Ban, Trash2, RotateCcw,
+  CheckCircle2, Link2, Users, Camera, MailCheck, Ban, Trash2, RotateCcw, Layers, FolderCheck,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
@@ -38,6 +38,7 @@ export function Triagem() {
   const [carregando, setCarregando] = useState(true)
   const [busca, setBusca] = useState('')
   const [filtroSituacao, setFiltroSituacao] = useState('')
+  const [resumo, setResumo] = useState<Awaited<ReturnType<typeof api.getResumoTriagem>> | null>(null)
   const [filtroModelo, setFiltroModelo] = useState('')
   const [abrindo, setAbrindo] = useState(false)
   const [gerando, setGerando] = useState<number | null>(null)
@@ -51,16 +52,18 @@ export function Triagem() {
   const carregar = useCallback(async () => {
     setCarregando(true)
     try {
-      const [m, a] = await Promise.all([
+      const [m, a, r] = await Promise.all([
         api.getModelosTriagem(),
         api.getAtendimentosTriagem({
           situacao: filtroSituacao || undefined,
           modelo: filtroModelo || undefined,
           busca: busca.trim() || undefined,
         }),
+        api.getResumoTriagem({ modelo: filtroModelo || undefined, busca: busca.trim() || undefined }),
       ])
       setModelos(m)
       setAtendimentos(a)
+      setResumo(r)
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível carregar as triagens.')
     } finally {
@@ -70,24 +73,19 @@ export function Triagem() {
 
   useEffect(() => { void carregar() }, [carregar])
 
+  // Contagens vêm do backend (a lista é limitada a 200 linhas, contar nela ficaria errado).
   const indicadores = useMemo(() => {
-    const conta = (s: string) => atendimentos.filter((a) => a.situacao === s).length
+    const r = resumo
     return [
-      { rotulo: 'Em triagem', valor: conta('em_triagem'), icone: ClipboardList, cor: 'text-blue-600 dark:text-blue-400' },
-      { rotulo: 'Aguardando cliente', valor: conta('aguardando_cliente'), icone: Clock, cor: 'text-amber-600 dark:text-amber-400' },
-      { rotulo: 'Cliente respondeu', valor: conta('respondido'), icone: MailCheck, cor: 'text-violet-600 dark:text-violet-400' },
-      {
-        rotulo: 'Prontas p/ processo',
-        valor: atendimentos.filter((a) => a.prontoParaProcesso).length,
-        icone: CheckCircle2, cor: 'text-emerald-600 dark:text-emerald-400',
-      },
-      {
-        rotulo: 'Prioridade alta',
-        valor: atendimentos.filter((a) => a.prioridade === 'alta' && a.situacao !== 'concluido').length,
-        icone: AlertTriangle, cor: 'text-red-600 dark:text-red-400',
-      },
+      { rotulo: 'Total de triagens', valor: r?.total ?? 0, icone: Layers, cor: 'text-slate-900 dark:text-slate-100' },
+      { rotulo: 'Em triagem', valor: r?.emTriagem ?? 0, icone: ClipboardList, cor: 'text-blue-600 dark:text-blue-400' },
+      { rotulo: 'Aguardando cliente', valor: r?.aguardandoCliente ?? 0, icone: Clock, cor: 'text-amber-600 dark:text-amber-400' },
+      { rotulo: 'Cliente respondeu', valor: r?.clienteRespondeu ?? 0, icone: MailCheck, cor: 'text-violet-600 dark:text-violet-400' },
+      { rotulo: 'Prontas p/ processo', valor: r?.prontasParaProcesso ?? 0, icone: CheckCircle2, cor: 'text-emerald-600 dark:text-emerald-400' },
+      { rotulo: 'Prioridade alta', valor: r?.prioridadeAlta ?? 0, icone: AlertTriangle, cor: 'text-red-600 dark:text-red-400' },
+      { rotulo: 'Processos abertos', valor: r?.processosAbertos ?? 0, icone: FolderCheck, cor: 'text-emerald-600 dark:text-emerald-400' },
     ]
-  }, [atendimentos])
+  }, [resumo])
 
   async function abrirTriagem() {
     if (!novo?.modelo) return toast.error('Escolha o tipo de triagem.')
@@ -175,7 +173,7 @@ export function Triagem() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
         {indicadores.map((k) => (
           <div key={k.rotulo} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
             <div className="flex items-start justify-between gap-2">

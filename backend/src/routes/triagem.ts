@@ -85,6 +85,65 @@ export async function triagemRoutes(app: FastifyInstance) {
     return saida
   })
 
+  // Contadores dos cards da tela. A lista acima é limitada a 200 linhas, então contar no
+  // front mentiria quando houver mais triagens; aqui as contagens vêm direto do banco.
+  // Respeita busca e tipo, mas não a situação: os cards já são a divisão por situação.
+  app.get('/atendimentos-resumo', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request) => {
+    const { modelo, busca } = request.query as Record<string, string>
+    const cond: string[] = []
+    const val: any[] = []
+    if (modelo) { cond.push('m.slug = ?'); val.push(modelo) }
+    if (busca) {
+      cond.push('(a.cliente_nome LIKE ? OR a.cnpj LIKE ? OR a.contato LIKE ?)')
+      const termo = `%${busca}%`
+      val.push(termo, termo, termo)
+    }
+    const where = cond.length ? `WHERE ${cond.join(' AND ')}` : ''
+
+    const porSituacao = await prisma.$queryRawUnsafe<Array<{ situacao: string; total: bigint | number }>>(
+      `SELECT a.situacao, COUNT(*) AS total
+         FROM triagem_atendimento a
+         INNER JOIN triagem_modelo m ON m.id = a.modelo_id
+        ${where}
+        GROUP BY a.situacao`, ...val)
+    const contagem: Record<string, number> = {}
+    for (const r of porSituacao) contagem[r.situacao] = Number(r.total)
+
+    // "Pronta p/ processo" e "prioridade alta" dependem das respostas (cenário/pendências),
+    // então são calculadas em JS — só sobre as triagens ainda em andamento.
+    const emAndamento = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT a.modelo_id, a.respostas, a.cliente_id, a.processo_id
+         FROM triagem_atendimento a
+         INNER JOIN triagem_modelo m ON m.id = a.modelo_id
+        WHERE a.situacao NOT IN ('concluido', 'cancelado')${cond.length ? ` AND ${cond.join(' AND ')}` : ''}`, ...val)
+    const cache = new Map<number, Awaited<ReturnType<typeof carregarModelo>>>()
+    let prontas = 0
+    let prioridadeAlta = 0
+    for (const a of emAndamento) {
+      const idModelo = Number(a.modelo_id)
+      if (!cache.has(idModelo)) cache.set(idModelo, await carregarModelo(idModelo))
+      const modeloTriagem = cache.get(idModelo) ?? null
+      if (!modeloTriagem) continue
+      const respostas = JSON.parse(a.respostas || '{}')
+      const cenario = identificarCenario(modeloTriagem, respostas)
+      if (cenario?.prioridade === 'alta') prioridadeAlta += 1
+      if (!a.processo_id && a.cliente_id && cenario && pendencias(modeloTriagem, respostas).length === 0) prontas += 1
+    }
+
+    const canceladas = contagem.cancelado ?? 0
+    const total = Object.values(contagem).reduce((s, n) => s + n, 0) - canceladas
+    return {
+      total,
+      emTriagem: contagem.em_triagem ?? 0,
+      aguardandoCliente: contagem.aguardando_cliente ?? 0,
+      clienteRespondeu: contagem.respondido ?? 0,
+      processosAbertos: contagem.concluido ?? 0,
+      canceladas,
+      prontasParaProcesso: prontas,
+      prioridadeAlta,
+    }
+  })
+
   app.get('/atendimentos/:id', { preHandler: authMiddleware, schema: { tags: ['Triagem'] } }, async (request, reply) => {
     const { id } = request.params as { id: string }
     const [a] = await prisma.$queryRawUnsafe<any[]>(

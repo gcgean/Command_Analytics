@@ -1055,14 +1055,28 @@ export interface MonitorAtendimento {
 // ============================================================
 export interface Campanha {
   id: number
+  ativa: boolean
   titulo: string
   descricao: string
-  dataInicio: string
-  dataFim: string
-  ativa: boolean
-  visualizacoes: number
-  tipo: 'Banner' | 'Notificação' | 'E-mail' | 'WhatsApp'
-  segmento?: Segmento
+  dataInicial: string | null
+  dataFinal: string | null
+  nomeArquivo: string
+  /** 0 sem ação · 1 clique no botão · 2 vídeo (clique no botão) */
+  tipoAcao: number
+  acao: string
+  textoBotaoAcao: string
+  totalClientes: number
+}
+
+export type CampanhaPayload = Omit<Campanha, 'id' | 'totalClientes'>
+
+export interface CampanhaCliente {
+  clienteId: number
+  nome: string
+  razaoSocial: string | null
+  cnpj: string | null
+  ativo: boolean
+  visualizada: boolean
 }
 
 // ============================================================

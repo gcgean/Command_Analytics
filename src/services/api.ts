@@ -4,7 +4,7 @@ import type {
   ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, PoliticaProvisionamentoIa, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
   MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada,
   PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
-  PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   ModeloTriagem, ModeloTriagemCompleto, AtendimentoTriagem, AtendimentoTriagemDetalhe,
@@ -664,12 +664,42 @@ export const api = {
   updateMonitorStatus: (id: number, status: string, atendente?: string) =>
     fetchApi<MonitorAtendimento>(`/monitor/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, atendente }) }),
 
-  // ─── Campanhas ─────────────────────────────────────────────
+  // ─── Campanhas (mensagens exibidas aos clientes no ERP) ────
   getCampanhas: () => fetchApi<Campanha[]>('/campanhas'),
-  createCampanha: (data: Partial<Campanha>) =>
-    fetchApi<Campanha>('/campanhas', { method: 'POST', body: JSON.stringify(data) }),
+  createCampanha: (data: CampanhaPayload) =>
+    fetchApi<{ id: number }>('/campanhas', { method: 'POST', body: JSON.stringify(data) }),
+  updateCampanha: (id: number, data: CampanhaPayload) =>
+    fetchApi<{ ok: boolean }>(`/campanhas/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   toggleCampanha: (id: number) =>
-    fetchApi<Campanha>(`/campanhas/${id}/toggle`, { method: 'PATCH' }),
+    fetchApi<{ ok: boolean; ativa: boolean }>(`/campanhas/${id}/toggle`, { method: 'PATCH' }),
+  deleteCampanha: (id: number) => fetchApi(`/campanhas/${id}`, { method: 'DELETE' }),
+  uploadImagemCampanha: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return fetchApi<{ caminho: string }>('/campanhas/imagem', { method: 'POST', body: form }, 120000)
+  },
+  getImagemCampanhaBlob: async (caminho: string) => {
+    const token = getToken()
+    const res = await fetch(`${BASE_URL}/campanhas/imagem?caminho=${encodeURIComponent(caminho)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.blob()
+  },
+  getClientesCampanha: (id: number, params: { search?: string; page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.search) qs.set('search', params.search)
+    if (params.page) qs.set('page', String(params.page))
+    if (params.limit) qs.set('limit', String(params.limit))
+    const query = qs.toString()
+    return fetchApi<{ total: number; page: number; limit: number; data: CampanhaCliente[] }>(`/campanhas/${id}/clientes${query ? `?${query}` : ''}`)
+  },
+  addClientesCampanha: (id: number, data: { clienteIds?: number[]; todosAtivos?: boolean }) =>
+    fetchApi<{ ok: boolean; adicionados: number }>(`/campanhas/${id}/clientes`, { method: 'POST', body: JSON.stringify(data) }),
+  removeClienteCampanha: (id: number, clienteId: number) =>
+    fetchApi(`/campanhas/${id}/clientes/${clienteId}`, { method: 'DELETE' }),
+  removeTodosClientesCampanha: (id: number) =>
+    fetchApi<{ ok: boolean; removidos: number }>(`/campanhas/${id}/clientes`, { method: 'DELETE' }),
 
   // ─── Contadores ────────────────────────────────────────────
   getContadores: (params?: { page?: string; limit?: string; search?: string; cidade?: string }) => {
@@ -926,6 +956,16 @@ export const api = {
     if (filtros?.busca) q.set('busca', filtros.busca)
     const s = q.toString()
     return fetchApi<AtendimentoTriagem[]>(`/triagem/atendimentos${s ? `?${s}` : ''}`)
+  },
+  getResumoTriagem: (filtros?: { modelo?: string; busca?: string }) => {
+    const q = new URLSearchParams()
+    if (filtros?.modelo) q.set('modelo', filtros.modelo)
+    if (filtros?.busca) q.set('busca', filtros.busca)
+    const s = q.toString()
+    return fetchApi<{
+      total: number; emTriagem: number; aguardandoCliente: number; clienteRespondeu: number
+      processosAbertos: number; canceladas: number; prontasParaProcesso: number; prioridadeAlta: number
+    }>(`/triagem/atendimentos-resumo${s ? `?${s}` : ''}`)
   },
   getAtendimentoTriagem: (id: number) =>
     fetchApi<AtendimentoTriagemDetalhe>(`/triagem/atendimentos/${id}`),

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowDown, ArrowUp, Check, Edit3, GripVertical, Plus, Trash2 } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, Edit3, Plus, Trash2 } from 'lucide-react'
 import clsx from 'clsx'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -35,7 +35,6 @@ export function CadastroEtapas() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [reordenando, setReordenando] = useState(false)
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [editId, setEditId] = useState<number | null>(null)
   const [form, setForm] = useState({
     nome: '',
@@ -170,46 +169,14 @@ export function CadastroEtapas() {
     }
   }
 
-  // Reordenação por arrastar: durante o drag reordena a lista localmente (feedback imediato)
-  // e ao soltar persiste a nova ordem no banco.
-  function handleDragStart(index: number) {
-    setDragIndex(index)
-  }
-
-  function handleDragOver(event: React.DragEvent, overIndex: number) {
-    event.preventDefault()
-    if (dragIndex === null || dragIndex === overIndex) return
-    setEtapas((prev) => {
-      const next = [...prev]
-      const [movida] = next.splice(dragIndex, 1)
-      next.splice(overIndex, 0, movida)
-      return next
-    })
-    setDragIndex(overIndex)
-  }
-
-  async function handleDrop() {
-    const ordemAtual = [...etapas]
-    setDragIndex(null)
-    setReordenando(true)
-    try {
-      await api.reorderEtapas(ordemAtual.map((e) => e.id))
-      await loadData()
-    } catch (err: any) {
-      alert(err?.message || 'Erro ao reordenar etapas.')
-      await loadData()
-    } finally {
-      setReordenando(false)
-    }
-  }
-
-  // Reordenação pelas setinhas: mesma persistência do drag-and-drop, só que movendo
-  // um item por vez (mais previsível que arrastar, especialmente em telas menores).
+  // Reordenação pelas setinhas: move um item por vez e persiste a nova ordem no banco.
   async function moverEtapa(index: number, direcao: -1 | 1) {
     const alvo = index + direcao
     if (alvo < 0 || alvo >= etapas.length) return
-    const next = [...etapas]
-    ;[next[index], next[alvo]] = [next[alvo], next[index]]
+    const trocada = [...etapas]
+    ;[trocada[index], trocada[alvo]] = [trocada[alvo], trocada[index]]
+    // Mesmo critério do backend (ordem = posição + 1), para o "Ordem: N" já refletir a mudança.
+    const next = trocada.map((e, i) => ({ ...e, ordem: i + 1 }))
     setEtapas(next)
     setReordenando(true)
     try {
@@ -337,7 +304,7 @@ export function CadastroEtapas() {
             Etapas Cadastradas ({etapas.length})
           </h2>
           <span className="text-xs text-slate-500 flex items-center gap-1">
-            <GripVertical className="w-3.5 h-3.5" /> Arraste ou use as setas para reordenar
+            Use as setas para reordenar
             {reordenando ? <span className="ml-1 text-blue-500">salvando...</span> : null}
           </span>
         </div>
@@ -350,20 +317,11 @@ export function CadastroEtapas() {
             {etapas.map((e, index) => (
               <div
                 key={e.id}
-                draggable
-                onDragStart={() => handleDragStart(index)}
-                onDragOver={(ev) => handleDragOver(ev, index)}
-                onDrop={handleDrop}
-                onDragEnd={() => setDragIndex(null)}
-                className={clsx(
-                  'p-3 rounded-lg border bg-white dark:bg-slate-900 transition-shadow',
-                  dragIndex === index ? 'border-blue-400 shadow-lg opacity-70' : 'border-slate-200 dark:border-slate-700',
-                )}
+                className="p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <GripVertical className="w-4 h-4 text-slate-400 cursor-grab flex-shrink-0" />
                       <input
                         type="color"
                         value={e.cor}

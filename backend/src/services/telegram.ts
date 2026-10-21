@@ -1,5 +1,6 @@
 
 import { PrismaClient } from '@prisma/client'
+import { COMMAND_API_BASE_URL, commandApiAuthHeader } from './commandApi'
 
 const prisma = new PrismaClient()
 
@@ -10,10 +11,6 @@ interface TelegramSendOptions {
 }
 
 export class TelegramService {
-  private static readonly BASE_URL = 'http://apicommandsystem.com.br:2450'
-  private static readonly AUTH_USER = 'cmdcrm%$#@!'
-  private static readonly AUTH_PASS = 'cmdcrm%$#@!'
-
   /**
    * Envia uma mensagem via Telegram usando a API do Command System.
    */
@@ -42,9 +39,9 @@ export class TelegramService {
         }
       }
 
-      const authHeader = 'Basic ' + Buffer.from(`${this.AUTH_USER}:${this.AUTH_PASS}`).toString('base64')
+      const authHeader = commandApiAuthHeader()
 
-      const response = await fetch(`${this.BASE_URL}/commandapi/telegram/mensagens`, {
+      const response = await fetch(`${COMMAND_API_BASE_URL}/commandapi/telegram/mensagens`, {
         method: 'POST',
         headers: {
           'Authorization': authHeader
