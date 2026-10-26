@@ -207,6 +207,8 @@ export function Agenda() {
     observacoes: '',
   })
   const [formClienteNome, setFormClienteNome] = useState('')
+  // Técnicos além do principal. O agendamento é replicado para cada um ao salvar.
+  const [tecnicosExtras, setTecnicosExtras] = useState<number[]>([])
   const [newFiles, setNewFiles] = useState<File[]>([])
 
   // Edit appointment modal
@@ -349,11 +351,19 @@ export function Agenda() {
   }
 
   async function saveAgendamento() {
+    // O primeiro técnico é o principal: é dele a linha que recebe os anexos.
+    const equipe = [
+      ...(form.tecnicoId ? [Number(form.tecnicoId)] : []),
+      ...tecnicosExtras.filter((id) => String(id) !== form.tecnicoId),
+    ]
+    if (equipe.length === 0) { alert('Escolha ao menos um técnico.'); return }
+
     setSaving(true)
     try {
       const created: any = await api.createAgendaItem({
         clienteId: form.clienteId ? Number(form.clienteId) : undefined,
-        tecnicoId: form.tecnicoId ? Number(form.tecnicoId) : undefined,
+        tecnicoId: equipe[0],
+        tecnicoIds: equipe,
         tipo: form.tipo || undefined,
         data: fromBRDate(form.data) || undefined,
         horario: form.horario || undefined,
@@ -372,7 +382,11 @@ export function Agenda() {
       setShowModal(false)
       const { clienteId: clienteIdSalvo, tipo: tipoSalvo, observacoes: observacoesSalvas } = form
       const clienteNomeSalvo = formClienteNome
+      if (created?.emEquipe) {
+        alert(`Agendamento criado para ${created.tecnicos} técnicos. Cada um vê na própria agenda; os anexos ficam no primeiro.`)
+      }
       setForm({ clienteId: '', tecnicoId: '', tipo: 'Instalação', data: toBRDate(todayStr()), horario: '09:00', dataFim: toBRDate(todayStr()), horarioFim: '10:00', observacoes: '' })
+      setTecnicosExtras([])
       setFormClienteNome('')
       setNewFiles([])
       buscar()
@@ -745,7 +759,15 @@ export function Agenda() {
                     </div>
                     <div className="col-span-2 flex items-center gap-1">
                       <User className="w-3 h-3 text-slate-500 flex-shrink-0" />
-                      <span className="text-xs text-slate-600 dark:text-slate-400 truncate">{item.tecnicoNome || '—'}</span>
+                      <span className="text-xs text-slate-600 dark:text-slate-400 truncate">
+                        {item.tecnicoNome || '—'}
+                        {item.equipe && item.equipe.length > 1 && (
+                          <span className="block text-[10px] text-blue-600 dark:text-blue-400"
+                            title={item.equipe.map((m) => m.nome ?? '—').join(', ')}>
+                            + {item.equipe.length - 1} na equipe
+                          </span>
+                        )}
+                      </span>
                     </div>
                     <div className="col-span-1">
                       {(item as any).origem === 'programado' ? (
@@ -851,6 +873,42 @@ export function Agenda() {
             value={form.tecnicoId}
             onChange={e => setForm(f => ({ ...f, tecnicoId: e.target.value }))}
           />
+
+          {/* Equipe: marcar mais técnicos replica o agendamento para cada um, em vez de
+              obrigar a lançar o mesmo compromisso várias vezes. */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                Outros técnicos neste agendamento
+              </label>
+              {tecnicosExtras.length > 0 && (
+                <span className="text-[11px] text-blue-600 dark:text-blue-400">
+                  {tecnicosExtras.length + (form.tecnicoId ? 1 : 0)} agendamentos serão criados
+                </span>
+              )}
+            </div>
+            <div className="rounded-lg border border-slate-300 dark:border-slate-700 max-h-36 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+              {tecnicos.filter(u => String(u.id) !== form.tecnicoId).map(u => (
+                <label key={u.id}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                  <input type="checkbox" className="accent-blue-600"
+                    checked={tecnicosExtras.includes(u.id)}
+                    onChange={e => setTecnicosExtras(atual => e.target.checked
+                      ? [...atual, u.id]
+                      : atual.filter(x => x !== u.id))} />
+                  <span className="text-slate-700 dark:text-slate-200">{u.nome}</span>
+                </label>
+              ))}
+              {tecnicos.length === 0 && (
+                <p className="px-3 py-2 text-xs text-slate-500">Nenhum técnico disponível.</p>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              Cada técnico marcado recebe o agendamento na própria agenda e é avisado no
+              Telegram. Os anexos ficam no agendamento do técnico principal.
+            </p>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <Select
               label="Tipo"

@@ -6,6 +6,8 @@ import { getUserPermissions } from './grupos'
 import { registrarAuditoria } from '../utils/auditoria'
 import { TelegramService } from '../services/telegram'
 import { initProcedimentos } from '../utils/procedimentos'
+import { equipesDe } from '../utils/agendaEquipe'
+import { randomUUID } from 'node:crypto'
 
 const nomeTecnico = (u: any) => u?.nomeCompleto || u?.nomeUsu || 'Usuário'
 
@@ -907,6 +909,17 @@ export async function agendaRoutes(app: FastifyInstance) {
       }
     })
 
+    // Quem mais está no mesmo agendamento: a tela mostra a equipe no card, e quem for
+    // editar sabe que existem cópias.
+    const equipes = await equipesDe(
+      itensNormalizados.filter((i) => i.origem !== 'programado').map((i) => Number(i.id)))
+    for (const item of itensNormalizados) {
+      const membros = equipes.get(Number(item.id))
+      item.equipe = membros && membros.length > 1
+        ? membros.map((m) => ({ agendaId: m.agendaId, tecnicoId: m.tecnicoId, nome: m.tecnicoNome }))
+        : null
+    }
+
     itensNormalizados.sort((a, b) => {
       const dataA = `${a.data instanceof Date ? a.data.toISOString() : String(a.data ?? '')}|${String(a.horarioIni ?? '')}`
       const dataB = `${b.data instanceof Date ? b.data.toISOString() : String(b.data ?? '')}|${String(b.horarioIni ?? '')}`
@@ -1749,61 +1762,106 @@ export async function agendaRoutes(app: FastifyInstance) {
   })
 
   // POST /agenda
+  /**
+   * Cria o agendamento. Com mais de um técnico, vira uma linha por técnico: a tabela do
+   * Delphi guarda um `cod_colaborador` só, e é assim que cada um vê na própria agenda. As
+   * linhas ficam amarradas por um grupo, para o sistema saber depois que nasceram juntas.
+   */
   app.post('/', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {
-    const { clienteId, tecnicoId, tipo, data, horario, dataFim, horarioFim, observacoes, temAnexos } = request.body as any
+    const {
+      clienteId, tecnicoId, tecnicoIds, tipo, data, horario, dataFim, horarioFim,
+      observacoes, temAnexos,
+    } = request.body as any
     const payload = request.user as { id: number }
-    const item = await prisma.agendaItem.create({
-      data: {
-        clienteId: clienteId ? Number(clienteId) : null,
-        tecnicoId: tecnicoId ? Number(tecnicoId) : null,
-        tipo: tipo || null,
-        status: 1,
-        data: data ? new Date(data + 'T12:00:00Z') : null,
-        horarioIni: horario ? new Date(`1970-01-01T${horario}:00Z`) : null,
-        dataFim: dataFim ? new Date(dataFim + 'T12:00:00Z') : null,
-        horarioFim: horarioFim ? new Date(`1970-01-01T${horarioFim}:00Z`) : null,
-        observacoes: observacoes || null,
-      } as any,
-    })
-    // Save criado_por and data_criacao via raw since not in schema
-    await prisma.$executeRaw`UPDATE agenda SET criado_por = ${payload.id}, data_criacao = NOW() WHERE cod_agenda = ${Number(item.id)}`
 
-    if (!Boolean(temAnexos)) {
-      enviarNotificacaoAgendamento({
-        tecnicoId: Number(tecnicoId),
-        clienteId: clienteId ? Number(clienteId) : null,
-        data,
-        horaIni: horario,
-        horaFim: horarioFim,
-        tipo: tipo || 'REUNIÃO',
-        observacao: observacoes,
-        isProgramado: false,
-        possuiAnexos: false
+    // Aceita o campo antigo para não quebrar quem ainda manda um técnico só.
+    const escolhidos: number[] = Array.isArray(tecnicoIds) && tecnicoIds.length > 0
+      ? [...new Set(tecnicoIds.map((x: any) => Number(x)).filter((x: number) => x > 0))]
+      : (tecnicoId ? [Number(tecnicoId)] : [])
+    if (escolhidos.length === 0) {
+      return reply.status(400).send({ error: 'Escolha ao menos um técnico.' })
+    }
+
+    const emEquipe = escolhidos.length > 1
+    const grupo = emEquipe ? randomUUID() : null
+    const criados: Array<{ id: number; tecnicoId: number }> = []
+
+    for (const tec of escolhidos) {
+      const item = await prisma.agendaItem.create({
+        data: {
+          clienteId: clienteId ? Number(clienteId) : null,
+          tecnicoId: tec,
+          tipo: tipo || null,
+          status: 1,
+          data: data ? new Date(data + 'T12:00:00Z') : null,
+          horarioIni: horario ? new Date(`1970-01-01T${horario}:00Z`) : null,
+          dataFim: dataFim ? new Date(dataFim + 'T12:00:00Z') : null,
+          horarioFim: horarioFim ? new Date(`1970-01-01T${horarioFim}:00Z`) : null,
+          observacoes: observacoes || null,
+        } as any,
+      })
+      const novoId = Number(item.id)
+      criados.push({ id: novoId, tecnicoId: tec })
+
+      // criado_por e data_criacao não estão no schema do Prisma.
+      await prisma.$executeRaw`UPDATE agenda SET criado_por = ${payload.id}, data_criacao = NOW() WHERE cod_agenda = ${novoId}`
+
+      if (grupo) {
+        await prisma.$executeRawUnsafe(
+          `INSERT INTO agenda_equipe (agenda_id, grupo, principal) VALUES (?,?,?)`,
+          novoId, grupo, criados.length === 1 ? 1 : 0,
+        ).catch(() => {})
+      }
+
+      // Cada técnico é avisado do seu próprio compromisso.
+      if (!Boolean(temAnexos)) {
+        enviarNotificacaoAgendamento({
+          tecnicoId: tec,
+          clienteId: clienteId ? Number(clienteId) : null,
+          data,
+          horaIni: horario,
+          horaFim: horarioFim,
+          tipo: tipo || 'REUNIÃO',
+          observacao: observacoes,
+          isProgramado: false,
+          possuiAnexos: false,
+        })
+      }
+
+      registrarAuditoria({
+        tabela: 'agenda', registroId: novoId, acao: 'CRIACAO', usuarioId: payload.id,
+        dadosAntes: null,
+        dadosDepois: {
+          clienteId: clienteId ? Number(clienteId) : null,
+          tecnicoId: tec,
+          tipo: tipo || null,
+          status: 1,
+          data: data || null,
+          horarioIni: horario || null,
+          dataFim: dataFim || null,
+          horarioFim: horarioFim || null,
+          observacoes: observacoes || null,
+          ...(grupo ? { equipe: escolhidos, grupo } : {}),
+        },
       })
     }
-    registrarAuditoria({
-      tabela: 'agenda', registroId: Number(item.id), acao: 'CRIACAO', usuarioId: payload.id,
-      dadosAntes: null,
-      dadosDepois: {
-        clienteId: clienteId ? Number(clienteId) : null,
-        tecnicoId: tecnicoId ? Number(tecnicoId) : null,
-        tipo: tipo || null,
-        status: 1,
-        data: data || null,
-        horarioIni: horario || null,
-        dataFim: dataFim || null,
-        horarioFim: horarioFim || null,
-        observacoes: observacoes || null,
-      },
-    })
 
+    // Só o primeiro define o responsável da implantação: rodar para todos faria o último
+    // escolhido sobrescrever os demais, trocando o responsável sem ninguém pedir.
     await sincronizarResponsavelImplantacao({
       clienteId: clienteId ? Number(clienteId) : null,
-      tecnicoId: tecnicoId ? Number(tecnicoId) : null,
+      tecnicoId: criados[0].tecnicoId,
       usuarioId: payload.id,
       origem: 'Agenda (criação)',
     })
-    return reply.status(201).send({ ...item, id: Number(item.id) })
+
+    // O id devolvido é o do primeiro — é nele que os anexos são gravados.
+    return reply.status(201).send({
+      id: criados[0].id,
+      ids: criados.map((c) => c.id),
+      emEquipe,
+      tecnicos: criados.length,
+    })
   })
 
   app.post('/:id/notificar', { preHandler: authMiddleware, schema: { tags: ['Agenda'] } }, async (request, reply) => {

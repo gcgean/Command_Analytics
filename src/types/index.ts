@@ -479,6 +479,8 @@ export interface AgendaItem {
   notaUsuarioId?: number | null
   notaUsuarioNome?: string | null
   notaAtualizadaEm?: string | null
+  /** Quando o agendamento foi lançado para mais de um técnico, as cópias irmãs. */
+  equipe?: Array<{ agendaId: number; tecnicoId: number | null; nome: string | null }> | null
   temAnexos?: boolean
   origem?: string
   // Legacy field for compatibility
