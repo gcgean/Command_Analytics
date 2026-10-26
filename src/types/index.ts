@@ -1899,6 +1899,11 @@ export interface AtendimentoTriagem {
   fotos?: number
   pendentes?: number
   prontoParaProcesso?: boolean
+  /** Etapa atual do processo no Pipeline, espelhada na listagem. */
+  processoEtapa?: string | null
+  processoEtapaCor?: string | null
+  processoEtapaOrdem?: number | null
+  processoEncerrado?: boolean
 }
 
 export interface AtendimentoTriagemDetalhe extends AtendimentoTriagem {

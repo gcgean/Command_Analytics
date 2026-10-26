@@ -230,10 +230,11 @@ export function Triagem() {
           <input className="input-field pl-9" placeholder="Buscar por cliente, CNPJ ou contato..."
             value={busca} onChange={(e) => setBusca(e.target.value)} />
         </div>
-        <select className="input-field w-full sm:w-52" value={filtroSituacao}
+        <select className="input-field w-full sm:w-56" value={filtroSituacao}
           onChange={(e) => setFiltroSituacao(e.target.value)}>
-          <option value="">Todas as situações</option>
+          <option value="">Em andamento</option>
           {Object.entries(SITUACAO).map(([v, s]) => <option key={v} value={v}>{s.rotulo}</option>)}
+          <option value="encerrado">Processo encerrado no Pipeline</option>
         </select>
         <select className="input-field w-full sm:w-56" value={filtroModelo}
           onChange={(e) => setFiltroModelo(e.target.value)}>
@@ -297,6 +298,13 @@ export function Triagem() {
                       </span>
                       {a.token && a.situacao === 'aguardando_cliente' && (
                         <Link2 className="w-3.5 h-3.5 inline ml-1.5 text-amber-500" />
+                      )}
+                      {a.processoEtapa && (
+                        <span className="block mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full mr-1 align-middle"
+                            style={{ backgroundColor: a.processoEtapaCor || '#94a3b8' }} />
+                          {a.processoEtapaOrdem ? `${a.processoEtapaOrdem}. ` : ''}{a.processoEtapa}
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-slate-500 text-xs whitespace-nowrap">

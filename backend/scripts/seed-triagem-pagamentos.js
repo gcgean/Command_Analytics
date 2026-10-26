@@ -341,9 +341,11 @@ const ETAPA_INICIAL = 'Aguardando Instalação'
 async function main() {
   await carregarAdquirentes()
 
+  // ATENÇÃO: implantacao_processos.status_atual guarda o status_ref da etapa, não o id.
+  // São numerações diferentes — "Aguardando Instalação" é id 3 e status_ref 1.
   const [etapa] = await prisma.$queryRawUnsafe(
-    `SELECT id FROM cadastro_etapas WHERE nome = ? AND ativo = 1 LIMIT 1`, ETAPA_INICIAL)
-  const etapaId = etapa ? Number(etapa.id) : null
+    `SELECT status_ref FROM cadastro_etapas WHERE nome = ? AND ativo = 1 LIMIT 1`, ETAPA_INICIAL)
+  const etapaId = etapa && etapa.status_ref != null ? Number(etapa.status_ref) : null
   if (!etapaId) {
     console.warn(`AVISO: etapa "${ETAPA_INICIAL}" não encontrada; o processo vai nascer na `
       + 'primeira etapa ativa do quadro.')

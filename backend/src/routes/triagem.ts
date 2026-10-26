@@ -10,6 +10,10 @@ import {
   carregarModelo, perguntasVisiveis, identificarCenario, pendencias, gerarToken, ORIGENS,
 } from '../utils/triagem'
 
+// Etapas que encerram o processo no Pipeline, pelo status_ref: 7 Concluído, 10 Desistência.
+// Os mesmos números que a tela de Encerrados usa.
+const ENCERRAMENTO = [7, 10]
+
 /** Triagem guiada: questionário por cadastro, atendimento virando processo no Pipeline. */
 export async function triagemRoutes(app: FastifyInstance) {
   // ── Modelos ──
@@ -42,9 +46,14 @@ export async function triagemRoutes(app: FastifyInstance) {
     const cond: string[] = []
     const val: any[] = []
     if (modelo) { cond.push('m.slug = ?'); val.push(modelo) }
-    // Cancelada não suja a lista do dia a dia, mas continua acessível pelo filtro.
-    if (situacao) { cond.push('a.situacao = ?'); val.push(situacao) }
-    else cond.push("a.situacao <> 'cancelado'")
+    // Encerrada = processo do Pipeline em Concluído ou Desistência. Some do dia a dia, mas
+    // continua alcançável pelo filtro — é o mesmo tratamento dado às canceladas.
+    if (situacao === 'encerrado') cond.push(`ip.status_atual IN (${ENCERRAMENTO.join(',')})`)
+    else if (situacao) { cond.push('a.situacao = ?'); val.push(situacao) }
+    else {
+      cond.push("a.situacao <> 'cancelado'")
+      cond.push(`(ip.status_atual IS NULL OR ip.status_atual NOT IN (${ENCERRAMENTO.join(',')}))`)
+    }
     if (busca) {
       cond.push('(a.cliente_nome LIKE ? OR a.cnpj LIKE ? OR a.contato LIKE ?)')
       const termo = `%${busca}%`
@@ -53,10 +62,15 @@ export async function triagemRoutes(app: FastifyInstance) {
     const linhas = await prisma.$queryRawUnsafe<any[]>(
       `SELECT a.*, m.nome AS modelo_nome, m.slug AS modelo_slug,
               COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS atendente,
-              (SELECT COUNT(*) FROM triagem_anexo x WHERE x.atendimento_id = a.id) AS fotos
+              (SELECT COUNT(*) FROM triagem_anexo x WHERE x.atendimento_id = a.id) AS fotos,
+              ip.status_atual AS processo_status, ip.ativo AS processo_ativo,
+              ce.nome AS processo_etapa, ce.cor AS processo_cor, ce.ordem AS processo_ordem
          FROM triagem_atendimento a
          INNER JOIN triagem_modelo m ON m.id = a.modelo_id
          LEFT JOIN usuario u ON u.COD_USU = a.atendente_id
+         LEFT JOIN implantacao_processos ip ON ip.id = a.processo_id
+         -- A etapa casa por status_ref: é o que status_atual guarda.
+         LEFT JOIN cadastro_etapas ce ON ce.status_ref = ip.status_atual
         ${cond.length ? `WHERE ${cond.join(' AND ')}` : ''}
         ORDER BY a.atualizado_em DESC LIMIT 200`, ...val)
 
@@ -78,6 +92,11 @@ export async function triagemRoutes(app: FastifyInstance) {
         prioridade: cenario?.prioridade ?? 'normal',
         fotos: Number(a.fotos ?? 0),
         pendentes: faltando,
+        // Espelho do processo no Pipeline: a triagem não manda nele, só mostra onde está.
+        processoEtapa: a.processo_etapa ?? null,
+        processoEtapaCor: a.processo_cor ?? null,
+        processoEtapaOrdem: a.processo_ordem == null ? null : Number(a.processo_ordem),
+        processoEncerrado: ENCERRAMENTO.includes(Number(a.processo_status)),
         // O que a tela precisa saber para oferecer (ou não) o botão de abrir o processo.
         prontoParaProcesso: !a.processo_id && !!a.cliente_id && !!cenario && faltando === 0,
       })
@@ -298,13 +317,15 @@ export async function triagemRoutes(app: FastifyInstance) {
       })
     }
 
-    // status_atual é NOT NULL no Pipeline. Sem etapa resolvida o INSERT quebra, então cai
-    // para a primeira etapa ativa do quadro — e, se nem isso existir, avisa em vez de falhar.
+    // status_atual é NOT NULL no Pipeline e guarda o STATUS_REF da etapa, não o id — são
+    // numerações diferentes. Sem etapa resolvida o INSERT quebra, então cai para a primeira
+    // etapa ativa do quadro; se nem isso existir, avisa em vez de falhar.
     let etapa = cenario.etapaDestino ?? modelo.etapaInicial ?? null
     if (etapa == null) {
       const [primeira] = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id FROM cadastro_etapas WHERE ativo = 1 ORDER BY ordem, id LIMIT 1`)
-      etapa = primeira ? Number(primeira.id) : null
+        `SELECT status_ref FROM cadastro_etapas
+          WHERE ativo = 1 AND status_ref IS NOT NULL ORDER BY ordem, id LIMIT 1`)
+      etapa = primeira ? Number(primeira.status_ref) : null
     }
     if (etapa == null) {
       return reply.status(400).send({
