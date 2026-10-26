@@ -233,7 +233,10 @@ export function Triagem() {
         <select className="input-field w-full sm:w-56" value={filtroSituacao}
           onChange={(e) => setFiltroSituacao(e.target.value)}>
           <option value="">Em andamento</option>
-          {Object.entries(SITUACAO).map(([v, s]) => <option key={v} value={v}>{s.rotulo}</option>)}
+          {/* 'rascunho' fica de fora: nenhuma triagem nasce nesse estado, e a opção só
+              gerava um filtro que nunca traz nada. O rótulo segue no mapa das badges. */}
+          {Object.entries(SITUACAO).filter(([v]) => v !== 'rascunho')
+            .map(([v, s]) => <option key={v} value={v}>{s.rotulo}</option>)}
           <option value="encerrado">Processo encerrado no Pipeline</option>
         </select>
         <select className="input-field w-full sm:w-56" value={filtroModelo}

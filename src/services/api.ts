@@ -964,7 +964,8 @@ export const api = {
     const s = q.toString()
     return fetchApi<{
       total: number; emTriagem: number; aguardandoCliente: number; clienteRespondeu: number
-      processosAbertos: number; canceladas: number; prontasParaProcesso: number; prioridadeAlta: number
+      processosAbertos: number; encerradas: number; canceladas: number
+      prontasParaProcesso: number; prioridadeAlta: number
     }>(`/triagem/atendimentos-resumo${s ? `?${s}` : ''}`)
   },
   getAtendimentoTriagem: (id: number) =>

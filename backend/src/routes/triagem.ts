@@ -14,6 +14,10 @@ import {
 // Os mesmos números que a tela de Encerrados usa.
 const ENCERRAMENTO = [7, 10]
 
+// Processo fora de jogo: chegou numa etapa final OU foi desativado no Pipeline. Os dois
+// casos tiram o processo do quadro, então a triagem também precisa tratá-los igual.
+const SQL_ENCERRADO = `(ip.status_atual IN (${ENCERRAMENTO.join(',')}) OR ip.ativo = 0)`
+
 /** Triagem guiada: questionário por cadastro, atendimento virando processo no Pipeline. */
 export async function triagemRoutes(app: FastifyInstance) {
   // ── Modelos ──
@@ -46,13 +50,17 @@ export async function triagemRoutes(app: FastifyInstance) {
     const cond: string[] = []
     const val: any[] = []
     if (modelo) { cond.push('m.slug = ?'); val.push(modelo) }
-    // Encerrada = processo do Pipeline em Concluído ou Desistência. Some do dia a dia, mas
-    // continua alcançável pelo filtro — é o mesmo tratamento dado às canceladas.
-    if (situacao === 'encerrado') cond.push(`ip.status_atual IN (${ENCERRAMENTO.join(',')})`)
-    else if (situacao) { cond.push('a.situacao = ?'); val.push(situacao) }
+    // Encerrada some do dia a dia, mas continua alcançável pelo filtro — mesmo tratamento
+    // dado às canceladas.
+    if (situacao === 'encerrado') cond.push(SQL_ENCERRADO)
+    else if (situacao === 'concluido') {
+      // "Processo aberto" é só o que ainda está aberto: quem já encerrou tem filtro próprio,
+      // e aparecer nos dois lugares faria as contas não fecharem.
+      cond.push(`a.situacao = 'concluido' AND NOT ${SQL_ENCERRADO}`)
+    } else if (situacao) { cond.push('a.situacao = ?'); val.push(situacao) }
     else {
       cond.push("a.situacao <> 'cancelado'")
-      cond.push(`(ip.status_atual IS NULL OR ip.status_atual NOT IN (${ENCERRAMENTO.join(',')}))`)
+      cond.push(`(ip.id IS NULL OR NOT ${SQL_ENCERRADO})`)
     }
     if (busca) {
       cond.push('(a.cliente_nome LIKE ? OR a.cnpj LIKE ? OR a.contato LIKE ?)')
@@ -96,7 +104,8 @@ export async function triagemRoutes(app: FastifyInstance) {
         processoEtapa: a.processo_etapa ?? null,
         processoEtapaCor: a.processo_cor ?? null,
         processoEtapaOrdem: a.processo_ordem == null ? null : Number(a.processo_ordem),
-        processoEncerrado: ENCERRAMENTO.includes(Number(a.processo_status)),
+        processoEncerrado: ENCERRAMENTO.includes(Number(a.processo_status))
+          || (a.processo_id != null && Number(a.processo_ativo) === 0),
         // O que a tela precisa saber para oferecer (ou não) o botão de abrir o processo.
         prontoParaProcesso: !a.processo_id && !!a.cliente_id && !!cenario && faltando === 0,
       })
@@ -149,14 +158,32 @@ export async function triagemRoutes(app: FastifyInstance) {
       if (!a.processo_id && a.cliente_id && cenario && pendencias(modeloTriagem, respostas).length === 0) prontas += 1
     }
 
+    // "Processo aberto" tem que excluir o que já encerrou no Pipeline, senão o card briga
+    // com a lista — que esconde as encerradas.
+    const [abertos] = await prisma.$queryRawUnsafe<Array<{ total: bigint | number }>>(
+      `SELECT COUNT(*) AS total
+         FROM triagem_atendimento a
+         INNER JOIN triagem_modelo m ON m.id = a.modelo_id
+         INNER JOIN implantacao_processos ip ON ip.id = a.processo_id
+        WHERE a.situacao = 'concluido' AND NOT ${SQL_ENCERRADO}
+          ${cond.length ? ` AND ${cond.join(' AND ')}` : ''}`, ...val)
+    const [encerrados] = await prisma.$queryRawUnsafe<Array<{ total: bigint | number }>>(
+      `SELECT COUNT(*) AS total
+         FROM triagem_atendimento a
+         INNER JOIN triagem_modelo m ON m.id = a.modelo_id
+         INNER JOIN implantacao_processos ip ON ip.id = a.processo_id
+        WHERE ${SQL_ENCERRADO}${cond.length ? ` AND ${cond.join(' AND ')}` : ''}`, ...val)
+
     const canceladas = contagem.cancelado ?? 0
-    const total = Object.values(contagem).reduce((s, n) => s + n, 0) - canceladas
+    const encerradas = Number(encerrados?.total ?? 0)
+    const total = Object.values(contagem).reduce((s, n) => s + n, 0) - canceladas - encerradas
     return {
       total,
       emTriagem: contagem.em_triagem ?? 0,
       aguardandoCliente: contagem.aguardando_cliente ?? 0,
       clienteRespondeu: contagem.respondido ?? 0,
-      processosAbertos: contagem.concluido ?? 0,
+      processosAbertos: Number(abertos?.total ?? 0),
+      encerradas,
       canceladas,
       prontasParaProcesso: prontas,
       prioridadeAlta,
