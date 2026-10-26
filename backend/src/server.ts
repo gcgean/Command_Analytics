@@ -53,6 +53,8 @@ import { triagemRoutes } from './routes/triagem'
 import { initTriagem } from './utils/triagem'
 import { initPlanoImagens } from './utils/planoImagens'
 import { initAgendaEquipe } from './utils/agendaEquipe'
+import { initSmartPos } from './utils/smartpos'
+import { smartposRoutes } from './routes/smartpos'
 import { connectionsRoutes } from './routes/connections'
 import { initAuditoria } from './utils/auditoria'
 import { initEtapas } from './utils/etapas'
@@ -242,6 +244,7 @@ app.register(async (api) => {
   api.register(comunicadosRoutes,  { prefix: '/comunicados' })
   api.register(precificacaoPublicaRoutes, { prefix: '/precificacao-publica' })
   api.register(triagemRoutes,      { prefix: '/triagem' })
+  api.register(smartposRoutes,     { prefix: '/smartpos' })
   api.register(emailRoutes,        { prefix: '/email' })
   api.register(metasDevRoutes,     { prefix: '/metas-dev' })
   api.register(orcamentosRoutes,   { prefix: '/orcamentos' })
@@ -296,6 +299,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initAgendaEquipe()
     .then(() => console.log('✓ Tabela de equipe da agenda verificada'))
     .catch(e => console.warn('⚠ Equipe da agenda init:', e.message))
+  initSmartPos()
+    .then(() => console.log('✓ Tabela de SmartPOS homologados verificada'))
+    .catch(e => console.warn('⚠ SmartPOS init:', e.message))
   initPrecificacaoPublica()
     .then(() => console.log('✓ Tabela de links de precificação verificada'))
     .catch(e => console.warn('⚠ Precificação pública init:', e.message))

@@ -550,6 +550,24 @@ export interface PlanoCatalogo {
   temImagem?: boolean
 }
 
+export interface TerminalSmartPos {
+  id: number
+  adquirente: string
+  modelo: string
+  fabricante: string | null
+  observacao: string | null
+  fonte: string | null
+  temImagem: boolean
+  ativo: boolean
+  ordem: number
+  atualizadoEm: string
+}
+
+export interface GrupoSmartPos {
+  adquirente: string
+  terminais: TerminalSmartPos[]
+}
+
 export interface SistemaPlanos {
   id: number
   nome: string

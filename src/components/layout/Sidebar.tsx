@@ -7,7 +7,7 @@ import {
   Code2, Tag, Video, Target, Server, Database, Store, Percent, Trophy,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X, Star,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
-  ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell, Cable, FolderKanban
+  Smartphone, ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell, Cable, FolderKanban
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '../../store/authStore'
@@ -60,6 +60,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
         ]
       },
       { label: 'Triagem Guiada', icon: <ListChecks className="w-4 h-4" />, to: '/triagem', recurso: 'triagem' },
+      { label: 'SmartPOS Compatíveis', icon: <Smartphone className="w-4 h-4" />, to: '/smartpos', recurso: 'smartpos' },
       {
         label: 'CRM / Negócios', icon: <Briefcase className="w-4 h-4" />, children: [
           { label: 'Negócios',          icon: <TrendingUp className="w-4 h-4" />, to: '/crm',       recurso: 'crm' },

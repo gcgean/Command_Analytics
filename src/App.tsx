@@ -11,6 +11,7 @@ import { SolicitacaoDemanda } from './pages/publico/SolicitacaoDemanda'
 import { PrecificacaoPublica } from './pages/implantacao/Orcamento'
 import { PwaUpdateBanner } from './components/ui/PwaUpdateBanner'
 import { Triagem } from './pages/triagem/Triagem'
+import { SmartPos } from './pages/smartpos/SmartPos'
 import { TriagemDetalhe } from './pages/triagem/TriagemDetalhe'
 import { TriagemCliente } from './pages/publico/TriagemCliente'
 import { MetasPeriodo } from './pages/metas/MetasPeriodo'
@@ -250,6 +251,7 @@ export default function App() {
         <Route path="planos/assinaturas" element={<PermissionRoute recurso="planos"><AssinaturaCliente /></PermissionRoute>} />
 
         <Route path="triagem" element={<PermissionRoute recurso="triagem"><Triagem /></PermissionRoute>} />
+        <Route path="smartpos" element={<PermissionRoute recurso="smartpos"><SmartPos /></PermissionRoute>} />
         <Route path="triagem/:id" element={<PermissionRoute recurso="triagem"><TriagemDetalhe /></PermissionRoute>} />
         <Route path="implantacao" element={<PermissionRoute recurso="implantacao"><Pipeline /></PermissionRoute>} />
         <Route path="implantacao/dashboard" element={<PermissionRoute recurso="implantacao"><DashboardImplantacao /></PermissionRoute>} />

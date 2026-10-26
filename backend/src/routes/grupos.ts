@@ -51,6 +51,7 @@ export const SYSTEM_RESOURCES = [
   // CERTIFICADOS DIGITAIS
   { id: 'comunicados',              label: 'Comunicados',                     grupo: 'OPERACIONAL' },
   { id: 'triagem',                  label: 'Triagem Guiada',                  grupo: 'OPERACIONAL' },
+  { id: 'smartpos',                 label: 'SmartPOS Compatíveis',            grupo: 'OPERACIONAL' },
   { id: 'certificados-digitais',    label: 'Controle de Certificados Digitais', grupo: 'CERTIFICADOS DIGITAIS' },
   // RH
   { id: 'banco-horas',              label: 'Banco de Horas',                  grupo: 'RH' },

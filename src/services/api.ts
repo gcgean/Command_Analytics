@@ -7,7 +7,7 @@ import type {
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
-  PlanoCatalogo, SistemaPlanos,
+  PlanoCatalogo, SistemaPlanos, TerminalSmartPos, GrupoSmartPos,
   ModeloTriagem, ModeloTriagemCompleto, AtendimentoTriagem, AtendimentoTriagemDetalhe,
   PerguntaTriagem, CenarioTriagem, ChecklistTriagem, TriagemPublica, RespostaProntaTriagem,
   AnexoTriagem,
@@ -522,6 +522,40 @@ export const api = {
     const qs = q.toString()
     return fetchApi<PlanoCatalogo[]>(`/planos${qs ? `?${qs}` : ''}`)
   },
+  // ─── SmartPOS homologados ──────────────────────────────────
+  getSmartPos: (filtros?: { busca?: string; adquirente?: string; todos?: boolean }) => {
+    const q = new URLSearchParams()
+    if (filtros?.busca) q.set('busca', filtros.busca)
+    if (filtros?.adquirente) q.set('adquirente', filtros.adquirente)
+    if (filtros?.todos) q.set('todos', 'true')
+    const qs = q.toString()
+    return fetchApi<{ grupos: GrupoSmartPos[]; total: number }>(`/smartpos${qs ? `?${qs}` : ''}`)
+  },
+  salvarSmartPos: (id: number | null, dados: Record<string, unknown>) =>
+    id
+      ? fetchApi<TerminalSmartPos>(`/smartpos/${id}`, { method: 'PUT', body: JSON.stringify(dados) })
+      : fetchApi<TerminalSmartPos>('/smartpos', { method: 'POST', body: JSON.stringify(dados) }),
+  excluirSmartPos: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/smartpos/${id}`, { method: 'DELETE' }),
+  enviarFotoSmartPos: async (id: number, arquivo: File) => {
+    const fd = new FormData()
+    fd.append('foto', arquivo)
+    const token = getToken()
+    const res = await fetch(`${BASE_URL}/smartpos/${id}/imagem`, {
+      method: 'POST', body: fd, headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    const corpo = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(corpo?.error || `HTTP ${res.status}`)
+    return corpo as { ok: boolean }
+  },
+  getFotoSmartPosBlob: async (id: number) => {
+    const token = getToken()
+    const res = await fetch(`${BASE_URL}/smartpos/${id}/imagem`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.blob()
+  },
+
   getSistemasPlanos: () =>
     fetchApi<{ sistemas: SistemaPlanos[]; semSistema: number }>('/planos/sistemas'),
   salvarPlano: (id: number | null, dados: Record<string, unknown>) =>
