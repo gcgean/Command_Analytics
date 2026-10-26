@@ -534,6 +534,27 @@ export interface Plano {
   destaque?: boolean
 }
 
+export interface PlanoCatalogo {
+  id: number
+  descricao: string
+  ativo: boolean
+  valor: string | number
+  valorAntigo?: string | number | null
+  detalhes?: string | null
+  sistemaId?: number | null
+  sistemaNome?: string | null
+  tipo?: number | null
+  percComissao?: string | number | null
+  temImagem?: boolean
+}
+
+export interface SistemaPlanos {
+  id: number
+  nome: string
+  categoria: string | null
+  planos: number
+}
+
 export type FormaPagamento = 'Boleto' | 'PIX' | 'Cartão de Crédito' | 'Cartão de Débito'
 
 export interface Assinatura {

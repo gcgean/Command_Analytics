@@ -7,6 +7,7 @@ import type {
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
+  PlanoCatalogo, SistemaPlanos,
   ModeloTriagem, ModeloTriagemCompleto, AtendimentoTriagem, AtendimentoTriagemDetalhe,
   PerguntaTriagem, CenarioTriagem, ChecklistTriagem, TriagemPublica, RespostaProntaTriagem,
   AnexoTriagem,
@@ -513,7 +514,41 @@ export const api = {
   deleteBloqueio: (id: number) => fetchApi(`/agenda/bloqueios/${id}`, { method: 'DELETE' }),
 
   // ─── Planos ────────────────────────────────────────────────
-  getPlanos: () => fetchApi<Plano[]>('/planos'),
+  getPlanos: (filtros?: { sistemaId?: string; tipo?: string; todos?: boolean }) => {
+    const q = new URLSearchParams()
+    if (filtros?.sistemaId) q.set('sistemaId', filtros.sistemaId)
+    if (filtros?.tipo) q.set('tipo', filtros.tipo)
+    if (filtros?.todos) q.set('todos', 'true')
+    const qs = q.toString()
+    return fetchApi<PlanoCatalogo[]>(`/planos${qs ? `?${qs}` : ''}`)
+  },
+  getSistemasPlanos: () =>
+    fetchApi<{ sistemas: SistemaPlanos[]; semSistema: number }>('/planos/sistemas'),
+  salvarPlano: (id: number | null, dados: Record<string, unknown>) =>
+    id
+      ? fetchApi<PlanoCatalogo>(`/planos/${id}`, { method: 'PUT', body: JSON.stringify(dados) })
+      : fetchApi<PlanoCatalogo>('/planos', { method: 'POST', body: JSON.stringify(dados) }),
+  // A imagem é multipart e a leitura é autenticada, então vai por fetch direto.
+  enviarImagemPlano: async (id: number, arquivo: File) => {
+    const fd = new FormData()
+    fd.append('imagem', arquivo)
+    const token = getToken()
+    const res = await fetch(`${BASE_URL}/planos/${id}/imagem`, {
+      method: 'POST', body: fd, headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+    const corpo = await res.json().catch(() => ({}))
+    if (!res.ok) throw new Error(corpo?.error || `HTTP ${res.status}`)
+    return corpo as { ok: boolean }
+  },
+  removerImagemPlano: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/planos/${id}/imagem`, { method: 'DELETE' }),
+  getImagemPlanoBlob: async (id: number) => {
+    const token = getToken()
+    const res = await fetch(`${BASE_URL}/planos/${id}/imagem`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    return res.blob()
+  },
   getAssinaturas: (params?: Record<string, string>) => {
     const qs = params ? '?' + new URLSearchParams(params).toString() : ''
     return fetchApi<Assinatura[]>(`/planos/assinaturas${qs}`)

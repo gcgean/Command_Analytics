@@ -51,6 +51,7 @@ import { comunicadosRoutes, initComunicados } from './routes/comunicados'
 import { precificacaoPublicaRoutes, initPrecificacaoPublica } from './routes/precificacaoPublica'
 import { triagemRoutes } from './routes/triagem'
 import { initTriagem } from './utils/triagem'
+import { initPlanoImagens } from './utils/planoImagens'
 import { connectionsRoutes } from './routes/connections'
 import { initAuditoria } from './utils/auditoria'
 import { initEtapas } from './utils/etapas'
@@ -288,6 +289,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initTriagem()
     .then(() => console.log('✓ Tabelas de triagem verificadas'))
     .catch(e => console.warn('⚠ Triagem init:', e.message))
+  initPlanoImagens()
+    .then(() => console.log('✓ Tabela de imagem de plano verificada'))
+    .catch(e => console.warn('⚠ Imagem de plano init:', e.message))
   initPrecificacaoPublica()
     .then(() => console.log('✓ Tabela de links de precificação verificada'))
     .catch(e => console.warn('⚠ Precificação pública init:', e.message))
