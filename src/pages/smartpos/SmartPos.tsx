@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import {
-  ChevronDown, Loader2, Search, Smartphone, Plus, Pencil, Trash2, ImagePlus, AlertTriangle,
+  ChevronDown, Loader2, Search, Smartphone, Plus, Pencil, Trash2, ImagePlus, AlertTriangle, Zap,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
@@ -16,11 +16,14 @@ interface Rascunho {
   modelo: string
   fabricante: string
   observacao: string
+  integracaoPropria: boolean
+  integracaoNome: string
   ativo: boolean
 }
 
 const vazio = (adquirente = ''): Rascunho => ({
-  id: null, adquirente, modelo: '', fabricante: '', observacao: '', ativo: true,
+  id: null, adquirente, modelo: '', fabricante: '', observacao: '',
+  integracaoPropria: false, integracaoNome: '', ativo: true,
 })
 
 export function SmartPos() {
@@ -93,6 +96,8 @@ export function SmartPos() {
         modelo: edicao.modelo.trim(),
         fabricante: edicao.fabricante.trim() || null,
         observacao: edicao.observacao.trim() || null,
+        integracaoPropria: edicao.integracaoPropria,
+        integracaoNome: edicao.integracaoNome.trim() || null,
         ativo: edicao.ativo,
       })
       toast.success(edicao.id ? 'Terminal atualizado.' : 'Terminal cadastrado.')
@@ -199,14 +204,28 @@ export function SmartPos() {
                       <div key={t.id}
                         className={clsx('rounded-lg border border-slate-200 dark:border-slate-700 p-3 text-center relative group',
                           !t.ativo && 'opacity-50')}>
-                        <div className="h-24 flex items-center justify-center mb-2">
+                        <div className="h-24 flex items-center justify-center mb-2 relative">
                           {fotos[t.id]
                             ? <img src={fotos[t.id]} alt={t.modelo} className="max-h-24 object-contain" />
                             : <Smartphone className="w-8 h-8 text-slate-300 dark:text-slate-600" />}
+                          {/* Sobre a imagem porque muda o caminho todo: não é habilitação
+                              pelo Smart TEF, e quem bate o olho precisa ver antes de pedir. */}
+                          {t.integracaoPropria && (
+                            <span className="absolute -top-1 left-1/2 -translate-x-1/2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-600 text-white text-[10px] font-semibold shadow">
+                              <Zap className="w-3 h-3" /> Integração própria
+                            </span>
+                          )}
                         </div>
                         <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t.modelo}</p>
                         {t.fabricante && <p className="text-xs text-slate-500">{t.fabricante}</p>}
-                        {t.observacao && (
+                        {t.integracaoPropria && (
+                          <p className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-1 font-medium">
+                            {t.integracaoNome
+                              ? `Integra direto: ${t.integracaoNome}`
+                              : 'Integra direto, sem Smart TEF'}
+                          </p>
+                        )}
+                        {t.observacao && !t.integracaoPropria && (
                           <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">{t.observacao}</p>
                         )}
                         {!t.ativo && <p className="text-[10px] text-slate-400 mt-1">inativo</p>}
@@ -216,6 +235,8 @@ export function SmartPos() {
                             onClick={() => setEdicao({
                               id: t.id, adquirente: t.adquirente, modelo: t.modelo,
                               fabricante: t.fabricante ?? '', observacao: t.observacao ?? '',
+                              integracaoPropria: t.integracaoPropria,
+                              integracaoNome: t.integracaoNome ?? '',
                               ativo: t.ativo,
                             })}
                             className="p-1 rounded text-slate-400 hover:text-blue-600 hover:bg-slate-100 dark:hover:bg-slate-700">
@@ -292,6 +313,24 @@ export function SmartPos() {
                   onChange={(e) => setEdicao({ ...edicao, ativo: e.target.checked })} />
                 Homologado / ativo
               </label>
+            </div>
+
+            <div className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-900/10 p-3 space-y-2">
+              <label className="flex items-center gap-2 text-sm text-slate-800 dark:text-slate-100">
+                <input type="checkbox" className="accent-emerald-600" checked={edicao.integracaoPropria}
+                  onChange={(e) => setEdicao({ ...edicao, integracaoPropria: e.target.checked })} />
+                <Zap className="w-4 h-4 text-emerald-600" />
+                Este aparelho tem integração própria
+              </label>
+              {edicao.integracaoPropria && (
+                <input className="input-field w-full" value={edicao.integracaoNome}
+                  onChange={(e) => setEdicao({ ...edicao, integracaoNome: e.target.value })}
+                  placeholder="Qual integração? Ex.: SDK Cielo LIO, Stone Connect" />
+              )}
+              <p className="text-[11px] text-slate-500">
+                Integra direto com o Command, sem passar pelo Smart TEF — o caminho de
+                habilitação é outro. Aparece em destaque sobre a foto do aparelho.
+              </p>
             </div>
 
             <div>

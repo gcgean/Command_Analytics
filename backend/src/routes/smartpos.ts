@@ -23,6 +23,8 @@ const formatar = (t: any) => ({
   modelo: t.modelo as string,
   fabricante: (t.fabricante ?? null) as string | null,
   observacao: (t.observacao ?? null) as string | null,
+  integracaoPropria: Number(t.integracao_propria) === 1,
+  integracaoNome: (t.integracao_nome ?? null) as string | null,
   fonte: (t.fonte ?? null) as string | null,
   temImagem: !!t.imagem_nome,
   ativo: Number(t.ativo) === 1,
@@ -67,14 +69,19 @@ export async function smartposRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Informe a adquirente e o modelo.' })
     }
     await prisma.$executeRawUnsafe(
-      `INSERT INTO smartpos_homologado (adquirente, modelo, fabricante, observacao, fonte, ativo, ordem)
-       VALUES (?,?,?,?,?,?,?)
+      `INSERT INTO smartpos_homologado
+         (adquirente, modelo, fabricante, observacao, fonte, integracao_propria,
+          integracao_nome, ativo, ordem)
+       VALUES (?,?,?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE fabricante = VALUES(fabricante), observacao = VALUES(observacao),
-         fonte = VALUES(fonte), ativo = VALUES(ativo), ordem = VALUES(ordem)`,
+         fonte = VALUES(fonte), integracao_propria = VALUES(integracao_propria),
+         integracao_nome = VALUES(integracao_nome), ativo = VALUES(ativo), ordem = VALUES(ordem)`,
       adquirente, modelo,
       String(b.fabricante ?? '').trim() || null,
       String(b.observacao ?? '').trim() || null,
       String(b.fonte ?? '').trim() || null,
+      b.integracaoPropria ? 1 : 0,
+      String(b.integracaoNome ?? '').trim() || null,
       b.ativo === false ? 0 : 1,
       Number(b.ordem ?? 0) || 0)
     const [novo] = await prisma.$queryRawUnsafe<any[]>(
@@ -92,13 +99,15 @@ export async function smartposRoutes(app: FastifyInstance) {
     await prisma.$executeRawUnsafe(
       `UPDATE smartpos_homologado
           SET adquirente = ?, modelo = ?, fabricante = ?, observacao = ?, fonte = ?,
-              ativo = ?, ordem = ?
+              integracao_propria = ?, integracao_nome = ?, ativo = ?, ordem = ?
         WHERE id = ?`,
       String(b.adquirente ?? atual.adquirente).trim(),
       String(b.modelo ?? atual.modelo).trim(),
       b.fabricante === undefined ? atual.fabricante : (String(b.fabricante).trim() || null),
       b.observacao === undefined ? atual.observacao : (String(b.observacao).trim() || null),
       b.fonte === undefined ? atual.fonte : (String(b.fonte).trim() || null),
+      b.integracaoPropria === undefined ? atual.integracao_propria : (b.integracaoPropria ? 1 : 0),
+      b.integracaoNome === undefined ? atual.integracao_nome : (String(b.integracaoNome).trim() || null),
       b.ativo === undefined ? atual.ativo : (b.ativo ? 1 : 0),
       b.ordem === undefined ? atual.ordem : Number(b.ordem) || 0,
       Number(id))

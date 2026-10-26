@@ -557,6 +557,9 @@ export interface TerminalSmartPos {
   fabricante: string | null
   observacao: string | null
   fonte: string | null
+  /** Aparelho que integra direto com o Command, sem passar pelo Smart TEF. */
+  integracaoPropria: boolean
+  integracaoNome: string | null
   temImagem: boolean
   ativo: boolean
   ordem: number

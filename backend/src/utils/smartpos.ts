@@ -20,6 +20,10 @@ export async function initSmartPos(): Promise<void> {
       -- Imagem própria: a do fornecedor é dele, aqui a equipe sobe a que quiser.
       imagem_nome   VARCHAR(120) NULL,
       imagem_mime   VARCHAR(120) NULL,
+      -- Aparelho que fala direto com o Command, sem passar pelo Smart TEF. O caminho de
+      -- habilitação é outro, então precisa saltar aos olhos no card.
+      integracao_propria TINYINT(1) NOT NULL DEFAULT 0,
+      integracao_nome    VARCHAR(120) NULL,
       ativo         TINYINT(1) NOT NULL DEFAULT 1,
       ordem         INT NOT NULL DEFAULT 0,
       criado_em     DATETIME NOT NULL DEFAULT NOW(),
@@ -29,4 +33,19 @@ export async function initSmartPos(): Promise<void> {
       INDEX idx_smartpos_modelo (modelo)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+
+  // Bancos que já tinham a tabela antes destas colunas.
+  for (const [coluna, tipo] of [
+    ['integracao_propria', 'TINYINT(1) NOT NULL DEFAULT 0'],
+    ['integracao_nome', 'VARCHAR(120) NULL'],
+  ]) {
+    const [existe] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+      SELECT COUNT(*) AS total FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'smartpos_homologado'
+         AND COLUMN_NAME = ?`, coluna)
+    if (!Number(existe?.total ?? 0)) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE smartpos_homologado ADD COLUMN ${coluna} ${tipo}`).catch(() => {})
+    }
+  }
 }
