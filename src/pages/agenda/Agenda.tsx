@@ -1,6 +1,6 @@
 import { useState, useEffect, Fragment } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ChevronLeft, ChevronRight, Plus, Clock, User, Search, Calendar, Pencil, CheckSquare, Trash2, History, Eye } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronDown, Plus, Clock, User, Search, Calendar, Pencil, CheckSquare, Trash2, History, Eye } from 'lucide-react'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -209,6 +209,9 @@ export function Agenda() {
   const [formClienteNome, setFormClienteNome] = useState('')
   // Técnicos além do principal. O agendamento é replicado para cada um ao salvar.
   const [tecnicosExtras, setTecnicosExtras] = useState<number[]>([])
+  // Fechado por padrão: a maioria dos agendamentos é de um técnico só, e a lista aberta
+  // empurrava data e horário para fora da tela.
+  const [equipeAberta, setEquipeAberta] = useState(false)
   const [newFiles, setNewFiles] = useState<File[]>([])
 
   // Edit appointment modal
@@ -387,6 +390,7 @@ export function Agenda() {
       }
       setForm({ clienteId: '', tecnicoId: '', tipo: 'Instalação', data: toBRDate(todayStr()), horario: '09:00', dataFim: toBRDate(todayStr()), horarioFim: '10:00', observacoes: '' })
       setTecnicosExtras([])
+      setEquipeAberta(false)
       setFormClienteNome('')
       setNewFiles([])
       buscar()
@@ -875,38 +879,52 @@ export function Agenda() {
           />
 
           {/* Equipe: marcar mais técnicos replica o agendamento para cada um, em vez de
-              obrigar a lançar o mesmo compromisso várias vezes. */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+              obrigar a lançar o mesmo compromisso várias vezes. Recolhido por padrão. */}
+          <div className="rounded-lg border border-slate-200 dark:border-slate-700">
+            <button type="button" onClick={() => setEquipeAberta(v => !v)}
+              className="w-full flex items-center justify-between gap-2 px-3 py-2 text-left">
+              <span className="text-sm text-slate-700 dark:text-slate-300">
                 Outros técnicos neste agendamento
-              </label>
-              {tecnicosExtras.length > 0 && (
-                <span className="text-[11px] text-blue-600 dark:text-blue-400">
-                  {tecnicosExtras.length + (form.tecnicoId ? 1 : 0)} agendamentos serão criados
-                </span>
-              )}
-            </div>
-            <div className="rounded-lg border border-slate-300 dark:border-slate-700 max-h-36 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
-              {tecnicos.filter(u => String(u.id) !== form.tecnicoId).map(u => (
-                <label key={u.id}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40">
-                  <input type="checkbox" className="accent-blue-600"
-                    checked={tecnicosExtras.includes(u.id)}
-                    onChange={e => setTecnicosExtras(atual => e.target.checked
-                      ? [...atual, u.id]
-                      : atual.filter(x => x !== u.id))} />
-                  <span className="text-slate-700 dark:text-slate-200">{u.nome}</span>
-                </label>
-              ))}
-              {tecnicos.length === 0 && (
-                <p className="px-3 py-2 text-xs text-slate-500">Nenhum técnico disponível.</p>
-              )}
-            </div>
-            <p className="text-[11px] text-slate-400 mt-1">
-              Cada técnico marcado recebe o agendamento na própria agenda e é avisado no
-              Telegram. Os anexos ficam no agendamento do técnico principal.
-            </p>
+                {tecnicosExtras.length > 0 && (
+                  <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300">
+                    {tecnicosExtras.length + (form.tecnicoId ? 1 : 0)} agendamentos
+                  </span>
+                )}
+              </span>
+              <ChevronDown className={clsx('w-4 h-4 text-slate-400 transition-transform',
+                equipeAberta && 'rotate-180')} />
+            </button>
+
+            {!equipeAberta && tecnicosExtras.length > 0 && (
+              <p className="px-3 pb-2 -mt-1 text-[11px] text-slate-500 truncate">
+                {tecnicos.filter(u => tecnicosExtras.includes(u.id)).map(u => u.nome).join(', ')}
+              </p>
+            )}
+
+            {equipeAberta && (
+              <div className="px-3 pb-3">
+                <div className="rounded-lg border border-slate-200 dark:border-slate-700 max-h-36 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                  {tecnicos.filter(u => String(u.id) !== form.tecnicoId).map(u => (
+                    <label key={u.id}
+                      className="flex items-center gap-2 px-3 py-1.5 text-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/40">
+                      <input type="checkbox" className="accent-blue-600"
+                        checked={tecnicosExtras.includes(u.id)}
+                        onChange={e => setTecnicosExtras(atual => e.target.checked
+                          ? [...atual, u.id]
+                          : atual.filter(x => x !== u.id))} />
+                      <span className="text-slate-700 dark:text-slate-200">{u.nome}</span>
+                    </label>
+                  ))}
+                  {tecnicos.length === 0 && (
+                    <p className="px-3 py-2 text-xs text-slate-500">Nenhum técnico disponível.</p>
+                  )}
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Cada técnico marcado recebe o agendamento na própria agenda e é avisado no
+                  Telegram. Os anexos ficam no agendamento do técnico principal.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4">
