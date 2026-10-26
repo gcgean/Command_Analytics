@@ -890,6 +890,12 @@ export function Pipeline() {
 
   async function salvarEdicaoCliente() {
     if (!editCliente) return
+    // Processo nascido de triagem tem dono conhecido — quem atendeu o cliente. Salvar sem
+    // responsável devolveria ao quadro um processo que ninguém está tocando.
+    if (triagemOrigem !== null && editResponsavel === 'none') {
+      setEditErro('Processo vindo da triagem guiada precisa de responsável.')
+      return
+    }
     const trocouServico = editServicoId && editServicoId !== editServicoInicial
     if (trocouServico) {
       const nomeNovo = editServicos.find((s) => String(s.id) === editServicoId)?.nome || 'o serviço selecionado'
@@ -1863,11 +1869,17 @@ export function Pipeline() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Responsável</label>
+                <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
+                  Responsável
+                  {triagemOrigem !== null && <span className="text-red-500 ml-1">*</span>}
+                </label>
                 <select
                   value={editResponsavel}
                   onChange={(e) => setEditResponsavel(e.target.value)}
-                  className="h-10 w-full rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-3"
+                  className={`h-10 w-full rounded-lg border bg-white dark:bg-slate-900 text-sm px-3 ${
+                    triagemOrigem !== null && editResponsavel === 'none'
+                      ? 'border-red-400 dark:border-red-500'
+                      : 'border-slate-300 dark:border-slate-700'}`}
                 >
                   <option value="none">Sem responsável</option>
                   {editResponsaveis.map((responsavel) => (

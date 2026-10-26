@@ -283,14 +283,26 @@ export async function triagemRoutes(app: FastifyInstance) {
     const [a] = await prisma.$queryRawUnsafe<any[]>(
       `SELECT * FROM triagem_atendimento WHERE id = ?`, Number(id))
     if (!a) return reply.status(404).send({ error: 'Atendimento não encontrado.' })
-    if (a.situacao === 'concluido') {
-      return reply.status(400).send({ error: 'Atendimento concluído não aceita alteração.' })
-    }
-
     const modelo = await carregarModelo(Number(a.modelo_id))
     if (!modelo) return reply.status(400).send({ error: 'Modelo indisponível.' })
 
-    const respostas = { ...JSON.parse(a.respostas || '{}'), ...(b.respostas ?? {}) }
+    // Concluída, a triagem vira registro: o que o cliente respondeu não se mexe mais. As
+    // perguntas de uso interno são outra coisa — o que a equipe descobre depois precisa de
+    // onde ser anotado, e reabrir a triagem só para isso seria pior.
+    const enviadas = b.respostas ?? {}
+    if (a.situacao === 'concluido') {
+      const internas = new Set(modelo.perguntas.filter((p) => p.publico === 'tecnico').map((p) => p.chave))
+      const antigas = JSON.parse(a.respostas || '{}')
+      const travadas = Object.keys(enviadas).filter(
+        (c) => !internas.has(c) && String(enviadas[c] ?? '') !== String(antigas[c] ?? ''))
+      if (travadas.length > 0) {
+        return reply.status(400).send({
+          error: 'Triagem concluída: só as anotações de uso interno podem ser alteradas.',
+        })
+      }
+    }
+
+    const respostas = { ...JSON.parse(a.respostas || '{}'), ...enviadas }
     const cenario = identificarCenario(modelo, respostas)
 
     await prisma.$executeRawUnsafe(
@@ -394,6 +406,28 @@ export async function triagemRoutes(app: FastifyInstance) {
            (cliente_id, processo_id, tipo, observacao, usuario_id, data_hora)
          VALUES (?,?, 'observacao', ?, ?, UTC_TIMESTAMP())`,
         Number(a.cliente_id), processoId, bloco, usuarioId,
+      ).catch(() => {})
+    }
+
+    // Processo que nasce sem dono fica órfão no quadro. Quem conduziu a triagem é o dono
+    // natural: foi quem falou com o cliente e mandou o link. Só cai para quem concluiu se a
+    // triagem não tiver atendente registrado.
+    const responsavelId = Number(a.atendente_id ?? 0) || usuarioId
+    if (processoId > 0 && responsavelId) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO implantacao_responsavel_processo
+           (processo_id, cliente_id, responsavel_id, atualizado_em, atualizado_por)
+         VALUES (?,?,?, UTC_TIMESTAMP(), ?)
+         ON DUPLICATE KEY UPDATE responsavel_id = VALUES(responsavel_id),
+           atualizado_em = UTC_TIMESTAMP(), atualizado_por = VALUES(atualizado_por)`,
+        processoId, Number(a.cliente_id), responsavelId, usuarioId,
+      ).catch(() => {})
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO implantacao_movimentacoes
+           (cliente_id, processo_id, tipo, responsavel_id, observacao, usuario_id, data_hora)
+         VALUES (?,?, 'responsavel', ?, ?, ?, UTC_TIMESTAMP())`,
+        Number(a.cliente_id), processoId, responsavelId,
+        'Responsável definido pela triagem guiada.', usuarioId,
       ).catch(() => {})
     }
 

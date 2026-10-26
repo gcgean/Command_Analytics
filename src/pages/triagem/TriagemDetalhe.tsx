@@ -127,6 +127,10 @@ export function TriagemDetalhe() {
   }
 
   const concluido = dados?.situacao === 'concluido'
+  // Concluída, a triagem vira registro: o que o cliente respondeu está fechado. O que é de
+  // uso interno continua aberto — informação nova sobre o caso aparece depois de concluir, e
+  // ela precisa de um lugar sem reabrir a triagem.
+  const travada = (p: { publico: string }) => concluido && p.publico !== 'tecnico'
   const faltando = useMemo(() => new Set(pendentes), [pendentes])
 
   // O que veio do cadastro não vira formulário: aparece como resumo, e só vira campo se o
@@ -209,7 +213,7 @@ export function TriagemDetalhe() {
               <Loader2 className="w-3 h-3 animate-spin" /> salvando
             </span>
           )}
-          {!concluido && sujo && !salvando && (
+          {sujo && !salvando && (
             <Button variant="secondary" onClick={() => void salvar(respostas)}>
               <Save className="w-4 h-4" /> Salvar
             </Button>
@@ -241,6 +245,10 @@ export function TriagemDetalhe() {
             <p className="text-emerald-700 dark:text-emerald-300 mt-0.5">
               Concluir a triagem não significa integração instalada. A instalação só é dada como
               pronta depois do checklist de testes aprovado dentro do processo.
+            </p>
+            <p className="text-emerald-700 dark:text-emerald-300 mt-0.5">
+              As respostas do cliente ficam congeladas. As anotações de uso interno seguem
+              editáveis — é onde registrar o que aparecer depois.
             </p>
           </div>
         </div>
@@ -294,9 +302,10 @@ export function TriagemDetalhe() {
                   <CampoTriagem key={p.chave} pergunta={p} valor={respostas[p.chave]}
                     pendente={faltando.has(p.chave)}
                     anexos={anexosDe(p.chave)}
-                    onEnviar={concluido ? undefined : (l) => enviarAnexo(p.chave, l)}
-                    onRemover={concluido ? undefined : removerAnexo}
-                    onChange={(v) => { if (!concluido) responder(p.chave, v) }} />
+                    somenteLeitura={travada(p)}
+                    onEnviar={travada(p) ? undefined : (l) => enviarAnexo(p.chave, l)}
+                    onRemover={travada(p) ? undefined : removerAnexo}
+                    onChange={(v) => { if (!travada(p)) responder(p.chave, v) }} />
                 ))}
               </div>
             </Card>
