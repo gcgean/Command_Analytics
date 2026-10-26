@@ -48,7 +48,11 @@ export async function initComunicados(): Promise<void> {
 const espera = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export async function comunicadosRoutes(app: FastifyInstance) {
-  /** Quem pode receber: usuário ativo e com o Telegram vinculado. */
+  /**
+   * Quem pode receber: usuário ativo e com o Telegram vinculado. Inativo nem aparece —
+   * continuava na lista por engano, e quem saiu da empresa não deve receber comunicado
+   * interno nem por marcação manual.
+   */
   app.get('/destinatarios', { preHandler: authMiddleware, schema: { tags: ['Comunicados'] } }, async () => {
     const linhas = await prisma.$queryRawUnsafe<any[]>(`
       SELECT u.COD_USU AS id,
@@ -58,7 +62,8 @@ export async function comunicadosRoutes(app: FastifyInstance) {
              COALESCE(u.ATIVO, 'S') AS ativo
         FROM usuario u
        WHERE u.ID_TELEGRAM IS NOT NULL AND u.ID_TELEGRAM <> ''
-       ORDER BY COALESCE(u.ATIVO,'S') DESC, nome`)
+         AND COALESCE(u.ATIVO, 'S') = 'S'
+       ORDER BY nome`)
     return linhas.map((l) => ({
       id: Number(l.id),
       nome: l.nome || l.login || `Usuário ${l.id}`,
@@ -131,6 +136,63 @@ export async function comunicadosRoutes(app: FastifyInstance) {
       `UPDATE comunicado SET entregues = ?, falhas = ? WHERE id = ?`, entregues, falhas, comunicadoId)
 
     return { id: comunicadoId, destinatarios: alvo.length, entregues, falhas }
+  })
+
+  /**
+   * Reenvia só a quem falhou. Não é automático de propósito: o erro que aparece aqui é
+   * timeout do relay, e timeout não diz se a mensagem chegou ou não — repetir sozinho
+   * duplicaria o comunicado para quem já recebeu. Quem decide é quem está olhando.
+   */
+  app.post('/:id/reenviar', { preHandler: authMiddleware, schema: { tags: ['Comunicados'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const comunicadoId = Number(id)
+
+    const [c] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT id, titulo, mensagem FROM comunicado WHERE id = ?`, comunicadoId)
+    if (!c) return reply.status(404).send({ error: 'Comunicado não encontrado.' })
+
+    const pendentes = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT cd.id, cd.usuario_id, cd.nome, u.ID_TELEGRAM AS telegram
+         FROM comunicado_destinatario cd
+         INNER JOIN usuario u ON u.COD_USU = cd.usuario_id
+        WHERE cd.comunicado_id = ? AND cd.entregue = 0
+          AND u.ID_TELEGRAM IS NOT NULL AND u.ID_TELEGRAM <> ''`, comunicadoId)
+    if (pendentes.length === 0) {
+      return reply.status(400).send({ error: 'Não há falhas para reenviar neste comunicado.' })
+    }
+
+    const texto = c.titulo ? `📢 *${c.titulo}*
+
+${c.mensagem}` : `📢 ${c.mensagem}`
+    let entregues = 0
+    let falhas = 0
+
+    for (const d of pendentes) {
+      let erro: string | null = null
+      try {
+        const r = await TelegramService.enviar({ userId: String(d.telegram), mensagem: texto })
+        if (r.success) entregues += 1
+        else { falhas += 1; erro = r.error ?? 'Falha no envio' }
+      } catch (e: any) {
+        falhas += 1
+        erro = String(e?.message ?? e)
+      }
+      await prisma.$executeRawUnsafe(
+        `UPDATE comunicado_destinatario SET entregue = ?, erro = ? WHERE id = ?`,
+        erro ? 0 : 1, erro?.slice(0, 300) ?? null, Number(d.id),
+      ).catch(() => {})
+      await espera(INTERVALO_ENVIO_MS)
+    }
+
+    // Recalcula pelo log, que é a fonte: somar aqui erraria se alguém reenviasse duas vezes.
+    const [tot] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT SUM(entregue) AS ok, SUM(1 - entregue) AS nok
+         FROM comunicado_destinatario WHERE comunicado_id = ?`, comunicadoId)
+    await prisma.$executeRawUnsafe(
+      `UPDATE comunicado SET entregues = ?, falhas = ? WHERE id = ?`,
+      Number(tot?.ok ?? 0), Number(tot?.nok ?? 0), comunicadoId)
+
+    return { tentados: pendentes.length, entregues, falhas }
   })
 
   /** Histórico, para saber o que já foi comunicado e quem não recebeu. */

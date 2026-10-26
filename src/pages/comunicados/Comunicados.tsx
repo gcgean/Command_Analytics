@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import clsx from 'clsx'
-import { Send, Loader2, Users, Search, CheckCircle2, AlertTriangle, History, Megaphone } from 'lucide-react'
+import { Send, Loader2, Users, Search, CheckCircle2, AlertTriangle, History, Megaphone, RefreshCw } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
@@ -20,6 +20,7 @@ export function Comunicados() {
   const [busca, setBusca] = useState('')
   const [selecionados, setSelecionados] = useState<number[]>([])
   const [detalhe, setDetalhe] = useState<{ id: number; linhas: EntregaComunicado[] } | null>(null)
+  const [reenviando, setReenviando] = useState<number | null>(null)
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -40,6 +41,26 @@ export function Comunicados() {
   }, [toast])
 
   useEffect(() => { void carregar() }, [carregar])
+
+  // Reenvio é manual de propósito: o erro que aparece no histórico é timeout do relay, e
+  // timeout não diz se a mensagem chegou — repetir sozinho duplicaria para quem já recebeu.
+  async function reenviar(id: number) {
+    setReenviando(id)
+    try {
+      const r = await api.reenviarComunicado(id)
+      if (r.falhas > 0) toast.error(`${r.entregues} entregue(s), ${r.falhas} ainda falhando.`)
+      else toast.success(`${r.entregues} entregue(s) no reenvio.`)
+      const h = await api.getHistoricoComunicados().catch(() => [])
+      setHistorico(h)
+      if (detalhe?.id === id) {
+        setDetalhe({ id, linhas: await api.getEntregasComunicado(id).catch(() => []) })
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível reenviar.')
+    } finally {
+      setReenviando(null)
+    }
+  }
 
   const visiveis = useMemo(() => {
     const termo = busca.trim().toLowerCase()
@@ -188,6 +209,17 @@ export function Comunicados() {
                           {c.falhas > 0 && (
                             <span className="block text-xs text-red-500 mt-0.5">{c.falhas} falha(s)</span>
                           )}
+                          {c.falhas > 0 && (
+                            <span role="button" tabIndex={0}
+                              onClick={(e) => { e.stopPropagation(); void reenviar(c.id) }}
+                              onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); void reenviar(c.id) } }}
+                              className="mt-1 inline-flex items-center gap-1 text-[11px] text-sky-600 dark:text-sky-400 hover:underline cursor-pointer">
+                              {reenviando === c.id
+                                ? <Loader2 className="w-3 h-3 animate-spin" />
+                                : <RefreshCw className="w-3 h-3" />}
+                              Reenviar aos que falharam
+                            </span>
+                          )}
                         </div>
                       </div>
                     </button>
@@ -257,13 +289,6 @@ export function Comunicados() {
                   <p className="p-6 text-sm text-slate-500 text-center">Ninguém encontrado.</p>
                 )}
               </div>
-              {destinatarios.some((d) => !d.ativo) && (
-                <p className="px-4 py-2.5 text-[11px] text-amber-600 dark:text-amber-400 border-t border-slate-200 dark:border-slate-700 flex gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                  Usuários inativos aparecem na lista mas não entram em "todos" — marque um a um
-                  se quiser incluí-los.
-                </p>
-              )}
             </Card>
           </div>
         </div>

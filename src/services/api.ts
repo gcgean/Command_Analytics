@@ -1277,6 +1277,9 @@ export const api = {
     fetchApi<ComunicadoHistorico[]>('/comunicados/historico'),
   getEntregasComunicado: (id: number) =>
     fetchApi<EntregaComunicado[]>(`/comunicados/historico/${id}`),
+  reenviarComunicado: (id: number) =>
+    fetchApi<{ tentados: number; entregues: number; falhas: number }>(
+      `/comunicados/${id}/reenviar`, { method: 'POST' }, 300_000),
 
   // ─── IA para sistemas externos (ERP Delphi) ────────────────
   getChavesIaExterna: () => fetchApi<ChaveIaExterna[]>('/ia-externa/chaves'),
