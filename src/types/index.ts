@@ -550,6 +550,34 @@ export interface PlanoCatalogo {
   temImagem?: boolean
 }
 
+export interface ItemPendenteTecnico {
+  id: number
+  status: number
+  clienteId: number | null
+  clienteNome: string | null
+  desenvolvedorNome: string | null
+  abertaEm: string | null
+  diasEmAberto: number
+  prioritaria: boolean
+  resumo: string | null
+}
+
+export interface TecnicoPendencias {
+  tecnicoId: number | null
+  nome: string
+  total: number
+  porStatus: Record<number, number>
+  maisAntigaDias: number
+  prioritarias: number
+  itens: ItemPendenteTecnico[]
+}
+
+export interface PendentesPorTecnico {
+  total: number
+  semTecnico: number
+  tecnicos: TecnicoPendencias[]
+}
+
 export interface TerminalSmartPos {
   id: number
   adquirente: string

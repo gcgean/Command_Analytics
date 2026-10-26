@@ -12,10 +12,11 @@ import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
 import { LancamentoSolicitacao, type PrefillSolicitacao } from './LancamentoSolicitacao'
 import { PainelDesempenhoDev } from './PainelDesempenhoDev'
+import { PainelPendentesTecnico } from './PainelPendentesTecnico'
 import { AuditoriaTimeline } from '../../components/ui/AuditoriaTimeline'
 import type { ClienteAnexo, Projeto, Solicitacao, SolicitacaoPendenteAtualizacao, Usuario } from '../../types'
 
-type Aba = 'suporte' | 'finalizadas' | 'pendentes' | 'desempenho' | 'arquivadas'
+type Aba = 'suporte' | 'finalizadas' | 'pendentes' | 'desempenho' | 'arquivadas' | 'por-tecnico'
 
 // Mesmos códigos do Delphi (UMapaAtendimentos.pas). Não existe status 15.
 const S = {
@@ -834,7 +835,7 @@ export function MapaSolicitacoes() {
       {/* Resumo por etapa — sempre todas, na mesma ordem, mesmo com contagem zero. Clicar filtra.
           Escondido em "Clientes a atualizar": lá a lista não é por etapa. */}
       <div
-        hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'finalizadas' || aba === 'arquivadas'}
+        hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'por-tecnico' || aba === 'finalizadas' || aba === 'arquivadas'}
         className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-2"
       >
         <button
@@ -894,6 +895,7 @@ export function MapaSolicitacoes() {
           ['pendentes', 'Clientes a atualizar'],
           ['arquivadas', 'Arquivadas'],
           ['desempenho', 'Desempenho do Dev'],
+          ['por-tecnico', 'Pendentes por técnico'],
         ] as Array<[Aba, string]>).map(([id, label]) => (
           <button
             key={id}
@@ -987,6 +989,7 @@ export function MapaSolicitacoes() {
       </div>
 
       {aba === 'desempenho' && <PainelDesempenhoDev rotuloStatus={ROTULO_STATUS} />}
+      {aba === 'por-tecnico' && <PainelPendentesTecnico rotuloStatus={ROTULO_STATUS} />}
 
       {/* Clientes a atualizar — tabela, porque o que importa aqui é comparar versões, não o kanban */}
       {aba === 'pendentes' && (
@@ -1075,7 +1078,7 @@ export function MapaSolicitacoes() {
       )}
 
       {/* Grade de cards — largura cheia; detalhes agora vivem no menu de cada card */}
-      <div ref={gridRef} hidden={aba === 'pendentes' || aba === 'desempenho'}>
+      <div ref={gridRef} hidden={aba === 'pendentes' || aba === 'desempenho' || aba === 'por-tecnico'}>
         {loading ? (
           <div className="flex items-center justify-center h-40 text-slate-500">
             <Loader2 className="w-6 h-6 animate-spin mr-3" /> Carregando solicitações...

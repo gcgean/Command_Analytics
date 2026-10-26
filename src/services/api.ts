@@ -7,7 +7,7 @@ import type {
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
-  PlanoCatalogo, SistemaPlanos, TerminalSmartPos, GrupoSmartPos,
+  PlanoCatalogo, SistemaPlanos, TerminalSmartPos, GrupoSmartPos, PendentesPorTecnico,
   ModeloTriagem, ModeloTriagemCompleto, AtendimentoTriagem, AtendimentoTriagemDetalhe,
   PerguntaTriagem, CenarioTriagem, ChecklistTriagem, TriagemPublica, RespostaProntaTriagem,
   AnexoTriagem,
@@ -522,6 +522,10 @@ export const api = {
     const qs = q.toString()
     return fetchApi<PlanoCatalogo[]>(`/planos${qs ? `?${qs}` : ''}`)
   },
+  getPendentesPorTecnico: (tecnicoId?: number) =>
+    fetchApi<PendentesPorTecnico>(
+      `/solicitacoes/pendentes-por-tecnico${tecnicoId ? `?tecnicoId=${tecnicoId}` : ''}`),
+
   // ─── SmartPOS homologados ──────────────────────────────────
   getSmartPos: (filtros?: { busca?: string; adquirente?: string; todos?: boolean }) => {
     const q = new URLSearchParams()

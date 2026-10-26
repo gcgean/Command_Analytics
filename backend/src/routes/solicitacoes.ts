@@ -994,6 +994,80 @@ export async function solicitacoesRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
+  /**
+   * GET /solicitacoes/pendentes-por-tecnico — quanto cada técnico tem na mão agora.
+   *
+   * "Pendente" é tudo que não foi concluído, cancelado nem arquivado. Não é recorte de
+   * período: a pergunta é o acúmulo de hoje, não o que entrou no mês.
+   */
+  app.get('/pendentes-por-tecnico', { preHandler: authMiddleware, schema: { tags: ['Solicitações'] } }, async (request) => {
+    const { tecnicoId } = request.query as Record<string, string>
+
+    const where: Record<string, any> = {
+      status: { notIn: [STATUS.CONCLUIDO, STATUS.CANCELADO, STATUS.ARQUIVADO] },
+    }
+    if (tecnicoId) where.tecnicoId = Number(tecnicoId) || undefined
+
+    const linhas = await prisma.atendimento.findMany({
+      where,
+      select: {
+        id: true, status: true, tecnicoId: true, prioridade: true, bugSistema: true,
+        dataAbertura: true, observacoes: true,
+        tecnico: { select: { id: true, nomeUsu: true, nomeCompleto: true } },
+        cliente: { select: { id: true, nome: true } },
+        desenvolvedor: { select: { id: true, nomeUsu: true, nomeCompleto: true } },
+      },
+      orderBy: { dataAbertura: 'asc' },
+    })
+
+    const agora = Date.now()
+    const diasDe = (d: Date | null) =>
+      d ? Math.max(0, Math.round((agora - new Date(d).getTime()) / 86_400_000)) : null
+
+    const porTecnico = new Map<string, any>()
+    for (const a of linhas) {
+      // Sem técnico é um grupo de verdade, não um detalhe: é trabalho sem dono.
+      const chave = a.tecnicoId == null ? 'sem' : String(a.tecnicoId)
+      if (!porTecnico.has(chave)) {
+        porTecnico.set(chave, {
+          tecnicoId: a.tecnicoId ?? null,
+          nome: a.tecnico?.nomeCompleto || a.tecnico?.nomeUsu || 'Sem técnico',
+          total: 0,
+          porStatus: {} as Record<number, number>,
+          maisAntigaDias: 0,
+          prioritarias: 0,
+          itens: [] as any[],
+        })
+      }
+      const g = porTecnico.get(chave)
+      const dias = diasDe(a.dataAbertura as Date | null) ?? 0
+      g.total += 1
+      g.porStatus[Number(a.status)] = (g.porStatus[Number(a.status)] ?? 0) + 1
+      if (dias > g.maisAntigaDias) g.maisAntigaDias = dias
+      const prioritaria = String(a.prioridade ?? '').trim() === 'S'
+        || String(a.bugSistema ?? '').trim() === 'S'
+      if (prioritaria) g.prioritarias += 1
+      g.itens.push({
+        id: Number(a.id),
+        status: Number(a.status),
+        clienteId: a.cliente?.id ?? null,
+        clienteNome: a.cliente?.nome ?? null,
+        desenvolvedorNome: a.desenvolvedor?.nomeCompleto || a.desenvolvedor?.nomeUsu || null,
+        abertaEm: a.dataAbertura,
+        diasEmAberto: dias,
+        prioritaria,
+        resumo: String(a.observacoes ?? '').replace(/\s+/g, ' ').trim().slice(0, 160) || null,
+      })
+    }
+
+    const tecnicos = [...porTecnico.values()].sort((a, b) => b.total - a.total)
+    return {
+      total: linhas.length,
+      semTecnico: porTecnico.get('sem')?.total ?? 0,
+      tecnicos,
+    }
+  })
+
   // GET /solicitacoes/dashboard-dev — números do painel de desempenho do desenvolvimento.
   // Sem IA aqui de propósito: os números precisam aparecer na hora; a leitura da IA é um passo
   // separado e opcional (POST .../analise), pra IA lenta ou indisponível não derrubar o painel.
