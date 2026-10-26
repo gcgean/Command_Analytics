@@ -266,6 +266,7 @@ export function RemuneracaoComercial() {
                         {([
                           ['Implantação', l.composicao.implantacao],
                           ['Migração', l.composicao.migracao],
+                          ['Mensalidade da venda', l.composicao.mensalidadeVenda],
                           ['Mensalidade nova', l.composicao.mensalidadeNova],
                           ['Upgrades', l.composicao.upgrades],
                           ['PayCore', l.composicao.paycore],

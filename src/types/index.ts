@@ -1590,6 +1590,7 @@ export interface CandidatoComissao { id: number; nome: string; processos: number
 export interface ComposicaoBaseComissao {
   implantacao: number
   migracao: number
+  mensalidadeVenda: number
   mensalidadeNova: number
   upgrades: number
   paycore: number

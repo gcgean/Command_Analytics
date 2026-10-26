@@ -184,6 +184,7 @@ export function MeuDesempenho() {
               {([
                 ['Implantação', v.composicao.implantacao],
                 ['Migração', v.composicao.migracao],
+                ['Mensalidade da venda', v.composicao.mensalidadeVenda],
                 ['Mensalidade nova', v.composicao.mensalidadeNova],
                 ['Upgrades', v.composicao.upgrades],
                 ['PayCore', v.composicao.paycore],
@@ -354,7 +355,9 @@ export function MeuDesempenho() {
                     <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                       Clientes novos ({dados.detalhe.clientesNovos.length})
                     </h3>
-                    <span className="text-xs text-slate-500">{brl(v.composicao.mensalidadeNova)} na base</span>
+                    <span className="text-xs text-slate-500">
+                      {brl(v.composicao.mensalidadeVenda + v.composicao.mensalidadeNova)} de mensalidade na base
+                    </span>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm min-w-[560px]">

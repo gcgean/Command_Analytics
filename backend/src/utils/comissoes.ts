@@ -198,6 +198,8 @@ function mesesDesde(admissao: string | Date | null, competencia: string): number
 export interface ComposicaoBase {
   implantacao: number
   migracao: number
+  /** Mensalidade negociada na venda, do próprio processo comercial. */
+  mensalidadeVenda: number
   mensalidadeNova: number
   upgrades: number
   paycore: number
@@ -268,19 +270,27 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
     const [b] = await prisma.$queryRawUnsafe<any[]>(
       `SELECT COUNT(*) AS q,
               COALESCE(SUM(c.valor_implantacao), 0) AS implantacao,
-              COALESCE(SUM(c.valor_migracao), 0) AS migracao
+              COALESCE(SUM(c.valor_migracao), 0) AS migracao,
+              COALESCE(SUM(c.valor_mensalidade), 0) AS mensalidade
          FROM processo_implantacao_comercial c
         WHERE c.id_usu_vendedor = ? AND DATE(${coluna}) BETWEEN ? AND ?`,
       usuarioId, inicio, fim,
-    ).catch(() => [{ q: 0, implantacao: 0, migracao: 0 }])
+    ).catch(() => [{ q: 0, implantacao: 0, migracao: 0, mensalidade: 0 }])
 
-    // Mensalidade dos clientes novos. A tabela `cliente` não guarda vendedor: a atribuição é a
-    // mesma do Boletim — o CRM pelo CNPJ e, na falta dele, quem fez o cadastro.
+    // Mensalidade de cliente novo que NÃO passou pelo processo comercial. Quando passou, o
+    // valor já veio acima, com o vendedor explícito na venda — contar dos dois lados dobraria
+    // a mensalidade da mesma venda. A tabela `cliente` não guarda vendedor, então aqui a
+    // atribuição é a mesma do Boletim: o CRM pelo CNPJ e, na falta dele, quem fez o cadastro.
     const [mens] = await prisma.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(SUM(c.valor_mensalidade), 0) AS valor
          FROM cliente c
          LEFT JOIN usuario u ON u.COD_USU = c.cod_usu_local_Cad
         WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000 AND c.ATIVO = 'S'
+          AND c.cod_cli NOT IN (
+                SELECT pi.id_cli FROM processo_implantacao pi
+                 INNER JOIN processo_implantacao_comercial pc ON pc.id_processo = pi.id
+                 WHERE DATE(pc.${coluna.replace('c.', '')}) BETWEEN ? AND ?
+                   AND pi.id_cli IS NOT NULL)
           AND c.DATACADASTRO_CLI BETWEEN ? AND ?
           AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
           AND UPPER(TRIM(COALESCE(
@@ -289,7 +299,7 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
                     AND nn.vendedor_nome IS NOT NULL AND nn.vendedor_nome <> ''
                   ORDER BY COALESCE(nn.finalizado_em, nn.criado_em, nn.data) DESC, nn.id DESC LIMIT 1),
                 NULLIF(u.NOME_USU, ''), ''))) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))`,
-      inicio, fim, v.nome ?? '', v.nome_usu ?? '',
+      inicio, fim, inicio, fim, v.nome ?? '', v.nome_usu ?? '',
     ).catch(() => [{ valor: 0 }])
 
     const [upg] = await prisma.$queryRawUnsafe<any[]>(
@@ -324,11 +334,12 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
     const composicao: ComposicaoBase = {
       implantacao: soCilos ? 0 : Number(b?.implantacao ?? 0),
       migracao: soCilos ? 0 : Number(b?.migracao ?? 0),
+      mensalidadeVenda: soCilos ? 0 : Number(b?.mensalidade ?? 0),
       mensalidadeNova: soCilos ? 0 : Number(mens?.valor ?? 0),
       upgrades: soCilos ? 0 : Number(upg?.valor ?? 0),
       paycore: Number(pay?.valor ?? 0),
     }
-    let base = composicao.implantacao + composicao.migracao
+    let base = composicao.implantacao + composicao.migracao + composicao.mensalidadeVenda
       + composicao.mensalidadeNova + composicao.upgrades + composicao.paycore
 
     // No plano proporcional a pessoa não é medida pelo que ela mesma vendeu: o que vale é o
