@@ -306,7 +306,14 @@ const CENARIOS = [
     chave: 'sem-integracao',
     nome: 'A — Cliente sem integração',
     descricao: 'Cliente ainda não tem meio de pagamento integrado ao Command.',
-    condicoes: [{ chave: 'ja_integrado', operador: 'igual', valor: 'Não' }],
+    // Pelo equipamento, e não pelo "já possui integração?": maquininha avulsa é, por
+    // definição, equipamento sem integração — e cliente que marca "Sim" achando que o
+    // maquininho dele já conversa com o sistema deixava a triagem sem cenário nenhum.
+    // SmartPOS e TEF/PinPad não chegam aqui: os cenários B e C vêm antes.
+    condicoes: [{
+      chave: 'equipamento', operador: 'em',
+      valor: ['Nenhum', 'Maquininha avulsa (sem integração)'],
+    }],
     passos: [
       'Confirmar a quantidade de caixas e o movimento do estabelecimento',
       'Identificar a adquirente e o equipamento atual',

@@ -205,7 +205,7 @@ export interface Condicao {
   chave: string
   /** igual | diferente | contem | preenchido | vazio | maior | menor */
   operador: string
-  valor?: string | number
+  valor?: string | number | Array<string | number>
 }
 
 /**
@@ -222,6 +222,9 @@ export function condicaoAtende(c: Condicao, respostas: Record<string, any>): boo
     case 'vazio': return vazio
     case 'diferente': return !vazio && texto !== String(c.valor ?? '')
     case 'contem': return !vazio && texto.toLowerCase().includes(String(c.valor ?? '').toLowerCase())
+    // Uma condição por resposta aceita obrigaria a cadastrar o mesmo cenário duas vezes
+    // quando duas opções levam ao mesmo lugar ("Nenhum" e "Maquininha avulsa", por exemplo).
+    case 'em': return !vazio && (Array.isArray(c.valor) ? c.valor : [c.valor]).map(String).includes(texto)
     case 'maior': return !vazio && Number(texto) > Number(c.valor ?? 0)
     case 'menor': return !vazio && Number(texto) < Number(c.valor ?? 0)
     case 'igual':

@@ -454,6 +454,14 @@ export function TriagemDetalhe() {
                   Sem cliente do cadastro vinculado — o processo não pode ser aberto.
                 </p>
               )}
+              {/* Botão desabilitado sem explicação deixa quem atende sem saída: o que falta
+                  tem que estar escrito ao lado dele. */}
+              {!cenario && pendentes.length === 0 && (
+                <p className="text-xs text-amber-600 dark:text-amber-400 mb-2">
+                  As respostas não se encaixam em nenhum cenário cadastrado — reveja as
+                  respostas do perfil operacional ou avise o responsável pelo roteiro.
+                </p>
+              )}
               <Button className="w-full" onClick={concluir}
                 disabled={concluindo || !cenario || pendentes.length > 0 || !dados.clienteId}>
                 {concluindo ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
