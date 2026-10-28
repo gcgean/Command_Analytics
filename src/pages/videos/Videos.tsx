@@ -17,6 +17,19 @@ interface VideoItem {
   visualizacoes: number
 }
 
+/**
+ * O id do vídeo no YouTube, de qualquer uma das formas que o cadastro guarda:
+ * watch?v=, youtu.be/, /embed/ e /shorts/ — com ou sem parâmetros de playlist.
+ */
+function youtubeId(url: string | null): string | null {
+  if (!url) return null
+  const m = url.match(/(?:youtu\.be\/|[?&]v=|\/embed\/|\/shorts\/)([A-Za-z0-9_-]{11})/)
+  return m ? m[1] : null
+}
+
+/** hqdefault existe para todo vídeo; maxresdefault não, e falha em metade do acervo. */
+const miniatura = (id: string) => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`
+
 function formatData(iso: string | null): string {
   if (!iso) return '—'
   try { return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) } catch { return '—' }
@@ -172,15 +185,27 @@ export function Videos() {
                 onClick={() => setVideoAberto(v.id)}
               >
                 <div className="bg-slate-900 h-36 flex items-center justify-center relative group">
-                  <div className="w-14 h-14 bg-blue-600/80 rounded-full flex items-center justify-center group-hover:bg-blue-600 transition-colors">
+                  {/* A capa do próprio vídeo diz mais que um ícone igual em todos os cards.
+                      object-cover corta as tarjas pretas que o hqdefault traz em 16:9. */}
+                  {youtubeId(v.url) && (
+                    <img
+                      src={miniatura(youtubeId(v.url)!)}
+                      alt=""
+                      loading="lazy"
+                      className="absolute inset-0 w-full h-full object-cover"
+                      onError={(e) => { e.currentTarget.style.display = 'none' }}
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors" />
+                  <div className="relative w-14 h-14 bg-blue-600/80 rounded-full flex items-center justify-center group-hover:bg-blue-600 transition-colors">
                     <Play size={24} className="text-white fill-white ml-1" />
                   </div>
                   {v.categoriaDescricao && (
-                    <span className="absolute top-2 left-2 badge bg-blue-600/80 text-white text-xs">
+                    <span className="absolute top-2 left-2 z-10 badge bg-blue-600/80 text-white text-xs">
                       {v.categoriaDescricao}
                     </span>
                   )}
-                  <span className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
+                  <span className="absolute bottom-2 right-2 z-10 bg-black/70 text-white text-xs px-1.5 py-0.5 rounded">
                     {v.visualizacoes} views
                   </span>
                 </div>
@@ -215,9 +240,23 @@ export function Videos() {
           onClick={() => setVideoAberto(null)}
         >
           <div className="card max-w-lg w-full" onClick={e => e.stopPropagation()}>
-            <div className="bg-slate-900 h-48 rounded-lg flex items-center justify-center mb-4">
-              <Play size={48} className="text-blue-400 fill-blue-400" />
-            </div>
+            {/* Assistir sem sair do sistema: o link para o YouTube continua abaixo, para
+                quem quiser a página do vídeo. */}
+            {youtubeId(videoModal.url) ? (
+              <div className="relative w-full rounded-lg overflow-hidden mb-4 aspect-video bg-slate-900">
+                <iframe
+                  src={`https://www.youtube-nocookie.com/embed/${youtubeId(videoModal.url)}`}
+                  title={videoModal.titulo ?? 'Vídeo'}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture"
+                  allowFullScreen
+                  className="absolute inset-0 w-full h-full border-0"
+                />
+              </div>
+            ) : (
+              <div className="bg-slate-900 h-48 rounded-lg flex items-center justify-center mb-4">
+                <Play size={48} className="text-blue-400 fill-blue-400" />
+              </div>
+            )}
             <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 mb-1">
               {videoModal.titulo ?? 'Sem título'}
             </h3>
@@ -237,7 +276,7 @@ export function Videos() {
                   rel="noreferrer"
                   className="btn-primary flex-1 justify-center"
                 >
-                  Abrir Vídeo
+                  Abrir no YouTube
                 </a>
               ) : (
                 <button
