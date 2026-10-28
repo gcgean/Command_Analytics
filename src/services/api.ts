@@ -4,7 +4,7 @@ import type {
   ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, PoliticaProvisionamentoIa, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
   MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada,
   PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
-  PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   PlanoCatalogo, SistemaPlanos, TerminalSmartPos, GrupoSmartPos, PendentesPorTecnico,
@@ -767,8 +767,31 @@ export const api = {
     const query = qs.toString()
     return fetchApi<{ total: number; page: number; limit: number; data: CampanhaCliente[] }>(`/campanhas/${id}/clientes${query ? `?${query}` : ''}`)
   },
-  addClientesCampanha: (id: number, data: { clienteIds?: number[]; todosAtivos?: boolean }) =>
+  addClientesCampanha: (id: number, data: { clienteIds?: number[]; todosAtivos?: boolean; filtros?: FiltroClientesCampanha }) =>
     fetchApi<{ ok: boolean; adicionados: number }>(`/campanhas/${id}/clientes`, { method: 'POST', body: JSON.stringify(data) }),
+  getOpcoesClientesCampanha: (estado?: string) =>
+    fetchApi<{
+      estados: string[]
+      cidades: string[]
+      planos: Array<{ id: number; descricao: string }>
+      classificacoes: Array<{ id: number; nome: string }>
+    }>(`/campanhas/opcoes-clientes${estado ? `?estado=${encodeURIComponent(estado)}` : ''}`),
+  getClientesDisponiveisCampanha: (id: number, params: FiltroClientesCampanha & { page?: number; limit?: number } = {}) => {
+    const qs = new URLSearchParams()
+    if (params.search) qs.set('search', params.search)
+    if (params.estado) qs.set('estado', params.estado)
+    if (params.cidade) qs.set('cidade', params.cidade)
+    if (params.planoId) qs.set('planoId', String(params.planoId))
+    if (params.classificacaoId) qs.set('classificacaoId', String(params.classificacaoId))
+    if (params.incluirInativos) qs.set('incluirInativos', 'true')
+    if (params.page) qs.set('page', String(params.page))
+    if (params.limit) qs.set('limit', String(params.limit))
+    const query = qs.toString()
+    return fetchApi<{
+      total: number; page: number; limit: number
+      data: Array<{ id: number; nome: string; cnpj: string | null; cidade: string | null; uf: string | null; ativo: boolean }>
+    }>(`/campanhas/${id}/clientes-disponiveis${query ? `?${query}` : ''}`)
+  },
   removeClienteCampanha: (id: number, clienteId: number) =>
     fetchApi(`/campanhas/${id}/clientes/${clienteId}`, { method: 'DELETE' }),
   removeTodosClientesCampanha: (id: number) =>

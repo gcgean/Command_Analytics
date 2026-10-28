@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  ImageIcon, Loader2, Megaphone, Pencil, Plus, Power, Search, Trash2, Upload, UserMinus, UserPlus, Users,
+  Filter, ImageIcon, Loader2, Megaphone, Pencil, Plus, Power, Search, Trash2, Upload, UserMinus, UserPlus, Users, X,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { api } from '../../services/api'
@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button'
 import { Card } from '../../components/ui/Card'
 import { Input } from '../../components/ui/Input'
 import { Modal } from '../../components/ui/Modal'
-import type { Campanha, CampanhaCliente, CampanhaPayload, Cliente } from '../../types'
+import type { Campanha, CampanhaCliente, CampanhaPayload, FiltroClientesCampanha } from '../../types'
 
 const TIPOS_ACAO = [
   { value: 0, label: 'Sem ação' },
@@ -376,9 +376,39 @@ function ClientesCampanhaModal({ campanha, onClose, onTotalAlterado }: {
   const [carregando, setCarregando] = useState(true)
   const [processando, setProcessando] = useState(false)
 
+  // Quem ainda pode entrar: a mesma consulta que o "adicionar todos" usa no banco.
   const [busca, setBusca] = useState('')
-  const [resultados, setResultados] = useState<Cliente[]>([])
+  const [estado, setEstado] = useState('')
+  const [cidade, setCidade] = useState('')
+  const [planoId, setPlanoId] = useState('')
+  const [classificacaoId, setClassificacaoId] = useState('')
+  const [incluirInativos, setIncluirInativos] = useState(false)
+  const [opcoes, setOpcoes] = useState<{
+    estados: string[]
+    cidades: string[]
+    planos: Array<{ id: number; descricao: string }>
+    classificacoes: Array<{ id: number; nome: string }>
+  }>({ estados: [], cidades: [], planos: [], classificacoes: [] })
+  const [candidatos, setCandidatos] = useState<
+    Array<{ id: number; nome: string; cnpj: string | null; cidade: string | null; uf: string | null; ativo: boolean }>
+  >([])
+  const [totalCandidatos, setTotalCandidatos] = useState(0)
   const [buscando, setBuscando] = useState(false)
+
+  const filtros: FiltroClientesCampanha = {
+    search: busca.trim() || undefined,
+    estado: estado || undefined,
+    cidade: cidade || undefined,
+    planoId: planoId || undefined,
+    classificacaoId: classificacaoId || undefined,
+    incluirInativos: incluirInativos || undefined,
+  }
+  const temFiltro = Boolean(busca.trim() || estado || cidade || planoId || classificacaoId)
+
+  function limparFiltros() {
+    setBusca(''); setEstado(''); setCidade(''); setPlanoId(''); setClassificacaoId('')
+    setIncluirInativos(false)
+  }
 
   async function carregarVinculados(pag = pagina, termo = filtro) {
     setCarregando(true)
@@ -399,18 +429,23 @@ function ClientesCampanhaModal({ campanha, onClose, onTotalAlterado }: {
     return () => window.clearTimeout(id)
   }, [filtro])
 
+  // Cidades dependem do estado: a lista inteira do pais nao ajudaria ninguem.
   useEffect(() => {
-    const termo = busca.trim()
-    if (termo.length < 2) { setResultados([]); return }
+    api.getOpcoesClientesCampanha(estado || undefined)
+      .then(setOpcoes)
+      .catch(() => {})
+  }, [estado])
+
+  useEffect(() => {
     setBuscando(true)
     const id = window.setTimeout(() => {
-      api.getClientesPaged({ page: 1, limit: 15, search: termo, ativo: 'S' })
-        .then((resp) => setResultados(resp.data))
-        .catch(() => setResultados([]))
+      api.getClientesDisponiveisCampanha(campanha.id, { ...filtros, page: 1, limit: 20 })
+        .then((resp) => { setCandidatos(resp.data); setTotalCandidatos(resp.total) })
+        .catch(() => { setCandidatos([]); setTotalCandidatos(0) })
         .finally(() => setBuscando(false))
     }, 300)
     return () => window.clearTimeout(id)
-  }, [busca])
+  }, [busca, estado, cidade, planoId, classificacaoId, incluirInativos, total])
 
   async function adicionar(dados: { clienteIds?: number[]; todosAtivos?: boolean }) {
     setProcessando(true)
@@ -459,38 +494,95 @@ function ClientesCampanhaModal({ campanha, onClose, onTotalAlterado }: {
     <Modal isOpen onClose={() => !processando && onClose()} title={`Clientes da campanha — ${campanha.titulo}`} size="xl">
       <div className="space-y-4">
         <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Filter className="w-3.5 h-3.5 text-slate-400" />
             <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Adicionar clientes</p>
-            <Button size="sm" icon={<UserPlus className="w-3.5 h-3.5" />} loading={processando} onClick={() => void adicionar({ todosAtivos: true })}>
-              Adicionar todos os clientes ativos
+            {temFiltro && (
+              <button type="button" onClick={limparFiltros}
+                className="ml-auto text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 inline-flex items-center gap-1">
+                <X className="w-3 h-3" /> limpar filtros
+              </button>
+            )}
+          </div>
+
+          <Input icon={<Search className="w-3.5 h-3.5" />} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar cliente por nome, fantasia ou CNPJ..." />
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <select value={estado} onChange={(e) => { setEstado(e.target.value); setCidade('') }}
+              className="h-9 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-2">
+              <option value="">Todos os estados</option>
+              {opcoes.estados.map((uf) => <option key={uf} value={uf}>{uf}</option>)}
+            </select>
+            <select value={cidade} onChange={(e) => setCidade(e.target.value)} disabled={!estado}
+              className="h-9 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-2 disabled:opacity-50">
+              <option value="">{estado ? 'Todas as cidades' : 'Escolha o estado'}</option>
+              {opcoes.cidades.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select value={planoId} onChange={(e) => setPlanoId(e.target.value)}
+              className="h-9 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-2">
+              <option value="">Todos os planos</option>
+              {opcoes.planos.map((pl) => <option key={pl.id} value={String(pl.id)}>{pl.descricao}</option>)}
+            </select>
+            <select value={classificacaoId} onChange={(e) => setClassificacaoId(e.target.value)}
+              className="h-9 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-2">
+              <option value="">Todas as classificações</option>
+              {opcoes.classificacoes.map((c) => <option key={c.id} value={String(c.id)}>{c.nome}</option>)}
+            </select>
+          </div>
+
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <label className="inline-flex items-center gap-2 text-xs text-slate-500">
+              <input type="checkbox" checked={incluirInativos} onChange={(e) => setIncluirInativos(e.target.checked)} />
+              incluir clientes inativos
+            </label>
+            {/* O botão promete o número que a listagem encontrou, e o backend aplica os mesmos
+                filtros — não só os que couberam na tela. */}
+            <Button size="sm" icon={<UserPlus className="w-3.5 h-3.5" />} loading={processando}
+              disabled={totalCandidatos === 0}
+              onClick={() => {
+                if (!confirm(`Adicionar ${totalCandidatos} cliente(s) a esta campanha?`)) return
+                void adicionar({ filtros })
+              }}>
+              {temFiltro
+                ? `Adicionar os ${totalCandidatos} encontrados`
+                : `Adicionar todos os ${totalCandidatos} ativos`}
             </Button>
           </div>
-          <div className="relative">
-            <Input icon={<Search className="w-3.5 h-3.5" />} value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar cliente por nome, fantasia ou CNPJ..." />
-            {busca.trim().length >= 2 ? (
-              <div className="absolute z-20 mt-1 w-full max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
-                {buscando ? (
-                  <p className="px-3 py-2 text-xs text-slate-500 flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando...</p>
-                ) : resultados.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-slate-500">Nenhum cliente ativo encontrado.</p>
-                ) : resultados.map((cl) => (
-                  <button
-                    key={cl.id}
-                    type="button"
-                    disabled={processando}
-                    onClick={() => { void adicionar({ clienteIds: [cl.id] }); setBusca('') }}
-                    className="flex w-full items-center justify-between gap-2 border-b border-slate-100 px-3 py-2 text-left last:border-b-0 hover:bg-slate-50 dark:border-slate-800 dark:hover:bg-slate-800"
-                  >
-                    <span className="min-w-0">
-                      <span className="block text-sm font-medium text-slate-800 dark:text-slate-100 truncate">{cl.nome || cl.nomeRazao}</span>
-                      <span className="block text-xs text-slate-500 truncate">#{cl.id} · {cl.cnpj || 'Sem CNPJ'}</span>
-                    </span>
-                    <UserPlus className="w-4 h-4 text-blue-500 flex-shrink-0" />
-                  </button>
-                ))}
-              </div>
-            ) : null}
+
+          <div className="rounded-lg border border-slate-200 dark:border-slate-700 max-h-48 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+            {buscando ? (
+              <p className="px-3 py-2 text-xs text-slate-500 flex items-center gap-2"><Loader2 className="w-3.5 h-3.5 animate-spin" /> Buscando...</p>
+            ) : candidatos.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-slate-500">
+                {temFiltro ? 'Nenhum cliente fora da campanha com esses filtros.' : 'Todos os clientes já estão na campanha.'}
+              </p>
+            ) : candidatos.map((cl) => (
+              <button
+                key={cl.id}
+                type="button"
+                disabled={processando}
+                onClick={() => void adicionar({ clienteIds: [cl.id] })}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800"
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-slate-800 dark:text-slate-100 truncate">
+                    {cl.nome}
+                    {!cl.ativo && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-slate-500/15 text-slate-500">inativo</span>}
+                  </span>
+                  <span className="block text-xs text-slate-500 truncate">
+                    #{cl.id} · {cl.cnpj || 'Sem CNPJ'}
+                    {cl.cidade ? ` · ${cl.cidade}${cl.uf ? `/${cl.uf}` : ''}` : ''}
+                  </span>
+                </span>
+                <UserPlus className="w-4 h-4 text-blue-500 flex-shrink-0" />
+              </button>
+            ))}
           </div>
+          {totalCandidatos > candidatos.length && (
+            <p className="text-[11px] text-slate-400">
+              Mostrando {candidatos.length} de {totalCandidatos} — refine os filtros ou use o botão acima para incluir todos.
+            </p>
+          )}
         </div>
 
         <div>

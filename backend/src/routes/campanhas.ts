@@ -15,6 +15,41 @@ import { baixarArquivoCommand, enviarArquivoCommand } from '../services/commandA
  * Os formatos gravados aqui precisam continuar idênticos aos do Delphi para não quebrar o ERP.
  */
 
+/**
+ * Filtros de quem entra na campanha. Montados em um lugar so porque a listagem de
+ * candidatos e o "adicionar todos" precisam enxergar exatamente o mesmo conjunto - se as
+ * duas consultas divergirem, o botao adiciona gente que a tela nao mostrou.
+ */
+type FiltroClientes = {
+  search?: string
+  estado?: string
+  cidade?: string
+  planoId?: number | string
+  classificacaoId?: number | string
+  incluirInativos?: boolean
+}
+
+function condicoesClientes(f: FiltroClientes): { sql: string; valores: any[] } {
+  const cond: string[] = []
+  const valores: any[] = []
+  if (!f.incluirInativos) cond.push("COALESCE(cl.ATIVO, 'S') = 'S'")
+  const busca = String(f.search ?? '').trim()
+  if (busca) {
+    cond.push('(cl.NOME_FANTASIA LIKE ? OR cl.NOME_CLI LIKE ? OR cl.CNPJ_CLI LIKE ? OR CAST(cl.cod_cli AS CHAR) = ?)')
+    const like = `%${busca}%`
+    valores.push(like, like, like, busca)
+  }
+  const estado = String(f.estado ?? '').trim()
+  if (estado) { cond.push('cl.ESTRES_CLI = ?'); valores.push(estado) }
+  const cidade = String(f.cidade ?? '').trim()
+  if (cidade) { cond.push('cl.CIDRES_CLI = ?'); valores.push(cidade) }
+  const plano = Number(f.planoId ?? 0)
+  if (plano > 0) { cond.push('cl.id_plano_principal = ?'); valores.push(plano) }
+  const classificacao = Number(f.classificacaoId ?? 0)
+  if (classificacao > 0) { cond.push('cl.COD_CLA = ?'); valores.push(classificacao) }
+  return { sql: cond.length ? cond.join(' AND ') : '1=1', valores }
+}
+
 const PASTA_IMAGENS = '/CommandAnalytics/Campanhas/'
 const TAMANHO_MAX = 100 // todas as colunas de texto da campanha são VARCHAR(100)
 const TIPOS_ACAO = new Set([0, 1, 2]) // 0 sem ação · 1 clique no botão · 2 vídeo (clique no botão)
@@ -318,22 +353,103 @@ export async function campanhasRoutes(app: FastifyInstance) {
     }
   })
 
+  /** Opcoes dos filtros, tiradas da propria base - lista fixa envelhece. */
+  app.get('/opcoes-clientes', { preHandler: authMiddleware, schema: { tags: ['Campanhas'], summary: 'Opções de estado, cidade, plano e classificação' } }, async (request) => {
+    const { estado } = request.query as { estado?: string }
+    const uf = String(estado ?? '').trim()
+
+    const [estados, cidades, planos, classificacoes] = await Promise.all([
+      prisma.$queryRawUnsafe<any[]>(
+        `SELECT DISTINCT ESTRES_CLI AS uf FROM cliente
+          WHERE ESTRES_CLI IS NOT NULL AND TRIM(ESTRES_CLI) <> '' ORDER BY ESTRES_CLI`),
+      uf
+        ? prisma.$queryRawUnsafe<any[]>(
+            `SELECT DISTINCT CIDRES_CLI AS cidade FROM cliente
+              WHERE ESTRES_CLI = ? AND CIDRES_CLI IS NOT NULL AND TRIM(CIDRES_CLI) <> ''
+              ORDER BY CIDRES_CLI`, uf)
+        : Promise.resolve([] as any[]),
+      prisma.$queryRawUnsafe<any[]>(
+        `SELECT id, descricao FROM planos WHERE ativo = 1 ORDER BY descricao`),
+      prisma.$queryRawUnsafe<any[]>(
+        `SELECT COD_CLA AS id, NOME_CLA AS nome FROM classif_cliente ORDER BY NOME_CLA`),
+    ])
+
+    return {
+      estados: estados.map((e) => String(e.uf).trim()).filter(Boolean),
+      cidades: cidades.map((c) => String(c.cidade).trim()).filter(Boolean),
+      planos: planos.map((p) => ({ id: Number(p.id), descricao: String(p.descricao ?? '') })),
+      classificacoes: classificacoes
+        .filter((c) => String(c.nome ?? '').trim())
+        .map((c) => ({ id: Number(c.id), nome: String(c.nome).trim() })),
+    }
+  })
+
+  /**
+   * Candidatos a entrar na campanha: quem casa com os filtros e ainda nao esta vinculado.
+   * O total vem do banco, nao da pagina - e o numero que o botao "adicionar todos" promete.
+   */
+  app.get('/:id/clientes-disponiveis', { preHandler: authMiddleware, schema: { tags: ['Campanhas'], summary: 'Clientes que ainda podem entrar na campanha' } }, async (request, reply) => {
+    const id = parseId((request.params as { id: string }).id)
+    if (!id) return reply.status(400).send({ error: 'ID inválido.' })
+    const q = request.query as Record<string, string>
+    const pagina = Math.max(1, Number(q.page) || 1)
+    const tamanho = Math.min(100, Math.max(1, Number(q.limit) || 20))
+    const { sql, valores } = condicoesClientes({
+      search: q.search, estado: q.estado, cidade: q.cidade,
+      planoId: q.planoId, classificacaoId: q.classificacaoId,
+      incluirInativos: q.incluirInativos === 'true',
+    })
+    const where = `${sql} AND NOT EXISTS (
+      SELECT 1 FROM clientes_campanha_mensagem x WHERE x.id_campanha = ? AND x.id_cliente = cl.cod_cli)`
+
+    const [contagem, linhas] = await Promise.all([
+      prisma.$queryRawUnsafe<any[]>(
+        `SELECT COUNT(*) AS total FROM cliente cl WHERE ${where}`, ...valores, id),
+      prisma.$queryRawUnsafe<any[]>(
+        `SELECT cl.cod_cli AS id, cl.NOME_FANTASIA AS fantasia, cl.NOME_CLI AS nome,
+                cl.CNPJ_CLI AS cnpj, cl.CIDRES_CLI AS cidade, cl.ESTRES_CLI AS uf, cl.ATIVO AS ativo
+           FROM cliente cl WHERE ${where}
+          ORDER BY COALESCE(cl.NOME_FANTASIA, cl.NOME_CLI)
+          LIMIT ${tamanho} OFFSET ${(pagina - 1) * tamanho}`, ...valores, id),
+    ])
+
+    return {
+      total: Number(contagem[0]?.total ?? 0),
+      page: pagina,
+      limit: tamanho,
+      data: linhas.map((r) => ({
+        id: Number(r.id),
+        nome: String(r.fantasia || r.nome || `Cliente #${r.id}`).trim(),
+        cnpj: r.cnpj ?? null,
+        cidade: r.cidade ?? null,
+        uf: r.uf ?? null,
+        ativo: String(r.ativo ?? 'S').toUpperCase() === 'S',
+      })),
+    }
+  })
+
   app.post('/:id/clientes', { preHandler: authMiddleware, schema: { tags: ['Campanhas'], summary: 'Adicionar clientes à campanha' } }, async (request, reply) => {
     const id = parseId((request.params as { id: string }).id)
     if (!id) return reply.status(400).send({ error: 'ID inválido.' })
     if (!(await buscarCampanha(id))) return reply.status(404).send({ error: 'Campanha não encontrada.' })
 
-    const { clienteIds, todosAtivos } = request.body as { clienteIds?: number[]; todosAtivos?: boolean }
+    const { clienteIds, todosAtivos, filtros } = request.body as {
+      clienteIds?: number[]; todosAtivos?: boolean; filtros?: FiltroClientes
+    }
 
     // visualizada = 'S' replica 100% dos vínculos gravados pelo Delphi; não criar vínculo duplicado.
     let adicionados = 0
-    if (todosAtivos) {
-      adicionados = await prisma.$executeRaw`
-        INSERT INTO clientes_campanha_mensagem (id_campanha, id_cliente, visualizada)
-        SELECT ${id}, cl.cod_cli, 'S' FROM cliente cl
-        WHERE cl.ATIVO = 'S'
-          AND NOT EXISTS (SELECT 1 FROM clientes_campanha_mensagem x WHERE x.id_campanha = ${id} AND x.id_cliente = cl.cod_cli)
-      `
+    if (todosAtivos || filtros) {
+      // Os filtros vao para o banco, nao para a pagina: "adicionar todos" significa todos os
+      // que a listagem encontrou, e nao so os que couberam na tela.
+      const { sql, valores } = condicoesClientes(filtros ?? {})
+      adicionados = await prisma.$executeRawUnsafe(
+        `INSERT INTO clientes_campanha_mensagem (id_campanha, id_cliente, visualizada)
+         SELECT ?, cl.cod_cli, 'S' FROM cliente cl
+          WHERE ${sql}
+            AND NOT EXISTS (SELECT 1 FROM clientes_campanha_mensagem x
+                             WHERE x.id_campanha = ? AND x.id_cliente = cl.cod_cli)`,
+        id, ...valores, id)
     } else {
       const ids = Array.from(new Set((clienteIds ?? []).map(Number).filter((n) => Number.isInteger(n) && n > 0)))
       if (!ids.length) return reply.status(400).send({ error: 'Selecione ao menos um cliente.' })
@@ -348,7 +464,7 @@ export async function campanhasRoutes(app: FastifyInstance) {
     }
 
     if (adicionados > 0) {
-      registrarAuditoria({ tabela: 'campanha_mensagem', registroId: id, acao: 'ALTERACAO', usuarioId: getUsuarioId(request), dadosAntes: null, dadosDepois: { clientesAdicionados: adicionados, todosAtivos: Boolean(todosAtivos) } })
+      registrarAuditoria({ tabela: 'campanha_mensagem', registroId: id, acao: 'ALTERACAO', usuarioId: getUsuarioId(request), dadosAntes: null, dadosDepois: { clientesAdicionados: adicionados, todosAtivos: Boolean(todosAtivos), filtros: filtros ?? null } })
     }
     return { ok: true, adicionados }
   })

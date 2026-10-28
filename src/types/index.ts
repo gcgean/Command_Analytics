@@ -1142,6 +1142,16 @@ export interface Campanha {
 
 export type CampanhaPayload = Omit<Campanha, 'id' | 'totalClientes'>
 
+/** Recorte de quem entra na campanha. O mesmo objeto filtra a listagem e o "adicionar todos". */
+export interface FiltroClientesCampanha {
+  search?: string
+  estado?: string
+  cidade?: string
+  planoId?: number | string
+  classificacaoId?: number | string
+  incluirInativos?: boolean
+}
+
 export interface CampanhaCliente {
   clienteId: number
   nome: string
