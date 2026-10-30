@@ -379,7 +379,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
               <div>
                 <label className="block text-xs text-slate-500 mb-1">Dados do Atendimento</label>
                 <textarea
-                  className="input w-full h-56 resize-none"
+                  className="input-field w-full h-56 resize-none"
                   placeholder="O que o cliente está pedindo..."
                   value={observacoes}
                   onChange={(e) => setObservacoes(e.target.value)}
@@ -452,7 +452,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
                   </label>
                   {jaFinalizado && (
                     <textarea
-                      className="input w-full h-20 resize-none mt-2 text-xs"
+                      className="input-field w-full h-20 resize-none mt-2 text-xs"
                       placeholder="Descreva a solução aplicada... (opcional)"
                       value={solucao}
                       onChange={(e) => setSolucao(e.target.value)}
@@ -530,7 +530,7 @@ export function LancamentoSolicitacao({ aberto, solicitacao, usuarios, prefill, 
             <div>
               <label className="block text-xs text-slate-500 mb-1">Solução aplicada</label>
               <textarea
-                className="input w-full h-40 resize-none"
+                className="input-field w-full h-40 resize-none"
                 placeholder="Descreva o que foi feito para resolver..."
                 value={solucao}
                 onChange={(e) => setSolucao(e.target.value)}

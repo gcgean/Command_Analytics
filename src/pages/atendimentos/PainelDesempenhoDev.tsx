@@ -69,11 +69,11 @@ export function PainelDesempenhoDev({ rotuloStatus }: { rotuloStatus: Record<num
       <div className="flex flex-wrap gap-3 items-end">
         <div>
           <label className="block text-xs text-slate-500 mb-1">De</label>
-          <input type="date" className="input" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+          <input type="date" className="input-field w-auto" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
         </div>
         <div>
           <label className="block text-xs text-slate-500 mb-1">Até</label>
-          <input type="date" className="input" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+          <input type="date" className="input-field w-auto" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
         </div>
         <button className="btn-primary flex items-center gap-2" onClick={gerar} disabled={gerando}>
           {gerando ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}

@@ -926,11 +926,11 @@ export function MapaSolicitacoes() {
           <>
             <div>
               <label className="block text-xs text-slate-500 mb-1">De</label>
-              <input type="date" className="input" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
+              <input type="date" className="input-field w-auto" value={dataInicio} onChange={(e) => setDataInicio(e.target.value)} />
             </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">Até</label>
-              <input type="date" className="input" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
+              <input type="date" className="input-field w-auto" value={dataFim} onChange={(e) => setDataFim(e.target.value)} />
             </div>
 
           </>
@@ -1368,7 +1368,7 @@ export function MapaSolicitacoes() {
           <div className="space-y-3">
             <textarea
               readOnly
-              className="input w-full h-[60vh] resize-none font-mono text-[13px] leading-relaxed"
+              className="input-field w-full h-[60vh] resize-none font-mono text-[13px] leading-relaxed"
               value={notasTexto || 'Nenhuma solicitação concluída no período.'}
             />
             <div className="flex justify-end gap-2">
@@ -1478,7 +1478,7 @@ export function MapaSolicitacoes() {
       >
         <div className="space-y-3">
           <textarea
-            className="input w-full h-32 resize-none"
+            className="input-field w-full h-32 resize-none"
             placeholder={modalJustificativa?.opcional ? 'Observação para quem vai testar (opcional)' : 'Descreva o motivo...'}
             autoFocus
             value={texto}
@@ -1548,7 +1548,7 @@ export function MapaSolicitacoes() {
             {modalArquivar ? ` (${ROTULO_STATUS[Number(modalArquivar.status)] ?? 'etapa atual'})` : ''}.
           </p>
           <textarea
-            className="input w-full h-24 resize-none"
+            className="input-field w-full h-24 resize-none"
             placeholder="Motivo (opcional) — ex.: sem previsão, aguardando decisão do cliente"
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
@@ -1578,7 +1578,7 @@ export function MapaSolicitacoes() {
             O cancelamento é registrado no log com seu usuário e não é desfeito por esta tela.
           </p>
           <textarea
-            className="input w-full h-28 resize-none"
+            className="input-field w-full h-28 resize-none"
             placeholder="Motivo do cancelamento"
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
@@ -1606,7 +1606,7 @@ export function MapaSolicitacoes() {
       <Modal isOpen={!!modalFinalizar} onClose={() => setModalFinalizar(null)} title={`Marcar como Finalizado — #${modalFinalizar?.id ?? ''}`}>
         <div className="space-y-3">
           <textarea
-            className="input w-full h-28 resize-none"
+            className="input-field w-full h-28 resize-none"
             placeholder="Descreva o que foi feito para resolver... (opcional)"
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
