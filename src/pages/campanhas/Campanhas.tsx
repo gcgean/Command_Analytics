@@ -447,7 +447,7 @@ function ClientesCampanhaModal({ campanha, onClose, onTotalAlterado }: {
     return () => window.clearTimeout(id)
   }, [busca, estado, cidade, planoId, classificacaoId, incluirInativos, total])
 
-  async function adicionar(dados: { clienteIds?: number[]; todosAtivos?: boolean }) {
+  async function adicionar(dados: { clienteIds?: number[]; todosAtivos?: boolean; filtros?: FiltroClientesCampanha }) {
     setProcessando(true)
     try {
       const { adicionados } = await api.addClientesCampanha(campanha.id, dados)

@@ -1142,6 +1142,74 @@ export interface Campanha {
 
 export type CampanhaPayload = Omit<Campanha, 'id' | 'totalClientes'>
 
+/** Lancamento de comissao ja gravado (comissoes_funcionario). */
+export interface LancamentoComissao {
+  id: number
+  colaboradorId: number | null
+  colaboradorNome: string
+  clienteId: number | null
+  clienteNome: string
+  descricao: string | null
+  valor: number
+  valorOperacao: number
+  dataVenda: string | null
+}
+
+export interface ListaLancamentosComissao {
+  inicio: string
+  fim: string
+  total: number
+  totalOperacao: number
+  itens: LancamentoComissao[]
+}
+
+/** Movimentacao de plano ainda sem comissao vinculada (cliente_log_plano). */
+export interface PendenteComissao {
+  id: number
+  acao: string
+  tipo: number | null
+  descTipo: string | null
+  clienteId: number
+  clienteNome: string
+  razaoSocial: string | null
+  cnpj: string | null
+  planoAtual: string | null
+  planoAnterior: string | null
+  assinaturaAnterior: number
+  assinaturaAtual: number
+  valorBase: number
+  percentual: number
+  valorComissao: number
+  dataHora: string | null
+  lancadoPor: string | null
+  comissionavel: boolean
+}
+
+export interface ListaPendentesComissao {
+  inicio: string
+  fim: string
+  total: number
+  comissionaveis: number
+  valorBaseTotal: number
+  itens: PendenteComissao[]
+}
+
+export interface RankingComissao {
+  posicao: number
+  colaboradorId: number
+  colaboradorNome: string
+  total: number
+  totalOperacao: number
+  vendas: number
+}
+
+export interface RankingTreinamento {
+  colaboradorId: number | null
+  colaborador: string
+  mediaNota: number
+  quantidade: number
+}
+
 /** Recorte de quem entra na campanha. O mesmo objeto filtra a listagem e o "adicionar todos". */
 export interface FiltroClientesCampanha {
   search?: string

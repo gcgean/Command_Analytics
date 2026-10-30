@@ -4,7 +4,8 @@ import type {
   ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, PoliticaProvisionamentoIa, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
   MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada,
   PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
-  PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
+  ListaLancamentosComissao, ListaPendentesComissao, RankingComissao, RankingTreinamento, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   PlanoCatalogo, SistemaPlanos, TerminalSmartPos, GrupoSmartPos, PendentesPorTecnico,
@@ -671,6 +672,25 @@ export const api = {
   // ─── Financeiro ────────────────────────────────────────────
   getAnaliseFinanceira: () => fetchApi<AnaliseFinanceira[]>('/financeiro/analise'),
   getComissoes: () => fetchApi<Comissao[]>('/financeiro/comissoes'),
+
+  // ── Lancamentos de comissao (mesmas tabelas da tela Delphi UComissoes) ──
+  getLancamentosComissao: (p: { inicio: string; fim: string; colaboradorId?: number }) => {
+    const qs = new URLSearchParams({ inicio: p.inicio, fim: p.fim })
+    if (p.colaboradorId) qs.set('colaboradorId', String(p.colaboradorId))
+    return fetchApi<ListaLancamentosComissao>(`/comissoes/lancamentos?${qs}`)
+  },
+  getPendentesComissao: (p: { inicio: string; fim: string }) =>
+    fetchApi<ListaPendentesComissao>(`/comissoes/pendentes?inicio=${p.inicio}&fim=${p.fim}`),
+  getRankingComissao: (p: { inicio: string; fim: string }) =>
+    fetchApi<{ inicio: string; fim: string; itens: RankingComissao[] }>(`/comissoes/ranking?inicio=${p.inicio}&fim=${p.fim}`),
+  getRankingTreinamentos: (p: { inicio: string; fim: string }) =>
+    fetchApi<{ inicio: string; fim: string; itens: RankingTreinamento[] }>(`/comissoes/treinamentos?inicio=${p.inicio}&fim=${p.fim}`),
+  getColaboradoresComissao: () =>
+    fetchApi<Array<{ id: number; nome: string }>>('/comissoes/colaboradores'),
+  lancarComissao: (dados: { logId: number; colaboradorId: number; percentual?: number }) =>
+    fetchApi<{ id: number; valor: number; percentual: number }>('/comissoes/lancamentos', { method: 'POST', body: JSON.stringify(dados) }),
+  excluirLancamentoComissao: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/comissoes/lancamentos/${id}`, { method: 'DELETE' }),
   updateComissaoStatus: (id: number, status: string, dataPagamento?: string) =>
     fetchApi<Comissao>(`/financeiro/comissoes/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status, dataPagamento }) }),
   getMRR: () => fetchApi('/financeiro/mrr'),

@@ -85,6 +85,7 @@ import { crmIntegracaoRoutes } from './routes/crmIntegracao'
 import { initCrmSync, startCrmSyncScheduler } from './utils/crmSync'
 import { revendasRoutes } from './routes/revendas'
 import { comissoesRoutes } from './routes/comissoes'
+import { comissoesLancamentosRoutes } from './routes/comissoesLancamentos'
 import { initComissoes } from './utils/comissoes'
 import { initRevendasSync, startRevendasSyncScheduler } from './utils/revendasSync'
 import { initNotasGeradas } from './routes/solicitacoes'
@@ -252,6 +253,7 @@ app.register(async (api) => {
   api.register(crmIntegracaoRoutes,{ prefix: '/crm-integracao' })
   api.register(revendasRoutes,    { prefix: '/revendas' })
   api.register(comissoesRoutes,   { prefix: '/comissoes' })
+  api.register(comissoesLancamentosRoutes, { prefix: '/comissoes' })
   // Sem authMiddleware de propósito: é o formulário que o cliente abre pelo link público.
   api.register(publicoRoutes,      { prefix: '/publico' })
 }, { prefix: '/api' })
