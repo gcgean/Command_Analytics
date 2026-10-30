@@ -11,6 +11,7 @@ import { ClienteSearch } from '../../components/ui/ClienteSearch'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { useToast } from '../../components/ui/Toast'
+import { Cancelamentos } from './Cancelamentos'
 import type { AtendimentoTriagem, ModeloTriagem } from '../../types'
 
 const SITUACAO: Record<string, { rotulo: string; classe: string }> = {
@@ -33,6 +34,7 @@ const formatarDoc = (d?: string | null) => {
 export function Triagem() {
   const { toast } = useToast()
   const navegar = useNavigate()
+  const [aba, setAba] = useState<'triagens' | 'cancelamentos'>('triagens')
   const [modelos, setModelos] = useState<ModeloTriagem[]>([])
   const [atendimentos, setAtendimentos] = useState<AtendimentoTriagem[]>([])
   const [carregando, setCarregando] = useState(true)
@@ -168,10 +170,29 @@ export function Triagem() {
             </p>
           </div>
         </div>
-        <Button onClick={() => setNovo({ modelo: modelos[0]?.slug ?? '', clienteId: '', clienteNome: '', contato: '', telefone: '' })}>
-          <Plus className="w-4 h-4" /> Nova triagem
-        </Button>
+        {aba === 'triagens' && (
+          <Button onClick={() => setNovo({ modelo: modelos[0]?.slug ?? '', clienteId: '', clienteNome: '', contato: '', telefone: '' })}>
+            <Plus className="w-4 h-4" /> Nova triagem
+          </Button>
+        )}
       </div>
+
+      <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700">
+        {([['triagens', 'Triagens'], ['cancelamentos', 'Cancelamentos']] as const).map(([id, rotulo]) => (
+          <button key={id} onClick={() => setAba(id)}
+            className={clsx('px-4 py-2 text-sm font-medium border-b-2 transition-colors',
+              aba === id
+                ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
+                : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200')}>
+            {rotulo}
+          </button>
+        ))}
+      </div>
+
+      {aba === 'cancelamentos' && <Cancelamentos />}
+
+      {aba === 'triagens' && (
+       <div className="space-y-5">
 
       <div className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-3">
         {indicadores.map((k) => (
@@ -365,6 +386,9 @@ export function Triagem() {
             </table>
           </div>
         </Card>
+      )}
+
+      </div>
       )}
 
       <Modal isOpen={!!encerrar} onClose={() => !encerrando && setEncerrar(null)}

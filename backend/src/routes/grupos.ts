@@ -29,6 +29,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'faturamento-clientes',     label: 'Faturamento de Clientes',         grupo: 'FINANCEIRO' },
   { id: 'comissoes',                label: 'Comissões',                       grupo: 'FINANCEIRO' },
   { id: 'comissoes-lancar',         label: 'Comissões — Lançar e excluir',    grupo: 'FINANCEIRO' },
+  { id: 'cancelamento-financeiro',  label: 'Cancelamentos — Baixa do financeiro', grupo: 'FINANCEIRO' },
   { id: 'planos',                   label: 'Planos e Assinaturas',            grupo: 'FINANCEIRO' },
   // DESENVOLVIMENTO
   { id: 'desenvolvimento',          label: 'Tarefas Dev',                     grupo: 'DESENVOLVIMENTO' },

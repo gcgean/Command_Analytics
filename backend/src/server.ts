@@ -51,6 +51,8 @@ import { comunicadosRoutes, initComunicados } from './routes/comunicados'
 import { precificacaoPublicaRoutes, initPrecificacaoPublica } from './routes/precificacaoPublica'
 import { triagemRoutes } from './routes/triagem'
 import { initTriagem } from './utils/triagem'
+import { cancelamentosRoutes } from './routes/cancelamentos'
+import { initCancelamentos } from './utils/cancelamentos'
 import { initPlanoImagens } from './utils/planoImagens'
 import { initAgendaEquipe } from './utils/agendaEquipe'
 import { initSmartPos } from './utils/smartpos'
@@ -245,6 +247,7 @@ app.register(async (api) => {
   api.register(comunicadosRoutes,  { prefix: '/comunicados' })
   api.register(precificacaoPublicaRoutes, { prefix: '/precificacao-publica' })
   api.register(triagemRoutes,      { prefix: '/triagem' })
+  api.register(cancelamentosRoutes, { prefix: '/cancelamentos' })
   api.register(smartposRoutes,     { prefix: '/smartpos' })
   api.register(emailRoutes,        { prefix: '/email' })
   api.register(metasDevRoutes,     { prefix: '/metas-dev' })
@@ -295,6 +298,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initTriagem()
     .then(() => console.log('✓ Tabelas de triagem verificadas'))
     .catch(e => console.warn('⚠ Triagem init:', e.message))
+  initCancelamentos()
+    .then(() => console.log('✓ Tabela de cancelamentos verificada'))
+    .catch(e => console.warn('⚠ Cancelamentos init:', e.message))
   initPlanoImagens()
     .then(() => console.log('✓ Tabela de imagem de plano verificada'))
     .catch(e => console.warn('⚠ Imagem de plano init:', e.message))

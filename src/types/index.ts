@@ -1142,6 +1142,34 @@ export interface Campanha {
 
 export type CampanhaPayload = Omit<Campanha, 'id' | 'totalClientes'>
 
+/** Pedido de cancelamento de integração de pagamento. */
+export interface Cancelamento {
+  id: number
+  clienteId: number | null
+  clienteNome: string
+  cnpj: string | null
+  dataSolicitacao: string | null
+  operadora: string | null
+  observacao: string | null
+  enviadoOperadora: boolean
+  enviadoOperadoraEm: string | null
+  enviadoOperadoraPor: string | null
+  canceladoFinanceiro: boolean
+  canceladoFinanceiroEm: string | null
+  canceladoFinanceiroPor: string | null
+  situacao: 'aberto' | 'aguardando_financeiro' | 'concluido'
+  criadoEm: string | null
+  criadoPor: string | null
+}
+
+export interface ListaCancelamentos {
+  total: number
+  abertos: number
+  aguardandoFinanceiro: number
+  concluidos: number
+  itens: Cancelamento[]
+}
+
 /** Lancamento de comissao ja gravado (comissoes_funcionario). */
 export interface LancamentoComissao {
   id: number

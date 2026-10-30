@@ -5,7 +5,8 @@ import type {
   MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada,
   PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
-  ListaLancamentosComissao, ListaPendentesComissao, RankingComissao, RankingTreinamento, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  ListaLancamentosComissao, ListaPendentesComissao, RankingComissao, RankingTreinamento,
+  Cancelamento, ListaCancelamentos, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   PlanoCatalogo, SistemaPlanos, TerminalSmartPos, GrupoSmartPos, PendentesPorTecnico,
@@ -685,6 +686,28 @@ export const api = {
     fetchApi<{ inicio: string; fim: string; itens: RankingComissao[] }>(`/comissoes/ranking?inicio=${p.inicio}&fim=${p.fim}`),
   getRankingTreinamentos: (p: { inicio: string; fim: string }) =>
     fetchApi<{ inicio: string; fim: string; itens: RankingTreinamento[] }>(`/comissoes/treinamentos?inicio=${p.inicio}&fim=${p.fim}`),
+  // ── Cancelamentos de integração ──
+  getCancelamentos: (p: { situacao?: string; busca?: string; inicio?: string; fim?: string } = {}) => {
+    const qs = new URLSearchParams()
+    if (p.situacao) qs.set('situacao', p.situacao)
+    if (p.busca) qs.set('busca', p.busca)
+    if (p.inicio) qs.set('inicio', p.inicio)
+    if (p.fim) qs.set('fim', p.fim)
+    const q = qs.toString()
+    return fetchApi<ListaCancelamentos>(`/cancelamentos${q ? `?${q}` : ''}`)
+  },
+  getOperadorasCancelamento: () => fetchApi<string[]>('/cancelamentos/operadoras'),
+  criarCancelamento: (dados: { clienteId: number; dataSolicitacao: string; operadora?: string; observacao?: string }) =>
+    fetchApi<{ id: number }>('/cancelamentos', { method: 'POST', body: JSON.stringify(dados) }),
+  atualizarCancelamento: (id: number, dados: { dataSolicitacao?: string; operadora?: string | null; observacao?: string | null }) =>
+    fetchApi<Cancelamento>(`/cancelamentos/${id}`, { method: 'PUT', body: JSON.stringify(dados) }),
+  marcarEnvioOperadora: (id: number, enviado: boolean) =>
+    fetchApi<Cancelamento>(`/cancelamentos/${id}/operadora`, { method: 'PATCH', body: JSON.stringify({ enviado }) }),
+  marcarCancelamentoFinanceiro: (id: number, cancelado: boolean) =>
+    fetchApi<Cancelamento>(`/cancelamentos/${id}/financeiro`, { method: 'PATCH', body: JSON.stringify({ cancelado }) }),
+  excluirCancelamento: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/cancelamentos/${id}`, { method: 'DELETE' }),
+
   getColaboradoresComissao: () =>
     fetchApi<Array<{ id: number; nome: string }>>('/comissoes/colaboradores'),
   lancarComissao: (dados: { logId: number; colaboradorId: number; percentual?: number }) =>
