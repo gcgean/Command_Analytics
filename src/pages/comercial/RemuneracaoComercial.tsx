@@ -543,8 +543,10 @@ export function RemuneracaoComercial() {
             </div>
 
             {editandoRateio.linhas.map((l, i) => (
-              <div key={i} className="flex gap-2">
-                <select className="input-field flex-1" value={l.usuarioId}
+              // Grid em vez de flex: .input-field traz w-full e vence as larguras utilitárias,
+              // entao o campo de percentual tomava a linha toda e o select sumia.
+              <div key={i} className="grid grid-cols-[1fr_7rem_auto] gap-2 items-center">
+                <select className="input-field" value={l.usuarioId}
                   onChange={(e) => setEditandoRateio({
                     ...editandoRateio,
                     linhas: editandoRateio.linhas.map((x, j) => j === i ? { ...x, usuarioId: e.target.value } : x),
@@ -552,8 +554,8 @@ export function RemuneracaoComercial() {
                   <option value="">Vendedor...</option>
                   {candidatos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
                 </select>
-                <input type="number" step="0.01" min="0" max="100" className="input-field w-28"
-                  value={l.percentual}
+                <input type="number" step="0.01" min="0" max="100" className="input-field"
+                  placeholder="%" value={l.percentual}
                   onChange={(e) => setEditandoRateio({
                     ...editandoRateio,
                     linhas: editandoRateio.linhas.map((x, j) => j === i ? { ...x, percentual: e.target.value } : x),
