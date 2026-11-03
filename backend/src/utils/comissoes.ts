@@ -221,6 +221,34 @@ export async function listarPlanos(): Promise<Plano[]> {
   }))
 }
 
+/** Sem acento e em maiúsculas, para comparar nome de gente sem tropeçar em acentuação. */
+function normalizarNome(valor: string | null | undefined): string {
+  return String(valor ?? '')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .trim().toUpperCase().replace(/\s+/g, ' ')
+}
+
+/**
+ * Os nomes com que o CRM conhece esta pessoa.
+ *
+ * O cadastro guarda "Renato" e o CRM grava "Renato Reinaldo" — comparando por igualdade
+ * exata, como era antes, nenhum cliente novo era atribuído a ele. Aqui o nome do cadastro
+ * vale quando é o nome inteiro do CRM ou o começo dele, em palavras completas.
+ *
+ * O prefixo tem que ser de palavra inteira: "João Pedro" NÃO pode casar com "João Vitor de
+ * Melo", que é outra pessoa. Por isso a comparação exige o espaço depois do nome.
+ */
+export function nomesCrmDoVendedor(
+  nome: string | null, nomeUsu: string | null, nomesCrm: string[],
+): string[] {
+  const candidatos = [nome, nomeUsu].map(normalizarNome).filter((n) => n.length >= 3)
+  if (candidatos.length === 0) return []
+  return nomesCrm.filter((bruto) => {
+    const alvo = normalizarNome(bruto)
+    return candidatos.some((c) => alvo === c || alvo.startsWith(`${c} `))
+  })
+}
+
 /** A faixa vigente é a maior cujo piso o faturamento alcançou. */
 export function faixaDe(base: number, faixas: Array<{ valorDe: number; percentual: number }>) {
   let atual: { valorDe: number; percentual: number } | null = null
@@ -360,6 +388,12 @@ export async function apurar(
     await comissaoPorCanal(inicio, fim).catch(() => new Map())
   const avulsasDoMes: Map<number, ComissaoAvulsa[]> =
     await avulsasPorUsuario(competencia).catch(() => new Map())
+
+  // Uma lista só dos nomes que o CRM usa, para resolver o apelido de cada vendedor.
+  const nomesCrm = (await prisma.$queryRawUnsafe<any[]>(
+    `SELECT DISTINCT vendedor_nome AS nome FROM crm_negocio
+      WHERE vendedor_nome IS NOT NULL AND vendedor_nome <> ''`).catch(() => []))
+    .map((r) => String(r.nome))
   const comissaoPorAgente = new Map<number, number>()
   for (const a of agentes) {
     comissaoPorAgente.set(a.usuarioId, (comissaoPorAgente.get(a.usuarioId) ?? 0) + a.comissao)
@@ -426,6 +460,15 @@ export async function apurar(
       usuarioId, inicio, fim,
     ).catch(() => [{ q: 0, implantacao: 0, migracao: 0, mensalidade: 0 }])
 
+    // O CRM chama a pessoa pelo nome completo e o cadastro guarda o primeiro: sem resolver
+    // isso, cliente novo nenhum era atribuído a quem tem nome curto no cadastro.
+    const nomesDoVendedor = [
+      ...new Set([
+        v.nome ?? '', v.nome_usu ?? '',
+        ...nomesCrmDoVendedor(v.nome ?? null, v.nome_usu ?? null, nomesCrm),
+      ].filter((n) => String(n).trim() !== '')),
+    ]
+
     // Mensalidade de cliente novo que NÃO passou pelo processo comercial. Quando passou, o
     // valor já veio acima, com o vendedor explícito na venda — contar dos dois lados dobraria
     // a mensalidade da mesma venda. A tabela `cliente` não guarda vendedor, então aqui a
@@ -447,8 +490,8 @@ export async function apurar(
                   WHERE nn.documento = REPLACE(REPLACE(REPLACE(REPLACE(c.CNPJ_CLI,'.',''),'/',''),'-',''),' ','')
                     AND nn.vendedor_nome IS NOT NULL AND nn.vendedor_nome <> ''
                   ORDER BY COALESCE(nn.finalizado_em, nn.criado_em, nn.data) DESC, nn.id DESC LIMIT 1),
-                NULLIF(u.NOME_USU, ''), ''))) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))`,
-      inicio, fim, inicio, fim, v.nome ?? '', v.nome_usu ?? '',
+                NULLIF(u.NOME_USU, ''), ''))) IN (${nomesDoVendedor.map(() => 'UPPER(TRIM(?))').join(', ')})`,
+      inicio, fim, inicio, fim, ...nomesDoVendedor,
     ).catch(() => [{ q: 0, valor: 0 }])
 
     const pUpg = prisma.$queryRawUnsafe<any[]>(
