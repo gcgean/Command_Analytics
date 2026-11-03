@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import {
-  Loader2, ChevronLeft, ChevronRight, Target, Wallet, TrendingUp, Trophy, Lock,
+  Loader2, ChevronLeft, ChevronRight, Target, Wallet, TrendingUp, Trophy, Lock, Users,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
@@ -46,6 +46,10 @@ export function MeuDesempenho() {
   // Vazio = eu mesmo. Só o gestor consegue mudar.
   const [verUsuario, setVerUsuario] = useState<number | null>(null)
   const [carregando, setCarregando] = useState(true)
+  // Meta geral da equipe: só o percentual. O endpoint não devolve valores em reais, então
+  // o faturamento da empresa não chega nem na resposta.
+  const [metaGeral, setMetaGeral] = useState<
+    { percMeta: number; batida: boolean; diasRestantes: number; encerrado: boolean } | null>(null)
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -59,6 +63,11 @@ export function MeuDesempenho() {
   }, [competencia, verUsuario, toast])
 
   useEffect(() => { void carregar() }, [carregar])
+
+  useEffect(() => {
+    setMetaGeral(null)
+    api.getPercentualMetaGeral(competencia).then(setMetaGeral).catch(() => {})
+  }, [competencia])
 
   const v = dados?.vendedor ?? null
 
@@ -154,6 +163,43 @@ export function MeuDesempenho() {
               </p>
             )}
           </div>
+
+          {/* Meta geral da equipe — só o percentual: o vendedor precisa saber se o mês
+              fechou, não quanto a empresa faturou. */}
+          {metaGeral && (
+            <Card>
+              <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
+                <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                  <Users className="w-4 h-4" /> Meta geral da equipe
+                </h2>
+                <div className="flex items-baseline gap-2">
+                  <span className={clsx('text-2xl font-black',
+                    metaGeral.batida ? 'text-emerald-500'
+                      : metaGeral.percMeta >= 60 ? 'text-amber-500' : 'text-red-400')}>
+                    {metaGeral.percMeta.toFixed(0)}%
+                  </span>
+                  {metaGeral.batida && (
+                    <span className="text-xs font-medium text-emerald-500">🎉 Meta batida!</span>
+                  )}
+                </div>
+              </div>
+              <div className="h-3 rounded-full bg-slate-100 dark:bg-slate-700 overflow-hidden">
+                <div className={clsx('h-full rounded-full transition-all',
+                  metaGeral.batida ? 'bg-emerald-500'
+                    : metaGeral.percMeta >= 60 ? 'bg-amber-500' : 'bg-red-400')}
+                  style={{ width: `${Math.min(metaGeral.percMeta, 100)}%` }} />
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                {metaGeral.batida
+                  ? 'A equipe fechou o período acima do objetivo.'
+                  : metaGeral.encerrado
+                    ? 'O período encerrou abaixo do objetivo.'
+                    : metaGeral.diasRestantes > 0
+                      ? `Faltam ${metaGeral.diasRestantes} dia(s) para fechar o período.`
+                      : 'Último dia do período.'}
+              </p>
+            </Card>
+          )}
 
           {/* Progresso na meta */}
           <Card>

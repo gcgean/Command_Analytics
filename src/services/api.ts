@@ -995,6 +995,10 @@ export const api = {
   }) => fetchApi<{ ok: boolean }>('/comissoes/vendedores', { method: 'POST', body: JSON.stringify(dados) }),
   excluirVendedorComissao: (usuarioId: number) =>
     fetchApi<{ ok: boolean }>(`/comissoes/vendedores/${usuarioId}`, { method: 'DELETE' }),
+  /** Só o percentual da meta geral — nenhum valor em reais trafega aqui. */
+  getPercentualMetaGeral: (mes: string) =>
+    fetchApi<{ competencia: string; percMeta: number; batida: boolean; diasRestantes: number; encerrado: boolean }>(
+      `/metas/comercial/percentual?mes=${mes}`),
   getMeuDesempenho: (competencia: string, usuarioId?: number) =>
     fetchApi<MeuDesempenhoComissao>(
       `/comissoes/meu-desempenho?competencia=${competencia}${usuarioId ? `&usuarioId=${usuarioId}` : ''}`),
