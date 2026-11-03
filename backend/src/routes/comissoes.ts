@@ -379,7 +379,8 @@ export async function comissoesRoutes(app: FastifyInstance) {
     ]
 
     const implantacoes = minha ? await prisma.$queryRawUnsafe<any[]>(
-      `SELECT c.id_processo, cli.NOME_FANTASIA AS cliente, cli.CIDRES_CLI AS cidade,
+      `SELECT c.id_processo, CASE WHEN cli.NOME_FANTASIA REGEXP '[A-Za-z]' THEN cli.NOME_FANTASIA
+                   ELSE COALESCE(NULLIF(cli.NOME_CLI, ''), cli.NOME_FANTASIA) END AS cliente, cli.CIDRES_CLI AS cidade,
               pl.descricao AS plano, c.valor_implantacao, c.valor_migracao,
               c.valor_mensalidade, DATE(${colunaData}) AS data
          FROM processo_implantacao_comercial c
@@ -392,7 +393,8 @@ export async function comissoesRoutes(app: FastifyInstance) {
     ).catch(() => [] as any[]) : []
 
     const clientesNovos = minha ? await prisma.$queryRawUnsafe<any[]>(
-      `SELECT c.cod_cli, c.NOME_FANTASIA AS cliente, c.CIDRES_CLI AS cidade,
+      `SELECT c.cod_cli, CASE WHEN c.NOME_FANTASIA REGEXP '[A-Za-z]' THEN c.NOME_FANTASIA
+                   ELSE COALESCE(NULLIF(c.NOME_CLI, ''), c.NOME_FANTASIA) END AS cliente, c.CIDRES_CLI AS cidade,
               c.valor_mensalidade AS valor, DATE(c.DATACADASTRO_CLI) AS data,
               COALESCE(cc.NOME_CLA, 'Sem classificação') AS segmento
          FROM cliente c
@@ -412,7 +414,8 @@ export async function comissoesRoutes(app: FastifyInstance) {
     ).catch(() => [] as any[]) : []
 
     const upgrades = minha ? await prisma.$queryRawUnsafe<any[]>(
-      `SELECT co.descricao, cli.NOME_FANTASIA AS cliente, co.Valor_operacao AS valor,
+      `SELECT co.descricao, CASE WHEN cli.NOME_FANTASIA REGEXP '[A-Za-z]' THEN cli.NOME_FANTASIA
+                   ELSE COALESCE(NULLIF(cli.NOME_CLI, ''), cli.NOME_FANTASIA) END AS cliente, co.Valor_operacao AS valor,
               CAST(co.data_venda AS DATE) AS data
          FROM comissoes_funcionario co
          INNER JOIN cliente cli ON cli.cod_cli = co.cod_cli
