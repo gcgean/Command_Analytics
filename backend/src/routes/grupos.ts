@@ -55,6 +55,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'triagem',                  label: 'Triagem Guiada',                  grupo: 'OPERACIONAL' },
   { id: 'smartpos',                 label: 'SmartPOS Compatíveis',            grupo: 'OPERACIONAL' },
   { id: 'certificados-digitais',    label: 'Controle de Certificados Digitais', grupo: 'CERTIFICADOS DIGITAIS' },
+  { id: 'comissoes-certificado',    label: 'Comissões de Certificado',        grupo: 'CERTIFICADOS DIGITAIS' },
   // RH
   { id: 'banco-horas',              label: 'Banco de Horas',                  grupo: 'RH' },
   { id: 'banco-horas-lancar',       label: 'Banco de Horas — Lançar/Descontar Horas', grupo: 'RH' },

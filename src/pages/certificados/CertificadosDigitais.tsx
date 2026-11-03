@@ -8,7 +8,6 @@ import {
   RefreshCw,
   Search,
   Target,
-  Wallet,
 } from 'lucide-react'
 import clsx from 'clsx'
 import {
@@ -24,10 +23,9 @@ import {
 } from 'recharts'
 import { api } from '../../services/api'
 import { useToast } from '../../components/ui/Toast'
-import { ComissoesCertificado } from './ComissoesCertificado'
 import type { CertificadoDigitalGraficoItem, CertificadoDigitalItem } from '../../types'
 
-type AbaCertificados = 'listagem' | 'grafico' | 'comissoes'
+type AbaCertificados = 'listagem' | 'grafico'
 
 function formatDateInput(date: Date) {
   return date.toISOString().slice(0, 10)
@@ -156,24 +154,9 @@ export function CertificadosDigitais() {
             <BarChart3 className="w-4 h-4" />
             Gráfico Próx. Meses
           </button>
-          <button
-            type="button"
-            onClick={() => setAba('comissoes')}
-            className={clsx(
-              'inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors',
-              aba === 'comissoes'
-                ? 'bg-blue-600 text-white'
-                : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-700/70 dark:text-slate-200 dark:hover:bg-slate-700'
-            )}
-          >
-            <Wallet className="w-4 h-4" />
-            Comissões
-          </button>
         </div>
 
-        {aba === 'comissoes' && <ComissoesCertificado />}
-
-        {aba === 'comissoes' ? null : aba === 'listagem' ? (
+        {aba === 'listagem' ? (
           <div className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
               <div>

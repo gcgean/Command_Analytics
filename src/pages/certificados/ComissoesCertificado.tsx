@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import {
-  Building2, Copy, Loader2, Pencil, Plus, Search, Trash2, Users, Wallet,
+  Building2, Copy, ListOrdered, Loader2, Pencil, Plus, Search, Trash2, Users, Wallet,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Button } from '../../components/ui/Button'
@@ -22,7 +22,22 @@ const dataBR = (v?: string | null) => {
 const primeiroDoMes = () => `${new Date().toISOString().slice(0, 7)}-01`
 const hoje = () => new Date().toISOString().slice(0, 10)
 
-type SubAba = 'gerenciador' | 'contadores' | 'agente'
+/** O que a listagem de contadores mostra — as mesmas colunas do cadastro antigo. */
+type ContadorCadastro = {
+  id: number
+  nome: string | null
+  nomeComercial: string | null
+  cnpj: string | null
+  email: string | null
+  telefone: string | null
+  descricao: string | null
+  perfilContador: string | null
+  responsavel: string | null
+  cidade: string | null
+  chavePix: string | null
+}
+
+type SubAba = 'gerenciador' | 'cadastro' | 'contadores' | 'agente'
 
 type Rascunho = {
   id?: number
@@ -57,6 +72,10 @@ export function ComissoesCertificado() {
   const [certificadoraId, setCertificadoraId] = useState('')
   const [certificadoras, setCertificadoras] = useState<Array<{ id: number; nome: string }>>([])
   const [listaContadores, setListaContadores] = useState<Array<{ id: number; nome: string }>>([])
+  const [buscaContador, setBuscaContador] = useState('')
+  const [cadastro, setCadastro] = useState<ContadorCadastro[]>([])
+  const [carregandoCadastro, setCarregandoCadastro] = useState(false)
+  const [formContador, setFormContador] = useState<Partial<ContadorCadastro> | null>(null)
   const [form, setForm] = useState<Rascunho | null>(null)
   const [salvando, setSalvando] = useState(false)
 
@@ -84,6 +103,22 @@ export function ComissoesCertificado() {
   }, [inicio, fim, busca, certificadoraId, toast])
 
   useEffect(() => { void consultar() }, [])
+
+  const carregarCadastro = useCallback(async () => {
+    setCarregandoCadastro(true)
+    try {
+      const r: any = await api.getContadores(
+        buscaContador.trim() ? { search: buscaContador.trim() } : undefined)
+      setCadastro(Array.isArray(r) ? r : (r?.data ?? []))
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível carregar os contadores.')
+    } finally {
+      setCarregandoCadastro(false)
+    }
+  }, [buscaContador, toast])
+
+  // Só busca ao abrir a aba: são 134 escritórios, não vale carregar junto com o resto.
+  useEffect(() => { if (sub === 'cadastro') void carregarCadastro() }, [sub, carregarCadastro])
   useEffect(() => {
     api.getCertificadoras().then(setCertificadoras).catch(() => {})
     api.getContadoresSelecao().then(setListaContadores).catch(() => {})
@@ -142,6 +177,42 @@ export function ComissoesCertificado() {
     }
   }
 
+  async function salvarContador() {
+    if (!formContador) return
+    const nome = String(formContador.nome ?? '').trim()
+    if (!nome) { toast.error('Informe a razão social.'); return }
+    setSalvando(true)
+    try {
+      const dados = {
+        nome,
+        nomeComercial: formContador.nomeComercial ?? null,
+        cnpj: formContador.cnpj ?? null,
+        email: formContador.email ?? null,
+        telefone: formContador.telefone ?? null,
+        descricao: formContador.descricao ?? null,
+        perfilContador: formContador.perfilContador ?? null,
+        responsavel: formContador.responsavel ?? null,
+        cidade: formContador.cidade ?? null,
+        chavePix: formContador.chavePix ?? null,
+      }
+      if (formContador.id) {
+        await api.updateContador(formContador.id, dados)
+        toast.success('Contador alterado.')
+      } else {
+        await api.createContador(dados)
+        toast.success('Contador cadastrado.')
+      }
+      setFormContador(null)
+      await carregarCadastro()
+      // O seletor do lançamento vem da mesma base: atualizar aqui evita cadastrar e não achar.
+      api.getContadoresSelecao().then(setListaContadores).catch(() => {})
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível salvar o contador.')
+    } finally {
+      setSalvando(false)
+    }
+  }
+
   async function excluir(i: IndicacaoCertificado) {
     if (!confirm(
       `Excluir o lançamento #${i.id}?\n\nCliente: ${i.cliente}\nValor: ${brl(i.valor)}`
@@ -165,7 +236,19 @@ export function ComissoesCertificado() {
     : 0
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 pb-10">
+      <div className="flex items-center gap-3">
+        <div className="p-2.5 rounded-xl bg-emerald-600 text-white"><Wallet size={22} /></div>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
+            Comissões de Certificado
+          </h1>
+          <p className="text-slate-600 dark:text-slate-400 text-sm">
+            Indicações de certificado digital, comissão dos escritórios e rateio entre os agentes.
+          </p>
+        </div>
+      </div>
+
       {/* Período e filtros */}
       <div className="flex flex-wrap items-end gap-3">
         <div>
@@ -213,7 +296,8 @@ export function ComissoesCertificado() {
       <div className="flex gap-2 border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
         {([
           ['gerenciador', 'Gerenciador', Wallet],
-          ['contadores', 'Qtd por contador', Building2],
+          ['cadastro', 'Listagem de contadores', Building2],
+          ['contadores', 'Qtd por contador', ListOrdered],
           ['agente', 'Comissão agente', Users],
         ] as const).map(([id, rotulo, Icone]) => (
           <button key={id} onClick={() => setSub(id)}
@@ -307,6 +391,68 @@ export function ComissoesCertificado() {
               ))}
             </tbody>
           </table>
+        </div>
+      ) : sub === 'cadastro' ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative flex-1 min-w-[16rem]">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input value={buscaContador} onChange={(e) => setBuscaContador(e.target.value)}
+                placeholder="Razão social, nome comercial ou CNPJ..."
+                className="input-field w-full pl-9" />
+            </div>
+            <Button size="sm" variant="secondary" loading={carregandoCadastro}
+              onClick={() => void carregarCadastro()}>
+              <Search className="w-3.5 h-3.5" /> Visualizar
+            </Button>
+            <Button size="sm" onClick={() => setFormContador({})}>
+              <Plus className="w-3.5 h-3.5" /> Novo contador
+            </Button>
+          </div>
+          <p className="text-xs text-slate-500">{cadastro.length} escritório(s)</p>
+          <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <tr className="text-left text-slate-600 dark:text-slate-400">
+                  <th className="px-3 py-2.5 font-medium">Cód</th>
+                  <th className="px-3 py-2.5 font-medium">Razão social</th>
+                  <th className="px-3 py-2.5 font-medium">Nome comercial</th>
+                  <th className="px-3 py-2.5 font-medium">CNPJ/CPF</th>
+                  <th className="px-3 py-2.5 font-medium">E-mail</th>
+                  <th className="px-3 py-2.5 font-medium">Telefone</th>
+                  <th className="px-3 py-2.5 font-medium">Descrição contábil</th>
+                  <th className="px-3 py-2.5" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                {carregandoCadastro ? (
+                  <tr><td colSpan={8} className="px-4 py-10 text-center">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-500 inline" />
+                  </td></tr>
+                ) : cadastro.length === 0 ? (
+                  <tr><td colSpan={8} className="px-4 py-10 text-center text-slate-500">
+                    Nenhum contador encontrado.
+                  </td></tr>
+                ) : cadastro.map((c) => (
+                  <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/30">
+                    <td className="px-3 py-2.5 text-slate-500">{c.id}</td>
+                    <td className="px-3 py-2.5 text-slate-800 dark:text-slate-100">{c.nome || '—'}</td>
+                    <td className="px-3 py-2.5 text-slate-600 dark:text-slate-300">{c.nomeComercial || '—'}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{c.cnpj || '—'}</td>
+                    <td className="px-3 py-2.5 text-slate-500 truncate max-w-[16rem]">{c.email || '—'}</td>
+                    <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{c.telefone || '—'}</td>
+                    <td className="px-3 py-2.5 text-slate-600 dark:text-slate-300">{c.descricao || '—'}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      <button onClick={() => setFormContador(c)} title="Alterar contador"
+                        className="text-slate-400 hover:text-blue-500">
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : sub === 'contadores' ? (
         <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700">
@@ -408,6 +554,51 @@ export function ComissoesCertificado() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* Novo / alterar contador */}
+      {formContador && (
+        <Modal isOpen onClose={() => !salvando && setFormContador(null)}
+          title={formContador.id ? `Alterar contador #${formContador.id}` : 'Novo contador'} size="lg">
+          <div className="space-y-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {([
+                ['nome', 'Razão social', true],
+                ['nomeComercial', 'Nome comercial', false],
+                ['cnpj', 'CNPJ / CPF', false],
+                ['descricao', 'Descrição contábil', false],
+                ['responsavel', 'Responsável', false],
+                ['email', 'E-mail', false],
+                ['telefone', 'Telefone', false],
+                ['cidade', 'Cidade', false],
+                ['chavePix', 'Chave PIX', false],
+              ] as const).map(([campo, rotulo, obrigatorio]) => (
+                <div key={campo}>
+                  <label className="block text-xs text-slate-500 mb-1">
+                    {rotulo}{obrigatorio && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  <input className="input-field w-full"
+                    value={String((formContador as any)[campo] ?? '')}
+                    onChange={(e) => setFormContador({ ...formContador, [campo]: e.target.value })} />
+                </div>
+              ))}
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">Perfil do contador</label>
+              <textarea className="input-field w-full min-h-[4.5rem]"
+                value={String(formContador.perfilContador ?? '')}
+                onChange={(e) => setFormContador({ ...formContador, perfilContador: e.target.value })} />
+            </div>
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="secondary" onClick={() => setFormContador(null)} disabled={salvando}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void salvarContador()} disabled={salvando}>
+                {salvando && <Loader2 className="w-4 h-4 animate-spin" />} Salvar
+              </Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* Lançar / alterar indicação */}

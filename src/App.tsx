@@ -78,6 +78,7 @@ import { Comunicados } from './pages/comunicados/Comunicados'
 
 // Certificados Digitais
 import { CertificadosDigitais } from './pages/certificados/CertificadosDigitais'
+import { ComissoesCertificado } from './pages/certificados/ComissoesCertificado'
 
 // Monitor
 import { MonitorAtendimentos } from './pages/monitor/MonitorAtendimentos'
@@ -270,6 +271,7 @@ export default function App() {
         <Route path="metas" element={<PermissionRoute recurso={['boletim-comercial', 'metas']}><Metas /></PermissionRoute>} />
         <Route path="comunicados" element={<PermissionRoute recurso="comunicados"><Comunicados /></PermissionRoute>} />
         <Route path="certificados-digitais" element={<PermissionRoute recurso="certificados-digitais"><CertificadosDigitais /></PermissionRoute>} />
+        <Route path="comissoes-certificado" element={<PermissionRoute recurso="comissoes-certificado"><ComissoesCertificado /></PermissionRoute>} />
         <Route path="monitor" element={<PermissionRoute recurso="monitor"><MonitorAtendimentos /></PermissionRoute>} />
         <Route path="campanhas" element={<PermissionRoute recurso="campanhas"><Campanhas /></PermissionRoute>} />
         <Route path="contadores" element={<PermissionRoute recurso="contadores"><Contadores /></PermissionRoute>} />

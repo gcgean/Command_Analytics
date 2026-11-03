@@ -7,7 +7,7 @@ import {
   Code2, Tag, Video, Target, Server, Database, Store, Percent, Trophy,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X, Star,
   MessageSquare, ClipboardList, Map, TrendingUp, FileText,
-  Smartphone, ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Archive, CreditCard, Bell, Cable, FolderKanban
+  Smartphone, ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Wallet, Archive, CreditCard, Bell, Cable, FolderKanban
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useAuthStore } from '../../store/authStore'
@@ -121,6 +121,7 @@ const navGroups: { group: string; items: NavItem[] }[] = [
     group: 'CERTIFICADOS DIGITAIS',
     items: [
       { label: 'Controle de Certificados Digitais', icon: <KeyRound className="w-4 h-4" />, to: '/certificados-digitais', recurso: 'certificados-digitais' },
+      { label: 'Comissões de Certificado', icon: <Wallet className="w-4 h-4" />, to: '/comissoes-certificado', recurso: 'comissoes-certificado' },
     ]
   },
   {
