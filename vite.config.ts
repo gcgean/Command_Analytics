@@ -55,6 +55,9 @@ export default defineConfig({
         // O custo é não abrir sem rede. Para este sistema isso quase não existe: toda tela
         // depende da API, então sem rede não há o que mostrar de qualquer jeito.
         globPatterns: ['**/*.{js,css,svg,ico}'],
+        // O bundle passou de 2 MiB, o limite padrão do Workbox, e o build inteiro passou a
+        // falhar — o que quebrava o deploy, não só o cache. 5 MiB dá folga para crescer.
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         // Sem isto o plugin registra a rota de navegação apontando para um index.html que
         // não está mais no precache, e aí nenhuma navegação carrega.
         navigateFallback: null,
