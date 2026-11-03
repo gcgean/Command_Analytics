@@ -4,7 +4,7 @@ import type {
   ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, PoliticaProvisionamentoIa, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
   MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada,
   PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
-  PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
+  PlanoComissao, VendedorComissao, CandidatoComissao, RegraCanalComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
   ListaLancamentosComissao, ListaPendentesComissao, RankingComissao, RankingTreinamento,
   Cancelamento, ListaCancelamentos,
   IndicacaoCertificado, ListaIndicacoesCertificado, ContadorComissaoCertificado, AgenteCertificado, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
@@ -685,6 +685,16 @@ export const api = {
     fetchApi<ListaPendentesComissao>(`/comissoes/pendentes?inicio=${p.inicio}&fim=${p.fim}`),
   getRankingComissao: (p: { inicio: string; fim: string }) =>
     fetchApi<{ inicio: string; fim: string; itens: RankingComissao[] }>(`/comissoes/ranking?inicio=${p.inicio}&fim=${p.fim}`),
+  getRegrasCanal: () => fetchApi<RegraCanalComissao[]>('/comissoes/canais'),
+  getOpcoesCanais: () =>
+    fetchApi<Array<{ canal: string; negocios: number; faturamento: number }>>('/comissoes/canais/opcoes'),
+  getApuracaoCanais: (p: { inicio: string; fim: string }) =>
+    fetchApi<{ inicio: string; fim: string; itens: RegraCanalComissao[] }>(
+      `/comissoes/canais/apuracao?inicio=${p.inicio}&fim=${p.fim}`),
+  salvarRegraCanal: (dados: { usuarioId: number; canal: string; blocoValor: number; valorPorBloco: number; ativo?: boolean }) =>
+    fetchApi<{ ok: boolean }>('/comissoes/canais', { method: 'POST', body: JSON.stringify(dados) }),
+  excluirRegraCanal: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/comissoes/canais/${id}`, { method: 'DELETE' }),
   getComissaoCertificados: (p: { inicio: string; fim: string }) =>
     fetchApi<{
       inicio: string; fim: string; total: number; valorComissao: number; valorEmitido: number

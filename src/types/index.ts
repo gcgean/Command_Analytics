@@ -1833,6 +1833,21 @@ export interface VendedorComissao {
   ativo: boolean
 }
 
+export interface RegraCanalComissao {
+  id: number
+  usuarioId: number
+  usuario: string | null
+  canal: string
+  blocoValor: number
+  valorPorBloco: number
+  ativo: boolean
+  /** Presentes só na prévia de apuração. */
+  faturamento?: number
+  negocios?: number
+  blocos?: number
+  valor?: number
+}
+
 export interface CandidatoComissao { id: number; nome: string; processos: number }
 
 /** De onde veio cada parte da base — o vendedor precisa poder conferir a conta. */
@@ -1881,6 +1896,15 @@ export interface LinhaComissao {
   } | null
   /** Comissão dos upgrades já lançados na tela Comissões, no período. */
   comissaoUpgrades: { quantidade: number; valorOperacao: number; valor: number }
+  /** Comissão por canal de aquisição: a cada bloco fechado no canal, um valor fixo. */
+  comissaoCanais: {
+    total: number
+    itens: Array<{
+      canal: string; faturamento: number; negocios: number
+      blocoValor: number; valorPorBloco: number; blocos: number; valor: number
+      faltaProximoBloco: number
+    }>
+  } | null
   /** Comissão de agente sobre os certificados digitais emitidos no período. */
   comissaoCertificado: {
     quantidade: number

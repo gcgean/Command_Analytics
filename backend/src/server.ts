@@ -90,6 +90,7 @@ import { revendasRoutes } from './routes/revendas'
 import { comissoesRoutes } from './routes/comissoes'
 import { comissoesLancamentosRoutes } from './routes/comissoesLancamentos'
 import { initComissoes } from './utils/comissoes'
+import { initComissaoCanal } from './utils/comissaoCanal'
 import { initRevendasSync, startRevendasSyncScheduler } from './utils/revendasSync'
 import { initNotasGeradas } from './routes/solicitacoes'
 import { ensureConfiguracaoIA } from './ia/config'
@@ -324,6 +325,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initComissoes()
     .then(() => console.log('✓ Tabelas de comissão verificadas'))
     .catch(e => console.warn('⚠ Comissões init:', e.message))
+  initComissaoCanal()
+    .then(() => console.log('✓ Tabela de comissão por canal verificada'))
+    .catch(e => console.warn('⚠ Comissão por canal init:', e.message))
   initRevendasSync()
     .then(() => { console.log('✓ Tabelas de revendas verificadas'); startRevendasSyncScheduler() })
     .catch(e => console.warn('⚠ Revendas init:', e.message))

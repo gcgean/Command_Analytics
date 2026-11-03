@@ -9,13 +9,18 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { useToast } from '../../components/ui/Toast'
 import type {
-  ApuracaoComissao, CandidatoComissao, PlanoComissao, VendedorComissao,
+  ApuracaoComissao, CandidatoComissao, PlanoComissao, RegraCanalComissao, VendedorComissao,
 } from '../../types'
 
 const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 const ESCOPO_ROTULO: Record<string, string> = { todos: 'todos os produtos', command: 'só produtos Command', cilos: 'só produtos Cilos' }
 const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
+/** Último dia da competência AAAA-MM, para fechar o período da consulta. */
+const fimDaCompetencia = (c: string) => {
+  const [a, m] = c.split('-').map(Number)
+  return `${c}-${String(new Date(a, m, 0).getDate()).padStart(2, '0')}`
+}
 const rotuloComp = (c: string) => {
   const [a, m] = c.split('-')
   return `${MESES[Number(m) - 1]} de ${a}`
@@ -28,11 +33,14 @@ const mover = (comp: string, passos: number) => {
 
 export function RemuneracaoComercial() {
   const { toast } = useToast()
-  const [aba, setAba] = useState<'apuracao' | 'vendedores' | 'plano'>('apuracao')
+  const [aba, setAba] = useState<'apuracao' | 'vendedores' | 'canais' | 'plano'>('apuracao')
   const [competencia, setCompetencia] = useState(() => new Date().toISOString().slice(0, 7))
   const [apuracao, setApuracao] = useState<ApuracaoComissao | null>(null)
   const [planos, setPlanos] = useState<PlanoComissao[]>([])
   const [vendedores, setVendedores] = useState<VendedorComissao[]>([])
+  const [regrasCanal, setRegrasCanal] = useState<RegraCanalComissao[]>([])
+  const [opcoesCanais, setOpcoesCanais] = useState<Array<{ canal: string; faturamento: number }>>([])
+  const [novoCanal, setNovoCanal] = useState({ usuarioId: '', canal: '', blocoValor: '1000', valorPorBloco: '' })
   const [candidatos, setCandidatos] = useState<CandidatoComissao[]>([])
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
@@ -86,6 +94,49 @@ export function RemuneracaoComercial() {
       void carregar()
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível criar o plano.')
+    }
+  }
+
+  const carregarCanais = useCallback(async () => {
+    try {
+      const [regras, opcoes] = await Promise.all([
+        api.getApuracaoCanais({ inicio: `${competencia}-01`, fim: fimDaCompetencia(competencia) }),
+        api.getOpcoesCanais(),
+      ])
+      setRegrasCanal(regras.itens)
+      setOpcoesCanais(opcoes.filter((o) => o.faturamento > 0))
+    } catch { /* a aba mostra vazia; o erro já aparece nas outras cargas */ }
+  }, [competencia])
+
+  useEffect(() => { if (aba === 'canais') void carregarCanais() }, [aba, carregarCanais])
+
+  async function adicionarRegraCanal() {
+    if (!novoCanal.usuarioId || !novoCanal.canal) {
+      toast.error('Escolha a pessoa e o canal.')
+      return
+    }
+    try {
+      await api.salvarRegraCanal({
+        usuarioId: Number(novoCanal.usuarioId),
+        canal: novoCanal.canal,
+        blocoValor: Number(novoCanal.blocoValor) || 0,
+        valorPorBloco: Number(novoCanal.valorPorBloco) || 0,
+      })
+      toast.success('Regra salva.')
+      setNovoCanal({ usuarioId: '', canal: '', blocoValor: '1000', valorPorBloco: '' })
+      await carregarCanais()
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível salvar a regra.')
+    }
+  }
+
+  async function removerRegraCanal(r: RegraCanalComissao) {
+    if (!confirm(`Remover a regra de ${r.usuario} no canal ${r.canal}?`)) return
+    try {
+      await api.excluirRegraCanal(r.id)
+      await carregarCanais()
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível remover.')
     }
   }
 
@@ -158,7 +209,8 @@ export function RemuneracaoComercial() {
       </div>
 
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
-        {([['apuracao', 'Apuração'], ['vendedores', 'Vendedores'], ['plano', 'Plano e faixas']] as const).map(([id, rotulo]) => (
+        {([['apuracao', 'Apuração'], ['vendedores', 'Vendedores'], ['canais', 'Canais de aquisição'],
+          ['plano', 'Plano e faixas']] as const).map(([id, rotulo]) => (
           <button key={id} onClick={() => setAba(id)}
             className={clsx('px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
               aba === id ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
@@ -315,6 +367,91 @@ export function RemuneracaoComercial() {
             {' '}atribuídas ao vendedor. É diferente do Boletim Comercial, que mede só receita recorrente
             {' '}nova e não inclui implantação. Fechar congela o valor: mudar o plano depois não altera o que já foi apurado.
           </p>
+        </div>
+      )}
+
+      {/* ── Canais de aquisição ── */}
+      {!carregando && aba === 'canais' && (
+        <div className="space-y-5">
+          <Card>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
+              Comissão por canal de aquisição
+            </h3>
+            <p className="text-xs text-slate-500 mb-3">
+              A cada bloco fechado no canal, um valor. Exemplo: R$ 50 a cada R$ 1.000 ganhos no
+              tráfego pago. Vale o que o canal inteiro fechou no mês, não o que a pessoa vendeu —
+              é remuneração de quem traz o lead, não de quem fecha.
+            </p>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <select className="input-field" value={novoCanal.usuarioId}
+                onChange={(e) => setNovoCanal({ ...novoCanal, usuarioId: e.target.value })}>
+                <option value="">Pessoa...</option>
+                {candidatos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              </select>
+              <select className="input-field" value={novoCanal.canal}
+                onChange={(e) => setNovoCanal({ ...novoCanal, canal: e.target.value })}>
+                <option value="">Canal...</option>
+                {opcoesCanais.map((o) => (
+                  <option key={o.canal} value={o.canal}>{o.canal} ({brl(o.faturamento)})</option>
+                ))}
+              </select>
+              <input type="number" step="0.01" className="input-field" placeholder="A cada R$"
+                value={novoCanal.blocoValor}
+                onChange={(e) => setNovoCanal({ ...novoCanal, blocoValor: e.target.value })} />
+              <div className="flex gap-2">
+                <input type="number" step="0.01" className="input-field" placeholder="Paga R$"
+                  value={novoCanal.valorPorBloco}
+                  onChange={(e) => setNovoCanal({ ...novoCanal, valorPorBloco: e.target.value })} />
+                <Button onClick={adicionarRegraCanal}><Plus className="w-4 h-4" /></Button>
+              </div>
+            </div>
+          </Card>
+
+          <Card padding="none">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <tr className="text-left text-slate-600 dark:text-slate-400">
+                  <th className="px-4 py-2.5 font-medium">Pessoa</th>
+                  <th className="px-4 py-2.5 font-medium">Canal</th>
+                  <th className="px-4 py-2.5 font-medium">Regra</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Fechado no mês</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Blocos</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Comissão</th>
+                  <th className="px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {regrasCanal.map((r) => (
+                  <tr key={r.id} className="border-t border-slate-200 dark:border-slate-700">
+                    <td className="px-4 py-2.5 text-slate-800 dark:text-slate-200">{r.usuario ?? `#${r.usuarioId}`}</td>
+                    <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">{r.canal}</td>
+                    <td className="px-4 py-2.5 text-slate-500">
+                      {brl(r.valorPorBloco)} a cada {brl(r.blocoValor)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-700 dark:text-slate-200">
+                      {brl(r.faturamento ?? 0)}
+                      <span className="block text-[11px] text-slate-400">{r.negocios ?? 0} negócio(s)</span>
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-600 dark:text-slate-300">{r.blocos ?? 0}</td>
+                    <td className="px-4 py-2.5 text-right font-semibold text-emerald-600 dark:text-emerald-400">
+                      {brl(r.valor ?? 0)}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => removerRegraCanal(r)} title="Remover regra"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {regrasCanal.length === 0 && (
+                  <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={7}>
+                    Nenhuma regra de canal cadastrada.
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </Card>
         </div>
       )}
 

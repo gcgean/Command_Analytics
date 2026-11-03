@@ -2,6 +2,7 @@ import { prisma } from '../database/client'
 import { percentualMetaGeral } from './metaGeral'
 import { treinamentosAvaliados, type TreinamentoAvaliado } from './treinamentos'
 import { comissaoAgente, certificadosEmitidos, type CertificadoEmitido } from './comissaoAgente'
+import { comissaoPorCanal, type ApuracaoCanal } from './comissaoCanal'
 
 /**
  * Plano de remuneração comercial: fixo por fase + comissão progressiva sobre a implantação.
@@ -293,6 +294,8 @@ export interface LinhaApuracao {
     /** Os treinamentos que geraram o bônus — a pessoa precisa poder conferir um a um. */
     itens: TreinamentoAvaliado[]
   } | null
+  /** Comissão por canal de aquisição: a cada bloco fechado no canal, um valor. */
+  comissaoCanais: { total: number; itens: ApuracaoCanal[] } | null
   /**
    * Comissão de agente sobre os certificados digitais que a pessoa emitiu no período.
    * Null para quem não emitiu nenhum.
@@ -337,6 +340,8 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
   // O rateio dos certificados depende do volume da equipe inteira: uma consulta só, e cada
   // pessoa pega a sua fatia depois.
   const agentes = await comissaoAgente(inicio, fim).catch(() => [])
+  const canaisPorUsuario: Map<number, ApuracaoCanal[]> =
+    await comissaoPorCanal(inicio, fim).catch(() => new Map())
   const comissaoPorAgente = new Map<number, number>()
   for (const a of agentes) {
     comissaoPorAgente.set(a.usuarioId, (comissaoPorAgente.get(a.usuarioId) ?? 0) + a.comissao)
@@ -534,8 +539,18 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
         }
       : null
 
+    // ── Canais de aquisição ──
+    const listaCanais = canaisPorUsuario.get(usuarioId) ?? []
+    const comissaoCanais = listaCanais.length > 0
+      ? {
+          total: Number(listaCanais.reduce((s, c) => s + c.valor, 0).toFixed(2)),
+          itens: listaCanais,
+        }
+      : null
+
     const extras = (bonusMeta?.valor ?? 0) + (bonusTreinamento?.valor ?? 0)
       + comissaoUpgrades.valor + (comissaoCertificado?.comissao ?? 0)
+      + (comissaoCanais?.total ?? 0)
 
     const fechado = fechamentos.find((f) => Number(f.usuario_id) === Number(v.usuario_id))
 
@@ -565,6 +580,7 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
       bonusTreinamento,
       comissaoUpgrades,
       comissaoCertificado,
+      comissaoCanais,
       usaMetaValor: meta > 0,
       fechado: !!fechado,
       fechadoEm: fechado?.fechado_em ?? null,

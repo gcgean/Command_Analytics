@@ -3,6 +3,7 @@ import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { listarPlanos, apurar, fechar, reabrir } from '../utils/comissoes'
 import { getUserPermissions } from './grupos'
+import { listarRegrasCanal, faturamentoPorCanal } from '../utils/comissaoCanal'
 
 /** Plano de remuneração comercial: planos, faixas, vendedores e apuração mensal. */
 export async function comissoesRoutes(app: FastifyInstance) {
@@ -142,6 +143,74 @@ export async function comissoesRoutes(app: FastifyInstance) {
    * vendedor recebia. Com o bônus por meta batida entrou gente que nunca vendeu — líder,
    * suporte — e que precisava aparecer aqui. Quem já vendeu continua no topo, com a contagem.
    */
+  // ── Comissão por canal de aquisição ──
+
+  app.get('/canais', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async () =>
+    listarRegrasCanal())
+
+  /** Canais disponíveis no CRM, com o que cada um fechou — ajuda a escolher a regra. */
+  app.get('/canais/opcoes', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async () => {
+    const linhas = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(NULLIF(canal, ''), 'Sem canal') AS canal,
+              COUNT(*) AS negocios,
+              COALESCE(SUM(CASE WHEN status = 'won' THEN valor END), 0) AS faturamento
+         FROM crm_negocio GROUP BY canal ORDER BY faturamento DESC`).catch(() => [])
+    return linhas.map((r) => ({
+      canal: String(r.canal),
+      negocios: Number(r.negocios ?? 0),
+      faturamento: Number(r.faturamento ?? 0),
+    }))
+  })
+
+  app.post('/canais', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request, reply) => {
+    const b = request.body as Record<string, any>
+    const usuarioId = Number(b.usuarioId ?? 0)
+    const canal = String(b.canal ?? '').trim()
+    const blocoValor = Number(b.blocoValor ?? 0)
+    const valorPorBloco = Number(b.valorPorBloco ?? 0)
+    if (!usuarioId || !canal) return reply.status(400).send({ error: 'Informe a pessoa e o canal.' })
+    if (!(blocoValor > 0)) return reply.status(400).send({ error: 'O valor do bloco precisa ser maior que zero.' })
+    if (!(valorPorBloco > 0)) return reply.status(400).send({ error: 'Informe quanto paga por bloco.' })
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO comissao_canal (usuario_id, canal, bloco_valor, valor_por_bloco, ativo)
+       VALUES (?,?,?,?,?)
+       ON DUPLICATE KEY UPDATE bloco_valor = VALUES(bloco_valor),
+         valor_por_bloco = VALUES(valor_por_bloco), ativo = VALUES(ativo)`,
+      usuarioId, canal.slice(0, 100), blocoValor, valorPorBloco, b.ativo === false ? 0 : 1)
+    return reply.status(201).send({ ok: true })
+  })
+
+  app.delete('/canais/:id', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request) => {
+    const { id } = request.params as { id: string }
+    await prisma.$executeRawUnsafe(`DELETE FROM comissao_canal WHERE id = ?`, Number(id))
+    return { ok: true }
+  })
+
+  /** Prévia: o que as regras pagariam no período, sem depender da apuração. */
+  app.get('/canais/apuracao', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request) => {
+    const q = request.query as Record<string, string>
+    const hoje = new Date().toISOString().slice(0, 10)
+    const inicio = /^\d{4}-\d{2}-\d{2}$/.test(q.inicio ?? '') ? q.inicio : `${hoje.slice(0, 7)}-01`
+    const fim = /^\d{4}-\d{2}-\d{2}$/.test(q.fim ?? '') ? q.fim : hoje
+    const regras = await listarRegrasCanal()
+    const porCanal = await faturamentoPorCanal(inicio, fim)
+    return {
+      inicio, fim,
+      itens: regras.map((r) => {
+        const d = porCanal.get(r.canal) ?? { faturamento: 0, negocios: 0 }
+        const blocos = r.blocoValor > 0 ? Math.floor(d.faturamento / r.blocoValor) : 0
+        return {
+          ...r,
+          faturamento: d.faturamento,
+          negocios: d.negocios,
+          blocos,
+          valor: Number((blocos * r.valorPorBloco).toFixed(2)),
+        }
+      }),
+    }
+  })
+
   app.get('/candidatos', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async () => {
     const linhas = await prisma.$queryRawUnsafe<any[]>(
       `SELECT u.COD_USU AS id, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS nome,
