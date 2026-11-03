@@ -4,7 +4,7 @@ import type {
   ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, PoliticaProvisionamentoIa, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
   MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada,
   PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
-  PlanoComissao, VendedorComissao, CandidatoComissao, RegraCanalComissao, ComissaoAvulsa, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
+  PlanoComissao, VendedorComissao, CandidatoComissao, RegraCanalComissao, ComissaoAvulsa, RateioVenda, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
   ListaLancamentosComissao, ListaPendentesComissao, RankingComissao, RankingTreinamento,
   Cancelamento, ListaCancelamentos,
   IndicacaoCertificado, ListaIndicacoesCertificado, ContadorComissaoCertificado, AgenteCertificado, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
@@ -685,6 +685,12 @@ export const api = {
     fetchApi<ListaPendentesComissao>(`/comissoes/pendentes?inicio=${p.inicio}&fim=${p.fim}`),
   getRankingComissao: (p: { inicio: string; fim: string }) =>
     fetchApi<{ inicio: string; fim: string; itens: RankingComissao[] }>(`/comissoes/ranking?inicio=${p.inicio}&fim=${p.fim}`),
+  getRateiosVenda: (busca?: string) =>
+    fetchApi<RateioVenda[]>(`/comissoes/rateios${busca ? `?busca=${encodeURIComponent(busca)}` : ''}`),
+  salvarRateioVenda: (idProcesso: number, participantes: Array<{ usuarioId: number; percentual: number }>) =>
+    fetchApi<{ ok: boolean }>(`/comissoes/rateios/${idProcesso}`, {
+      method: 'POST', body: JSON.stringify({ participantes }),
+    }),
   getComissoesAvulsas: (competencia?: string) =>
     fetchApi<ComissaoAvulsa[]>(`/comissoes/avulsas${competencia ? `?competencia=${competencia}` : ''}`),
   criarComissaoAvulsa: (dados: { usuarioId: number; competencia: string; descricao: string; valor: number }) =>

@@ -450,14 +450,27 @@ export async function apurar(
     const usuarioId = Number(v.usuario_id)
 
     // Implantação e migração do pacote de entrada, pelo vendedor do processo.
+    /**
+     * Quando a venda tem rateio, cada um leva a sua fatia e o `id_usu_vendedor` deixa de
+     * valer. Sem esse "deixa de valer" as duas regras somariam mais de 100% da venda.
+     */
     const pBase = prisma.$queryRawUnsafe<any[]>(
       `SELECT COUNT(*) AS q,
-              COALESCE(SUM(c.valor_implantacao), 0) AS implantacao,
-              COALESCE(SUM(c.valor_migracao), 0) AS migracao,
-              COALESCE(SUM(c.valor_mensalidade), 0) AS mensalidade
-         FROM processo_implantacao_comercial c
-        WHERE c.id_usu_vendedor = ? AND DATE(${coluna}) BETWEEN ? AND ?`,
-      usuarioId, inicio, fim,
+              COALESCE(SUM(c.valor_implantacao * fatia), 0) AS implantacao,
+              COALESCE(SUM(c.valor_migracao * fatia), 0) AS migracao,
+              COALESCE(SUM(c.valor_mensalidade * fatia), 0) AS mensalidade
+         FROM (
+           SELECT c.*, COALESCE(r.percentual, 100) / 100 AS fatia
+             FROM processo_implantacao_comercial c
+             LEFT JOIN processo_rateio r
+               ON r.id_processo = c.id_processo AND r.usuario_id = ?
+            WHERE DATE(${coluna}) BETWEEN ? AND ?
+              AND (r.usuario_id IS NOT NULL
+                   OR (c.id_usu_vendedor = ?
+                       AND NOT EXISTS (SELECT 1 FROM processo_rateio x
+                                        WHERE x.id_processo = c.id_processo)))
+         ) c`,
+      usuarioId, inicio, fim, usuarioId,
     ).catch(() => [{ q: 0, implantacao: 0, migracao: 0, mensalidade: 0 }])
 
     // O CRM chama a pessoa pelo nome completo e o cadastro guarda o primeiro: sem resolver

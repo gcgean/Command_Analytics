@@ -1844,6 +1844,15 @@ export interface ComissaoAvulsa {
   criadoPor: string | null
 }
 
+export interface RateioVenda {
+  idProcesso: number
+  cliente: string | null
+  data: string | null
+  valorTotal: number
+  vendedorOriginal: string | null
+  participantes: Array<{ usuarioId: number; usuario: string | null; percentual: number }>
+}
+
 export interface RegraCanalComissao {
   id: number
   usuarioId: number

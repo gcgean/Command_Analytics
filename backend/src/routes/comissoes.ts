@@ -5,6 +5,7 @@ import { listarPlanos, apurar, fechar, reabrir, nomesCrmDoVendedor } from '../ut
 import { getUserPermissions } from './grupos'
 import { listarRegrasCanal, faturamentoPorCanal } from '../utils/comissaoCanal'
 import { listarAvulsas } from '../utils/comissaoAvulsa'
+import { listarVendasParaRateio, salvarRateio } from '../utils/rateioVenda'
 
 /** Plano de remuneração comercial: planos, faixas, vendedores e apuração mensal. */
 export async function comissoesRoutes(app: FastifyInstance) {
@@ -144,6 +145,25 @@ export async function comissoesRoutes(app: FastifyInstance) {
    * vendedor recebia. Com o bônus por meta batida entrou gente que nunca vendeu — líder,
    * suporte — e que precisava aparecer aqui. Quem já vendeu continua no topo, com a contagem.
    */
+  // ── Divisão de uma venda entre vendedores ──
+
+  app.get('/rateios', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request) => {
+    const { busca } = request.query as { busca?: string }
+    return listarVendasParaRateio(String(busca ?? ''))
+  })
+
+  app.post('/rateios/:idProcesso', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request, reply) => {
+    const idProcesso = Number((request.params as { idProcesso: string }).idProcesso)
+    if (!idProcesso) return reply.status(400).send({ error: 'Processo inválido.' })
+    const b = request.body as { participantes?: Array<{ usuarioId: number; percentual: number }> }
+    try {
+      await salvarRateio(idProcesso, b.participantes ?? [], Number((request.user as any)?.id || 0) || null)
+    } catch (e: any) {
+      return reply.status(400).send({ error: String(e?.message ?? e) })
+    }
+    return { ok: true }
+  })
+
   // ── Comissão avulsa (prêmios lançados à mão) ──
 
   app.get('/avulsas', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request) => {
@@ -381,15 +401,24 @@ export async function comissoesRoutes(app: FastifyInstance) {
     const implantacoes = minha ? await prisma.$queryRawUnsafe<any[]>(
       `SELECT c.id_processo, CASE WHEN cli.NOME_FANTASIA REGEXP '[A-Za-z]' THEN cli.NOME_FANTASIA
                    ELSE COALESCE(NULLIF(cli.NOME_CLI, ''), cli.NOME_FANTASIA) END AS cliente, cli.CIDRES_CLI AS cidade,
-              pl.descricao AS plano, c.valor_implantacao, c.valor_migracao,
-              c.valor_mensalidade, DATE(${colunaData}) AS data
+              pl.descricao AS plano,
+              c.valor_implantacao * (COALESCE(r.percentual, 100) / 100) AS valor_implantacao,
+              c.valor_migracao * (COALESCE(r.percentual, 100) / 100) AS valor_migracao,
+              c.valor_mensalidade * (COALESCE(r.percentual, 100) / 100) AS valor_mensalidade,
+              COALESCE(r.percentual, 100) AS percentual,
+              DATE(${colunaData}) AS data
          FROM processo_implantacao_comercial c
          LEFT JOIN processo_implantacao pi ON pi.id = c.id_processo
          LEFT JOIN cliente cli ON cli.cod_cli = pi.id_cli
          LEFT JOIN planos pl ON pl.id = c.id_plano
-        WHERE c.id_usu_vendedor = ? AND DATE(${colunaData}) BETWEEN ? AND ?
+         LEFT JOIN processo_rateio r ON r.id_processo = c.id_processo AND r.usuario_id = ?
+        WHERE DATE(${colunaData}) BETWEEN ? AND ?
+          AND (r.usuario_id IS NOT NULL
+               OR (c.id_usu_vendedor = ?
+                   AND NOT EXISTS (SELECT 1 FROM processo_rateio x
+                                    WHERE x.id_processo = c.id_processo)))
         ORDER BY data DESC`,
-      eu, `${comp}-01`, fimDoMes,
+      eu, `${comp}-01`, fimDoMes, eu,
     ).catch(() => [] as any[]) : []
 
     const clientesNovos = minha ? await prisma.$queryRawUnsafe<any[]>(
@@ -456,6 +485,7 @@ export async function comissoesRoutes(app: FastifyInstance) {
       escada: plano?.faixas ?? [],
       detalhe: {
         implantacoes: implantacoes.map((i) => ({
+          percentual: Number(i.percentual ?? 100),
           processo: Number(i.id_processo),
           cliente: i.cliente ?? `Processo ${i.id_processo}`,
           cidade: i.cidade ?? null,

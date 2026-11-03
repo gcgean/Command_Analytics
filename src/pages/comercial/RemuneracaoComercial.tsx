@@ -2,14 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import {
   Loader2, Save, Plus, Trash2, Lock, Unlock, ChevronLeft, ChevronRight,
-  Percent, Wallet, TrendingUp, Users, Target,
+  Percent, Wallet, TrendingUp, Users, Target, Search,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
+import { Modal } from '../../components/ui/Modal'
 import { useToast } from '../../components/ui/Toast'
 import type {
-  ApuracaoComissao, CandidatoComissao, ComissaoAvulsa, PlanoComissao, RegraCanalComissao,
+  ApuracaoComissao, CandidatoComissao, ComissaoAvulsa, PlanoComissao, RateioVenda,
+  RegraCanalComissao,
   VendedorComissao,
 } from '../../types'
 
@@ -34,13 +36,18 @@ const mover = (comp: string, passos: number) => {
 
 export function RemuneracaoComercial() {
   const { toast } = useToast()
-  const [aba, setAba] = useState<'apuracao' | 'vendedores' | 'canais' | 'plano'>('apuracao')
+  const [aba, setAba] = useState<'apuracao' | 'vendedores' | 'rateio' | 'canais' | 'plano'>('apuracao')
   const [competencia, setCompetencia] = useState(() => new Date().toISOString().slice(0, 7))
   const [apuracao, setApuracao] = useState<ApuracaoComissao | null>(null)
   const [planos, setPlanos] = useState<PlanoComissao[]>([])
   const [vendedores, setVendedores] = useState<VendedorComissao[]>([])
   const [regrasCanal, setRegrasCanal] = useState<RegraCanalComissao[]>([])
   const [avulsas, setAvulsas] = useState<ComissaoAvulsa[]>([])
+  const [vendas, setVendas] = useState<RateioVenda[]>([])
+  const [buscaVenda, setBuscaVenda] = useState('')
+  const [carregandoVendas, setCarregandoVendas] = useState(false)
+  const [editandoRateio, setEditandoRateio] = useState<
+    { venda: RateioVenda; linhas: Array<{ usuarioId: string; percentual: string }> } | null>(null)
   const [novoPremio, setNovoPremio] = useState({ usuarioId: '', descricao: '', valor: '' })
   const [opcoesCanais, setOpcoesCanais] = useState<Array<{ canal: string; faturamento: number }>>([])
   const [novoCanal, setNovoCanal] = useState({ usuarioId: '', canal: '', blocoValor: '1000', valorPorBloco: '' })
@@ -118,6 +125,44 @@ export function RemuneracaoComercial() {
   }, [competencia])
 
   useEffect(() => { void carregarAvulsas() }, [carregarAvulsas])
+
+  const carregarVendas = useCallback(async () => {
+    setCarregandoVendas(true)
+    try { setVendas(await api.getRateiosVenda(buscaVenda.trim() || undefined)) }
+    catch (e: any) { toast.error(e?.message || 'Não foi possível carregar as vendas.') }
+    finally { setCarregandoVendas(false) }
+  }, [buscaVenda, toast])
+
+  useEffect(() => { if (aba === 'rateio') void carregarVendas() }, [aba])
+
+  function abrirRateio(v: RateioVenda) {
+    setEditandoRateio({
+      venda: v,
+      // Já dividida, abre como está; nova, começa meio a meio com o vendedor atual.
+      linhas: v.participantes.length > 0
+        ? v.participantes.map((p) => ({ usuarioId: String(p.usuarioId), percentual: String(p.percentual) }))
+        : [{ usuarioId: '', percentual: '50' }, { usuarioId: '', percentual: '50' }],
+    })
+  }
+
+  async function salvarRateio() {
+    if (!editandoRateio) return
+    const participantes = editandoRateio.linhas
+      .filter((l) => l.usuarioId && Number(l.percentual) > 0)
+      .map((l) => ({ usuarioId: Number(l.usuarioId), percentual: Number(l.percentual) }))
+    if (participantes.some((p, i) => participantes.findIndex((o) => o.usuarioId === p.usuarioId) !== i)) {
+      toast.error('A mesma pessoa aparece duas vezes na divisão.')
+      return
+    }
+    try {
+      await api.salvarRateioVenda(editandoRateio.venda.idProcesso, participantes)
+      toast.success(participantes.length ? 'Divisão salva.' : 'Divisão removida: a venda volta para o vendedor original.')
+      setEditandoRateio(null)
+      await Promise.all([carregarVendas(), carregar()])
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível salvar a divisão.')
+    }
+  }
 
   async function adicionarPremio() {
     if (!novoPremio.usuarioId || !novoPremio.descricao.trim() || !(Number(novoPremio.valor) > 0)) {
@@ -248,8 +293,8 @@ export function RemuneracaoComercial() {
       </div>
 
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
-        {([['apuracao', 'Apuração'], ['vendedores', 'Vendedores'], ['canais', 'Canais de aquisição'],
-          ['plano', 'Plano e faixas']] as const).map(([id, rotulo]) => (
+        {([['apuracao', 'Apuração'], ['vendedores', 'Vendedores'], ['rateio', 'Divisão de vendas'],
+          ['canais', 'Canais de aquisição'], ['plano', 'Plano e faixas']] as const).map(([id, rotulo]) => (
           <button key={id} onClick={() => setAba(id)}
             className={clsx('px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
               aba === id ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
@@ -407,6 +452,147 @@ export function RemuneracaoComercial() {
             {' '}nova e não inclui implantação. Fechar congela o valor: mudar o plano depois não altera o que já foi apurado.
           </p>
         </div>
+      )}
+
+      {/* ── Divisão de vendas ── */}
+      {!carregando && aba === 'rateio' && (
+        <div className="space-y-5">
+          <Card>
+            <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
+              Dividir uma venda entre vendedores
+            </h3>
+            <p className="text-xs text-slate-500 mb-3">
+              Para quando um abre a venda e outro fecha. Com a divisão salva, cada um leva a sua
+              fatia na base da meta — e o vendedor do processo deixa de levar tudo. Some os
+              percentuais até 100%. Para desfazer, apague as linhas e salve.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <div className="relative flex-1 min-w-[16rem]">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input value={buscaVenda} onChange={(e) => setBuscaVenda(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void carregarVendas() }}
+                  placeholder="Cliente ou número do processo..."
+                  className="input-field w-full pl-9" />
+              </div>
+              <Button variant="secondary" loading={carregandoVendas} onClick={() => void carregarVendas()}>
+                Buscar
+              </Button>
+            </div>
+          </Card>
+
+          <Card padding="none">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-50 dark:bg-slate-900/50">
+                <tr className="text-left text-slate-600 dark:text-slate-400">
+                  <th className="px-4 py-2.5 font-medium">Venda</th>
+                  <th className="px-4 py-2.5 font-medium">Cliente</th>
+                  <th className="px-4 py-2.5 font-medium">Data</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Valor</th>
+                  <th className="px-4 py-2.5 font-medium">Quem leva</th>
+                  <th className="px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {carregandoVendas ? (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-500 inline" />
+                  </td></tr>
+                ) : vendas.length === 0 ? (
+                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                    Nenhuma venda encontrada.
+                  </td></tr>
+                ) : vendas.map((v) => (
+                  <tr key={v.idProcesso} className="border-t border-slate-200 dark:border-slate-700">
+                    <td className="px-4 py-2.5 text-slate-500">#{v.idProcesso}</td>
+                    <td className="px-4 py-2.5 text-slate-800 dark:text-slate-200">{v.cliente ?? '—'}</td>
+                    <td className="px-4 py-2.5 text-slate-500 whitespace-nowrap">
+                      {v.data ? v.data.split('-').reverse().join('/') : '—'}
+                    </td>
+                    <td className="px-4 py-2.5 text-right text-slate-700 dark:text-slate-300">{brl(v.valorTotal)}</td>
+                    <td className="px-4 py-2.5 text-slate-600 dark:text-slate-300">
+                      {v.participantes.length === 0
+                        ? <span className="text-slate-400">{v.vendedorOriginal ?? 'sem vendedor'} (inteira)</span>
+                        : v.participantes.map((pp) => `${pp.usuario} ${pp.percentual}%`).join(' · ')}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => abrirRateio(v)}
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                        {v.participantes.length ? 'alterar' : 'dividir'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        </div>
+      )}
+
+      {editandoRateio && (
+        <Modal isOpen onClose={() => setEditandoRateio(null)}
+          title={`Dividir a venda #${editandoRateio.venda.idProcesso}`} size="md">
+          <div className="space-y-3">
+            <div className="rounded-lg bg-slate-50 dark:bg-slate-800/60 p-3 text-sm">
+              <p className="font-medium text-slate-900 dark:text-slate-100">
+                {editandoRateio.venda.cliente ?? 'Cliente sem nome'}
+              </p>
+              <p className="text-xs text-slate-500">
+                {brl(editandoRateio.venda.valorTotal)} · vendedor no processo:{' '}
+                {editandoRateio.venda.vendedorOriginal ?? '—'}
+              </p>
+            </div>
+
+            {editandoRateio.linhas.map((l, i) => (
+              <div key={i} className="flex gap-2">
+                <select className="input-field flex-1" value={l.usuarioId}
+                  onChange={(e) => setEditandoRateio({
+                    ...editandoRateio,
+                    linhas: editandoRateio.linhas.map((x, j) => j === i ? { ...x, usuarioId: e.target.value } : x),
+                  })}>
+                  <option value="">Vendedor...</option>
+                  {candidatos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+                <input type="number" step="0.01" min="0" max="100" className="input-field w-28"
+                  value={l.percentual}
+                  onChange={(e) => setEditandoRateio({
+                    ...editandoRateio,
+                    linhas: editandoRateio.linhas.map((x, j) => j === i ? { ...x, percentual: e.target.value } : x),
+                  })} />
+                <button onClick={() => setEditandoRateio({
+                  ...editandoRateio,
+                  linhas: editandoRateio.linhas.filter((_, j) => j !== i),
+                })} className="text-slate-400 hover:text-red-500 px-1">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+
+            <div className="flex items-center justify-between">
+              <button onClick={() => setEditandoRateio({
+                ...editandoRateio,
+                linhas: [...editandoRateio.linhas, { usuarioId: '', percentual: '' }],
+              })} className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                + adicionar vendedor
+              </button>
+              {(() => {
+                const soma = editandoRateio.linhas.reduce((t, l) => t + (Number(l.percentual) || 0), 0)
+                const vazio = editandoRateio.linhas.every((l) => !l.usuarioId)
+                return (
+                  <span className={clsx('text-xs font-medium',
+                    vazio ? 'text-slate-400'
+                      : Math.abs(soma - 100) < 0.01 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-500')}>
+                    {vazio ? 'sem divisão — volta para o vendedor original' : `soma: ${soma.toFixed(2)}%`}
+                  </span>
+                )
+              })()}
+            </div>
+
+            <div className="flex justify-end gap-2 pt-1">
+              <Button variant="secondary" onClick={() => setEditandoRateio(null)}>Cancelar</Button>
+              <Button onClick={() => void salvarRateio()}>Salvar divisão</Button>
+            </div>
+          </div>
+        </Modal>
       )}
 
       {/* ── Prêmios avulsos, dentro da Apuração: é o mês que está sendo fechado ── */}
