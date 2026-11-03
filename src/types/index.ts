@@ -1833,6 +1833,17 @@ export interface VendedorComissao {
   ativo: boolean
 }
 
+export interface ComissaoAvulsa {
+  id: number
+  usuarioId: number
+  usuario: string | null
+  competencia: string
+  descricao: string
+  valor: number
+  criadoEm: string | null
+  criadoPor: string | null
+}
+
 export interface RegraCanalComissao {
   id: number
   usuarioId: number
@@ -1896,6 +1907,14 @@ export interface LinhaComissao {
   } | null
   /** Comissão dos upgrades já lançados na tela Comissões, no período. */
   comissaoUpgrades: { quantidade: number; valorOperacao: number; valor: number }
+  /** Prêmios lançados à mão para a competência. */
+  avulsas: {
+    total: number
+    itens: Array<{
+      id: number; usuarioId: number; usuario: string | null; competencia: string
+      descricao: string; valor: number; criadoEm: string | null; criadoPor: string | null
+    }>
+  } | null
   /** Comissão por canal de aquisição: a cada bloco fechado no canal, um valor fixo. */
   comissaoCanais: {
     total: number
@@ -1956,7 +1975,6 @@ export interface MeuDesempenhoComissao {
     }>
   }
   /** Posição no mês, sem expor o número dos colegas. */
-  ranking: { posicao: number; total: number } | null
   historico: Array<{ competencia: string; base: number; percentual: number; variavel: number; total: number }>
 }
 

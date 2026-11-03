@@ -3,6 +3,7 @@ import { percentualMetaGeral } from './metaGeral'
 import { treinamentosAvaliados, type TreinamentoAvaliado } from './treinamentos'
 import { comissaoAgente, certificadosEmitidos, type CertificadoEmitido } from './comissaoAgente'
 import { comissaoPorCanal, type ApuracaoCanal } from './comissaoCanal'
+import { avulsasPorUsuario, type ComissaoAvulsa } from './comissaoAvulsa'
 
 /**
  * Plano de remuneração comercial: fixo por fase + comissão progressiva sobre a implantação.
@@ -294,6 +295,8 @@ export interface LinhaApuracao {
     /** Os treinamentos que geraram o bônus — a pessoa precisa poder conferir um a um. */
     itens: TreinamentoAvaliado[]
   } | null
+  /** Prêmios lançados à mão para a competência. */
+  avulsas: { total: number; itens: ComissaoAvulsa[] } | null
   /** Comissão por canal de aquisição: a cada bloco fechado no canal, um valor. */
   comissaoCanais: { total: number; itens: ApuracaoCanal[] } | null
   /**
@@ -351,6 +354,8 @@ export async function apurar(
   const agentes = await comissaoAgente(inicio, fim).catch(() => [])
   const canaisPorUsuario: Map<number, ApuracaoCanal[]> =
     await comissaoPorCanal(inicio, fim).catch(() => new Map())
+  const avulsasDoMes: Map<number, ComissaoAvulsa[]> =
+    await avulsasPorUsuario(competencia).catch(() => new Map())
   const comissaoPorAgente = new Map<number, number>()
   for (const a of agentes) {
     comissaoPorAgente.set(a.usuarioId, (comissaoPorAgente.get(a.usuarioId) ?? 0) + a.comissao)
@@ -377,7 +382,7 @@ export async function apurar(
     ativo: true, faixas: [],
   }
   const jaVinculados = new Set(vendedores.map((v) => Number(v.usuario_id)))
-  for (const [usuarioId] of canaisPorUsuario) {
+  for (const usuarioId of [...canaisPorUsuario.keys(), ...avulsasDoMes.keys()]) {
     if (jaVinculados.has(usuarioId)) continue
     const [u] = await prisma.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(NOME_USUARIO_COMPLETO, NOME_USU) AS nome, NOME_USU AS nome_usu
@@ -397,7 +402,12 @@ export async function apurar(
     if (!plano) continue
 
     // A data que define "recebida" vem do plano: hoje o sistema só tem o vencimento da parcela.
-    const coluna = plano.baseCalculo === 'processo' ? 'c.data_hora_dados' : 'c.data_venc_implantacao'
+    // Quase metade dos processos nao tem data de vencimento preenchida. Sem o COALESCE a
+    // venda nao cai em mes nenhum: some da apuracao e ninguem recebe por ela.
+    const dataDoProcesso = (alias: string) => plano.baseCalculo === 'processo'
+      ? `${alias}.data_hora_dados`
+      : `COALESCE(${alias}.data_venc_implantacao, ${alias}.data_hora_dados)`
+    const coluna = dataDoProcesso('c')
     const usuarioId = Number(v.usuario_id)
 
     // Implantação e migração do pacote de entrada, pelo vendedor do processo.
@@ -423,7 +433,7 @@ export async function apurar(
           AND c.cod_cli NOT IN (
                 SELECT pi.id_cli FROM processo_implantacao pi
                  INNER JOIN processo_implantacao_comercial pc ON pc.id_processo = pi.id
-                 WHERE DATE(pc.${coluna.replace('c.', '')}) BETWEEN ? AND ?
+                 WHERE DATE(${dataDoProcesso('pc')}) BETWEEN ? AND ?
                    AND pi.id_cli IS NOT NULL)
           AND c.DATACADASTRO_CLI BETWEEN ? AND ?
           AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
@@ -583,9 +593,18 @@ export async function apurar(
         }
       : null
 
+    // ── Avulsos ──
+    const listaAvulsas = avulsasDoMes.get(usuarioId) ?? []
+    const avulsas = listaAvulsas.length > 0
+      ? {
+          total: Number(listaAvulsas.reduce((s, a) => s + a.valor, 0).toFixed(2)),
+          itens: listaAvulsas,
+        }
+      : null
+
     const extras = (bonusMeta?.valor ?? 0) + (bonusTreinamento?.valor ?? 0)
       + comissaoUpgrades.valor + (comissaoCertificado?.comissao ?? 0)
-      + (comissaoCanais?.total ?? 0)
+      + (comissaoCanais?.total ?? 0) + (avulsas?.total ?? 0)
 
     const fechado = fechamentos.find((f) => Number(f.usuario_id) === Number(v.usuario_id))
 
@@ -616,6 +635,7 @@ export async function apurar(
       comissaoUpgrades,
       comissaoCertificado,
       comissaoCanais,
+      avulsas,
       usaMetaValor: meta > 0,
       fechado: !!fechado,
       fechadoEm: fechado?.fechado_em ?? null,

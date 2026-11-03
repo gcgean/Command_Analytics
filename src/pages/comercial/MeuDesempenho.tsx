@@ -73,7 +73,7 @@ export function MeuDesempenho() {
   // O que a pessoa recebe fora da escada: bônus e a comissão já lançada dos upgrades.
   const somaBonus = (v?.bonusMeta?.valor ?? 0) + (v?.bonusTreinamento?.valor ?? 0)
     + (v?.comissaoUpgrades?.valor ?? 0) + (v?.comissaoCertificado?.comissao ?? 0)
-    + (v?.comissaoCanais?.total ?? 0)
+    + (v?.comissaoCanais?.total ?? 0) + (v?.avulsas?.total ?? 0)
 
   return (
     <div className="space-y-5 pb-10">
@@ -157,6 +157,9 @@ export function MeuDesempenho() {
                   {v.comissaoUpgrades.valor > 0 && (
                     <p>Comissão dos upgrades: {brl(v.comissaoUpgrades.valor)}</p>
                   )}
+                  {v.avulsas && v.avulsas.total > 0 && (
+                    <p>Prêmios: {brl(v.avulsas.total)}</p>
+                  )}
                   {v.comissaoCanais && v.comissaoCanais.total > 0 && (
                     <p>Canais de aquisição: {brl(v.comissaoCanais.total)}</p>
                   )}
@@ -230,12 +233,23 @@ export function MeuDesempenho() {
           {/* Bônus por meta batida e por treinamento bem avaliado. Só aparece para quem tem
               esses bônus no cadastro — para os demais seria ruído. */}
           {(v.bonusMeta || v.bonusTreinamento || v.comissaoUpgrades.valor > 0
-            || v.comissaoCertificado || v.comissaoCanais) && (
+            || v.comissaoCertificado || v.comissaoCanais || v.avulsas) && (
             <Card>
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-3">
                 <Award className="w-4 h-4" /> O que eu recebo no mês
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {v.avulsas && (
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                    <p className="text-xs text-slate-500">Prêmios do mês</p>
+                    <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      {brl(v.avulsas.total)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {v.avulsas.itens.map((x) => x.descricao).join(' · ')}
+                    </p>
+                  </div>
+                )}
                 {v.comissaoCanais && (
                   <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
                     <p className="text-xs text-slate-500">Canais de aquisição</p>
@@ -534,16 +548,6 @@ export function MeuDesempenho() {
             </Card>
             )}
           </div>
-          )}
-
-          {v.usaMetaValor && !v.baseEmpresa && dados.ranking && dados.ranking.total > 1 && (
-            <Card>
-              <p className="text-sm text-slate-600 dark:text-slate-300 text-center">
-                Você está em <strong className="text-slate-900 dark:text-slate-100">
-                  {dados.ranking.posicao}º de {dados.ranking.total}
-                </strong> no time comercial neste mês.
-              </p>
-            </Card>
           )}
 
           {/* ── O que entrou na base, item a item ───────────────────── */}

@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth'
 import { listarPlanos, apurar, fechar, reabrir } from '../utils/comissoes'
 import { getUserPermissions } from './grupos'
 import { listarRegrasCanal, faturamentoPorCanal } from '../utils/comissaoCanal'
+import { listarAvulsas } from '../utils/comissaoAvulsa'
 
 /** Plano de remuneração comercial: planos, faixas, vendedores e apuração mensal. */
 export async function comissoesRoutes(app: FastifyInstance) {
@@ -143,6 +144,48 @@ export async function comissoesRoutes(app: FastifyInstance) {
    * vendedor recebia. Com o bônus por meta batida entrou gente que nunca vendeu — líder,
    * suporte — e que precisava aparecer aqui. Quem já vendeu continua no topo, com a contagem.
    */
+  // ── Comissão avulsa (prêmios lançados à mão) ──
+
+  app.get('/avulsas', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request) => {
+    const { competencia } = request.query as { competencia?: string }
+    return listarAvulsas(/^\d{4}-\d{2}$/.test(competencia ?? '') ? competencia : undefined)
+  })
+
+  app.post('/avulsas', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request, reply) => {
+    const b = request.body as Record<string, any>
+    const usuarioId = Number(b.usuarioId ?? 0)
+    const competencia = String(b.competencia ?? '')
+    const descricao = String(b.descricao ?? '').trim()
+    const valor = Number(b.valor ?? 0)
+    if (!usuarioId) return reply.status(400).send({ error: 'Escolha quem recebe.' })
+    if (!/^\d{4}-\d{2}$/.test(competencia)) return reply.status(400).send({ error: 'Competência inválida. Use AAAA-MM.' })
+    if (!descricao) return reply.status(400).send({ error: 'Descreva o que está sendo pago.' })
+    if (!(valor > 0)) return reply.status(400).send({ error: 'O valor precisa ser maior que zero.' })
+
+    // Mês já fechado não aceita lançamento novo: o que foi pago não muda depois.
+    const [fechado] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT 1 AS x FROM comissao_apuracao WHERE competencia = ? AND usuario_id = ? LIMIT 1`,
+      competencia, usuarioId)
+    if (fechado) {
+      return reply.status(400).send({
+        error: 'A competência desta pessoa já foi fechada. Reabra antes de lançar.',
+      })
+    }
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO comissao_avulsa (usuario_id, competencia, descricao, valor, criado_por)
+       VALUES (?,?,?,?,?)`,
+      usuarioId, competencia, descricao.slice(0, 200), valor,
+      Number((request.user as any)?.id || 0) || null)
+    return reply.status(201).send({ ok: true })
+  })
+
+  app.delete('/avulsas/:id', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request) => {
+    const { id } = request.params as { id: string }
+    await prisma.$executeRawUnsafe(`DELETE FROM comissao_avulsa WHERE id = ?`, Number(id))
+    return { ok: true }
+  })
+
   // ── Comissão por canal de aquisição ──
 
   app.get('/canais', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async () =>
@@ -306,9 +349,6 @@ export async function comissoesRoutes(app: FastifyInstance) {
       }
     })
 
-    // Onde a pessoa está no ranking do mês, sem expor o número dos colegas.
-    const ordenado = [...linhas].sort((a, b) => b.base - a.base)
-    const posicao = ordenado.findIndex((l) => l.usuarioId === eu)
 
     const planos = await listarPlanos()
     const plano = planos.find((p) => p.id === minha?.planoId) ?? planos[0] ?? null
@@ -427,7 +467,6 @@ export async function comissoesRoutes(app: FastifyInstance) {
           data: dataTexto(a4.data),
         })),
       },
-      ranking: posicao >= 0 ? { posicao: posicao + 1, total: ordenado.length } : null,
       historico,
     }
   })

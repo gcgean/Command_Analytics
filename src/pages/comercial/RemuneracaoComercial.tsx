@@ -9,7 +9,8 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { useToast } from '../../components/ui/Toast'
 import type {
-  ApuracaoComissao, CandidatoComissao, PlanoComissao, RegraCanalComissao, VendedorComissao,
+  ApuracaoComissao, CandidatoComissao, ComissaoAvulsa, PlanoComissao, RegraCanalComissao,
+  VendedorComissao,
 } from '../../types'
 
 const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -39,6 +40,8 @@ export function RemuneracaoComercial() {
   const [planos, setPlanos] = useState<PlanoComissao[]>([])
   const [vendedores, setVendedores] = useState<VendedorComissao[]>([])
   const [regrasCanal, setRegrasCanal] = useState<RegraCanalComissao[]>([])
+  const [avulsas, setAvulsas] = useState<ComissaoAvulsa[]>([])
+  const [novoPremio, setNovoPremio] = useState({ usuarioId: '', descricao: '', valor: '' })
   const [opcoesCanais, setOpcoesCanais] = useState<Array<{ canal: string; faturamento: number }>>([])
   const [novoCanal, setNovoCanal] = useState({ usuarioId: '', canal: '', blocoValor: '1000', valorPorBloco: '' })
   const [candidatos, setCandidatos] = useState<CandidatoComissao[]>([])
@@ -109,6 +112,42 @@ export function RemuneracaoComercial() {
   }, [competencia])
 
   useEffect(() => { if (aba === 'canais') void carregarCanais() }, [aba, carregarCanais])
+
+  const carregarAvulsas = useCallback(async () => {
+    try { setAvulsas(await api.getComissoesAvulsas(competencia)) } catch { /* lista vazia */ }
+  }, [competencia])
+
+  useEffect(() => { void carregarAvulsas() }, [carregarAvulsas])
+
+  async function adicionarPremio() {
+    if (!novoPremio.usuarioId || !novoPremio.descricao.trim() || !(Number(novoPremio.valor) > 0)) {
+      toast.error('Escolha a pessoa, descreva o prêmio e informe o valor.')
+      return
+    }
+    try {
+      await api.criarComissaoAvulsa({
+        usuarioId: Number(novoPremio.usuarioId),
+        competencia,
+        descricao: novoPremio.descricao.trim(),
+        valor: Number(novoPremio.valor),
+      })
+      toast.success('Prêmio lançado.')
+      setNovoPremio({ usuarioId: '', descricao: '', valor: '' })
+      await Promise.all([carregarAvulsas(), carregar()])
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível lançar.')
+    }
+  }
+
+  async function removerPremio(a: ComissaoAvulsa) {
+    if (!confirm(`Remover "${a.descricao}" de ${a.usuario} (${brl(a.valor)})?`)) return
+    try {
+      await api.excluirComissaoAvulsa(a.id)
+      await Promise.all([carregarAvulsas(), carregar()])
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível remover.')
+    }
+  }
 
   async function adicionarRegraCanal() {
     if (!novoCanal.usuarioId || !novoCanal.canal) {
@@ -368,6 +407,57 @@ export function RemuneracaoComercial() {
             {' '}nova e não inclui implantação. Fechar congela o valor: mudar o plano depois não altera o que já foi apurado.
           </p>
         </div>
+      )}
+
+      {/* ── Prêmios avulsos, dentro da Apuração: é o mês que está sendo fechado ── */}
+      {!carregando && aba === 'apuracao' && (
+        <Card>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
+            Prêmios e comissões avulsas de {rotuloComp(competencia)}
+          </h3>
+          <p className="text-xs text-slate-500 mb-3">
+            Para o que não tem regra no sistema — melhor nota do suporte, campanha pontual. Entra
+            no total da pessoa no mês informado. Competência já fechada não aceita lançamento.
+          </p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <select className="input-field" value={novoPremio.usuarioId}
+              onChange={(e) => setNovoPremio({ ...novoPremio, usuarioId: e.target.value })}>
+              <option value="">Quem recebe...</option>
+              {candidatos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+            <input className="input-field md:col-span-2" placeholder="Motivo (ex.: melhor nota do suporte)"
+              value={novoPremio.descricao}
+              onChange={(e) => setNovoPremio({ ...novoPremio, descricao: e.target.value })} />
+            <div className="flex gap-2">
+              <input type="number" step="0.01" className="input-field" placeholder="Valor R$"
+                value={novoPremio.valor}
+                onChange={(e) => setNovoPremio({ ...novoPremio, valor: e.target.value })} />
+              <Button onClick={adicionarPremio}><Plus className="w-4 h-4" /></Button>
+            </div>
+          </div>
+
+          {avulsas.length > 0 && (
+            <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
+              {avulsas.map((a) => (
+                <div key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <span className="min-w-0">
+                    <span className="block text-slate-800 dark:text-slate-100 truncate">
+                      {a.usuario} — {a.descricao}
+                    </span>
+                    {a.criadoPor && (
+                      <span className="block text-[11px] text-slate-400">lançado por {a.criadoPor}</span>
+                    )}
+                  </span>
+                  <span className="flex items-center gap-3 shrink-0">
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">{brl(a.valor)}</span>
+                    <button onClick={() => removerPremio(a)} title="Remover"
+                      className="text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
       )}
 
       {/* ── Canais de aquisição ── */}
