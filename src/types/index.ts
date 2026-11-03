@@ -1142,6 +1142,68 @@ export interface Campanha {
 
 export type CampanhaPayload = Omit<Campanha, 'id' | 'totalClientes'>
 
+/** Lançamento de certificado digital com a comissão do contador que indicou. */
+export interface IndicacaoCertificado {
+  id: number
+  dataIndicacao: string | null
+  dataLancamento: string | null
+  tipo: number | null
+  valor: number
+  comissao: number
+  percentual: number
+  tipoCliente: string | null
+  validadeCertificado: string | null
+  contadorId: number | null
+  escritorio: string | null
+  contador: string | null
+  chavePix: string | null
+  clienteId: number | null
+  cliente: string
+  clienteFantasia: string | null
+  usuarioId: number | null
+  usuario: string
+  certificadoraId: number | null
+  certificadora: string | null
+}
+
+export interface ListaIndicacoesCertificado {
+  inicio: string
+  fim: string
+  total: number
+  valorOperacao: number
+  valorComissao: number
+  itens: IndicacaoCertificado[]
+}
+
+export interface ContadorComissaoCertificado {
+  contadorId: number
+  escritorio: string | null
+  responsavel: string | null
+  comercial: string | null
+  cidade: string | null
+  chavePix: string | null
+  indicacoes: number
+  valor: number
+  comissao: number
+  percentual: number
+}
+
+export interface AgenteCertificado {
+  usuarioId: number
+  usuario: string
+  certificadoraId: number
+  certificadora: string | null
+  qtdIndividual: number
+  qtdEquipe: number
+  valorIndividual: number
+  valorEquipe: number
+  percentualAplicado: number
+  participacaoInicial: number
+  participacaoFinal: number
+  baseCalculo: number
+  comissao: number
+}
+
 /** Pedido de cancelamento de integração de pagamento. */
 export interface Cancelamento {
   id: number

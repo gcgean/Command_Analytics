@@ -6,7 +6,8 @@ import type {
   PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
   ListaLancamentosComissao, ListaPendentesComissao, RankingComissao, RankingTreinamento,
-  Cancelamento, ListaCancelamentos, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
+  Cancelamento, ListaCancelamentos,
+  IndicacaoCertificado, ListaIndicacoesCertificado, ContadorComissaoCertificado, AgenteCertificado, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
   StatusAtendimento, ProcedimentoCadastro, ClienteAnexo, ConfiguracaoNotificacaoAgendamento, NotificacaoPlataforma,
   PlanoCatalogo, SistemaPlanos, TerminalSmartPos, GrupoSmartPos, PendentesPorTecnico,
@@ -686,6 +687,46 @@ export const api = {
     fetchApi<{ inicio: string; fim: string; itens: RankingComissao[] }>(`/comissoes/ranking?inicio=${p.inicio}&fim=${p.fim}`),
   getRankingTreinamentos: (p: { inicio: string; fim: string }) =>
     fetchApi<{ inicio: string; fim: string; itens: RankingTreinamento[] }>(`/comissoes/treinamentos?inicio=${p.inicio}&fim=${p.fim}`),
+  // ── Comissões de certificado digital (aba do sistema legado) ──
+  getIndicacoesCertificado: (p: {
+    inicio: string; fim: string; contadorId?: number; certificadoraId?: number
+    usuarioId?: number; busca?: string; comComissao?: boolean
+  }) => {
+    const qs = new URLSearchParams({ inicio: p.inicio, fim: p.fim })
+    if (p.contadorId) qs.set('contadorId', String(p.contadorId))
+    if (p.certificadoraId) qs.set('certificadoraId', String(p.certificadoraId))
+    if (p.usuarioId) qs.set('usuarioId', String(p.usuarioId))
+    if (p.busca) qs.set('busca', p.busca)
+    if (p.comComissao !== undefined) qs.set('comComissao', String(p.comComissao))
+    return fetchApi<ListaIndicacoesCertificado>(`/certificados/comissoes/indicacoes?${qs}`)
+  },
+  getContadoresComissaoCertificado: (p: { inicio: string; fim: string }) =>
+    fetchApi<{
+      inicio: string; fim: string; total: number; valorOperacao: number; valorComissao: number
+      itens: ContadorComissaoCertificado[]
+    }>(`/certificados/comissoes/por-contador?inicio=${p.inicio}&fim=${p.fim}`),
+  getAgentesCertificado: (p: { inicio: string; fim: string }) =>
+    fetchApi<{ inicio: string; fim: string; total: number; valorComissao: number; itens: AgenteCertificado[] }>(
+      `/certificados/comissoes/agente?inicio=${p.inicio}&fim=${p.fim}`),
+  getCertificadoras: () =>
+    fetchApi<Array<{ id: number; nome: string }>>('/certificados/comissoes/certificadoras'),
+  getContadoresSelecao: (busca?: string) =>
+    fetchApi<Array<{ id: number; nome: string; responsavel: string | null; cidade: string | null; chavePix: string | null }>>(
+      `/certificados/comissoes/contadores${busca ? `?busca=${encodeURIComponent(busca)}` : ''}`),
+  criarIndicacaoCertificado: (dados: {
+    clienteId: number; dataIndicacao: string; valor: number; percentual?: number; comissao?: number
+    contadorId?: number; certificadoraId?: number; tipo?: number; tipoCliente?: string
+    validadeCertificado?: string
+  }) => fetchApi<{ id: number; comissao: number }>('/certificados/comissoes/indicacoes', {
+    method: 'POST', body: JSON.stringify(dados),
+  }),
+  atualizarIndicacaoCertificado: (id: number, dados: Record<string, any>) =>
+    fetchApi<{ ok: boolean; comissao: number }>(`/certificados/comissoes/indicacoes/${id}`, {
+      method: 'PUT', body: JSON.stringify(dados),
+    }),
+  excluirIndicacaoCertificado: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/certificados/comissoes/indicacoes/${id}`, { method: 'DELETE' }),
+
   // ── Cancelamentos de integração ──
   getCancelamentos: (p: { situacao?: string; busca?: string; inicio?: string; fim?: string } = {}) => {
     const qs = new URLSearchParams()

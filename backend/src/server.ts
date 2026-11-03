@@ -26,6 +26,7 @@ import { monitorRoutes } from './routes/monitor'
 import { campanhasRoutes } from './routes/campanhas'
 import { contadoresRoutes } from './routes/contadores'
 import { certificadosRoutes } from './routes/certificados'
+import { comissoesCertificadoRoutes } from './routes/comissoesCertificado'
 import { versoesRoutes } from './routes/versoes'
 import { servidoresRoutes } from './routes/servidores'
 import { dashboardRoutes } from './routes/dashboard'
@@ -224,6 +225,7 @@ app.register(async (api) => {
   api.register(campanhasRoutes,    { prefix: '/campanhas' })
   api.register(contadoresRoutes,   { prefix: '/contadores' })
   api.register(certificadosRoutes, { prefix: '/certificados' })
+  api.register(comissoesCertificadoRoutes, { prefix: '/certificados/comissoes' })
   api.register(versoesRoutes,      { prefix: '/versoes' })
   api.register(servidoresRoutes,   { prefix: '/servidores' })
   api.register(connectionsRoutes,  { prefix: '/connections' })
