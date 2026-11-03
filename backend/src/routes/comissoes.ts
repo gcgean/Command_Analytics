@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
-import { listarPlanos, apurar, fechar, reabrir } from '../utils/comissoes'
+import { listarPlanos, apurar, fechar, reabrir, nomesCrmDoVendedor } from '../utils/comissoes'
 import { getUserPermissions } from './grupos'
 import { listarRegrasCanal, faturamentoPorCanal } from '../utils/comissaoCanal'
 import { listarAvulsas } from '../utils/comissaoAvulsa'
@@ -359,8 +359,24 @@ export async function comissoesRoutes(app: FastifyInstance) {
     // ── O que a pessoa fez no período, item a item ──
     // Sem isso o vendedor vê só o total e não tem como conferir de onde ele saiu.
     const planoDaPessoa = (await listarPlanos()).find((pl) => pl.id === minha?.planoId)
+    // O MESMO recorte da apuração. Sem o COALESCE a lista escondia as vendas sem data de
+    // vencimento — que entram no total — e o vendedor via um valor que a lista não explicava.
     const colunaData = planoDaPessoa?.baseCalculo === 'processo'
-      ? 'c.data_hora_dados' : 'c.data_venc_implantacao'
+      ? 'c.data_hora_dados'
+      : 'COALESCE(c.data_venc_implantacao, c.data_hora_dados)'
+
+    // O CRM chama a pessoa pelo nome completo; o cadastro guarda o primeiro. Mesma regra da
+    // apuração, senão a lista mostra menos clientes do que o total soma.
+    const nomesCrmTodos = (await prisma.$queryRawUnsafe<any[]>(
+      `SELECT DISTINCT vendedor_nome AS nome FROM crm_negocio
+        WHERE vendedor_nome IS NOT NULL AND vendedor_nome <> ''`).catch(() => []))
+      .map((r) => String(r.nome))
+    const nomesDaPessoa = [
+      ...new Set([
+        minha?.nome ?? '', nomeUsu,
+        ...nomesCrmDoVendedor(minha?.nome ?? null, nomeUsu, nomesCrmTodos),
+      ].filter((n) => String(n).trim() !== '')),
+    ]
 
     const implantacoes = minha ? await prisma.$queryRawUnsafe<any[]>(
       `SELECT c.id_processo, cli.NOME_FANTASIA AS cliente, cli.CIDRES_CLI AS cidade,
@@ -390,9 +406,9 @@ export async function comissoesRoutes(app: FastifyInstance) {
                   WHERE nn.documento = REPLACE(REPLACE(REPLACE(REPLACE(c.CNPJ_CLI,'.',''),'/',''),'-',''),' ','')
                     AND nn.vendedor_nome IS NOT NULL AND nn.vendedor_nome <> ''
                   ORDER BY COALESCE(nn.finalizado_em, nn.criado_em, nn.data) DESC, nn.id DESC LIMIT 1),
-                NULLIF(u.NOME_USU, ''), ''))) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))
+                NULLIF(u.NOME_USU, ''), ''))) IN (${nomesDaPessoa.map(() => 'UPPER(TRIM(?))').join(', ')})
         ORDER BY data DESC`,
-      `${comp}-01`, fimDoMes, minha.nome, nomeUsu,
+      `${comp}-01`, fimDoMes, ...nomesDaPessoa,
     ).catch(() => [] as any[]) : []
 
     const upgrades = minha ? await prisma.$queryRawUnsafe<any[]>(
