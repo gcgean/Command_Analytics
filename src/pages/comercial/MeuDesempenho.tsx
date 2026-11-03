@@ -443,6 +443,14 @@ export function MeuDesempenho() {
                 style={{ width: `${Math.min(v.percMeta ?? 0, 100)}%` }} />
             </div>
 
+            {/* Sem venda de sistema no mês a escada não vale: o upgrade paga só pelo próprio
+                lançamento, senão o mesmo upgrade seria pago duas vezes. */}
+            {!v.baseEmpresa && !v.naEscada && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-3">
+                Você não fechou nenhum sistema neste mês, então a escada de comissão não se
+                aplica. Seus upgrades continuam pagando pelo valor lançado em Comissões.
+              </p>
+            )}
             {v.baseEmpresa && (
               <p className="text-xs text-slate-500 mt-3">
                 Seu bônus acompanha o resultado de toda a empresa, contando{' '}

@@ -266,6 +266,10 @@ export interface LinhaApuracao {
   emFaseInicial: boolean
   base: number
   processos: number
+  /** Processos comerciais + clientes novos atribuídos no mês. */
+  sistemasFechados: number
+  /** Falso quando a pessoa não vendeu sistema no mês: fica fora da escada de 1% a 30%. */
+  naEscada: boolean
   meta: number
   percMeta: number | null
   faixaDe: number | null
@@ -396,10 +400,11 @@ export async function apurar(
     jaVinculados.add(usuarioId)
   }
 
-  const linhas: LinhaApuracao[] = []
-  for (const v of vendedores) {
+  // Cada pessoa é independente das outras: em série, dezessete pessoas viravam dezessete
+  // rodadas de ida e volta ao banco e a tela demorava segundos para abrir.
+  const linhas: LinhaApuracao[] = (await Promise.all(vendedores.map(async (v) => {
     const plano = Number(v.plano_id) === 0 ? planoSemEscada : porPlano.get(Number(v.plano_id))
-    if (!plano) continue
+    if (!plano) return null
 
     // A data que define "recebida" vem do plano: hoje o sistema só tem o vencimento da parcela.
     // Quase metade dos processos nao tem data de vencimento preenchida. Sem o COALESCE a
@@ -411,7 +416,7 @@ export async function apurar(
     const usuarioId = Number(v.usuario_id)
 
     // Implantação e migração do pacote de entrada, pelo vendedor do processo.
-    const [b] = await prisma.$queryRawUnsafe<any[]>(
+    const pBase = prisma.$queryRawUnsafe<any[]>(
       `SELECT COUNT(*) AS q,
               COALESCE(SUM(c.valor_implantacao), 0) AS implantacao,
               COALESCE(SUM(c.valor_migracao), 0) AS migracao,
@@ -425,8 +430,8 @@ export async function apurar(
     // valor já veio acima, com o vendedor explícito na venda — contar dos dois lados dobraria
     // a mensalidade da mesma venda. A tabela `cliente` não guarda vendedor, então aqui a
     // atribuição é a mesma do Boletim: o CRM pelo CNPJ e, na falta dele, quem fez o cadastro.
-    const [mens] = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT COALESCE(SUM(c.valor_mensalidade), 0) AS valor
+    const pMens = prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS q, COALESCE(SUM(c.valor_mensalidade), 0) AS valor
          FROM cliente c
          LEFT JOIN usuario u ON u.COD_USU = c.cod_usu_local_Cad
         WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000 AND c.ATIVO = 'S'
@@ -444,9 +449,9 @@ export async function apurar(
                   ORDER BY COALESCE(nn.finalizado_em, nn.criado_em, nn.data) DESC, nn.id DESC LIMIT 1),
                 NULLIF(u.NOME_USU, ''), ''))) IN (UPPER(TRIM(?)), UPPER(TRIM(?)))`,
       inicio, fim, inicio, fim, v.nome ?? '', v.nome_usu ?? '',
-    ).catch(() => [{ valor: 0 }])
+    ).catch(() => [{ q: 0, valor: 0 }])
 
-    const [upg] = await prisma.$queryRawUnsafe<any[]>(
+    const pUpg = prisma.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(SUM(co.Valor_operacao), 0) AS valor
          FROM comissoes_funcionario co
          INNER JOIN cliente c ON c.cod_cli = co.cod_cli
@@ -462,7 +467,7 @@ export async function apurar(
       : plano.escopoProduto === 'cilos' ? "AND COALESCE(s.nome, '') LIKE '%cilos%'" : ''
 
     // No PayCore o vendedor já vem resolvido para o nosso COD_USU na sincronização.
-    const [pay] = await prisma.$queryRawUnsafe<any[]>(
+    const pPay = prisma.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
          FROM paycore_assinatura a
          INNER JOIN paycore_cliente pc
@@ -471,6 +476,10 @@ export async function apurar(
         WHERE pc.vendedor_id = ? AND DATE(a.inicio) BETWEEN ? AND ? ${filtroServidor}`,
       usuarioId, inicio, fim,
     ).catch(() => [{ valor: 0 }])
+
+    // As cinco consultas acima não dependem umas das outras. Em série eram cinco idas ao
+    // banco por pessoa, e com dezessete pessoas a tela levava segundos para abrir.
+    const [[b], [mens], [upg], [pay]] = await Promise.all([pBase, pMens, pUpg, pPay])
 
     // Com escopo 'cilos' só o PayCore da Cilos conta: implantação, mensalidade e upgrades são
     // todos da operação Command.
@@ -492,7 +501,16 @@ export async function apurar(
     if (proporcional) {
       base = await baseDaEmpresa(inicio, fim, plano.escopoProduto, coluna)
     }
-    const faixa = proporcional ? null : faixaDe(base, plano.faixas)
+    /**
+     * Sistemas fechados no mês: processo comercial lançado ou cliente novo atribuído pelo
+     * CRM. A escada é remuneração de VENDA — quem não vendeu sistema nenhum fica fora dela
+     * e recebe só a comissão do próprio upgrade, que já vem decidida no lançamento. Sem
+     * isso o mesmo upgrade pagava duas vezes: pelo percentual da escada e pelo lançamento.
+     */
+    const sistemasFechados = Number(b?.q ?? 0) + Number(mens?.q ?? 0)
+    const naEscada = proporcional || sistemasFechados > 0
+
+    const faixa = proporcional || !naEscada ? null : faixaDe(base, plano.faixas)
     const percentual = faixa?.percentual ?? 0
 
     const meses = mesesDesde(v.data_admissao, competencia)
@@ -504,10 +522,12 @@ export async function apurar(
     const meta = v.meta_individual != null ? Number(v.meta_individual) : plano.metaReferencia
     const atingido = meta > 0 ? base / meta : 0
     // 110% da meta pagam 110% do bônus: não há teto, é proporcional de verdade.
-    const variavel = proporcional ? plano.valorBonus * atingido : (base * percentual) / 100
+    const variavel = proporcional
+      ? plano.valorBonus * atingido
+      : naEscada ? (base * percentual) / 100 : 0
 
     // O próximo degrau vale sobre tudo, então o ganho extra não é só sobre a diferença.
-    const acima = proporcional ? undefined
+    const acima = proporcional || !naEscada ? undefined
       : [...plano.faixas].sort((a, b2) => a.valorDe - b2.valorDe).find((f) => f.valorDe > base)
     const proximaFaixa = acima
       ? {
@@ -608,7 +628,7 @@ export async function apurar(
 
     const fechado = fechamentos.find((f) => Number(f.usuario_id) === Number(v.usuario_id))
 
-    linhas.push({
+    return {
       usuarioId,
       nome: v.nome ?? `Usuário ${usuarioId}`,
       tipo: plano.tipo,
@@ -622,6 +642,8 @@ export async function apurar(
       emFaseInicial,
       base: fechado ? Number(fechado.base) : base,
       processos: Number(b?.q ?? 0),
+      sistemasFechados,
+      naEscada,
       meta,
       percMeta: meta > 0 ? (base / meta) * 100 : null,
       faixaDe: fechado ? (fechado.faixa_de == null ? null : Number(fechado.faixa_de)) : faixa?.valorDe ?? null,
@@ -639,8 +661,9 @@ export async function apurar(
       usaMetaValor: meta > 0,
       fechado: !!fechado,
       fechadoEm: fechado?.fechado_em ?? null,
-    })
-  }
+    }
+  }))).filter((l): l is LinhaApuracao => l !== null)
+
   return linhas.sort((a, b) => b.base - a.base)
 }
 

@@ -1886,6 +1886,10 @@ export interface LinhaComissao {
   emFaseInicial: boolean
   base: number
   processos: number
+  /** Processos comerciais + clientes novos atribuídos no mês. */
+  sistemasFechados: number
+  /** Falso quando a pessoa não vendeu sistema no mês: fica fora da escada de 1% a 30%. */
+  naEscada: boolean
   meta: number
   percMeta: number | null
   faixaDe: number | null

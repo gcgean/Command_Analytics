@@ -314,9 +314,21 @@ export async function comissoesRoutes(app: FastifyInstance) {
     }
     const eu = gestor && pedido ? pedido : logado
 
+    // O mês e os seis do histórico não dependem um do outro: esperar os dois juntos corta
+    // quase metade do tempo de abertura da tela.
+    const [anoH, mesH] = comp.split('-').map(Number)
+    const competencias = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(anoH, mesH - 6 + i, 1)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    })
+
     let linhas
+    let apuracoes: Awaited<ReturnType<typeof apurar>>[]
     try {
-      linhas = await apurar(comp)
+      [linhas, apuracoes] = await Promise.all([
+        apurar(comp),
+        Promise.all(competencias.map((c) => apurar(c, { detalhe: false }).catch(() => []))),
+      ])
     } catch (e: any) {
       return reply.status(400).send({ error: String(e?.message ?? e) })
     }
@@ -329,15 +341,6 @@ export async function comissoesRoutes(app: FastifyInstance) {
     const nomeUsu = u?.nome ?? ''
 
     // Os últimos 6 meses, para a pessoa ver a própria evolução e não só a foto do mês.
-    // Em paralelo e sem as listas item a item: eram seis apurações completas em série, e a
-    // tela ficava mais de vinte segundos no "carregando".
-    const [ano, mes] = comp.split('-').map(Number)
-    const competencias = Array.from({ length: 6 }, (_, i) => {
-      const d = new Date(ano, mes - 6 + i, 1)
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-    })
-    const apuracoes = await Promise.all(
-      competencias.map((c) => apurar(c, { detalhe: false }).catch(() => [])))
     const historico = competencias.map((c, i) => {
       const l = apuracoes[i].find((x) => x.usuarioId === eu)
       return {
