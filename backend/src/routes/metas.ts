@@ -1,8 +1,8 @@
 import type { FastifyInstance } from 'fastify'
 import { authMiddleware } from '../middleware/auth'
 import { prisma } from '../database/client'
+import { META_GERAL, receitaNovaDoPeriodo } from '../utils/metaGeral'
 
-const META_GERAL    = 8333
 const META_LIMOEIRO = 2000
 const META_ARACATI  = 6333
 
@@ -19,50 +19,6 @@ async function tabelaExiste(nomeTabela: string): Promise<boolean> {
   `)
 
   return Number(row?.total ?? 0) > 0
-}
-
-/**
- * Quanto de receita recorrente NOVA o periodo somou: upgrades + clientes novos + reativados
- * + assinaturas PayCore. E a mesma conta do boletim, isolada aqui porque duas telas dependem
- * dela - se cada uma fizesse a sua, uma mostraria um percentual e a outra, outro.
- */
-export async function receitaNovaDoPeriodo(dataIni: string, dataFim: string) {
-  const [upg, novos, reativ, paycore] = await Promise.all([
-    prisma.$queryRawUnsafe<any[]>(
-      `SELECT COALESCE(SUM(co.Valor_operacao), 0) AS valor
-         FROM comissoes_funcionario co
-         INNER JOIN cliente c ON c.cod_cli = co.cod_cli
-        WHERE CAST(co.data_venda AS DATE) BETWEEN ? AND ?
-          AND c.cod_cli NOT IN (1,6,7,8) AND c.cod_cla <> 30`, dataIni, dataFim)
-      .catch(() => [{ valor: 0 }]),
-    prisma.$queryRawUnsafe<any[]>(
-      `SELECT COUNT(c.cod_cli) AS qtd, COALESCE(SUM(c.valor_mensalidade), 0) AS valor
-         FROM cliente c
-        WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
-          AND c.ATIVO = 'S' AND c.DATACADASTRO_CLI BETWEEN ? AND ?
-          AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8`, dataIni, dataFim)
-      .catch(() => [{ qtd: 0, valor: 0 }]),
-    prisma.$queryRawUnsafe<any[]>(
-      `SELECT COUNT(c.cod_cli) AS qtd, COALESCE(SUM(c.valor_mensalidade), 0) AS valor
-         FROM cliente c
-        WHERE c.cod_cli NOT IN (1,6,7,8) AND c.cod_cli < 10000000
-          AND c.ATIVO = 'S' AND c.DATA_DESATIVACAO BETWEEN ? AND ?
-          AND NOT (c.DATACADASTRO_CLI BETWEEN ? AND ?)
-          AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8`,
-      dataIni, dataFim, dataIni, dataFim).catch(() => [{ qtd: 0, valor: 0 }]),
-    prisma.$queryRawUnsafe<any[]>(
-      `SELECT COUNT(*) AS qtd, COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
-         FROM paycore_assinatura a
-         LEFT JOIN paycore_cliente pc
-           ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
-         LEFT JOIN cliente c ON c.cod_cli = pc.cod_cli
-        WHERE DATE(a.inicio) BETWEEN ? AND ?
-          AND (c.cod_cli IS NULL OR DATE(c.DATACADASTRO_CLI) NOT BETWEEN ? AND ?)`,
-      dataIni, dataFim, dataIni, dataFim).catch(() => [{ qtd: 0, valor: 0 }]),
-  ])
-  const valor = (r: any[]) => Number(r[0]?.valor ?? 0)
-  const total = valor(upg) + valor(novos) + valor(reativ) + valor(paycore)
-  return { total, upgrades: valor(upg), novos: valor(novos), reativados: valor(reativ), paycore: valor(paycore) }
 }
 
 export async function metasRoutes(app: FastifyInstance) {

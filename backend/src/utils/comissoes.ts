@@ -1,4 +1,5 @@
 import { prisma } from '../database/client'
+import { percentualMetaGeral } from './metaGeral'
 
 /**
  * Plano de remuneração comercial: fixo por fase + comissão progressiva sobre a implantação.
@@ -79,6 +80,39 @@ export async function initComissoes(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 
+  // Bonus por meta batida e por treinamento bem avaliado. Sao por PESSOA, nao por plano:
+  // dois lideres no mesmo plano recebem valores diferentes, e e isso que o cadastro precisa
+  // dizer. Colunas adicionadas aqui para bancos que ja tinham a tabela.
+  for (const [coluna, tipo] of [
+    ['bonus_meta', 'DECIMAL(12,2) NULL'],
+    ['bonus_treinamento', 'TINYINT(1) NOT NULL DEFAULT 0'],
+  ]) {
+    const [existe] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+      SELECT COUNT(*) AS total FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'comissao_vendedor'
+         AND COLUMN_NAME = ?`, coluna)
+    if (!Number(existe?.total ?? 0)) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE comissao_vendedor ADD COLUMN ${coluna} ${tipo}`).catch(() => {})
+    }
+  }
+
+  // Quanto vale o treinamento bem avaliado. No plano, porque e regra da empresa, nao da pessoa.
+  for (const [coluna, tipo] of [
+    ['treino_nota_minima', 'DECIMAL(4,2) NOT NULL DEFAULT 9'],
+    ['treino_valor_base', 'DECIMAL(12,2) NOT NULL DEFAULT 100'],
+    ['treino_valor_unitario', 'DECIMAL(12,2) NOT NULL DEFAULT 20'],
+  ]) {
+    const [existe] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+      SELECT COUNT(*) AS total FROM information_schema.COLUMNS
+       WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'comissao_plano'
+         AND COLUMN_NAME = ?`, coluna)
+    if (!Number(existe?.total ?? 0)) {
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE comissao_plano ADD COLUMN ${coluna} ${tipo}`).catch(() => {})
+    }
+  }
+
   // Fechamento do mês. Guarda o resultado congelado: se a faixa mudar depois, o que foi pago não muda.
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS comissao_apuracao (
@@ -149,6 +183,10 @@ export interface Plano {
   fixoEfetivo: number
   mesesFaseInicial: number
   metaReferencia: number
+  /** Regra do bônus por treinamento bem avaliado — vale para todos do plano. */
+  treinoNotaMinima: number
+  treinoValorBase: number
+  treinoValorUnitario: number
   ativo: boolean
   faixas: Array<{ id: number; valorDe: number; percentual: number }>
 }
@@ -169,6 +207,9 @@ export async function listarPlanos(): Promise<Plano[]> {
     fixoEfetivo: Number(p.fixo_efetivo ?? 0),
     mesesFaseInicial: Number(p.meses_fase_inicial ?? 0),
     metaReferencia: Number(p.meta_referencia ?? 0),
+    treinoNotaMinima: Number(p.treino_nota_minima ?? 9),
+    treinoValorBase: Number(p.treino_valor_base ?? 100),
+    treinoValorUnitario: Number(p.treino_valor_unitario ?? 20),
     ativo: !!p.ativo,
     faixas: faixas.filter((f) => Number(f.plano_id) === Number(p.id)).map((f) => ({
       id: Number(f.id), valorDe: Number(f.valor_de), percentual: Number(f.percentual),
@@ -230,6 +271,24 @@ export interface LinhaApuracao {
   total: number
   /** Quanto falta de implantação para alcançar a próxima faixa, e o que ela acrescenta. */
   proximaFaixa: { valorDe: number; percentual: number; falta: number; ganhoExtra: number } | null
+  /**
+   * Bônus por meta batida: o percentual da meta GERAL da empresa aplicado ao valor que a
+   * pessoa tem cadastrado. 98% da meta pagam 98% do valor; 105% pagam 105% — sem teto.
+   * Null para quem não tem esse bônus no cadastro.
+   */
+  bonusMeta: {
+    valorCheio: number
+    percMetaGeral: number
+    valor: number
+  } | null
+  /** Bônus por treinamento bem avaliado no período. Null para quem não participa. */
+  bonusTreinamento: {
+    notaMinima: number
+    quantidade: number
+    valorBase: number
+    valorUnitario: number
+    valor: number
+  } | null
   fechado: boolean
   fechadoEm: string | null
 }
@@ -246,6 +305,10 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
 
   const planos = await listarPlanos()
   const porPlano = new Map(planos.map((p) => [p.id, p]))
+
+  // Uma consulta só para todo mundo: o percentual da meta geral é o mesmo para a equipe
+  // inteira, e é o número que o Boletim Comercial e o Meu Desempenho já mostram.
+  const percMetaGeral = await percentualMetaGeral(inicio, fim).catch(() => 0)
 
   const vendedores = await prisma.$queryRawUnsafe<any[]>(
     `SELECT v.*, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS nome, u.NOME_USU AS nome_usu
@@ -374,6 +437,44 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
         }
       : null
 
+    // ── Bônus por meta batida ──
+    // Usa o MESMO percentual que o Boletim Comercial e o card de meta geral mostram. Se
+    // usasse outra conta, a pessoa veria um número na tela e receberia sobre outro.
+    const valorBonusMeta = v.bonus_meta == null ? 0 : Number(v.bonus_meta)
+    const bonusMeta = valorBonusMeta > 0
+      ? {
+          valorCheio: valorBonusMeta,
+          percMetaGeral: percMetaGeral,
+          valor: Number(((valorBonusMeta * percMetaGeral) / 100).toFixed(2)),
+        }
+      : null
+
+    // ── Bônus por treinamento bem avaliado ──
+    // Sem treinamento nota alta no período não há bônus nenhum: o valor fixo é o
+    // reconhecimento do primeiro, não um pagamento por existir.
+    let bonusTreinamento: LinhaApuracao['bonusTreinamento'] = null
+    if (Number(v.bonus_treinamento) === 1) {
+      const [t] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT COUNT(*) AS qtd FROM agenda a
+          WHERE a.cod_agenda > 0 AND a.cod_colaborador = ?
+            AND COALESCE(a.Nota, 0) >= ?
+            AND a.data_agendamento BETWEEN ? AND ?`,
+        usuarioId, plano.treinoNotaMinima, inicio, fim,
+      ).catch(() => [{ qtd: 0 }])
+      const qtd = Number(t?.qtd ?? 0)
+      bonusTreinamento = {
+        notaMinima: plano.treinoNotaMinima,
+        quantidade: qtd,
+        valorBase: plano.treinoValorBase,
+        valorUnitario: plano.treinoValorUnitario,
+        valor: qtd > 0
+          ? Number((plano.treinoValorBase + plano.treinoValorUnitario * qtd).toFixed(2))
+          : 0,
+      }
+    }
+
+    const extras = (bonusMeta?.valor ?? 0) + (bonusTreinamento?.valor ?? 0)
+
     const fechado = fechamentos.find((f) => Number(f.usuario_id) === Number(v.usuario_id))
 
     linhas.push({
@@ -396,8 +497,10 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
       percentual: fechado ? Number(fechado.percentual) : percentual,
       variavel: fechado ? Number(fechado.variavel) : variavel,
       fixo: fechado ? Number(fechado.fixo) : fixo,
-      total: fechado ? Number(fechado.total) : fixo + variavel,
+      total: fechado ? Number(fechado.total) : fixo + variavel + extras,
       proximaFaixa,
+      bonusMeta,
+      bonusTreinamento,
       fechado: !!fechado,
       fechadoEm: fechado?.fechado_em ?? null,
     })

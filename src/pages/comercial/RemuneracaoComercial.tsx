@@ -37,7 +37,8 @@ export function RemuneracaoComercial() {
   const [carregando, setCarregando] = useState(true)
   const [salvando, setSalvando] = useState(false)
   const [plano, setPlano] = useState<PlanoComissao | null>(null)
-  const [novo, setNovo] = useState({ usuarioId: '', planoId: '', dataAdmissao: '', fixoPersonalizado: '', metaIndividual: '' })
+  const [novo, setNovo] = useState({ usuarioId: '', planoId: '', dataAdmissao: '',
+    fixoPersonalizado: '', metaIndividual: '', bonusMeta: '', bonusTreinamento: false })
 
   const carregar = useCallback(async () => {
     setCarregando(true)
@@ -97,8 +98,11 @@ export function RemuneracaoComercial() {
         dataAdmissao: novo.dataAdmissao || undefined,
         fixoPersonalizado: novo.fixoPersonalizado === '' ? undefined : Number(novo.fixoPersonalizado),
         metaIndividual: novo.metaIndividual === '' ? undefined : Number(novo.metaIndividual),
+        bonusMeta: novo.bonusMeta === '' ? undefined : Number(novo.bonusMeta),
+        bonusTreinamento: novo.bonusTreinamento,
       })
-      setNovo({ usuarioId: '', planoId: '', dataAdmissao: '', fixoPersonalizado: '', metaIndividual: '' })
+      setNovo({ usuarioId: '', planoId: '', dataAdmissao: '', fixoPersonalizado: '',
+        metaIndividual: '', bonusMeta: '', bonusTreinamento: false })
       toast.success('Vendedor vinculado ao plano!')
       void carregar()
     } catch (e: any) {
@@ -336,14 +340,25 @@ export function RemuneracaoComercial() {
                 value={novo.dataAdmissao} onChange={(e) => setNovo({ ...novo, dataAdmissao: e.target.value })} />
               <input type="number" step="0.01" className="input-field" placeholder="Fixo próprio (opcional)"
                 value={novo.fixoPersonalizado} onChange={(e) => setNovo({ ...novo, fixoPersonalizado: e.target.value })} />
-              <div className="flex gap-2">
-                <input type="number" step="0.01" className="input-field" placeholder="Meta própria"
-                  value={novo.metaIndividual} onChange={(e) => setNovo({ ...novo, metaIndividual: e.target.value })} />
+              <input type="number" step="0.01" className="input-field" placeholder="Meta própria"
+                value={novo.metaIndividual} onChange={(e) => setNovo({ ...novo, metaIndividual: e.target.value })} />
+              {/* Bônus por meta batida: valor por pessoa, porque um líder ganha 500 e outro 700. */}
+              <input type="number" step="0.01" className="input-field" placeholder="Bônus por meta (R$)"
+                title="Valor cheio do bônus quando a meta geral fecha em 100%"
+                value={novo.bonusMeta} onChange={(e) => setNovo({ ...novo, bonusMeta: e.target.value })} />
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300 whitespace-nowrap">
+                  <input type="checkbox" checked={novo.bonusTreinamento}
+                    onChange={(e) => setNovo({ ...novo, bonusTreinamento: e.target.checked })} />
+                  bônus treino
+                </label>
                 <Button onClick={adicionarVendedor}><Plus className="w-4 h-4" /></Button>
               </div>
             </div>
             <p className="text-[11px] text-slate-400 mt-2">
               A admissão define quando acaba o fixo de treinamento. Fixo e meta próprios sobrepõem o plano só para essa pessoa.
+              O <strong>bônus por meta</strong> é o valor cheio a 100%: a pessoa recebe o mesmo percentual que a meta geral
+              atingir — 98% da meta pagam 98% do valor, 105% pagam 105%, sem teto. Deixe em branco para quem não recebe por meta.
             </p>
           </Card>
 
@@ -356,6 +371,8 @@ export function RemuneracaoComercial() {
                   <th className="px-4 py-2.5 font-medium">Admissão</th>
                   <th className="px-4 py-2.5 font-medium text-right">Fixo próprio</th>
                   <th className="px-4 py-2.5 font-medium text-right">Meta própria</th>
+                  <th className="px-4 py-2.5 font-medium text-right">Bônus por meta</th>
+                  <th className="px-4 py-2.5 font-medium text-center">Bônus treino</th>
                   <th className="px-4 py-2.5" />
                 </tr>
               </thead>
@@ -376,6 +393,14 @@ export function RemuneracaoComercial() {
                     <td className="px-4 py-2.5 text-right text-slate-600 dark:text-slate-300">
                       {v.metaIndividual == null ? <span className="text-slate-400">do plano</span> : brl(v.metaIndividual)}
                     </td>
+                    <td className="px-4 py-2.5 text-right text-slate-600 dark:text-slate-300">
+                      {v.bonusMeta == null ? <span className="text-slate-400">não recebe</span> : brl(v.bonusMeta)}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      {v.bonusTreinamento
+                        ? <span className="text-emerald-500 text-xs">sim</span>
+                        : <span className="text-slate-400 text-xs">não</span>}
+                    </td>
                     <td className="px-4 py-2.5 text-right">
                       <button onClick={() => removerVendedor(v)} title="Remover do plano"
                         className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10">
@@ -385,7 +410,7 @@ export function RemuneracaoComercial() {
                   </tr>
                 ))}
                 {vendedores.length === 0 && (
-                  <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={6}>Nenhum vendedor vinculado.</td></tr>
+                  <tr><td className="px-4 py-8 text-center text-slate-500" colSpan={8}>Nenhum vendedor vinculado.</td></tr>
                 )}
               </tbody>
             </table>

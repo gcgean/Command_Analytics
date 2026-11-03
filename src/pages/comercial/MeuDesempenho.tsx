@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
 import {
-  Loader2, ChevronLeft, ChevronRight, Target, Wallet, TrendingUp, Trophy, Lock, Users,
+  Loader2, ChevronLeft, ChevronRight, Target, Wallet, TrendingUp, Trophy, Lock, Users, Award,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
@@ -198,6 +198,52 @@ export function MeuDesempenho() {
                       ? `Faltam ${metaGeral.diasRestantes} dia(s) para fechar o período.`
                       : 'Último dia do período.'}
               </p>
+            </Card>
+          )}
+
+          {/* Bônus por meta batida e por treinamento bem avaliado. Só aparece para quem tem
+              esses bônus no cadastro — para os demais seria ruído. */}
+          {(v.bonusMeta || v.bonusTreinamento) && (
+            <Card>
+              <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-3">
+                <Award className="w-4 h-4" /> Meus bônus do mês
+              </h2>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {v.bonusMeta && (
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                    <p className="text-xs text-slate-500">Bônus por meta batida</p>
+                    <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      {brl(v.bonusMeta.valor)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {v.bonusMeta.percMetaGeral.toFixed(0)}% da meta geral sobre {brl(v.bonusMeta.valorCheio)}
+                    </p>
+                    {v.bonusMeta.percMetaGeral < 100 && (
+                      <p className="text-[11px] text-slate-400 mt-1">
+                        A 100% da meta o bônus seria {brl(v.bonusMeta.valorCheio)}.
+                      </p>
+                    )}
+                  </div>
+                )}
+                {v.bonusTreinamento && (
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                    <p className="text-xs text-slate-500">Bônus por treinamento bem avaliado</p>
+                    <p className={clsx('text-2xl font-black mt-0.5',
+                      v.bonusTreinamento.valor > 0
+                        ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>
+                      {brl(v.bonusTreinamento.valor)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {v.bonusTreinamento.quantidade > 0
+                        ? `${v.bonusTreinamento.quantidade} treinamento(s) com nota `
+                          + `${v.bonusTreinamento.notaMinima} ou mais: `
+                          + `${brl(v.bonusTreinamento.valorBase)} + `
+                          + `${brl(v.bonusTreinamento.valorUnitario)} por treinamento`
+                        : `Nenhum treinamento com nota ${v.bonusTreinamento.notaMinima} ou mais neste mês.`}
+                    </p>
+                  </div>
+                )}
+              </div>
             </Card>
           )}
 

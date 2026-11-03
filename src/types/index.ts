@@ -1759,6 +1759,10 @@ export interface VendedorComissao {
   /** Quando preenchidos, sobrepõem o plano só para esta pessoa. */
   fixoPersonalizado: number | null
   metaIndividual: number | null
+  /** Valor cheio do bônus por meta batida. Null = esta pessoa não recebe por meta. */
+  bonusMeta: number | null
+  /** Participa do bônus por treinamento bem avaliado. */
+  bonusTreinamento: boolean
   ativo: boolean
 }
 
@@ -1798,6 +1802,12 @@ export interface LinhaComissao {
   total: number
   /** O degrau seguinte vale sobre tudo, então o ganho extra não é só sobre a diferença. */
   proximaFaixa: { valorDe: number; percentual: number; falta: number; ganhoExtra: number } | null
+  /** Bônus por meta batida: % da meta geral aplicado ao valor cadastrado da pessoa. */
+  bonusMeta: { valorCheio: number; percMetaGeral: number; valor: number } | null
+  /** Bônus por treinamento bem avaliado no período. */
+  bonusTreinamento: {
+    notaMinima: number; quantidade: number; valorBase: number; valorUnitario: number; valor: number
+  } | null
   fechado: boolean
   fechadoEm: string | null
 }

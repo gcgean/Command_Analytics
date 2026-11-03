@@ -24,11 +24,14 @@ export async function comissoesRoutes(app: FastifyInstance) {
     await prisma.$executeRawUnsafe(
       `UPDATE comissao_plano SET nome=?, descricao=?, base_calculo=?, tipo=?, valor_bonus=?,
          escopo_produto=?, fixo_inicial=?, fixo_efetivo=?, meses_fase_inicial=?,
-         meta_referencia=?, ativo=? WHERE id=?`,
+         meta_referencia=?, treino_nota_minima=?, treino_valor_base=?,
+         treino_valor_unitario=?, ativo=? WHERE id=?`,
       nome, String(b.descricao ?? '') || null, String(b.baseCalculo), tipo,
       Number(b.valorBonus) || 0, escopo,
       Number(b.fixoInicial) || 0, Number(b.fixoEfetivo) || 0,
       Number(b.mesesFaseInicial) || 0, Number(b.metaReferencia) || 0,
+      Number(b.treinoNotaMinima) || 9,
+      Number(b.treinoValorBase) || 0, Number(b.treinoValorUnitario) || 0,
       b.ativo === false ? 0 : 1, Number(id),
     )
 
@@ -93,6 +96,9 @@ export async function comissoesRoutes(app: FastifyInstance) {
       dataAdmissao: v.data_admissao ? String(v.data_admissao).slice(0, 10) : null,
       fixoPersonalizado: v.fixo_personalizado == null ? null : Number(v.fixo_personalizado),
       metaIndividual: v.meta_individual == null ? null : Number(v.meta_individual),
+      // Valor cheio do bônus de meta desta pessoa. Null = não recebe por meta.
+      bonusMeta: v.bonus_meta == null ? null : Number(v.bonus_meta),
+      bonusTreinamento: Number(v.bonus_treinamento ?? 0) === 1,
       ativo: !!v.ativo,
     }))
   })
@@ -104,14 +110,20 @@ export async function comissoesRoutes(app: FastifyInstance) {
     if (!usuarioId || !planoId) return reply.status(400).send({ error: 'Informe o usuário e o plano.' })
     await prisma.$executeRawUnsafe(
       `INSERT INTO comissao_vendedor
-         (usuario_id, plano_id, data_admissao, fixo_personalizado, meta_individual, ativo)
-       VALUES (?,?,?,?,?,?)
+         (usuario_id, plano_id, data_admissao, fixo_personalizado, meta_individual,
+          bonus_meta, bonus_treinamento, ativo)
+       VALUES (?,?,?,?,?,?,?,?)
        ON DUPLICATE KEY UPDATE plano_id=VALUES(plano_id), data_admissao=VALUES(data_admissao),
          fixo_personalizado=VALUES(fixo_personalizado), meta_individual=VALUES(meta_individual),
+         bonus_meta=VALUES(bonus_meta), bonus_treinamento=VALUES(bonus_treinamento),
          ativo=VALUES(ativo)`,
       usuarioId, planoId, b.dataAdmissao || null,
       b.fixoPersonalizado === '' || b.fixoPersonalizado == null ? null : Number(b.fixoPersonalizado),
       b.metaIndividual === '' || b.metaIndividual == null ? null : Number(b.metaIndividual),
+      // Zero e vazio viram null: "nao recebe por meta" e um estado, nao um valor de R$ 0,00.
+      b.bonusMeta === '' || b.bonusMeta == null || Number(b.bonusMeta) <= 0
+        ? null : Number(b.bonusMeta),
+      b.bonusTreinamento ? 1 : 0,
       b.ativo === false ? 0 : 1,
     )
     return reply.status(201).send({ ok: true })

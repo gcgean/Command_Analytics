@@ -992,6 +992,8 @@ export const api = {
   salvarVendedorComissao: (dados: {
     usuarioId: number; planoId: number; dataAdmissao?: string
     fixoPersonalizado?: number; metaIndividual?: number; ativo?: boolean
+    /** Valor cheio do bônus por meta batida; ausente ou 0 = não recebe por meta. */
+    bonusMeta?: number; bonusTreinamento?: boolean
   }) => fetchApi<{ ok: boolean }>('/comissoes/vendedores', { method: 'POST', body: JSON.stringify(dados) }),
   excluirVendedorComissao: (usuarioId: number) =>
     fetchApi<{ ok: boolean }>(`/comissoes/vendedores/${usuarioId}`, { method: 'DELETE' }),
