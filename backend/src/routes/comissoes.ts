@@ -286,20 +286,25 @@ export async function comissoesRoutes(app: FastifyInstance) {
     const nomeUsu = u?.nome ?? ''
 
     // Os últimos 6 meses, para a pessoa ver a própria evolução e não só a foto do mês.
-    const historico: Array<{ competencia: string; base: number; percentual: number; variavel: number; total: number }> = []
+    // Em paralelo e sem as listas item a item: eram seis apurações completas em série, e a
+    // tela ficava mais de vinte segundos no "carregando".
     const [ano, mes] = comp.split('-').map(Number)
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(ano, mes - 1 - i, 1)
-      const c = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-      const l = (await apurar(c)).find((x) => x.usuarioId === eu)
-      historico.push({
+    const competencias = Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(ano, mes - 6 + i, 1)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    })
+    const apuracoes = await Promise.all(
+      competencias.map((c) => apurar(c, { detalhe: false }).catch(() => [])))
+    const historico = competencias.map((c, i) => {
+      const l = apuracoes[i].find((x) => x.usuarioId === eu)
+      return {
         competencia: c,
         base: l?.base ?? 0,
         percentual: l?.percentual ?? 0,
         variavel: l?.variavel ?? 0,
         total: l?.total ?? 0,
-      })
-    }
+      }
+    })
 
     // Onde a pessoa está no ranking do mês, sem expor o número dos colegas.
     const ordenado = [...linhas].sort((a, b) => b.base - a.base)

@@ -324,7 +324,16 @@ export interface LinhaApuracao {
  * Apura a competência (YYYY-MM) para todos os vendedores do plano. Se já houver fechamento
  * gravado, devolve o valor congelado — o que foi pago não muda porque a configuração mudou depois.
  */
-export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
+export async function apurar(
+  competencia: string,
+  /**
+   * `detalhe: false` pula as listas item a item (os certificados emitidos). O histórico de
+   * seis meses do Meu Desempenho só usa os totais, e carregar as listas de todo mundo em
+   * todos os meses fazia a tela levar mais de vinte segundos para abrir.
+   */
+  opcoes: { detalhe?: boolean } = {},
+): Promise<LinhaApuracao[]> {
+  const comDetalhe = opcoes.detalhe !== false
   if (!/^\d{4}-\d{2}$/.test(competencia)) throw new Error('Competência inválida. Use AAAA-MM.')
   const [ano, mes] = competencia.split('-').map(Number)
   const inicio = `${competencia}-01`
@@ -357,9 +366,34 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
   const fechamentos = await prisma.$queryRawUnsafe<any[]>(
     `SELECT * FROM comissao_apuracao WHERE competencia = ?`, competencia)
 
+  // Quem recebe só por canal de aquisição não tem escada nem meta, e por isso nunca foi
+  // vinculado a um plano — mas recebe, e precisa aparecer. Entra aqui com um plano vazio:
+  // sem faixa, sem fixo e sem meta, só com as parcelas que de fato valem para a pessoa.
+  const planoSemEscada: Plano = {
+    id: 0, nome: 'Sem plano de escada', descricao: null, baseCalculo: 'vencimento',
+    tipo: 'escada', valorBonus: 0, escopoProduto: 'todos',
+    fixoInicial: 0, fixoEfetivo: 0, mesesFaseInicial: 0, metaReferencia: 0,
+    treinoNotaMinima: 9, treinoValorBase: 100, treinoValorUnitario: 20,
+    ativo: true, faixas: [],
+  }
+  const jaVinculados = new Set(vendedores.map((v) => Number(v.usuario_id)))
+  for (const [usuarioId] of canaisPorUsuario) {
+    if (jaVinculados.has(usuarioId)) continue
+    const [u] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COALESCE(NOME_USUARIO_COMPLETO, NOME_USU) AS nome, NOME_USU AS nome_usu
+         FROM usuario WHERE COD_USU = ?`, usuarioId).catch(() => [])
+    vendedores.push({
+      usuario_id: usuarioId, plano_id: 0, ativo: 1,
+      data_admissao: null, fixo_personalizado: null, meta_individual: 0,
+      bonus_meta: null, bonus_treinamento: 0,
+      nome: u?.nome ?? `Usuário ${usuarioId}`, nome_usu: u?.nome_usu ?? null,
+    })
+    jaVinculados.add(usuarioId)
+  }
+
   const linhas: LinhaApuracao[] = []
   for (const v of vendedores) {
-    const plano = porPlano.get(Number(v.plano_id))
+    const plano = Number(v.plano_id) === 0 ? planoSemEscada : porPlano.get(Number(v.plano_id))
     if (!plano) continue
 
     // A data que define "recebida" vem do plano: hoje o sistema só tem o vencimento da parcela.
@@ -527,10 +561,11 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
 
     // ── Certificados digitais ──
     const comissaoAgenteValor = comissaoPorAgente.get(usuarioId) ?? 0
-    const certificados = comissaoAgenteValor > 0 || agentes.some((a) => a.usuarioId === usuarioId)
+    const ehAgente = agentes.some((a) => a.usuarioId === usuarioId)
+    const certificados = comDetalhe && ehAgente
       ? await certificadosEmitidos(usuarioId, inicio, fim).catch(() => [])
       : []
-    const comissaoCertificado = certificados.length > 0
+    const comissaoCertificado = certificados.length > 0 || (!comDetalhe && ehAgente)
       ? {
           quantidade: certificados.length,
           valorEmitido: Number(certificados.reduce((s, c) => s + c.valor, 0).toFixed(2)),
