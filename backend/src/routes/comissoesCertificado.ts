@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { registrarAuditoria } from '../utils/auditoria'
+import { comissaoAgente } from '../utils/comissaoAgente'
 
 /**
  * Comissões de certificado digital — a aba "Gerenciador de comissões" do sistema legado.
@@ -147,95 +148,12 @@ export async function comissoesCertificadoRoutes(app: FastifyInstance) {
   })
 
   /**
-   * Comissão Agente: rateio por certificadora entre quem lançou.
-   *
-   * A regra do legado: o percentual pago sobre o total emitido sobe com o volume da EQUIPE
-   * (0% até 10 certificados, 1% de 11 a 20, e assim por diante até 5% acima de 51). Cada
-   * pessoa participa pela fatia que emitiu, com um teto de 60% — o que passa disso é
-   * redistribuído igualmente entre todos, para uma pessoa só não levar o bolo inteiro.
+   * Comissão Agente: rateio por certificadora entre quem lançou. A conta vive em
+   * utils/comissaoAgente, compartilhada com o Meu Desempenho.
    */
   app.get('/agente', { preHandler: authMiddleware, schema: { tags: ['Certificados'] } }, async (request) => {
     const { inicio, fim } = periodo(request.query as Record<string, string>)
-
-    const porPessoa = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT u.COD_USU AS usuarioId, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS usuario,
-              i.id_certificadora AS certificadoraId,
-              ce.descricao_certificadora AS certificadora,
-              COUNT(i.id) AS qtdIndividual,
-              SUM(i.valor) AS valorIndividual
-         FROM indicacao_contador i
-         INNER JOIN usuario u ON u.COD_USU = i.id_usu_lanc
-         LEFT JOIN certificadora ce ON ce.id_certificadora = i.id_certificadora
-        WHERE i.data_indicacao BETWEEN ? AND ?
-          AND COALESCE(i.id_certificadora, 0) > 0
-        GROUP BY u.COD_USU, usuario, i.id_certificadora, ce.descricao_certificadora`,
-      inicio, fim).catch(() => [])
-
-    const porCertificadora = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT i.id_certificadora AS certificadoraId,
-              COUNT(i.id) AS qtdEquipe,
-              SUM(i.valor) AS valorEquipe
-         FROM indicacao_contador i
-        WHERE i.data_indicacao BETWEEN ? AND ?
-          AND COALESCE(i.id_certificadora, 0) > 0
-        GROUP BY i.id_certificadora`, inicio, fim).catch(() => [])
-
-    const equipe = new Map(porCertificadora.map((r) => [Number(r.certificadoraId), {
-      qtd: Number(r.qtdEquipe ?? 0), valor: num(r.valorEquipe),
-    }]))
-
-    /** Faixa por volume da equipe, igual ao legado. */
-    const percentualPorVolume = (qtd: number) => {
-      if (qtd <= 10) return 0
-      if (qtd <= 20) return 0.01
-      if (qtd <= 30) return 0.02
-      if (qtd <= 40) return 0.03
-      if (qtd <= 50) return 0.04
-      return 0.05
-    }
-
-    // Excedente acima de 60% por certificadora, para redistribuir.
-    const excedente = new Map<number, { total: number; pessoas: number }>()
-    for (const r of porPessoa) {
-      const cid = Number(r.certificadoraId)
-      const eq = equipe.get(cid)
-      const participacao = eq && eq.qtd > 0 ? Number(r.qtdIndividual) / eq.qtd : 0
-      const atual = excedente.get(cid) ?? { total: 0, pessoas: 0 }
-      atual.total += participacao > 0.6 ? participacao - 0.6 : 0
-      atual.pessoas += 1
-      excedente.set(cid, atual)
-    }
-
-    const itens = porPessoa.map((r) => {
-      const cid = Number(r.certificadoraId)
-      const eq = equipe.get(cid) ?? { qtd: 0, valor: 0 }
-      const ex = excedente.get(cid) ?? { total: 0, pessoas: 0 }
-      const participacaoInicial = eq.qtd > 0 ? Number(r.qtdIndividual) / eq.qtd : 0
-      const sobra = ex.pessoas > 0 ? ex.total / ex.pessoas : 0
-
-      const participacao = eq.qtd === 0 ? 0
-        : ex.total === 0 ? participacaoInicial
-          : participacaoInicial > 0.6 ? 0.6 + sobra
-            : participacaoInicial + sobra
-
-      const percAplicado = percentualPorVolume(eq.qtd)
-      return {
-        usuarioId: Number(r.usuarioId),
-        usuario: String(r.usuario ?? '').trim(),
-        certificadoraId: cid,
-        certificadora: r.certificadora ?? null,
-        qtdIndividual: Number(r.qtdIndividual ?? 0),
-        qtdEquipe: eq.qtd,
-        valorIndividual: num(r.valorIndividual),
-        valorEquipe: eq.valor,
-        percentualAplicado: Number((percAplicado * 100).toFixed(2)),
-        participacaoInicial: Number((participacaoInicial * 100).toFixed(2)),
-        participacaoFinal: Number((participacao * 100).toFixed(2)),
-        baseCalculo: Number((eq.valor * participacao).toFixed(2)),
-        comissao: Number((eq.valor * percAplicado * participacao).toFixed(2)),
-      }
-    }).sort((a, b) => a.certificadoraId - b.certificadoraId || b.comissao - a.comissao)
-
+    const itens = await comissaoAgente(inicio, fim)
     return {
       inicio, fim,
       total: itens.length,

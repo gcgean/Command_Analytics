@@ -72,7 +72,7 @@ export function MeuDesempenho() {
   const v = dados?.vendedor ?? null
   // O que a pessoa recebe fora da escada: bônus e a comissão já lançada dos upgrades.
   const somaBonus = (v?.bonusMeta?.valor ?? 0) + (v?.bonusTreinamento?.valor ?? 0)
-    + (v?.comissaoUpgrades?.valor ?? 0)
+    + (v?.comissaoUpgrades?.valor ?? 0) + (v?.comissaoCertificado?.comissao ?? 0)
 
   return (
     <div className="space-y-5 pb-10">
@@ -156,6 +156,9 @@ export function MeuDesempenho() {
                   {v.comissaoUpgrades.valor > 0 && (
                     <p>Comissão dos upgrades: {brl(v.comissaoUpgrades.valor)}</p>
                   )}
+                  {v.comissaoCertificado && v.comissaoCertificado.comissao > 0 && (
+                    <p>Comissão de certificados: {brl(v.comissaoCertificado.comissao)}</p>
+                  )}
                   {v.bonusMeta && <p>Bônus por meta batida: {brl(v.bonusMeta.valor)}</p>}
                   {v.bonusTreinamento && v.bonusTreinamento.valor > 0 && (
                     <p>Bônus por treinamento: {brl(v.bonusTreinamento.valor)}</p>
@@ -222,12 +225,27 @@ export function MeuDesempenho() {
 
           {/* Bônus por meta batida e por treinamento bem avaliado. Só aparece para quem tem
               esses bônus no cadastro — para os demais seria ruído. */}
-          {(v.bonusMeta || v.bonusTreinamento || v.comissaoUpgrades.valor > 0) && (
+          {(v.bonusMeta || v.bonusTreinamento || v.comissaoUpgrades.valor > 0
+            || v.comissaoCertificado) && (
             <Card>
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-3">
                 <Award className="w-4 h-4" /> O que eu recebo no mês
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {v.comissaoCertificado && (
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                    <p className="text-xs text-slate-500">Comissão de certificados</p>
+                    <p className={clsx('text-2xl font-black mt-0.5',
+                      v.comissaoCertificado.comissao > 0
+                        ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>
+                      {brl(v.comissaoCertificado.comissao)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {v.comissaoCertificado.quantidade} certificado(s) somando{' '}
+                      {brl(v.comissaoCertificado.valorEmitido)} emitidos
+                    </p>
+                  </div>
+                )}
                 {v.comissaoUpgrades.valor > 0 && (
                   <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
                     <p className="text-xs text-slate-500">Comissão dos upgrades</p>
@@ -278,6 +296,40 @@ export function MeuDesempenho() {
 
               {/* Quais treinamentos entraram. Sem a lista, a pessoa só tem o total para
                   confiar — e é justamente a lista que ela confere quando discorda. */}
+              {v.comissaoCertificado && v.comissaoCertificado.itens.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Certificados que você emitiu
+                  </p>
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700 max-h-72 overflow-y-auto">
+                    {v.comissaoCertificado.itens.map((c) => (
+                      <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                        <span className="min-w-0">
+                          <span className="block text-slate-700 dark:text-slate-200 truncate">
+                            {c.cliente}
+                          </span>
+                          <span className="block text-[11px] text-slate-400">
+                            {dataBR(c.data)}{c.certificadora ? ` · ${c.certificadora}` : ''}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className="block text-slate-700 dark:text-slate-200">{brl(c.valor)}</span>
+                          {c.comissaoContador > 0 && (
+                            <span className="block text-[10px] text-slate-400">
+                              contador: {brl(c.comissaoContador)}
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    A comissão de agente não é por certificado: sai do rateio da equipe em cada
+                    certificadora, pela fatia que você emitiu.
+                  </p>
+                </div>
+              )}
+
               {v.bonusTreinamento && v.bonusTreinamento.itens.length > 0 && (
                 <div className="mt-4">
                   <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">

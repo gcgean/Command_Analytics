@@ -1876,6 +1876,16 @@ export interface LinhaComissao {
   } | null
   /** Comissão dos upgrades já lançados na tela Comissões, no período. */
   comissaoUpgrades: { quantidade: number; valorOperacao: number; valor: number }
+  /** Comissão de agente sobre os certificados digitais emitidos no período. */
+  comissaoCertificado: {
+    quantidade: number
+    valorEmitido: number
+    comissao: number
+    itens: Array<{
+      id: number; data: string | null; cliente: string
+      certificadora: string | null; valor: number; comissaoContador: number
+    }>
+  } | null
   /** Falso para quem só recebe bônus: não tem meta em R$ nem escada de comissão. */
   usaMetaValor: boolean
   fechado: boolean

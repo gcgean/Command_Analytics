@@ -284,7 +284,9 @@ export function ComissoesCertificado() {
         {[
           { rotulo: 'Lançamentos', valor: String(totais.total), cor: 'text-slate-900 dark:text-slate-100' },
           { rotulo: 'Valor operação', valor: brl(totais.valorOperacao), cor: 'text-slate-900 dark:text-slate-100' },
-          { rotulo: 'Valor comissão', valor: brl(totais.valorComissao), cor: 'text-emerald-600 dark:text-emerald-400' },
+          // Esta é a comissão paga aos ESCRITÓRIOS que indicaram. A do agente é outra conta,
+          // sai no rateio por certificadora e aparece na sub-aba Comissão agente.
+          { rotulo: 'Comissão dos contadores', valor: brl(totais.valorComissao), cor: 'text-emerald-600 dark:text-emerald-400' },
         ].map((k) => (
           <div key={k.rotulo} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-4">
             <p className="text-xs text-slate-500">{k.rotulo}</p>

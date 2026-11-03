@@ -1,6 +1,7 @@
 import { prisma } from '../database/client'
 import { percentualMetaGeral } from './metaGeral'
 import { treinamentosAvaliados, type TreinamentoAvaliado } from './treinamentos'
+import { comissaoAgente, certificadosEmitidos, type CertificadoEmitido } from './comissaoAgente'
 
 /**
  * Plano de remuneração comercial: fixo por fase + comissão progressiva sobre a implantação.
@@ -293,6 +294,16 @@ export interface LinhaApuracao {
     itens: TreinamentoAvaliado[]
   } | null
   /**
+   * Comissão de agente sobre os certificados digitais que a pessoa emitiu no período.
+   * Null para quem não emitiu nenhum.
+   */
+  comissaoCertificado: {
+    quantidade: number
+    valorEmitido: number
+    comissao: number
+    itens: CertificadoEmitido[]
+  } | null
+  /**
    * Comissão dos upgrades já lançados na tela Comissões (50% ou 25% por venda). É dinheiro
    * decidido lá, por lançamento — aqui só é somado ao que a pessoa recebe no mês.
    */
@@ -322,6 +333,14 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
   // Uma consulta só para todo mundo: o percentual da meta geral é o mesmo para a equipe
   // inteira, e é o número que o Boletim Comercial e o Meu Desempenho já mostram.
   const percMetaGeral = await percentualMetaGeral(inicio, fim).catch(() => 0)
+
+  // O rateio dos certificados depende do volume da equipe inteira: uma consulta só, e cada
+  // pessoa pega a sua fatia depois.
+  const agentes = await comissaoAgente(inicio, fim).catch(() => [])
+  const comissaoPorAgente = new Map<number, number>()
+  for (const a of agentes) {
+    comissaoPorAgente.set(a.usuarioId, (comissaoPorAgente.get(a.usuarioId) ?? 0) + a.comissao)
+  }
 
   const vendedores = await prisma.$queryRawUnsafe<any[]>(
     `SELECT v.*, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS nome, u.NOME_USU AS nome_usu
@@ -501,7 +520,22 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
       valor: Number(Number(comUpg?.comissao ?? 0).toFixed(2)),
     }
 
-    const extras = (bonusMeta?.valor ?? 0) + (bonusTreinamento?.valor ?? 0) + comissaoUpgrades.valor
+    // ── Certificados digitais ──
+    const comissaoAgenteValor = comissaoPorAgente.get(usuarioId) ?? 0
+    const certificados = comissaoAgenteValor > 0 || agentes.some((a) => a.usuarioId === usuarioId)
+      ? await certificadosEmitidos(usuarioId, inicio, fim).catch(() => [])
+      : []
+    const comissaoCertificado = certificados.length > 0
+      ? {
+          quantidade: certificados.length,
+          valorEmitido: Number(certificados.reduce((s, c) => s + c.valor, 0).toFixed(2)),
+          comissao: Number(comissaoAgenteValor.toFixed(2)),
+          itens: certificados,
+        }
+      : null
+
+    const extras = (bonusMeta?.valor ?? 0) + (bonusTreinamento?.valor ?? 0)
+      + comissaoUpgrades.valor + (comissaoCertificado?.comissao ?? 0)
 
     const fechado = fechamentos.find((f) => Number(f.usuario_id) === Number(v.usuario_id))
 
@@ -530,6 +564,7 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
       bonusMeta,
       bonusTreinamento,
       comissaoUpgrades,
+      comissaoCertificado,
       usaMetaValor: meta > 0,
       fechado: !!fechado,
       fechadoEm: fechado?.fechado_em ?? null,
