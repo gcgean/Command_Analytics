@@ -293,6 +293,11 @@ export interface LinhaApuracao {
     itens: TreinamentoAvaliado[]
   } | null
   /**
+   * Comissão dos upgrades já lançados na tela Comissões (50% ou 25% por venda). É dinheiro
+   * decidido lá, por lançamento — aqui só é somado ao que a pessoa recebe no mês.
+   */
+  comissaoUpgrades: { quantidade: number; valorOperacao: number; valor: number }
+  /**
    * Se a pessoa é medida por meta em R$. Quem só recebe bônus por meta geral e treinamento
    * não tem escada nem base individual, e mostrar meta zerada seria só confusão.
    */
@@ -477,7 +482,26 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
       }
     }
 
-    const extras = (bonusMeta?.valor ?? 0) + (bonusTreinamento?.valor ?? 0)
+    // ── Comissão dos upgrades ──
+    // O valor já está decidido no lançamento (comissoes_funcionario.valor_comissao); não é
+    // recalculado aqui. Ficava de fora do total, e era dinheiro que a pessoa já recebia.
+    const [comUpg] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COUNT(*) AS qtd,
+              COALESCE(SUM(co.Valor_operacao), 0) AS operacao,
+              COALESCE(SUM(co.valor_comissao), 0) AS comissao
+         FROM comissoes_funcionario co
+         INNER JOIN cliente c ON c.cod_cli = co.cod_cli
+        WHERE co.cod_func = ? AND CAST(co.data_venda AS DATE) BETWEEN ? AND ?
+          AND c.cod_cli NOT IN (1,6,7,8) AND c.cod_cla <> 30`,
+      usuarioId, inicio, fim,
+    ).catch(() => [{ qtd: 0, operacao: 0, comissao: 0 }])
+    const comissaoUpgrades = {
+      quantidade: Number(comUpg?.qtd ?? 0),
+      valorOperacao: Number(comUpg?.operacao ?? 0),
+      valor: Number(Number(comUpg?.comissao ?? 0).toFixed(2)),
+    }
+
+    const extras = (bonusMeta?.valor ?? 0) + (bonusTreinamento?.valor ?? 0) + comissaoUpgrades.valor
 
     const fechado = fechamentos.find((f) => Number(f.usuario_id) === Number(v.usuario_id))
 
@@ -505,6 +529,7 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
       proximaFaixa,
       bonusMeta,
       bonusTreinamento,
+      comissaoUpgrades,
       usaMetaValor: meta > 0,
       fechado: !!fechado,
       fechadoEm: fechado?.fechado_em ?? null,

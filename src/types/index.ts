@@ -1812,6 +1812,8 @@ export interface LinhaComissao {
       clienteNome: string; data: string | null; nota: number
     }>
   } | null
+  /** Comissão dos upgrades já lançados na tela Comissões, no período. */
+  comissaoUpgrades: { quantidade: number; valorOperacao: number; valor: number }
   /** Falso para quem só recebe bônus: não tem meta em R$ nem escada de comissão. */
   usaMetaValor: boolean
   fechado: boolean

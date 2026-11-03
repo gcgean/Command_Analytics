@@ -70,7 +70,9 @@ export function MeuDesempenho() {
   }, [competencia])
 
   const v = dados?.vendedor ?? null
+  // O que a pessoa recebe fora da escada: bônus e a comissão já lançada dos upgrades.
   const somaBonus = (v?.bonusMeta?.valor ?? 0) + (v?.bonusTreinamento?.valor ?? 0)
+    + (v?.comissaoUpgrades?.valor ?? 0)
 
   return (
     <div className="space-y-5 pb-10">
@@ -137,20 +139,28 @@ export function MeuDesempenho() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-wider text-emerald-100">
-                  {!v.usaMetaValor || v.baseEmpresa ? 'Bônus previsto no mês' : 'Comissão prevista no mês'}
+                  Previsto no mês
                 </p>
-                {/* Sem meta em R$ não há comissão de escada: o que a pessoa recebe são os
-                    bônus, e mostrar R$ 0,00 aqui seria dizer que ela não ganha nada. */}
-                <p className="text-4xl font-black mt-1">
-                  {brl(v.usaMetaValor ? v.variavel : somaBonus)}
-                </p>
-                <p className="text-sm text-emerald-100 mt-1">
-                  {!v.usaMetaValor
-                    ? 'Bônus por meta batida e por treinamento bem avaliado'
-                    : v.baseEmpresa
-                      ? `${(v.percMeta ?? 0).toFixed(0)}% da meta da empresa, sobre ${ESCOPO_ROTULO[v.escopoProduto] ?? v.escopoProduto}`
-                      : `${v.percentual}% sobre ${brl(v.base)} que você produziu`}
-                </p>
+                {/* O número grande é tudo que a pessoa recebe de variável: a comissão da
+                    escada mais os bônus e a comissão dos upgrades. Mostrar só a escada dizia
+                    "R$ 0,00" para quem tinha upgrade lançado e ia receber por ele. */}
+                <p className="text-4xl font-black mt-1">{brl(v.variavel + somaBonus)}</p>
+                <div className="text-sm text-emerald-100 mt-1 space-y-0.5">
+                  {v.usaMetaValor && (
+                    <p>
+                      {v.baseEmpresa
+                        ? `${(v.percMeta ?? 0).toFixed(0)}% da meta da empresa, sobre ${ESCOPO_ROTULO[v.escopoProduto] ?? v.escopoProduto}`
+                        : `Comissão da escada: ${brl(v.variavel)} — ${v.percentual}% sobre ${brl(v.base)} que você produziu`}
+                    </p>
+                  )}
+                  {v.comissaoUpgrades.valor > 0 && (
+                    <p>Comissão dos upgrades: {brl(v.comissaoUpgrades.valor)}</p>
+                  )}
+                  {v.bonusMeta && <p>Bônus por meta batida: {brl(v.bonusMeta.valor)}</p>}
+                  {v.bonusTreinamento && v.bonusTreinamento.valor > 0 && (
+                    <p>Bônus por treinamento: {brl(v.bonusTreinamento.valor)}</p>
+                  )}
+                </div>
               </div>
               {v.usaMetaValor && (
               <div className="text-right">
@@ -212,12 +222,24 @@ export function MeuDesempenho() {
 
           {/* Bônus por meta batida e por treinamento bem avaliado. Só aparece para quem tem
               esses bônus no cadastro — para os demais seria ruído. */}
-          {(v.bonusMeta || v.bonusTreinamento) && (
+          {(v.bonusMeta || v.bonusTreinamento || v.comissaoUpgrades.valor > 0) && (
             <Card>
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-3">
-                <Award className="w-4 h-4" /> Meus bônus do mês
+                <Award className="w-4 h-4" /> O que eu recebo no mês
               </h2>
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {v.comissaoUpgrades.valor > 0 && (
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                    <p className="text-xs text-slate-500">Comissão dos upgrades</p>
+                    <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
+                      {brl(v.comissaoUpgrades.valor)}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {v.comissaoUpgrades.quantidade} lançamento(s) somando{' '}
+                      {brl(v.comissaoUpgrades.valorOperacao)} em operação
+                    </p>
+                  </div>
+                )}
                 {v.bonusMeta && (
                   <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
                     <p className="text-xs text-slate-500">Bônus por meta batida</p>
