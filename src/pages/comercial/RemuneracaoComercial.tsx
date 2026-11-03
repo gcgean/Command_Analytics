@@ -323,12 +323,16 @@ export function RemuneracaoComercial() {
         <div className="space-y-5">
           <Card>
             <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-3">Vincular vendedor a um plano</h3>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-6">
               <select className="input-field" value={novo.usuarioId}
                 onChange={(e) => setNovo({ ...novo, usuarioId: e.target.value })}>
                 <option value="">Vendedor...</option>
+                {/* A contagem só aparece para quem já vendeu: "(0 processos)" em 23 linhas
+                    seria ruído, e agora a lista traz todo usuário ativo. */}
                 {candidatos.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nome} ({c.processos} processos)</option>
+                  <option key={c.id} value={c.id}>
+                    {c.nome}{c.processos > 0 ? ` (${c.processos} processos)` : ''}
+                  </option>
                 ))}
               </select>
               <select className="input-field" value={novo.planoId}

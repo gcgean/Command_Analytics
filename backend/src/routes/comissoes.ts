@@ -135,16 +135,22 @@ export async function comissoesRoutes(app: FastifyInstance) {
     return { ok: true }
   })
 
-  // Candidatos: quem já aparece como vendedor em processos de implantação.
+  /**
+   * Quem pode ser vinculado a um plano: todo usuário ativo.
+   *
+   * Antes a lista exigia ao menos um processo de implantação, o que servia enquanto só
+   * vendedor recebia. Com o bônus por meta batida entrou gente que nunca vendeu — líder,
+   * suporte — e que precisava aparecer aqui. Quem já vendeu continua no topo, com a contagem.
+   */
   app.get('/candidatos', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async () => {
     const linhas = await prisma.$queryRawUnsafe<any[]>(
       `SELECT u.COD_USU AS id, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS nome,
               COUNT(c.id_processo) AS processos
          FROM usuario u
          LEFT JOIN processo_implantacao_comercial c ON c.id_usu_vendedor = u.COD_USU
+        WHERE COALESCE(u.ATIVO, 'S') = 'S'
         GROUP BY u.COD_USU, nome
-        HAVING processos > 0
-        ORDER BY processos DESC`)
+        ORDER BY processos DESC, nome`)
     return linhas.map((u) => ({
       id: Number(u.id), nome: u.nome, processos: Number(u.processos ?? 0),
     }))
