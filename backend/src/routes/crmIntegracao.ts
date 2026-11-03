@@ -115,7 +115,16 @@ export async function crmIntegracaoRoutes(app: FastifyInstance) {
    * Faturamento por canal de aquisição. O canal é do lead e fica carimbado no negócio na
    * sincronização, então aqui é só agrupar.
    */
-  app.get('/canais', { preHandler: authMiddleware, schema: { tags: ['CRM'] } }, async () => {
+  app.get('/canais', { preHandler: authMiddleware, schema: { tags: ['CRM'] } }, async (request) => {
+    const q = request.query as Record<string, string>
+    const ehData = (v: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(v ?? ''))
+    // Sem período vem tudo, como sempre veio — quem abre a tela esperando o acumulado não
+    // pode receber só o mês corrente de surpresa.
+    const cond: string[] = []
+    const val: any[] = []
+    if (ehData(q.inicio)) { cond.push('DATE(COALESCE(finalizado_em, data)) >= ?'); val.push(q.inicio) }
+    if (ehData(q.fim)) { cond.push('DATE(COALESCE(finalizado_em, data)) <= ?'); val.push(q.fim) }
+
     const linhas = await prisma.$queryRawUnsafe<any[]>(`
       SELECT COALESCE(NULLIF(canal, ''), 'Sem canal') AS canal,
              COUNT(*) AS negocios,
@@ -123,7 +132,8 @@ export async function crmIntegracaoRoutes(app: FastifyInstance) {
              SUM(status = 'lost') AS perdidos,
              COALESCE(SUM(CASE WHEN status = 'won' THEN valor END), 0) AS faturamento
         FROM crm_negocio
-       GROUP BY canal ORDER BY faturamento DESC`)
+       ${cond.length ? `WHERE ${cond.join(' AND ')}` : ''}
+       GROUP BY canal ORDER BY faturamento DESC`, ...val)
     const total = linhas.reduce((s, l) => s + Number(l.faturamento ?? 0), 0)
     return linhas.map((l) => {
       const ganhos = Number(l.ganhos ?? 0)

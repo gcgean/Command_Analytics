@@ -1115,7 +1115,13 @@ export const api = {
     return fetchApi<NegocioCrm[]>(`/crm-integracao/negocios${q ? `?${q}` : ''}`)
   },
   getVendedoresCrm: () => fetchApi<VendedorCrm[]>('/crm-integracao/vendedores'),
-  getCanaisCrm: () => fetchApi<CanalCrm[]>('/crm-integracao/canais'),
+  getCanaisCrm: (p: { inicio?: string; fim?: string } = {}) => {
+    const qs = new URLSearchParams()
+    if (p.inicio) qs.set('inicio', p.inicio)
+    if (p.fim) qs.set('fim', p.fim)
+    const q = qs.toString()
+    return fetchApi<CanalCrm[]>(`/crm-integracao/canais${q ? `?${q}` : ''}`)
+  },
   getVendedorPorDocumento: (documento: string) =>
     fetchApi<{ vendedorId: number | null; vendedorNome: string | null; origem: string | null; negocioId?: number }>(
       `/crm-integracao/vendedor?documento=${encodeURIComponent(documento)}`),

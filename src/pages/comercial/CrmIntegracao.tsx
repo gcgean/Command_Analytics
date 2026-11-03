@@ -42,6 +42,8 @@ export function CrmIntegracao() {
   const [filtroVendedor, setFiltroVendedor] = useState('')
   const [filtroCanal, setFiltroCanal] = useState('')
   const [canais, setCanais] = useState<CanalCrm[]>([])
+  const [periodo, setPeriodo] = useState({ inicio: '', fim: '' })
+  const [carregandoCanais, setCarregandoCanais] = useState(false)
   const [form, setForm] = useState({ baseUrl: 'https://app.crm.cilos.com.br', email: '', senha: '', ativo: true })
 
   const carregar = useCallback(async () => {
@@ -56,7 +58,7 @@ export function CrmIntegracao() {
           busca: busca.trim() || undefined,
         }).catch(() => []),
         api.getVendedoresCrm().catch(() => []),
-        api.getCanaisCrm().catch(() => []),
+        api.getCanaisCrm(periodo).catch(() => []),
       ])
       setConfig(cfg)
       setForm((f) => ({ ...f, baseUrl: cfg.baseUrl || f.baseUrl, email: cfg.email || '', ativo: cfg.ativo }))
@@ -71,6 +73,20 @@ export function CrmIntegracao() {
   }, [toast, filtroStatus, filtroVendedor, filtroCanal, busca])
 
   useEffect(() => { void carregar() }, [carregar])
+
+  /** Recarrega só os canais: o resto da tela não depende do período. */
+  async function recarregarCanais(novo?: { inicio: string; fim: string }) {
+    const alvo = novo ?? periodo
+    if (novo) setPeriodo(novo)
+    setCarregandoCanais(true)
+    try {
+      setCanais(await api.getCanaisCrm(alvo))
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível filtrar os canais.')
+    } finally {
+      setCarregandoCanais(false)
+    }
+  }
 
   async function sincronizar(completa: boolean) {
     setSincronizando(true)
@@ -322,6 +338,33 @@ export function CrmIntegracao() {
             <p className="text-xs text-slate-500 mt-0.5">
               Soma dos negócios ganhos de cada canal. Clique na linha para ver os negócios dele.
             </p>
+            {/* Sem data, mostra o acumulado — que é o que a tela sempre mostrou. */}
+            <div className="flex flex-wrap items-end gap-2 mt-3">
+              <div>
+                <label className="block text-[11px] uppercase tracking-wide text-slate-500 mb-1">De</label>
+                <input type="date" className="input-field w-auto" value={periodo.inicio}
+                  onChange={(e) => setPeriodo({ ...periodo, inicio: e.target.value })} />
+              </div>
+              <div>
+                <label className="block text-[11px] uppercase tracking-wide text-slate-500 mb-1">Até</label>
+                <input type="date" className="input-field w-auto" value={periodo.fim}
+                  onChange={(e) => setPeriodo({ ...periodo, fim: e.target.value })} />
+              </div>
+              <button onClick={() => void recarregarCanais()} disabled={carregandoCanais}
+                className="btn-primary h-10">
+                {carregandoCanais ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                Filtrar
+              </button>
+              {(periodo.inicio || periodo.fim) && (
+                <button onClick={() => void recarregarCanais({ inicio: '', fim: '' })}
+                  className="btn-secondary h-10">Limpar</button>
+              )}
+              {(periodo.inicio || periodo.fim) && (
+                <span className="text-xs text-slate-500 pb-2.5">
+                  Mostrando só o período escolhido.
+                </span>
+              )}
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
