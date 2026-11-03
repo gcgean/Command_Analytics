@@ -1288,9 +1288,14 @@ export interface RankingComissao {
   posicao: number
   colaboradorId: number
   colaboradorNome: string
+  /** Soma de tudo que a pessoa recebe no período: vendas + certificados. */
   total: number
   totalOperacao: number
+  /** Quantidade de lançamentos de venda. */
   vendas: number
+  comissaoVendas: number
+  comissaoCertificados: number
+  certificados: number
 }
 
 export interface RankingTreinamento {

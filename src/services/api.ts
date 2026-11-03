@@ -685,6 +685,11 @@ export const api = {
     fetchApi<ListaPendentesComissao>(`/comissoes/pendentes?inicio=${p.inicio}&fim=${p.fim}`),
   getRankingComissao: (p: { inicio: string; fim: string }) =>
     fetchApi<{ inicio: string; fim: string; itens: RankingComissao[] }>(`/comissoes/ranking?inicio=${p.inicio}&fim=${p.fim}`),
+  getComissaoCertificados: (p: { inicio: string; fim: string }) =>
+    fetchApi<{
+      inicio: string; fim: string; total: number; valorComissao: number; valorEmitido: number
+      itens: AgenteCertificado[]
+    }>(`/comissoes/certificados?inicio=${p.inicio}&fim=${p.fim}`),
   getRankingTreinamentos: (p: { inicio: string; fim: string }) =>
     fetchApi<{ inicio: string; fim: string; itens: RankingTreinamento[] }>(`/comissoes/treinamentos?inicio=${p.inicio}&fim=${p.fim}`),
   // ── Comissões de certificado digital (aba do sistema legado) ──

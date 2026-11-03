@@ -4,6 +4,7 @@ import { authMiddleware } from '../middleware/auth'
 import { registrarAuditoria } from '../utils/auditoria'
 import { getUserPermissions } from './grupos'
 import { rankingTreinamentos } from '../utils/treinamentos'
+import { comissaoAgente } from '../utils/comissaoAgente'
 
 /**
  * Lançamentos de comissão — o que a tela Delphi UComissoes faz.
@@ -188,16 +189,65 @@ export async function comissoesLancamentosRoutes(app: FastifyInstance) {
         GROUP BY co.cod_func, nome_usu
         ORDER BY total_comissao DESC`, inicio, fim)
 
+    // Certificado digital paga por fora de comissoes_funcionario: sem somar aqui, o ranking
+    // diria que quem só emite certificado não recebeu nada no mês.
+    const agentes = await comissaoAgente(inicio, fim).catch(() => [])
+    const porAgente = new Map<number, { comissao: number; certificados: number }>()
+    for (const a of agentes) {
+      const atual = porAgente.get(a.usuarioId) ?? { comissao: 0, certificados: 0 }
+      atual.comissao += a.comissao
+      atual.certificados += a.qtdIndividual
+      porAgente.set(a.usuarioId, atual)
+    }
+
+    const base = linhas.map((r) => ({
+      colaboradorId: Number(r.cod_func),
+      colaboradorNome: String(r.nome_usu ?? '').trim(),
+      vendas: num(r.total_comissao),
+      totalOperacao: num(r.total_operacao),
+      quantidade: Number(r.vendas ?? 0),
+    }))
+
+    // Quem só tem certificado no período não aparece na consulta acima.
+    for (const [usuarioId, dados] of porAgente) {
+      if (base.some((b) => b.colaboradorId === usuarioId)) continue
+      const linha = agentes.find((a) => a.usuarioId === usuarioId)
+      base.push({
+        colaboradorId: usuarioId,
+        colaboradorNome: linha?.usuario ?? `Usuário ${usuarioId}`,
+        vendas: 0, totalOperacao: 0, quantidade: 0,
+      })
+      void dados
+    }
+
+    const itens = base.map((b) => {
+      const cert = porAgente.get(b.colaboradorId) ?? { comissao: 0, certificados: 0 }
+      return {
+        colaboradorId: b.colaboradorId,
+        colaboradorNome: b.colaboradorNome,
+        vendas: b.quantidade,
+        totalOperacao: b.totalOperacao,
+        comissaoVendas: b.vendas,
+        comissaoCertificados: Number(cert.comissao.toFixed(2)),
+        certificados: cert.certificados,
+        total: Number((b.vendas + cert.comissao).toFixed(2)),
+      }
+    }).sort((a, b) => b.total - a.total)
+      .map((x, i) => ({ ...x, posicao: i + 1 }))
+
+    return { inicio, fim, itens }
+  })
+
+  /** Comissão de agente por certificado digital, no período. */
+  app.get('/certificados', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request) => {
+    const { inicio, fim } = periodo(request.query as Record<string, string>)
+    const itens = await comissaoAgente(inicio, fim).catch(() => [])
     return {
       inicio, fim,
-      itens: linhas.map((r, i) => ({
-        posicao: i + 1,
-        colaboradorId: Number(r.cod_func),
-        colaboradorNome: String(r.nome_usu ?? '').trim(),
-        total: num(r.total_comissao),
-        totalOperacao: num(r.total_operacao),
-        vendas: Number(r.vendas ?? 0),
-      })),
+      total: itens.length,
+      valorComissao: itens.reduce((s, i) => s + i.comissao, 0),
+      valorEmitido: itens.reduce((s, i) => s + i.valorIndividual, 0),
+      itens,
     }
   })
 

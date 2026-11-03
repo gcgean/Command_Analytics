@@ -9,7 +9,7 @@ import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import type {
-  LancamentoComissao, PendenteComissao, RankingComissao, RankingTreinamento,
+  AgenteCertificado, LancamentoComissao, PendenteComissao, RankingComissao, RankingTreinamento,
 } from '../../types'
 
 const brl = (v: number) =>
@@ -21,7 +21,7 @@ const dataBR = (iso: string | null) => {
 const primeiroDoMes = () => `${new Date().toISOString().slice(0, 7)}-01`
 const hoje = () => new Date().toISOString().slice(0, 10)
 
-type Aba = 'listagem' | 'vincular' | 'ranking' | 'treinamentos'
+type Aba = 'listagem' | 'vincular' | 'ranking' | 'certificados' | 'treinamentos'
 
 export function Comissoes() {
   const { toast } = useToast()
@@ -40,6 +40,8 @@ export function Comissoes() {
   const [resumoPendentes, setResumoPendentes] = useState({ total: 0, comissionaveis: 0, valorBaseTotal: 0 })
   const [ranking, setRanking] = useState<RankingComissao[]>([])
   const [treinamentos, setTreinamentos] = useState<RankingTreinamento[]>([])
+  const [certificados, setCertificados] = useState<AgenteCertificado[]>([])
+  const [totalCertificados, setTotalCertificados] = useState({ comissao: 0, emitido: 0 })
   const [colaboradores, setColaboradores] = useState<Array<{ id: number; nome: string }>>([])
 
   const [buscaLancamento, setBuscaLancamento] = useState('')
@@ -54,11 +56,12 @@ export function Comissoes() {
   const consultar = useCallback(async () => {
     setCarregando(true)
     try {
-      const [lanc, pend, rank, trein] = await Promise.all([
+      const [lanc, pend, rank, trein, cert] = await Promise.all([
         api.getLancamentosComissao({ inicio, fim }),
         api.getPendentesComissao({ inicio, fim }),
         api.getRankingComissao({ inicio, fim }),
         api.getRankingTreinamentos({ inicio, fim }),
+        api.getComissaoCertificados({ inicio, fim }),
       ])
       setLancamentos(lanc.itens)
       setTotalComissao(lanc.total)
@@ -67,6 +70,8 @@ export function Comissoes() {
       setResumoPendentes({ total: pend.total, comissionaveis: pend.comissionaveis, valorBaseTotal: pend.valorBaseTotal })
       setRanking(rank.itens)
       setTreinamentos(trein.itens)
+      setCertificados(cert.itens)
+      setTotalCertificados({ comissao: cert.valorComissao, emitido: cert.valorEmitido })
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível consultar o período.')
     } finally {
@@ -138,6 +143,7 @@ export function Comissoes() {
     { id: 'listagem', rotulo: 'Listagem', contador: lancamentos.length },
     ...(podeLancar ? [{ id: 'vincular' as Aba, rotulo: 'Vincular', contador: resumoPendentes.comissionaveis }] : []),
     { id: 'ranking', rotulo: 'Ranking de vendas' },
+    { id: 'certificados', rotulo: 'Certificados digitais', contador: certificados.length },
     { id: 'treinamentos', rotulo: 'Ranking dos treinamentos' },
   ]
 
@@ -175,6 +181,14 @@ export function Comissoes() {
             <p className="text-[11px] uppercase tracking-wide text-slate-500">Valor das operações</p>
             <p className="text-lg font-bold text-slate-800 dark:text-slate-100">{brl(totalOperacao)}</p>
           </div>
+          {totalCertificados.comissao > 0 && (
+            <div>
+              <p className="text-[11px] uppercase tracking-wide text-slate-500">Certificados</p>
+              <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                {brl(totalCertificados.comissao)}
+              </p>
+            </div>
+          )}
           {podeLancar && (
             <div>
               <p className="text-[11px] uppercase tracking-wide text-slate-500">A comissionar</p>
@@ -344,8 +358,12 @@ export function Comissoes() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{r.colaboradorNome}</p>
+                    {/* A quebra evita a leitura errada de que tudo veio de venda. */}
                     <p className="text-xs text-slate-500">
-                      {r.vendas} venda(s) · operações {brl(r.totalOperacao)}
+                      {r.comissaoVendas > 0 && `vendas ${brl(r.comissaoVendas)} (${r.vendas})`}
+                      {r.comissaoVendas > 0 && r.comissaoCertificados > 0 && ' · '}
+                      {r.comissaoCertificados > 0
+                        && `certificados ${brl(r.comissaoCertificados)} (${r.certificados})`}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
@@ -354,6 +372,59 @@ export function Comissoes() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {aba === 'certificados' && (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500">
+                Comissão de agente sobre certificados emitidos. O percentual sobe com o volume
+                da <strong>equipe</strong> em cada certificadora (0% até 10, 1% de 11 a 20, 2% de
+                21 a 30, 3% de 31 a 40, 4% de 41 a 50 e 5% acima de 51) e cada pessoa participa
+                pela fatia que emitiu, com teto de 60%.
+                {totalCertificados.emitido > 0 && (
+                  <> No período foram {brl(totalCertificados.emitido)} emitidos.</>
+                )}
+              </p>
+              <div className="card p-0 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-700">
+                      {['Colaborador', 'Certificadora', 'Emitidos', 'Equipe', 'Faixa', 'Fatia', 'Comissão']
+                        .map((h) => <th key={h} className="table-header text-left">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {certificados.length === 0 ? (
+                      <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-500">
+                        Nenhum certificado emitido no período.
+                      </td></tr>
+                    ) : certificados.map((c) => (
+                      <tr key={`${c.certificadoraId}-${c.usuarioId}`} className="table-row">
+                        <td className="table-cell font-medium text-slate-900 dark:text-slate-100">{c.usuario}</td>
+                        <td className="table-cell text-slate-600 dark:text-slate-400">{c.certificadora || '—'}</td>
+                        <td className="table-cell text-slate-700 dark:text-slate-300">
+                          {c.qtdIndividual}
+                          <span className="block text-[11px] text-slate-400">{brl(c.valorIndividual)}</span>
+                        </td>
+                        <td className="table-cell text-slate-500">{c.qtdEquipe}</td>
+                        <td className="table-cell text-slate-500">{c.percentualAplicado}%</td>
+                        <td className="table-cell text-slate-500">
+                          {c.participacaoFinal}%
+                          {c.participacaoInicial !== c.participacaoFinal && (
+                            <span className="block text-[10px] text-slate-400">
+                              antes do rateio: {c.participacaoInicial}%
+                            </span>
+                          )}
+                        </td>
+                        <td className="table-cell font-semibold text-emerald-600 dark:text-emerald-400">
+                          {brl(c.comissao)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
