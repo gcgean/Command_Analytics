@@ -70,6 +70,7 @@ export function MeuDesempenho() {
   }, [competencia])
 
   const v = dados?.vendedor ?? null
+  const somaBonus = (v?.bonusMeta?.valor ?? 0) + (v?.bonusTreinamento?.valor ?? 0)
 
   return (
     <div className="space-y-5 pb-10">
@@ -136,15 +137,22 @@ export function MeuDesempenho() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs uppercase tracking-wider text-emerald-100">
-                  {v.baseEmpresa ? 'Bônus previsto no mês' : 'Comissão prevista no mês'}
+                  {!v.usaMetaValor || v.baseEmpresa ? 'Bônus previsto no mês' : 'Comissão prevista no mês'}
                 </p>
-                <p className="text-4xl font-black mt-1">{brl(v.variavel)}</p>
+                {/* Sem meta em R$ não há comissão de escada: o que a pessoa recebe são os
+                    bônus, e mostrar R$ 0,00 aqui seria dizer que ela não ganha nada. */}
+                <p className="text-4xl font-black mt-1">
+                  {brl(v.usaMetaValor ? v.variavel : somaBonus)}
+                </p>
                 <p className="text-sm text-emerald-100 mt-1">
-                  {v.baseEmpresa
-                    ? `${(v.percMeta ?? 0).toFixed(0)}% da meta da empresa, sobre ${ESCOPO_ROTULO[v.escopoProduto] ?? v.escopoProduto}`
-                    : `${v.percentual}% sobre ${brl(v.base)} que você produziu`}
+                  {!v.usaMetaValor
+                    ? 'Bônus por meta batida e por treinamento bem avaliado'
+                    : v.baseEmpresa
+                      ? `${(v.percMeta ?? 0).toFixed(0)}% da meta da empresa, sobre ${ESCOPO_ROTULO[v.escopoProduto] ?? v.escopoProduto}`
+                      : `${v.percentual}% sobre ${brl(v.base)} que você produziu`}
                 </p>
               </div>
+              {v.usaMetaValor && (
               <div className="text-right">
                 <p className="text-xs text-emerald-100">{v.baseEmpresa ? 'Meta da empresa' : 'Faixa atingida'}</p>
                 <p className="text-3xl font-black">
@@ -156,6 +164,7 @@ export function MeuDesempenho() {
                     : v.faixaDe === null ? 'abaixo da 1ª faixa' : `a partir de ${brl(v.faixaDe)}`}
                 </p>
               </div>
+              )}
             </div>
             {v.fechado && (
               <p className="mt-3 text-xs text-emerald-100 flex items-center gap-1.5">
@@ -244,10 +253,40 @@ export function MeuDesempenho() {
                   </div>
                 )}
               </div>
+
+              {/* Quais treinamentos entraram. Sem a lista, a pessoa só tem o total para
+                  confiar — e é justamente a lista que ela confere quando discorda. */}
+              {v.bonusTreinamento && v.bonusTreinamento.itens.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1.5">
+                    Treinamentos que contaram
+                  </p>
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700 max-h-64 overflow-y-auto">
+                    {v.bonusTreinamento.itens.map((t) => (
+                      <div key={`${t.origem}-${t.id}`}
+                        className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                        <span className="min-w-0">
+                          <span className="block text-slate-700 dark:text-slate-200 truncate">
+                            {t.clienteNome}
+                          </span>
+                          <span className="block text-[11px] text-slate-400">{dataBR(t.data)}</span>
+                        </span>
+                        <span className={clsx('shrink-0 px-2 py-0.5 rounded-full font-medium',
+                          t.nota >= 10
+                            ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                            : 'bg-blue-500/15 text-blue-600 dark:text-blue-400')}>
+                          nota {t.nota}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </Card>
           )}
 
-          {/* Progresso na meta */}
+          {/* Progresso na meta — só para quem é medido por valor. */}
+          {v.usaMetaValor && (
           <Card>
             <div className="flex flex-wrap items-baseline justify-between gap-2 mb-2">
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2">
@@ -301,7 +340,9 @@ export function MeuDesempenho() {
               </div>
             )}
           </Card>
+          )}
 
+          {v.usaMetaValor && (
           <div className="grid gap-5 lg:grid-cols-2">
             {/* Histórico */}
             <Card>
@@ -367,8 +408,9 @@ export function MeuDesempenho() {
             </Card>
             )}
           </div>
+          )}
 
-          {!v.baseEmpresa && dados.ranking && dados.ranking.total > 1 && (
+          {v.usaMetaValor && !v.baseEmpresa && dados.ranking && dados.ranking.total > 1 && (
             <Card>
               <p className="text-sm text-slate-600 dark:text-slate-300 text-center">
                 Você está em <strong className="text-slate-900 dark:text-slate-100">
@@ -379,7 +421,7 @@ export function MeuDesempenho() {
           )}
 
           {/* ── O que entrou na base, item a item ───────────────────── */}
-          {!v.baseEmpresa && (dados.detalhe.implantacoes.length > 0 || dados.detalhe.clientesNovos.length > 0
+          {v.usaMetaValor && !v.baseEmpresa && (dados.detalhe.implantacoes.length > 0 || dados.detalhe.clientesNovos.length > 0
             || dados.detalhe.upgrades.length > 0 || dados.detalhe.assinaturas.length > 0) && (
             <div className="space-y-5">
               <h2 className="text-sm font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-wider">

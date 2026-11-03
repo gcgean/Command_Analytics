@@ -1,5 +1,6 @@
 import { prisma } from '../database/client'
 import { percentualMetaGeral } from './metaGeral'
+import { treinamentosAvaliados, type TreinamentoAvaliado } from './treinamentos'
 
 /**
  * Plano de remuneração comercial: fixo por fase + comissão progressiva sobre a implantação.
@@ -288,7 +289,14 @@ export interface LinhaApuracao {
     valorBase: number
     valorUnitario: number
     valor: number
+    /** Os treinamentos que geraram o bônus — a pessoa precisa poder conferir um a um. */
+    itens: TreinamentoAvaliado[]
   } | null
+  /**
+   * Se a pessoa é medida por meta em R$. Quem só recebe bônus por meta geral e treinamento
+   * não tem escada nem base individual, e mostrar meta zerada seria só confusão.
+   */
+  usaMetaValor: boolean
   fechado: boolean
   fechadoEm: string | null
 }
@@ -454,14 +462,9 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
     // reconhecimento do primeiro, não um pagamento por existir.
     let bonusTreinamento: LinhaApuracao['bonusTreinamento'] = null
     if (Number(v.bonus_treinamento) === 1) {
-      const [t] = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT COUNT(*) AS qtd FROM agenda a
-          WHERE a.cod_agenda > 0 AND a.cod_colaborador = ?
-            AND COALESCE(a.Nota, 0) >= ?
-            AND a.data_agendamento BETWEEN ? AND ?`,
-        usuarioId, plano.treinoNotaMinima, inicio, fim,
-      ).catch(() => [{ qtd: 0 }])
-      const qtd = Number(t?.qtd ?? 0)
+      // Mesma fonte do Histórico de Treinamentos: as duas tabelas, só o tipo Treinamento.
+      const itens = await treinamentosAvaliados(usuarioId, inicio, fim, plano.treinoNotaMinima)
+      const qtd = itens.length
       bonusTreinamento = {
         notaMinima: plano.treinoNotaMinima,
         quantidade: qtd,
@@ -470,6 +473,7 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
         valor: qtd > 0
           ? Number((plano.treinoValorBase + plano.treinoValorUnitario * qtd).toFixed(2))
           : 0,
+        itens,
       }
     }
 
@@ -501,6 +505,7 @@ export async function apurar(competencia: string): Promise<LinhaApuracao[]> {
       proximaFaixa,
       bonusMeta,
       bonusTreinamento,
+      usaMetaValor: meta > 0,
       fechado: !!fechado,
       fechadoEm: fechado?.fechado_em ?? null,
     })

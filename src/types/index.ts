@@ -1807,7 +1807,13 @@ export interface LinhaComissao {
   /** Bônus por treinamento bem avaliado no período. */
   bonusTreinamento: {
     notaMinima: number; quantidade: number; valorBase: number; valorUnitario: number; valor: number
+    itens: Array<{
+      id: number; origem: 'agenda' | 'programado'; clienteId: number | null
+      clienteNome: string; data: string | null; nota: number
+    }>
   } | null
+  /** Falso para quem só recebe bônus: não tem meta em R$ nem escada de comissão. */
+  usaMetaValor: boolean
   fechado: boolean
   fechadoEm: string | null
 }

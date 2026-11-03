@@ -3,6 +3,7 @@ import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { registrarAuditoria } from '../utils/auditoria'
 import { getUserPermissions } from './grupos'
+import { rankingTreinamentos } from '../utils/treinamentos'
 
 /**
  * Lançamentos de comissão — o que a tela Delphi UComissoes faz.
@@ -200,29 +201,25 @@ export async function comissoesLancamentosRoutes(app: FastifyInstance) {
     }
   })
 
-  /** Ranking dos treinamentos: nota média e quantidade por colaborador, no período. */
+  /**
+   * Ranking dos treinamentos: nota média e quantidade por colaborador, no período.
+   * Mesma fonte do Histórico de Treinamentos — as duas tabelas, só o tipo Treinamento.
+   */
   app.get('/treinamentos', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request) => {
     const { inicio, fim } = periodo(request.query as Record<string, string>)
-    const linhas = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT COALESCE(o.NOME_USUARIO_COMPLETO, o.NOME_USU) AS colaborador,
-              a.cod_colaborador,
-              AVG(a.Nota) AS media_nota,
-              COUNT(a.Nota) AS qtd_treinamentos
-         FROM agenda a
-         LEFT JOIN usuario o ON o.COD_USU = a.cod_colaborador
-        WHERE a.cod_agenda > 0
-          AND COALESCE(a.Nota, 0) > 0
-          AND a.data_agendamento BETWEEN ? AND ?
-        GROUP BY a.cod_colaborador, colaborador
-        ORDER BY COUNT(a.Nota) DESC, AVG(a.Nota) DESC`, inicio, fim)
+    const linhas = await rankingTreinamentos(inicio, fim, 1)
+    const nomes = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT COD_USU AS id, COALESCE(NOME_USUARIO_COMPLETO, NOME_USU) AS nome FROM usuario`)
+      .catch(() => [])
+    const porId = new Map(nomes.map((n) => [Number(n.id), String(n.nome ?? '').trim()]))
 
     return {
       inicio, fim,
       itens: linhas.map((r) => ({
-        colaboradorId: r.cod_colaborador == null ? null : Number(r.cod_colaborador),
-        colaborador: String(r.colaborador ?? 'Sem colaborador').trim(),
-        mediaNota: Number(num(r.media_nota).toFixed(2)),
-        quantidade: Number(r.qtd_treinamentos ?? 0),
+        colaboradorId: r.colaboradorId,
+        colaborador: (r.colaboradorId != null && porId.get(r.colaboradorId)) || 'Sem colaborador',
+        mediaNota: r.mediaNota,
+        quantidade: r.quantidade,
       })),
     }
   })
