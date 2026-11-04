@@ -36,7 +36,7 @@ const mover = (comp: string, passos: number) => {
 
 export function RemuneracaoComercial() {
   const { toast } = useToast()
-  const [aba, setAba] = useState<'apuracao' | 'vendedores' | 'rateio' | 'canais' | 'plano'>('apuracao')
+  const [aba, setAba] = useState<'apuracao' | 'premios' | 'vendedores' | 'rateio' | 'canais' | 'plano'>('apuracao')
   const [competencia, setCompetencia] = useState(() => new Date().toISOString().slice(0, 7))
   const [apuracao, setApuracao] = useState<ApuracaoComissao | null>(null)
   const [planos, setPlanos] = useState<PlanoComissao[]>([])
@@ -293,8 +293,9 @@ export function RemuneracaoComercial() {
       </div>
 
       <div className="flex gap-1 border-b border-slate-200 dark:border-slate-700">
-        {([['apuracao', 'Apuração'], ['vendedores', 'Vendedores'], ['rateio', 'Divisão de vendas'],
-          ['canais', 'Canais de aquisição'], ['plano', 'Plano e faixas']] as const).map(([id, rotulo]) => (
+        {([['apuracao', 'Apuração'], ['premios', 'Prêmios avulsos'], ['vendedores', 'Vendedores'],
+          ['rateio', 'Divisão de vendas'], ['canais', 'Canais de aquisição'],
+          ['plano', 'Plano e faixas']] as const).map(([id, rotulo]) => (
           <button key={id} onClick={() => setAba(id)}
             className={clsx('px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
               aba === id ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400'
@@ -307,6 +308,57 @@ export function RemuneracaoComercial() {
       {carregando && <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-emerald-500" /></div>}
 
       {/* ── Apuração ── */}
+      {/* ── Prêmios avulsos: aba própria, no mês selecionado no topo ── */}
+      {!carregando && aba === 'premios' && (
+        <Card>
+          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
+            Prêmios e comissões avulsas de {rotuloComp(competencia)}
+          </h3>
+          <p className="text-xs text-slate-500 mb-3">
+            Para o que não tem regra no sistema — melhor nota do suporte, campanha pontual. Entra
+            no total da pessoa no mês informado. Competência já fechada não aceita lançamento.
+          </p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <select className="input-field" value={novoPremio.usuarioId}
+              onChange={(e) => setNovoPremio({ ...novoPremio, usuarioId: e.target.value })}>
+              <option value="">Quem recebe...</option>
+              {candidatos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+            <input className="input-field md:col-span-2" placeholder="Motivo (ex.: melhor nota do suporte)"
+              value={novoPremio.descricao}
+              onChange={(e) => setNovoPremio({ ...novoPremio, descricao: e.target.value })} />
+            <div className="flex gap-2">
+              <input type="number" step="0.01" className="input-field" placeholder="Valor R$"
+                value={novoPremio.valor}
+                onChange={(e) => setNovoPremio({ ...novoPremio, valor: e.target.value })} />
+              <Button onClick={adicionarPremio}><Plus className="w-4 h-4" /></Button>
+            </div>
+          </div>
+
+          {avulsas.length > 0 && (
+            <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
+              {avulsas.map((a) => (
+                <div key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+                  <span className="min-w-0">
+                    <span className="block text-slate-800 dark:text-slate-100 truncate">
+                      {a.usuario} — {a.descricao}
+                    </span>
+                    {a.criadoPor && (
+                      <span className="block text-[11px] text-slate-400">lançado por {a.criadoPor}</span>
+                    )}
+                  </span>
+                  <span className="flex items-center gap-3 shrink-0">
+                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">{brl(a.valor)}</span>
+                    <button onClick={() => removerPremio(a)} title="Remover"
+                      className="text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
       {!carregando && aba === 'apuracao' && apuracao && (
         <div className="space-y-5">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -595,57 +647,6 @@ export function RemuneracaoComercial() {
             </div>
           </div>
         </Modal>
-      )}
-
-      {/* ── Prêmios avulsos, dentro da Apuração: é o mês que está sendo fechado ── */}
-      {!carregando && aba === 'apuracao' && (
-        <Card>
-          <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-1">
-            Prêmios e comissões avulsas de {rotuloComp(competencia)}
-          </h3>
-          <p className="text-xs text-slate-500 mb-3">
-            Para o que não tem regra no sistema — melhor nota do suporte, campanha pontual. Entra
-            no total da pessoa no mês informado. Competência já fechada não aceita lançamento.
-          </p>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <select className="input-field" value={novoPremio.usuarioId}
-              onChange={(e) => setNovoPremio({ ...novoPremio, usuarioId: e.target.value })}>
-              <option value="">Quem recebe...</option>
-              {candidatos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-            </select>
-            <input className="input-field md:col-span-2" placeholder="Motivo (ex.: melhor nota do suporte)"
-              value={novoPremio.descricao}
-              onChange={(e) => setNovoPremio({ ...novoPremio, descricao: e.target.value })} />
-            <div className="flex gap-2">
-              <input type="number" step="0.01" className="input-field" placeholder="Valor R$"
-                value={novoPremio.valor}
-                onChange={(e) => setNovoPremio({ ...novoPremio, valor: e.target.value })} />
-              <Button onClick={adicionarPremio}><Plus className="w-4 h-4" /></Button>
-            </div>
-          </div>
-
-          {avulsas.length > 0 && (
-            <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
-              {avulsas.map((a) => (
-                <div key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
-                  <span className="min-w-0">
-                    <span className="block text-slate-800 dark:text-slate-100 truncate">
-                      {a.usuario} — {a.descricao}
-                    </span>
-                    {a.criadoPor && (
-                      <span className="block text-[11px] text-slate-400">lançado por {a.criadoPor}</span>
-                    )}
-                  </span>
-                  <span className="flex items-center gap-3 shrink-0">
-                    <span className="font-semibold text-emerald-600 dark:text-emerald-400">{brl(a.valor)}</span>
-                    <button onClick={() => removerPremio(a)} title="Remover"
-                      className="text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
       )}
 
       {/* ── Canais de aquisição ── */}
