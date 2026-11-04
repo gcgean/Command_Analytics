@@ -6,7 +6,7 @@ import type {
   PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, RegraCanalComissao, ComissaoAvulsa, RateioVenda, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
   ListaLancamentosComissao, ListaPendentesComissao, RankingComissao, RankingTreinamento,
-  RegraUpgrade,
+  RegraUpgrade, RankingAtendimento,
   Cancelamento, ListaCancelamentos,
   IndicacaoCertificado, ListaIndicacoesCertificado, ContadorComissaoCertificado, AgenteCertificado, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
@@ -709,12 +709,20 @@ export const api = {
   excluirRegraCanal: (id: number) =>
     fetchApi<{ ok: boolean }>(`/comissoes/canais/${id}`, { method: 'DELETE' }),
   getRegrasUpgrade: () =>
-    fetchApi<{ regras: RegraUpgrade[]; premioCampeao: number }>('/comissoes/upgrade-regras'),
+    fetchApi<{
+      regras: RegraUpgrade[]; premioCampeao: number
+      premioAtendente: number; minimoAtendimentos: number
+    }>('/comissoes/upgrade-regras'),
+  getRankingAtendimentos: (p: { inicio: string; fim: string }) =>
+    fetchApi<{
+      inicio: string; fim: string; minimo: number; premio: number; elegiveis: number
+      itens: RankingAtendimento[]
+    }>(`/comissoes/atendimentos-ranking?inicio=${p.inicio}&fim=${p.fim}`),
   salvarRegrasUpgrade: (
     regras: Array<{ termo: string | null; percentual: number; ordem?: number; ativo?: boolean }>,
-    premioCampeao?: number,
+    extras?: { premioCampeao?: number; premioAtendente?: number; minimoAtendimentos?: number },
   ) => fetchApi<{ ok: boolean }>('/comissoes/upgrade-regras', {
-    method: 'PUT', body: JSON.stringify({ regras, premioCampeao }),
+    method: 'PUT', body: JSON.stringify({ regras, ...extras }),
   }),
   getComissaoCertificados: (p: { inicio: string; fim: string }) =>
     fetchApi<{

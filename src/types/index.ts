@@ -1294,6 +1294,17 @@ export interface RegraUpgrade {
   padrao: boolean
 }
 
+export interface RankingAtendimento {
+  posicao: number
+  tecnicoId: number
+  tecnico: string
+  atendimentos: number
+  avaliados: number
+  notaMedia: number
+  tmaMinutos: number | null
+  elegivel: boolean
+}
+
 export interface RankingComissao {
   posicao: number
   colaboradorId: number
@@ -1932,6 +1943,8 @@ export interface LinhaComissao {
   comissaoUpgrades: { quantidade: number; valorOperacao: number; valor: number }
   /** Prêmio de quem liderou a comissão de upgrades no mês; zero para os demais. */
   premioCampeaoUpgrade: number
+  /** Prêmio do melhor atendente do mês; zero quando desligado ou não é o caso. */
+  premioMelhorAtendente: number
   /** Prêmios lançados à mão para a competência. */
   avulsas: {
     total: number

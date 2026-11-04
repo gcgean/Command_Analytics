@@ -5,7 +5,9 @@ import { registrarAuditoria } from '../utils/auditoria'
 import { getUserPermissions } from './grupos'
 import { rankingTreinamentos } from '../utils/treinamentos'
 import { listarRegrasUpgrade, percentualPelasRegras, salvarRegrasUpgrade,
-  valorPremioCampeao, salvarPremioCampeao } from '../utils/comissaoUpgrade'
+  valorPremioCampeao, salvarPremioCampeao, valorPremioAtendente, salvarPremioAtendente,
+  minimoAtendimentos, salvarMinimoAtendimentos } from '../utils/comissaoUpgrade'
+import { rankingAtendimentos } from '../utils/rankingAtendimentos'
 import { comissaoAgente } from '../utils/comissaoAgente'
 
 /**
@@ -242,19 +244,41 @@ export async function comissoesLancamentosRoutes(app: FastifyInstance) {
     }
   })
 
+  /** Ranking de atendimentos, para premiar o melhor atendente. */
+  app.get('/atendimentos-ranking', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request) => {
+    const { inicio, fim } = periodo(request.query as Record<string, string>)
+    const minimo = await minimoAtendimentos()
+    const itens = await rankingAtendimentos(inicio, fim, minimo)
+    return {
+      inicio, fim, minimo,
+      premio: await valorPremioAtendente(),
+      elegiveis: itens.filter((i) => i.elegivel).length,
+      itens,
+    }
+  })
+
   // ── Percentuais de comissão dos upgrades ──
 
   app.get('/upgrade-regras', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } },
-    async () => ({ regras: await listarRegrasUpgrade(), premioCampeao: await valorPremioCampeao() }))
+    async () => ({
+      regras: await listarRegrasUpgrade(),
+      premioCampeao: await valorPremioCampeao(),
+      premioAtendente: await valorPremioAtendente(),
+      minimoAtendimentos: await minimoAtendimentos(),
+    }))
 
   app.put('/upgrade-regras', { preHandler: [authMiddleware, exigirPermissaoDeLancamento], schema: { tags: ['Comissões'] } }, async (request, reply) => {
     const b = request.body as {
       regras?: Array<{ termo: string | null; percentual: number; ordem?: number; ativo?: boolean }>
       premioCampeao?: number
+      premioAtendente?: number
+      minimoAtendimentos?: number
     }
     try {
       await salvarRegrasUpgrade(b.regras ?? [])
       if (b.premioCampeao !== undefined) await salvarPremioCampeao(Number(b.premioCampeao))
+      if (b.premioAtendente !== undefined) await salvarPremioAtendente(Number(b.premioAtendente))
+      if (b.minimoAtendimentos !== undefined) await salvarMinimoAtendimentos(Number(b.minimoAtendimentos))
     } catch (e: any) {
       return reply.status(400).send({ error: String(e?.message ?? e) })
     }

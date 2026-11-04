@@ -4,7 +4,9 @@ import { treinamentosAvaliados, type TreinamentoAvaliado } from './treinamentos'
 import { comissaoAgente, certificadosEmitidos, type CertificadoEmitido } from './comissaoAgente'
 import { comissaoPorCanal, type ApuracaoCanal } from './comissaoCanal'
 import { avulsasPorUsuario, type ComissaoAvulsa } from './comissaoAvulsa'
-import { campeoesDeUpgrade, valorPremioCampeao } from './comissaoUpgrade'
+import { campeoesDeUpgrade, valorPremioCampeao, valorPremioAtendente,
+  minimoAtendimentos } from './comissaoUpgrade'
+import { rankingAtendimentos, melhoresAtendentes } from './rankingAtendimentos'
 
 /**
  * Plano de remuneração comercial: fixo por fase + comissão progressiva sobre a implantação.
@@ -330,6 +332,8 @@ export interface LinhaApuracao {
   } | null
   /** Prêmio de quem liderou a comissão de upgrades no mês. */
   premioCampeaoUpgrade: number
+  /** Prêmio do melhor atendente do mês. Zero quando o prêmio está desligado. */
+  premioMelhorAtendente: number
   /** Prêmios lançados à mão para a competência. */
   avulsas: { total: number; itens: ComissaoAvulsa[] } | null
   /** Comissão por canal de aquisição: a cada bloco fechado no canal, um valor. */
@@ -393,10 +397,16 @@ export async function apurar(
     await avulsasPorUsuario(competencia).catch(() => new Map())
 
   // Uma lista só dos nomes que o CRM usa, para resolver o apelido de cada vendedor.
-  const [campeoes, premioCampeao] = await Promise.all([
+  const [campeoes, premioCampeao, premioAtendente, minAtend] = await Promise.all([
     campeoesDeUpgrade(inicio, fim).catch(() => [] as number[]),
     valorPremioCampeao().catch(() => 0),
+    valorPremioAtendente().catch(() => 0),
+    minimoAtendimentos().catch(() => 200),
   ])
+  // Só vale a consulta do ranking quando o prêmio está ligado.
+  const melhores = premioAtendente > 0
+    ? melhoresAtendentes(await rankingAtendimentos(inicio, fim, minAtend).catch(() => []))
+    : []
 
   const nomesCrm = (await prisma.$queryRawUnsafe<any[]>(
     `SELECT DISTINCT vendedor_nome AS nome FROM crm_negocio
@@ -687,10 +697,12 @@ export async function apurar(
       : null
 
     const premioCampeaoUpgrade = campeoes.includes(usuarioId) ? premioCampeao : 0
+    const premioMelhorAtendente = melhores.includes(usuarioId) ? premioAtendente : 0
 
     const extras = (bonusMeta?.valor ?? 0) + (bonusTreinamento?.valor ?? 0)
       + comissaoUpgrades.valor + (comissaoCertificado?.comissao ?? 0)
       + (comissaoCanais?.total ?? 0) + (avulsas?.total ?? 0) + premioCampeaoUpgrade
+      + premioMelhorAtendente
 
     const fechado = fechamentos.find((f) => Number(f.usuario_id) === Number(v.usuario_id))
 
@@ -724,6 +736,7 @@ export async function apurar(
       comissaoCertificado,
       comissaoCanais,
       premioCampeaoUpgrade,
+      premioMelhorAtendente,
       avulsas,
       usaMetaValor: meta > 0,
       fechado: !!fechado,

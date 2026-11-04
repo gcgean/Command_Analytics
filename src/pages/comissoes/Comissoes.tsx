@@ -10,7 +10,7 @@ import { Modal } from '../../components/ui/Modal'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import type {
   AgenteCertificado, LancamentoComissao, PendenteComissao, RankingComissao, RankingTreinamento,
-  RegraUpgrade,
+  RegraUpgrade, RankingAtendimento,
 } from '../../types'
 
 const brl = (v: number) =>
@@ -22,7 +22,8 @@ const dataBR = (iso: string | null) => {
 const primeiroDoMes = () => `${new Date().toISOString().slice(0, 7)}-01`
 const hoje = () => new Date().toISOString().slice(0, 10)
 
-type Aba = 'listagem' | 'vincular' | 'percentuais' | 'ranking' | 'certificados' | 'treinamentos'
+type Aba = 'listagem' | 'vincular' | 'percentuais' | 'ranking' | 'atendimentos'
+  | 'certificados' | 'treinamentos'
 
 export function Comissoes() {
   const { toast } = useToast()
@@ -45,6 +46,9 @@ export function Comissoes() {
   const [regras, setRegras] = useState<RegraUpgrade[]>([])
   const [salvandoRegras, setSalvandoRegras] = useState(false)
   const [premioCampeao, setPremioCampeao] = useState(0)
+  const [premioAtendente, setPremioAtendente] = useState(0)
+  const [minAtend, setMinAtend] = useState(200)
+  const [atendentes, setAtendentes] = useState<RankingAtendimento[]>([])
   const [totalCertificados, setTotalCertificados] = useState({ comissao: 0, emitido: 0 })
   const [colaboradores, setColaboradores] = useState<Array<{ id: number; nome: string }>>([])
 
@@ -85,20 +89,32 @@ export function Comissoes() {
 
   useEffect(() => { void consultar() }, [])
   useEffect(() => {
-    api.getRegrasUpgrade().then((r) => { setRegras(r.regras); setPremioCampeao(r.premioCampeao) })
-      .catch(() => {})
+    api.getRegrasUpgrade().then((r) => {
+      setRegras(r.regras); setPremioCampeao(r.premioCampeao)
+      setPremioAtendente(r.premioAtendente); setMinAtend(r.minimoAtendimentos)
+    }).catch(() => {})
   }, [])
+
+  // O ranking de atendimentos é pesado e só interessa na sua aba.
+  useEffect(() => {
+    if (aba !== 'atendimentos') return
+    api.getRankingAtendimentos({ inicio, fim })
+      .then((r) => { setAtendentes(r.itens); setMinAtend(r.minimo) })
+      .catch(() => setAtendentes([]))
+  }, [aba, inicio, fim])
 
   async function salvarRegras() {
     setSalvandoRegras(true)
     try {
       await api.salvarRegrasUpgrade(regras.map((r, i) => ({
         termo: r.padrao ? null : r.termo, percentual: r.percentual, ordem: (i + 1) * 10, ativo: r.ativo,
-      })), premioCampeao)
+      })), { premioCampeao, premioAtendente, minimoAtendimentos: minAtend })
       toast.success('Percentuais salvos. Valem para os próximos lançamentos.')
       const atual = await api.getRegrasUpgrade()
       setRegras(atual.regras)
       setPremioCampeao(atual.premioCampeao)
+      setPremioAtendente(atual.premioAtendente)
+      setMinAtend(atual.minimoAtendimentos)
       await consultar()
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível salvar.')
@@ -170,6 +186,7 @@ export function Comissoes() {
     ...(podeLancar ? [{ id: 'vincular' as Aba, rotulo: 'Vincular', contador: resumoPendentes.comissionaveis }] : []),
     ...(podeLancar ? [{ id: 'percentuais' as Aba, rotulo: 'Percentuais' }] : []),
     { id: 'ranking', rotulo: 'Ranking de vendas' },
+    { id: 'atendimentos', rotulo: 'Ranking de atendimentos' },
     { id: 'certificados', rotulo: 'Certificados digitais', contador: certificados.length },
     { id: 'treinamentos', rotulo: 'Ranking dos treinamentos' },
   ]
@@ -473,6 +490,28 @@ export function Comissoes() {
                 </p>
               </div>
 
+              <div className="card flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wide text-slate-500 mb-1">
+                    Prêmio do melhor atendente (R$)
+                  </label>
+                  <input type="number" step="0.01" min="0" className="input-field w-40"
+                    value={premioAtendente}
+                    onChange={(e) => setPremioAtendente(Number(e.target.value))} />
+                </div>
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wide text-slate-500 mb-1">
+                    Mínimo de atendimentos
+                  </label>
+                  <input type="number" step="1" min="0" className="input-field w-40"
+                    value={minAtend} onChange={(e) => setMinAtend(Number(e.target.value))} />
+                </div>
+                <p className="text-xs text-slate-500 pb-2.5 flex-1 min-w-[16rem]">
+                  Vale para o 1º do Ranking de atendimentos. Começa em zero, desligado — ligue
+                  quando o valor estiver combinado.
+                </p>
+              </div>
+
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => setRegras([
@@ -486,6 +525,62 @@ export function Comissoes() {
                 <Button size="sm" loading={salvandoRegras} onClick={() => void salvarRegras()}>
                   Salvar percentuais
                 </Button>
+              </div>
+            </div>
+          )}
+
+          {aba === 'atendimentos' && (
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500">
+                Atendimentos finalizados nas filas de Suporte, Fiscal, Instalação, Treinamento,
+                Técnico e Migração. Classifica pela <strong>nota média</strong>, e o desempate é
+                o volume. Quem tem menos de <strong>{minAtend} atendimentos</strong> aparece
+                abaixo, fora da disputa — média de poucos atendimentos não mostra consistência.
+              </p>
+              <div className="card p-0 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-700">
+                      {['#', 'Atendente', 'Nota média', 'Atendimentos', 'Avaliados', 'TMA']
+                        .map((h) => <th key={h} className="table-header text-left">{h}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {atendentes.length === 0 ? (
+                      <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-500">
+                        Nenhum atendimento finalizado nessas filas no período.
+                      </td></tr>
+                    ) : atendentes.map((a2) => (
+                      <tr key={a2.tecnicoId}
+                        className={clsx('table-row', !a2.elegivel && 'opacity-60')}>
+                        <td className="table-cell">
+                          {a2.elegivel && a2.posicao === 1
+                            ? <Trophy className="w-4 h-4 text-amber-500" />
+                            : <span className="text-slate-400">{a2.elegivel ? `${a2.posicao}º` : '—'}</span>}
+                        </td>
+                        <td className="table-cell font-medium text-slate-900 dark:text-slate-100">
+                          {a2.tecnico}
+                          {!a2.elegivel && (
+                            <span className="block text-[11px] text-slate-400">abaixo do mínimo</span>
+                          )}
+                        </td>
+                        <td className="table-cell">
+                          <span className={clsx('badge',
+                            a2.notaMedia >= 8 ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                              : a2.notaMedia >= 7 ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                                : 'bg-red-500/20 text-red-500')}>
+                            {a2.notaMedia.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </span>
+                        </td>
+                        <td className="table-cell text-slate-700 dark:text-slate-300">{a2.atendimentos}</td>
+                        <td className="table-cell text-slate-500">{a2.avaliados}</td>
+                        <td className="table-cell text-slate-500">
+                          {a2.tmaMinutos != null ? `${a2.tmaMinutos} min` : '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

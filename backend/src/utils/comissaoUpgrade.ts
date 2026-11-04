@@ -129,6 +129,8 @@ export async function salvarRegrasUpgrade(
  * apenas um exigiria um critério de desempate que ninguém combinou.
  */
 const CHAVE_PREMIO = 'premio_campeao_upgrade'
+const CHAVE_PREMIO_ATEND = 'premio_melhor_atendente'
+const CHAVE_MIN_ATEND = 'min_atendimentos_ranking'
 
 export async function initComissaoConfig(): Promise<void> {
   await prisma.$executeRawUnsafe(`
@@ -137,8 +139,15 @@ export async function initComissaoConfig(): Promise<void> {
       valor DECIMAL(12,2) NOT NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
-  await prisma.$executeRawUnsafe(
-    `INSERT IGNORE INTO comissao_config (chave, valor) VALUES (?, ?)`, CHAVE_PREMIO, 100)
+  for (const [chave, valor] of [
+    [CHAVE_PREMIO, 100],
+    // Começa desligado: premiar sem o valor combinado seria inventar número.
+    [CHAVE_PREMIO_ATEND, 0],
+    [CHAVE_MIN_ATEND, 200],
+  ] as Array<[string, number]>) {
+    await prisma.$executeRawUnsafe(
+      `INSERT IGNORE INTO comissao_config (chave, valor) VALUES (?, ?)`, chave, valor)
+  }
 }
 
 export async function valorPremioCampeao(): Promise<number> {
@@ -169,3 +178,21 @@ export async function campeoesDeUpgrade(inicio: string, fim: string): Promise<nu
   if (!(topo > 0)) return []
   return linhas.filter((l) => Number(l.total) === topo).map((l) => Number(l.id))
 }
+
+async function lerConfig(chave: string, padrao: number): Promise<number> {
+  const [r] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT valor FROM comissao_config WHERE chave = ?`, chave).catch(() => [])
+  return r ? Number(r.valor) : padrao
+}
+
+async function gravarConfig(chave: string, valor: number): Promise<void> {
+  if (!Number.isFinite(valor) || valor < 0) throw new Error('Valor inválido.')
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO comissao_config (chave, valor) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE valor = VALUES(valor)`, chave, valor)
+}
+
+export const valorPremioAtendente = () => lerConfig(CHAVE_PREMIO_ATEND, 0)
+export const salvarPremioAtendente = (v: number) => gravarConfig(CHAVE_PREMIO_ATEND, v)
+export const minimoAtendimentos = () => lerConfig(CHAVE_MIN_ATEND, 200)
+export const salvarMinimoAtendimentos = (v: number) => gravarConfig(CHAVE_MIN_ATEND, v)
