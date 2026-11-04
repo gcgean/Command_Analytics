@@ -1284,6 +1284,16 @@ export interface ListaPendentesComissao {
   itens: PendenteComissao[]
 }
 
+export interface RegraUpgrade {
+  id: number
+  /** Texto procurado na descrição do plano. Null é a regra padrão. */
+  termo: string | null
+  percentual: number
+  ordem: number
+  ativo: boolean
+  padrao: boolean
+}
+
 export interface RankingComissao {
   posicao: number
   colaboradorId: number

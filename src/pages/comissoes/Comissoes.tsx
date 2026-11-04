@@ -10,6 +10,7 @@ import { Modal } from '../../components/ui/Modal'
 import { usePermissions } from '../../contexts/PermissionsContext'
 import type {
   AgenteCertificado, LancamentoComissao, PendenteComissao, RankingComissao, RankingTreinamento,
+  RegraUpgrade,
 } from '../../types'
 
 const brl = (v: number) =>
@@ -21,7 +22,7 @@ const dataBR = (iso: string | null) => {
 const primeiroDoMes = () => `${new Date().toISOString().slice(0, 7)}-01`
 const hoje = () => new Date().toISOString().slice(0, 10)
 
-type Aba = 'listagem' | 'vincular' | 'ranking' | 'certificados' | 'treinamentos'
+type Aba = 'listagem' | 'vincular' | 'percentuais' | 'ranking' | 'certificados' | 'treinamentos'
 
 export function Comissoes() {
   const { toast } = useToast()
@@ -41,6 +42,8 @@ export function Comissoes() {
   const [ranking, setRanking] = useState<RankingComissao[]>([])
   const [treinamentos, setTreinamentos] = useState<RankingTreinamento[]>([])
   const [certificados, setCertificados] = useState<AgenteCertificado[]>([])
+  const [regras, setRegras] = useState<RegraUpgrade[]>([])
+  const [salvandoRegras, setSalvandoRegras] = useState(false)
   const [totalCertificados, setTotalCertificados] = useState({ comissao: 0, emitido: 0 })
   const [colaboradores, setColaboradores] = useState<Array<{ id: number; nome: string }>>([])
 
@@ -80,6 +83,23 @@ export function Comissoes() {
   }, [inicio, fim, toast])
 
   useEffect(() => { void consultar() }, [])
+  useEffect(() => { api.getRegrasUpgrade().then(setRegras).catch(() => {}) }, [])
+
+  async function salvarRegras() {
+    setSalvandoRegras(true)
+    try {
+      await api.salvarRegrasUpgrade(regras.map((r, i) => ({
+        termo: r.padrao ? null : r.termo, percentual: r.percentual, ordem: (i + 1) * 10, ativo: r.ativo,
+      })))
+      toast.success('Percentuais salvos. Valem para os próximos lançamentos.')
+      setRegras(await api.getRegrasUpgrade())
+      await consultar()
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível salvar.')
+    } finally {
+      setSalvandoRegras(false)
+    }
+  }
   useEffect(() => {
     if (!podeLancar) return
     api.getColaboradoresComissao().then(setColaboradores).catch(() => {})
@@ -142,6 +162,7 @@ export function Comissoes() {
   const abas: Array<{ id: Aba; rotulo: string; contador?: number }> = [
     { id: 'listagem', rotulo: 'Listagem', contador: lancamentos.length },
     ...(podeLancar ? [{ id: 'vincular' as Aba, rotulo: 'Vincular', contador: resumoPendentes.comissionaveis }] : []),
+    ...(podeLancar ? [{ id: 'percentuais' as Aba, rotulo: 'Percentuais' }] : []),
     { id: 'ranking', rotulo: 'Ranking de vendas' },
     { id: 'certificados', rotulo: 'Certificados digitais', contador: certificados.length },
     { id: 'treinamentos', rotulo: 'Ranking dos treinamentos' },
@@ -372,6 +393,80 @@ export function Comissoes() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {aba === 'percentuais' && podeLancar && (
+            <div className="space-y-3 max-w-3xl">
+              <p className="text-xs text-slate-500">
+                Quanto cada upgrade paga de comissão. Quando a descrição do plano contém o
+                termo, vale aquele percentual; a <strong>primeira regra que casa vence</strong>,
+                de cima para baixo. Sem nenhuma, vale o padrão. Ao lançar, o valor vem
+                preenchido com isto e ainda pode ser trocado naquele lançamento.
+              </p>
+              <div className="card p-0 overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-slate-700">
+                      {['Quando a descrição contém', '%', 'Ativa', ''].map((h) => (
+                        <th key={h} className="table-header text-left">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {regras.map((r, i) => (
+                      <tr key={r.id || `novo-${i}`} className="table-row">
+                        <td className="table-cell">
+                          {r.padrao ? (
+                            <span className="text-slate-500 italic">
+                              qualquer outro produto (padrão)
+                            </span>
+                          ) : (
+                            <input className="input-field" value={r.termo ?? ''}
+                              placeholder="ex.: tef"
+                              onChange={(e) => setRegras(regras.map((x, j) =>
+                                j === i ? { ...x, termo: e.target.value } : x))} />
+                          )}
+                        </td>
+                        <td className="table-cell w-32">
+                          <input type="number" step="0.01" min="0" max="100" className="input-field"
+                            value={r.percentual}
+                            onChange={(e) => setRegras(regras.map((x, j) =>
+                              j === i ? { ...x, percentual: Number(e.target.value) } : x))} />
+                        </td>
+                        <td className="table-cell">
+                          <input type="checkbox" checked={r.ativo}
+                            onChange={(e) => setRegras(regras.map((x, j) =>
+                              j === i ? { ...x, ativo: e.target.checked } : x))} />
+                        </td>
+                        <td className="table-cell text-right">
+                          {/* A regra padrão não some: sem ela, produto fora de termo ficaria sem percentual. */}
+                          {!r.padrao && (
+                            <button onClick={() => setRegras(regras.filter((_, j) => j !== i))}
+                              className="text-slate-400 hover:text-red-500">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-between">
+                <button
+                  onClick={() => setRegras([
+                    ...regras.filter((r) => !r.padrao),
+                    { id: 0, termo: '', percentual: 25, ordem: 0, ativo: true, padrao: false },
+                    ...regras.filter((r) => r.padrao),
+                  ])}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:underline">
+                  + adicionar regra
+                </button>
+                <Button size="sm" loading={salvandoRegras} onClick={() => void salvarRegras()}>
+                  Salvar percentuais
+                </Button>
+              </div>
             </div>
           )}
 

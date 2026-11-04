@@ -4,6 +4,8 @@ import { authMiddleware } from '../middleware/auth'
 import { registrarAuditoria } from '../utils/auditoria'
 import { getUserPermissions } from './grupos'
 import { rankingTreinamentos } from '../utils/treinamentos'
+import { listarRegrasUpgrade, percentualPelasRegras, salvarRegrasUpgrade }
+  from '../utils/comissaoUpgrade'
 import { comissaoAgente } from '../utils/comissaoAgente'
 
 /**
@@ -24,15 +26,9 @@ const CLIENTES_IGNORADOS = [1, 6, 7, 8]
 const LIMITE_COD_CLI = 10000000
 
 /**
- * Percentual sobre o valor base. Regra do Delphi: TEF e Delivery-Faturamento pagam metade,
- * porque boa parte da receita vai para o fornecedor.
+ * O percentual sobre o valor base vem do cadastro (Comissões › Percentuais). Era fixo aqui
+ * — 25% para TEF e Delivery-Faturamento, 50% no resto —, e mudar exigia deploy.
  */
-const PERC_REDUZIDO = 25
-const PERC_PADRAO = 50
-export function percentualDoPlano(descricaoPlano: string | null | undefined): number {
-  const d = String(descricaoPlano ?? '').trim().toLowerCase()
-  return d.includes('delivery - faturamento') || d.includes('tef') ? PERC_REDUZIDO : PERC_PADRAO
-}
 
 const hoje = () => new Date().toISOString().slice(0, 10)
 const primeiroDoMes = () => `${new Date().toISOString().slice(0, 7)}-01`
@@ -139,6 +135,8 @@ export async function comissoesLancamentosRoutes(app: FastifyInstance) {
     const { inicio, fim } = periodo(request.query as Record<string, string>)
     const linhas = await prisma.$queryRawUnsafe<any[]>(
       `${SQL_PENDENTES} ORDER BY d1.data_hora DESC, d1.id DESC`, inicio, fim)
+    // Uma leitura das regras para a lista inteira, em vez de uma por linha.
+    const regras = await listarRegrasUpgrade()
 
     const itens = linhas.map((r) => {
       const base = num(r.valor_base_para_comissao)
@@ -157,8 +155,8 @@ export async function comissoesLancamentosRoutes(app: FastifyInstance) {
         assinaturaAtual: num(r.valor_assinatura_atual),
         valorBase: base,
         // A tela mostra antes de gravar: ninguém deveria descobrir o valor só depois.
-        percentual: percentualDoPlano(r.desc_plano_atual),
-        valorComissao: Number(((base * percentualDoPlano(r.desc_plano_atual)) / 100).toFixed(2)),
+        percentual: percentualPelasRegras(r.desc_plano_atual, regras),
+        valorComissao: Number(((base * percentualPelasRegras(r.desc_plano_atual, regras)) / 100).toFixed(2)),
         dataHora: r.data_hora ?? null,
         lancadoPor: r.nome_usuario ?? null,
         comissionavel: base > 0,
@@ -274,6 +272,21 @@ export async function comissoesLancamentosRoutes(app: FastifyInstance) {
     }
   })
 
+  // ── Percentuais de comissão dos upgrades ──
+
+  app.get('/upgrade-regras', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } },
+    async () => listarRegrasUpgrade())
+
+  app.put('/upgrade-regras', { preHandler: [authMiddleware, exigirPermissaoDeLancamento], schema: { tags: ['Comissões'] } }, async (request, reply) => {
+    const b = request.body as { regras?: Array<{ termo: string | null; percentual: number; ordem?: number; ativo?: boolean }> }
+    try {
+      await salvarRegrasUpgrade(b.regras ?? [])
+    } catch (e: any) {
+      return reply.status(400).send({ error: String(e?.message ?? e) })
+    }
+    return { ok: true }
+  })
+
   /** Colaboradores que podem receber comissão (ativos do ponto de revenda). */
   app.get('/colaboradores', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async () => {
     const linhas = await prisma.$queryRawUnsafe<any[]>(
@@ -322,7 +335,7 @@ export async function comissoesLancamentosRoutes(app: FastifyInstance) {
     const percentual = Number(b.percentual ?? NaN)
     const perc = Number.isFinite(percentual) && percentual > 0 && percentual <= 100
       ? percentual
-      : percentualDoPlano(log.desc_plano_atual)
+      : percentualPelasRegras(log.desc_plano_atual, await listarRegrasUpgrade())
     const valor = Number(((base * perc) / 100).toFixed(2))
     const descricao = String(log.desc_plano_atual ?? '').slice(0, 100)
 

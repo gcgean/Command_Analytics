@@ -93,6 +93,7 @@ import { initComissoes } from './utils/comissoes'
 import { initComissaoCanal } from './utils/comissaoCanal'
 import { initComissaoAvulsa } from './utils/comissaoAvulsa'
 import { initRateioVenda } from './utils/rateioVenda'
+import { initComissaoUpgrade } from './utils/comissaoUpgrade'
 import { initRevendasSync, startRevendasSyncScheduler } from './utils/revendasSync'
 import { initNotasGeradas } from './routes/solicitacoes'
 import { ensureConfiguracaoIA } from './ia/config'
@@ -336,6 +337,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initRateioVenda()
     .then(() => console.log('✓ Tabela de rateio de venda verificada'))
     .catch(e => console.warn('⚠ Rateio de venda init:', e.message))
+  initComissaoUpgrade()
+    .then(() => console.log('✓ Regras de % dos upgrades verificadas'))
+    .catch(e => console.warn('⚠ Regras de upgrade init:', e.message))
   initRevendasSync()
     .then(() => { console.log('✓ Tabelas de revendas verificadas'); startRevendasSyncScheduler() })
     .catch(e => console.warn('⚠ Revendas init:', e.message))

@@ -6,6 +6,7 @@ import type {
   PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, RegraCanalComissao, ComissaoAvulsa, RateioVenda, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
   ListaLancamentosComissao, ListaPendentesComissao, RankingComissao, RankingTreinamento,
+  RegraUpgrade,
   Cancelamento, ListaCancelamentos,
   IndicacaoCertificado, ListaIndicacoesCertificado, ContadorComissaoCertificado, AgenteCertificado, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
@@ -707,6 +708,9 @@ export const api = {
     fetchApi<{ ok: boolean }>('/comissoes/canais', { method: 'POST', body: JSON.stringify(dados) }),
   excluirRegraCanal: (id: number) =>
     fetchApi<{ ok: boolean }>(`/comissoes/canais/${id}`, { method: 'DELETE' }),
+  getRegrasUpgrade: () => fetchApi<RegraUpgrade[]>('/comissoes/upgrade-regras'),
+  salvarRegrasUpgrade: (regras: Array<{ termo: string | null; percentual: number; ordem?: number; ativo?: boolean }>) =>
+    fetchApi<{ ok: boolean }>('/comissoes/upgrade-regras', { method: 'PUT', body: JSON.stringify({ regras }) }),
   getComissaoCertificados: (p: { inicio: string; fim: string }) =>
     fetchApi<{
       inicio: string; fim: string; total: number; valorComissao: number; valorEmitido: number
