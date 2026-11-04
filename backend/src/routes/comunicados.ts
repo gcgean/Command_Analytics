@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { TelegramService } from '../services/telegram'
+import { dispararComunicado, montarTexto } from '../utils/comunicadoEnvio'
 
 /**
  * Comunicados por Telegram: uma mensagem para vários usuários de uma vez.
@@ -12,7 +13,6 @@ import { TelegramService } from '../services/telegram'
  */
 
 const INTERVALO_ENVIO_MS = 120
-const MAX_CARACTERES = 4000 // limite do Telegram é 4096; sobra para o rodapé
 
 export async function initComunicados(): Promise<void> {
   await prisma.$executeRawUnsafe(`
@@ -78,64 +78,16 @@ export async function comunicadosRoutes(app: FastifyInstance) {
    */
   app.post('/enviar', { preHandler: authMiddleware, schema: { tags: ['Comunicados'] } }, async (request, reply) => {
     const b = request.body as { titulo?: string; mensagem?: string; usuarios?: number[] }
-    const mensagem = String(b.mensagem ?? '').trim()
-    if (!mensagem) return reply.status(400).send({ error: 'Escreva a mensagem.' })
-    if (mensagem.length > MAX_CARACTERES) {
-      return reply.status(400).send({ error: `A mensagem passa de ${MAX_CARACTERES} caracteres.` })
+    try {
+      return await dispararComunicado({
+        titulo: b.titulo ?? null,
+        mensagem: String(b.mensagem ?? ''),
+        usuarios: Array.isArray(b.usuarios) ? b.usuarios : [],
+        autor: Number((request.user as { id: number } | undefined)?.id ?? 0) || null,
+      })
+    } catch (e: any) {
+      return reply.status(400).send({ error: String(e?.message ?? e) })
     }
-
-    const escolhidos = Array.isArray(b.usuarios) ? b.usuarios.map(Number).filter(Boolean) : []
-    const todos = await prisma.$queryRawUnsafe<any[]>(`
-      SELECT u.COD_USU AS id, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS nome,
-             u.ID_TELEGRAM AS telegram
-        FROM usuario u
-       WHERE u.ID_TELEGRAM IS NOT NULL AND u.ID_TELEGRAM <> '' AND COALESCE(u.ATIVO,'S') = 'S'`)
-
-    const alvo = escolhidos.length
-      ? todos.filter((u) => escolhidos.includes(Number(u.id)))
-      : todos
-    if (alvo.length === 0) {
-      return reply.status(400).send({ error: 'Nenhum destinatário com Telegram vinculado.' })
-    }
-
-    const titulo = String(b.titulo ?? '').trim().slice(0, 160) || null
-    const autor = Number((request.user as { id: number } | undefined)?.id ?? 0) || null
-
-    await prisma.$executeRawUnsafe(
-      `INSERT INTO comunicado (titulo, mensagem, enviado_por, destinatarios) VALUES (?,?,?,?)`,
-      titulo, mensagem, autor, alvo.length,
-    )
-    const [criado] = await prisma.$queryRawUnsafe<any[]>(`SELECT LAST_INSERT_ID() AS id`)
-    const comunicadoId = Number(criado?.id ?? 0)
-
-    const texto = titulo ? `📢 *${titulo}*\n\n${mensagem}` : `📢 ${mensagem}`
-    let entregues = 0
-    let falhas = 0
-
-    for (const u of alvo) {
-      let erro: string | null = null
-      try {
-        const r = await TelegramService.enviar({ userId: String(u.telegram), mensagem: texto })
-        if (r.success) entregues += 1
-        else { falhas += 1; erro = r.error ?? 'Falha no envio' }
-      } catch (e: any) {
-        falhas += 1
-        erro = String(e?.message ?? e)
-      }
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO comunicado_destinatario (comunicado_id, usuario_id, nome, entregue, erro)
-         VALUES (?,?,?,?,?)`,
-        comunicadoId, Number(u.id), String(u.nome ?? '').slice(0, 150),
-        erro ? 0 : 1, erro?.slice(0, 300) ?? null,
-      ).catch(() => {})
-      // Espaça os envios para não tomar 429 do Telegram no meio do comunicado.
-      await espera(INTERVALO_ENVIO_MS)
-    }
-
-    await prisma.$executeRawUnsafe(
-      `UPDATE comunicado SET entregues = ?, falhas = ? WHERE id = ?`, entregues, falhas, comunicadoId)
-
-    return { id: comunicadoId, destinatarios: alvo.length, entregues, falhas }
   })
 
   /**
@@ -161,9 +113,7 @@ export async function comunicadosRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Não há falhas para reenviar neste comunicado.' })
     }
 
-    const texto = c.titulo ? `📢 *${c.titulo}*
-
-${c.mensagem}` : `📢 ${c.mensagem}`
+    const texto = montarTexto(c.titulo ?? null, c.mensagem)
     let entregues = 0
     let falhas = 0
 

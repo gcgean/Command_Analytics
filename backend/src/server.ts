@@ -49,6 +49,7 @@ import { bancoHorasRoutes } from './routes/bancoHoras'
 import { assistenteRoutes } from './routes/assistente'
 import { iaExternaRoutes, initIaExterna } from './routes/iaExterna'
 import { comunicadosRoutes, initComunicados } from './routes/comunicados'
+import { initComunicadoCampeoes, startComunicadoCampeoesScheduler } from './utils/comunicadoCampeoes'
 import { precificacaoPublicaRoutes, initPrecificacaoPublica } from './routes/precificacaoPublica'
 import { triagemRoutes } from './routes/triagem'
 import { initTriagem } from './utils/triagem'
@@ -322,6 +323,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initComunicados()
     .then(() => console.log('✓ Tabelas de comunicados verificadas'))
     .catch(e => console.warn('⚠ Comunicados init:', e.message))
+  initComunicadoCampeoes()
+    .then(() => { console.log('✓ Tabela do comunicado dos campeões verificada'); startComunicadoCampeoesScheduler() })
+    .catch(e => console.warn('⚠ Comunicado dos campeões init:', e.message))
   initIaExterna()
     .then(() => console.log('✓ Tabelas da IA externa verificadas'))
     .catch(e => console.warn('⚠ IA externa init:', e.message))

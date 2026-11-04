@@ -141,8 +141,7 @@ export async function initComissaoConfig(): Promise<void> {
   `)
   for (const [chave, valor] of [
     [CHAVE_PREMIO, 100],
-    // Começa desligado: premiar sem o valor combinado seria inventar número.
-    [CHAVE_PREMIO_ATEND, 0],
+    [CHAVE_PREMIO_ATEND, 200],
     [CHAVE_MIN_ATEND, 200],
   ] as Array<[string, number]>) {
     await prisma.$executeRawUnsafe(

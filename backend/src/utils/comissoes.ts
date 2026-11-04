@@ -435,9 +435,11 @@ export async function apurar(
   const fechamentos = await prisma.$queryRawUnsafe<any[]>(
     `SELECT * FROM comissao_apuracao WHERE competencia = ?`, competencia)
 
-  // Quem recebe só por canal de aquisição não tem escada nem meta, e por isso nunca foi
-  // vinculado a um plano — mas recebe, e precisa aparecer. Entra aqui com um plano vazio:
-  // sem faixa, sem fixo e sem meta, só com as parcelas que de fato valem para a pessoa.
+  // Quem recebe só por canal de aquisição, prêmio avulso ou prêmio de ranking não tem escada
+  // nem meta, e por isso nunca foi vinculado a um plano — mas recebe, e precisa aparecer. O
+  // melhor atendente do mês é o caso mais claro: é do suporte, não vende nada, e sem isto o
+  // prêmio dele seria calculado e não apareceria em lugar nenhum. Entra aqui com um plano
+  // vazio: sem faixa, sem fixo e sem meta, só com as parcelas que de fato valem para a pessoa.
   const planoSemEscada: Plano = {
     id: 0, nome: 'Sem plano de escada', descricao: null, baseCalculo: 'vencimento',
     tipo: 'escada', valorBonus: 0, escopoProduto: 'todos',
@@ -446,7 +448,10 @@ export async function apurar(
     ativo: true, faixas: [],
   }
   const jaVinculados = new Set(vendedores.map((v) => Number(v.usuario_id)))
-  for (const usuarioId of [...canaisPorUsuario.keys(), ...avulsasDoMes.keys()]) {
+  for (const usuarioId of [
+    ...canaisPorUsuario.keys(), ...avulsasDoMes.keys(),
+    ...(premioCampeao > 0 ? campeoes : []), ...(premioAtendente > 0 ? melhores : []),
+  ]) {
     if (jaVinculados.has(usuarioId)) continue
     const [u] = await prisma.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(NOME_USUARIO_COMPLETO, NOME_USU) AS nome, NOME_USU AS nome_usu
