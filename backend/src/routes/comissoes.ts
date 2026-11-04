@@ -177,6 +177,12 @@ export async function comissoesRoutes(app: FastifyInstance) {
     const competencia = String(b.competencia ?? '')
     const descricao = String(b.descricao ?? '').trim()
     const valor = Number(b.valor ?? 0)
+    // Data da premiação: opcional no corpo, mas registrada sempre. Sem ela, assume o
+    // primeiro dia da competência — nunca "hoje", que mentiria num lançamento retroativo.
+    const dataInformada = String(b.data ?? '').trim()
+    if (dataInformada && !/^\d{4}-\d{2}-\d{2}$/.test(dataInformada)) {
+      return reply.status(400).send({ error: 'Data da premiação inválida.' })
+    }
     if (!usuarioId) return reply.status(400).send({ error: 'Escolha quem recebe.' })
     if (!/^\d{4}-\d{2}$/.test(competencia)) return reply.status(400).send({ error: 'Competência inválida. Use AAAA-MM.' })
     if (!descricao) return reply.status(400).send({ error: 'Descreva o que está sendo pago.' })
@@ -192,10 +198,12 @@ export async function comissoesRoutes(app: FastifyInstance) {
       })
     }
 
+    const data = dataInformada || `${competencia}-01`
     await prisma.$executeRawUnsafe(
-      `INSERT INTO comissao_avulsa (usuario_id, competencia, descricao, valor, criado_por)
-       VALUES (?,?,?,?,?)`,
-      usuarioId, competencia, descricao.slice(0, 200), valor,
+      `INSERT INTO comissao_avulsa
+         (usuario_id, competencia, data_premiacao, descricao, valor, criado_por)
+       VALUES (?,?,?,?,?,?)`,
+      usuarioId, competencia, data, descricao.slice(0, 200), valor,
       Number((request.user as any)?.id || 0) || null)
     return reply.status(201).send({ ok: true })
   })

@@ -694,7 +694,9 @@ export const api = {
     }),
   getComissoesAvulsas: (competencia?: string) =>
     fetchApi<ComissaoAvulsa[]>(`/comissoes/avulsas${competencia ? `?competencia=${competencia}` : ''}`),
-  criarComissaoAvulsa: (dados: { usuarioId: number; competencia: string; descricao: string; valor: number }) =>
+  criarComissaoAvulsa: (dados: {
+    usuarioId: number; competencia: string; data?: string; descricao: string; valor: number
+  }) =>
     fetchApi<{ ok: boolean }>('/comissoes/avulsas', { method: 'POST', body: JSON.stringify(dados) }),
   excluirComissaoAvulsa: (id: number) =>
     fetchApi<{ ok: boolean }>(`/comissoes/avulsas/${id}`, { method: 'DELETE' }),

@@ -15,6 +15,8 @@ export interface ComissaoAvulsa {
   usuarioId: number
   usuario: string | null
   competencia: string
+  /** Quando a premiação aconteceu. Pode cair fora da competência em que o valor entra. */
+  data: string | null
   descricao: string
   valor: number
   criadoEm: string | null
@@ -36,25 +38,39 @@ export async function initComissaoAvulsa(): Promise<void> {
       INDEX idx_comissao_avulsa_usuario (usuario_id, competencia)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
+
+  // Data da premiação. Chegou depois, e os lançamentos antigos ficam com NULL — a
+  // competência continua sendo o que define o mês de pagamento, a data é o registro
+  // de quando o prêmio foi conquistado.
+  const [temData] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'comissao_avulsa'
+       AND COLUMN_NAME = 'data_premiacao'`)
+  if (!Number(temData?.total ?? 0)) {
+    await prisma.$executeRawUnsafe(
+      `ALTER TABLE comissao_avulsa ADD COLUMN data_premiacao DATE NULL`).catch(() => {})
+  }
 }
 
 const num = (v: any) => (v == null ? 0 : Number(v))
 
 export async function listarAvulsas(competencia?: string): Promise<ComissaoAvulsa[]> {
   const linhas = await prisma.$queryRawUnsafe<any[]>(
-    `SELECT a.*, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS usuario,
+    `SELECT a.*, DATE_FORMAT(a.data_premiacao, '%Y-%m-%d') AS data_fmt,
+            COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS usuario,
             COALESCE(c.NOME_USUARIO_COMPLETO, c.NOME_USU) AS criado_por_nome
        FROM comissao_avulsa a
        LEFT JOIN usuario u ON u.COD_USU = a.usuario_id
        LEFT JOIN usuario c ON c.COD_USU = a.criado_por
       ${competencia ? 'WHERE a.competencia = ?' : ''}
-      ORDER BY a.competencia DESC, usuario`,
+      ORDER BY a.competencia DESC, a.data_premiacao DESC, usuario`,
     ...(competencia ? [competencia] : [])).catch(() => [])
   return linhas.map((r) => ({
     id: Number(r.id),
     usuarioId: Number(r.usuario_id),
     usuario: r.usuario ?? null,
     competencia: String(r.competencia),
+    data: r.data_fmt ?? null,
     descricao: String(r.descricao ?? ''),
     valor: num(r.valor),
     criadoEm: r.criado_em ?? null,

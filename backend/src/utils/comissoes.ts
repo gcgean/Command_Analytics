@@ -396,15 +396,23 @@ export async function apurar(
   const avulsasDoMes: Map<number, ComissaoAvulsa[]> =
     await avulsasPorUsuario(competencia).catch(() => new Map())
 
+  // Prêmios de ranking (campeão de upgrades, melhor atendente) só saem com o mês fechado.
+  // Durante o mês corrente o líder muda a cada venda, e anunciar um vencedor provisório no
+  // Meu Desempenho de alguém que vai perder a posição no dia 28 é pior do que não mostrar
+  // nada. A partir do dia 1º o mês anterior está fechado e o vencedor aparece lá.
+  const hoje = new Date()
+  const competenciaAtual = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}`
+  const mesEncerrado = competencia < competenciaAtual
+
   // Uma lista só dos nomes que o CRM usa, para resolver o apelido de cada vendedor.
   const [campeoes, premioCampeao, premioAtendente, minAtend] = await Promise.all([
-    campeoesDeUpgrade(inicio, fim).catch(() => [] as number[]),
+    mesEncerrado ? campeoesDeUpgrade(inicio, fim).catch(() => [] as number[]) : [] as number[],
     valorPremioCampeao().catch(() => 0),
     valorPremioAtendente().catch(() => 0),
     minimoAtendimentos().catch(() => 200),
   ])
   // Só vale a consulta do ranking quando o prêmio está ligado.
-  const melhores = premioAtendente > 0
+  const melhores = premioAtendente > 0 && mesEncerrado
     ? melhoresAtendentes(await rankingAtendimentos(inicio, fim, minAtend).catch(() => []))
     : []
 

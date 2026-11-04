@@ -34,6 +34,23 @@ const mover = (comp: string, passos: number) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+/**
+ * Data sugerida para um prêmio: hoje, quando a competência é o mês corrente; o primeiro dia
+ * dela quando é um mês passado. Lançar "hoje" num mês retroativo registraria uma data que
+ * não aconteceu.
+ */
+const dataPadrao = (comp: string) => {
+  const h = new Date()
+  const atual = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}`
+  return comp === atual ? `${atual}-${String(h.getDate()).padStart(2, '0')}` : `${comp}-01`
+}
+
+const dataBr = (d: string | null) => {
+  if (!d) return null
+  const [a2, m, dia] = d.split('-')
+  return `${dia}/${m}/${a2}`
+}
+
 export function RemuneracaoComercial() {
   const { toast } = useToast()
   const [aba, setAba] = useState<'apuracao' | 'premios' | 'vendedores' | 'rateio' | 'canais' | 'plano'>('apuracao')
@@ -48,7 +65,7 @@ export function RemuneracaoComercial() {
   const [carregandoVendas, setCarregandoVendas] = useState(false)
   const [editandoRateio, setEditandoRateio] = useState<
     { venda: RateioVenda; linhas: Array<{ usuarioId: string; percentual: string }> } | null>(null)
-  const [novoPremio, setNovoPremio] = useState({ usuarioId: '', descricao: '', valor: '' })
+  const [novoPremio, setNovoPremio] = useState({ usuarioId: '', data: '', descricao: '', valor: '' })
   const [opcoesCanais, setOpcoesCanais] = useState<Array<{ canal: string; faturamento: number }>>([])
   const [novoCanal, setNovoCanal] = useState({ usuarioId: '', canal: '', blocoValor: '1000', valorPorBloco: '' })
   const [candidatos, setCandidatos] = useState<CandidatoComissao[]>([])
@@ -173,11 +190,12 @@ export function RemuneracaoComercial() {
       await api.criarComissaoAvulsa({
         usuarioId: Number(novoPremio.usuarioId),
         competencia,
+        data: novoPremio.data || dataPadrao(competencia),
         descricao: novoPremio.descricao.trim(),
         valor: Number(novoPremio.valor),
       })
       toast.success('Prêmio lançado.')
-      setNovoPremio({ usuarioId: '', descricao: '', valor: '' })
+      setNovoPremio({ usuarioId: '', data: '', descricao: '', valor: '' })
       await Promise.all([carregarAvulsas(), carregar()])
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível lançar.')
@@ -318,12 +336,15 @@ export function RemuneracaoComercial() {
             Para o que não tem regra no sistema — melhor nota do suporte, campanha pontual. Entra
             no total da pessoa no mês informado. Competência já fechada não aceita lançamento.
           </p>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
             <select className="input-field" value={novoPremio.usuarioId}
               onChange={(e) => setNovoPremio({ ...novoPremio, usuarioId: e.target.value })}>
               <option value="">Quem recebe...</option>
               {candidatos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
+            <input type="date" className="input-field" title="Data da premiação"
+              value={novoPremio.data || dataPadrao(competencia)}
+              onChange={(e) => setNovoPremio({ ...novoPremio, data: e.target.value })} />
             <input className="input-field md:col-span-2" placeholder="Motivo (ex.: melhor nota do suporte)"
               value={novoPremio.descricao}
               onChange={(e) => setNovoPremio({ ...novoPremio, descricao: e.target.value })} />
@@ -343,9 +364,10 @@ export function RemuneracaoComercial() {
                     <span className="block text-slate-800 dark:text-slate-100 truncate">
                       {a.usuario} — {a.descricao}
                     </span>
-                    {a.criadoPor && (
-                      <span className="block text-[11px] text-slate-400">lançado por {a.criadoPor}</span>
-                    )}
+                    <span className="block text-[11px] text-slate-400">
+                      {dataBr(a.data) ? `premiado em ${dataBr(a.data)}` : 'sem data informada'}
+                      {a.criadoPor ? ` · lançado por ${a.criadoPor}` : ''}
+                    </span>
                   </span>
                   <span className="flex items-center gap-3 shrink-0">
                     <span className="font-semibold text-emerald-600 dark:text-emerald-400">{brl(a.valor)}</span>

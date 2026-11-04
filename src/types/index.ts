@@ -1859,6 +1859,8 @@ export interface ComissaoAvulsa {
   usuarioId: number
   usuario: string | null
   competencia: string
+  /** Data da premiação (AAAA-MM-DD). Nula nos lançamentos feitos antes do campo existir. */
+  data: string | null
   descricao: string
   valor: number
   criadoEm: string | null
