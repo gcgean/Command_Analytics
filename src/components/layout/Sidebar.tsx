@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Headphones, Calendar, Monitor,
@@ -6,7 +6,7 @@ import {
   DollarSign, Award, Package,
   Code2, Tag, Video, Target, Server, Database, Store, Percent, Trophy,
   ChevronDown, ChevronRight, LogOut, Command, Menu, X, Star,
-  MessageSquare, ClipboardList, Map, TrendingUp, FileText,
+  MessageSquare, ClipboardList, Map, TrendingUp, FileText, Search,
   Smartphone, ShoppingBag, Megaphone, Clock, Settings, Receipt, ShieldCheck, Palette, ListChecks, Activity, KeyRound, WalletCards, Wallet, Archive, CreditCard, Bell, Cable, FolderKanban
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -288,6 +288,13 @@ function NavItemComponent({
   )
 }
 
+/**
+ * Compara ignorando acento e caixa: o menu tem "Precificação", "Comissões", "Implantação",
+ * e quem procura digita "precificacao" ou "comissoes" sem pensar duas vezes.
+ */
+const normalizar = (t: string) =>
+  t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
 interface SidebarProps {
   open: boolean
   onToggle: () => void
@@ -310,6 +317,22 @@ export function Sidebar({ open, onToggle, onNavigate }: SidebarProps) {
   const [favoritos, setFavoritos] = useState<string[]>(() => lerFavoritos(chave))
   useEffect(() => setFavoritos(lerFavoritos(chave)), [chave])
 
+  const [busca, setBusca] = useState('')
+  const campoBusca = useRef<HTMLInputElement>(null)
+
+  // Ctrl+K / Cmd+K é o atalho que todo mundo já tenta antes de procurar com o mouse.
+  useEffect(() => {
+    const atalho = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        if (collapsed) onToggle()
+        setTimeout(() => campoBusca.current?.focus(), 50)
+      }
+    }
+    window.addEventListener('keydown', atalho)
+    return () => window.removeEventListener('keydown', atalho)
+  }, [collapsed, onToggle])
+
   const alternarFavorito = (to: string) => {
     setFavoritos((atuais) => {
       const novos = atuais.includes(to) ? atuais.filter((f) => f !== to) : [...atuais, to]
@@ -325,6 +348,14 @@ export function Sidebar({ open, onToggle, onNavigate }: SidebarProps) {
   // Na ordem em que foram fixados; só telas que a pessoa ainda pode abrir.
   const disponiveis = visibleGroups.flatMap((g) => itensFolha(g.items))
   const itensFavoritos = favoritos.flatMap((to) => disponiveis.filter((i) => i.to === to).slice(0, 1))
+
+  const termo = busca.trim()
+  const resultados = termo
+    ? disponiveis.filter((i) => normalizar(i.rotulo).includes(normalizar(termo)))
+    : []
+
+  // Navegar fecha a busca: deixar o filtro aceso esconderia o menu inteiro na tela seguinte.
+  const aoNavegar = () => { setBusca(''); onNavigate() }
 
   const handleLogout = () => {
     logout()
@@ -375,9 +406,66 @@ export function Sidebar({ open, onToggle, onNavigate }: SidebarProps) {
           </button>
         </div>
 
+        {/* Busca de menu: o sistema passou de cinquenta telas, e rolar procurando pelo nome
+            virou o caminho mais lento para chegar em qualquer uma delas. */}
+        {!collapsed && (
+          <div className="px-3 pt-3">
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+              <input
+                ref={campoBusca}
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') setBusca('')
+                  if (e.key === 'Enter' && resultados[0]?.to) {
+                    navigate(resultados[0].to)
+                    aoNavegar()
+                  }
+                }}
+                placeholder="Buscar menu..."
+                aria-label="Buscar menu"
+                className="w-full pl-8 pr-7 py-1.5 text-sm rounded-lg bg-slate-100 dark:bg-slate-800 border border-transparent focus:border-blue-500 focus:bg-white dark:focus:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder:text-slate-400 outline-none transition-colors"
+              />
+              {busca && (
+                <button type="button" onClick={() => setBusca('')} aria-label="Limpar busca"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Nav */}
         <nav className="flex-1 overflow-y-auto py-4 px-2 space-y-4">
-          {itensFavoritos.length > 0 && (
+          {termo && (
+            <div>
+              <p className="px-3 mb-1 text-xs font-semibold text-slate-600 uppercase tracking-widest">
+                {resultados.length} resultado{resultados.length === 1 ? '' : 's'}
+              </p>
+              {resultados.length === 0 ? (
+                <p className="px-3 py-4 text-xs text-slate-400">
+                  Nenhum menu com esse nome. Telas sem permissão não aparecem na busca.
+                </p>
+              ) : (
+                <div className="space-y-0.5">
+                  {resultados.map((item) => (
+                    <NavItemComponent
+                      key={`busca-${item.to}`}
+                      item={item}
+                      rotulo={item.rotulo}
+                      collapsed={collapsed}
+                      onNavigate={aoNavegar}
+                      favoritos={favoritos}
+                      alternarFavorito={alternarFavorito}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          {!termo && itensFavoritos.length > 0 && (
             <div>
               {!collapsed && (
                 <p className="px-3 mb-1 text-xs font-semibold text-amber-600 dark:text-amber-500 uppercase tracking-widest flex items-center gap-1">
@@ -399,7 +487,7 @@ export function Sidebar({ open, onToggle, onNavigate }: SidebarProps) {
               </div>
             </div>
           )}
-          {visibleGroups.map(group => (
+          {!termo && visibleGroups.map(group => (
             <div key={group.group}>
               {!collapsed && (
                 <p className="px-3 mb-1 text-xs font-semibold text-slate-600 uppercase tracking-widest">
