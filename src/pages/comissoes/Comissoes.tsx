@@ -44,6 +44,7 @@ export function Comissoes() {
   const [certificados, setCertificados] = useState<AgenteCertificado[]>([])
   const [regras, setRegras] = useState<RegraUpgrade[]>([])
   const [salvandoRegras, setSalvandoRegras] = useState(false)
+  const [premioCampeao, setPremioCampeao] = useState(0)
   const [totalCertificados, setTotalCertificados] = useState({ comissao: 0, emitido: 0 })
   const [colaboradores, setColaboradores] = useState<Array<{ id: number; nome: string }>>([])
 
@@ -83,16 +84,21 @@ export function Comissoes() {
   }, [inicio, fim, toast])
 
   useEffect(() => { void consultar() }, [])
-  useEffect(() => { api.getRegrasUpgrade().then(setRegras).catch(() => {}) }, [])
+  useEffect(() => {
+    api.getRegrasUpgrade().then((r) => { setRegras(r.regras); setPremioCampeao(r.premioCampeao) })
+      .catch(() => {})
+  }, [])
 
   async function salvarRegras() {
     setSalvandoRegras(true)
     try {
       await api.salvarRegrasUpgrade(regras.map((r, i) => ({
         termo: r.padrao ? null : r.termo, percentual: r.percentual, ordem: (i + 1) * 10, ativo: r.ativo,
-      })))
+      })), premioCampeao)
       toast.success('Percentuais salvos. Valem para os próximos lançamentos.')
-      setRegras(await api.getRegrasUpgrade())
+      const atual = await api.getRegrasUpgrade()
+      setRegras(atual.regras)
+      setPremioCampeao(atual.premioCampeao)
       await consultar()
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível salvar.')
@@ -379,12 +385,8 @@ export function Comissoes() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-900 dark:text-slate-100 truncate">{r.colaboradorNome}</p>
-                    {/* A quebra evita a leitura errada de que tudo veio de venda. */}
                     <p className="text-xs text-slate-500">
-                      {r.comissaoVendas > 0 && `vendas ${brl(r.comissaoVendas)} (${r.vendas})`}
-                      {r.comissaoVendas > 0 && r.comissaoCertificados > 0 && ' · '}
-                      {r.comissaoCertificados > 0
-                        && `certificados ${brl(r.comissaoCertificados)} (${r.certificados})`}
+                      {r.vendas} upgrade(s) · operações {brl(r.totalOperacao)}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
@@ -453,6 +455,24 @@ export function Comissoes() {
                   </tbody>
                 </table>
               </div>
+              {/* O prêmio do campeão mora aqui porque é a mesma conversa: quanto o upgrade
+                  paga. Vale para quem somar mais comissão de upgrade no mês. */}
+              <div className="card flex flex-wrap items-end gap-3">
+                <div>
+                  <label className="block text-[11px] uppercase tracking-wide text-slate-500 mb-1">
+                    Prêmio do campeão de upgrades (R$)
+                  </label>
+                  <input type="number" step="0.01" min="0" className="input-field w-40"
+                    value={premioCampeao}
+                    onChange={(e) => setPremioCampeao(Number(e.target.value))} />
+                </div>
+                <p className="text-xs text-slate-500 pb-2.5 flex-1 min-w-[16rem]">
+                  Lançado automaticamente no Meu Desempenho de quem liderar a comissão de
+                  upgrades no mês. Em caso de empate, os empatados recebem — não há critério
+                  de desempate combinado. Zero desliga o prêmio.
+                </p>
+              </div>
+
               <div className="flex items-center justify-between">
                 <button
                   onClick={() => setRegras([
@@ -473,7 +493,8 @@ export function Comissoes() {
           {aba === 'certificados' && (
             <div className="space-y-3">
               <p className="text-xs text-slate-500">
-                Comissão de agente sobre certificados emitidos. O percentual sobe com o volume
+                Comissão de agente sobre certificados emitidos. Não entra no ranking de
+                vendas, que conta só os upgrades lançados. O percentual sobe com o volume
                 da <strong>equipe</strong> em cada certificadora (0% até 10, 1% de 11 a 20, 2% de
                 21 a 30, 3% de 31 a 40, 4% de 41 a 50 e 5% acima de 51) e cada pessoa participa
                 pela fatia que emitiu, com teto de 60%.

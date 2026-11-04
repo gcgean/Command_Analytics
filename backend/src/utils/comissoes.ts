@@ -4,6 +4,7 @@ import { treinamentosAvaliados, type TreinamentoAvaliado } from './treinamentos'
 import { comissaoAgente, certificadosEmitidos, type CertificadoEmitido } from './comissaoAgente'
 import { comissaoPorCanal, type ApuracaoCanal } from './comissaoCanal'
 import { avulsasPorUsuario, type ComissaoAvulsa } from './comissaoAvulsa'
+import { campeoesDeUpgrade, valorPremioCampeao } from './comissaoUpgrade'
 
 /**
  * Plano de remuneração comercial: fixo por fase + comissão progressiva sobre a implantação.
@@ -327,6 +328,8 @@ export interface LinhaApuracao {
     /** Os treinamentos que geraram o bônus — a pessoa precisa poder conferir um a um. */
     itens: TreinamentoAvaliado[]
   } | null
+  /** Prêmio de quem liderou a comissão de upgrades no mês. */
+  premioCampeaoUpgrade: number
   /** Prêmios lançados à mão para a competência. */
   avulsas: { total: number; itens: ComissaoAvulsa[] } | null
   /** Comissão por canal de aquisição: a cada bloco fechado no canal, um valor. */
@@ -390,6 +393,11 @@ export async function apurar(
     await avulsasPorUsuario(competencia).catch(() => new Map())
 
   // Uma lista só dos nomes que o CRM usa, para resolver o apelido de cada vendedor.
+  const [campeoes, premioCampeao] = await Promise.all([
+    campeoesDeUpgrade(inicio, fim).catch(() => [] as number[]),
+    valorPremioCampeao().catch(() => 0),
+  ])
+
   const nomesCrm = (await prisma.$queryRawUnsafe<any[]>(
     `SELECT DISTINCT vendedor_nome AS nome FROM crm_negocio
       WHERE vendedor_nome IS NOT NULL AND vendedor_nome <> ''`).catch(() => []))
@@ -678,9 +686,11 @@ export async function apurar(
         }
       : null
 
+    const premioCampeaoUpgrade = campeoes.includes(usuarioId) ? premioCampeao : 0
+
     const extras = (bonusMeta?.valor ?? 0) + (bonusTreinamento?.valor ?? 0)
       + comissaoUpgrades.valor + (comissaoCertificado?.comissao ?? 0)
-      + (comissaoCanais?.total ?? 0) + (avulsas?.total ?? 0)
+      + (comissaoCanais?.total ?? 0) + (avulsas?.total ?? 0) + premioCampeaoUpgrade
 
     const fechado = fechamentos.find((f) => Number(f.usuario_id) === Number(v.usuario_id))
 
@@ -713,6 +723,7 @@ export async function apurar(
       comissaoUpgrades,
       comissaoCertificado,
       comissaoCanais,
+      premioCampeaoUpgrade,
       avulsas,
       usaMetaValor: meta > 0,
       fechado: !!fechado,

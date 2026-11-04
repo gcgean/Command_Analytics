@@ -120,3 +120,52 @@ export async function salvarRegrasUpgrade(
     }
   })
 }
+
+/**
+ * Prêmio do campeão de upgrades do mês.
+ *
+ * Quem somar mais comissão de upgrade no período leva um valor fixo. Fica em cadastro, e
+ * não no código, porque é um número que a gestão muda — e empate paga aos dois: dar a
+ * apenas um exigiria um critério de desempate que ninguém combinou.
+ */
+const CHAVE_PREMIO = 'premio_campeao_upgrade'
+
+export async function initComissaoConfig(): Promise<void> {
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS comissao_config (
+      chave VARCHAR(60) PRIMARY KEY,
+      valor DECIMAL(12,2) NOT NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+  await prisma.$executeRawUnsafe(
+    `INSERT IGNORE INTO comissao_config (chave, valor) VALUES (?, ?)`, CHAVE_PREMIO, 100)
+}
+
+export async function valorPremioCampeao(): Promise<number> {
+  const [r] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT valor FROM comissao_config WHERE chave = ?`, CHAVE_PREMIO).catch(() => [])
+  return r ? Number(r.valor) : 0
+}
+
+export async function salvarPremioCampeao(valor: number): Promise<void> {
+  if (!Number.isFinite(valor) || valor < 0) throw new Error('Valor do prêmio inválido.')
+  await prisma.$executeRawUnsafe(
+    `INSERT INTO comissao_config (chave, valor) VALUES (?, ?)
+     ON DUPLICATE KEY UPDATE valor = VALUES(valor)`, CHAVE_PREMIO, valor)
+}
+
+/** Quem liderou a comissão de upgrades no período. Empate devolve todos os empatados. */
+export async function campeoesDeUpgrade(inicio: string, fim: string): Promise<number[]> {
+  const linhas = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT co.cod_func AS id, SUM(co.valor_comissao) AS total
+       FROM comissoes_funcionario co
+       INNER JOIN cliente c ON c.cod_cli = co.cod_cli
+      WHERE CAST(co.data_venda AS DATE) BETWEEN ? AND ?
+        AND c.cod_cli NOT IN (1,6,7,8) AND c.cod_cla <> 30
+      GROUP BY co.cod_func
+      ORDER BY total DESC`, inicio, fim).catch(() => [])
+  if (linhas.length === 0) return []
+  const topo = Number(linhas[0].total ?? 0)
+  if (!(topo > 0)) return []
+  return linhas.filter((l) => Number(l.total) === topo).map((l) => Number(l.id))
+}

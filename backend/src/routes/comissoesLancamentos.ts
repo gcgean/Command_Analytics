@@ -4,8 +4,8 @@ import { authMiddleware } from '../middleware/auth'
 import { registrarAuditoria } from '../utils/auditoria'
 import { getUserPermissions } from './grupos'
 import { rankingTreinamentos } from '../utils/treinamentos'
-import { listarRegrasUpgrade, percentualPelasRegras, salvarRegrasUpgrade }
-  from '../utils/comissaoUpgrade'
+import { listarRegrasUpgrade, percentualPelasRegras, salvarRegrasUpgrade,
+  valorPremioCampeao, salvarPremioCampeao } from '../utils/comissaoUpgrade'
 import { comissaoAgente } from '../utils/comissaoAgente'
 
 /**
@@ -187,50 +187,20 @@ export async function comissoesLancamentosRoutes(app: FastifyInstance) {
         GROUP BY co.cod_func, nome_usu
         ORDER BY total_comissao DESC`, inicio, fim)
 
-    // Certificado digital paga por fora de comissoes_funcionario: sem somar aqui, o ranking
-    // diria que quem só emite certificado não recebeu nada no mês.
-    const agentes = await comissaoAgente(inicio, fim).catch(() => [])
-    const porAgente = new Map<number, { comissao: number; certificados: number }>()
-    for (const a of agentes) {
-      const atual = porAgente.get(a.usuarioId) ?? { comissao: 0, certificados: 0 }
-      atual.comissao += a.comissao
-      atual.certificados += a.qtdIndividual
-      porAgente.set(a.usuarioId, atual)
-    }
-
-    const base = linhas.map((r) => ({
-      colaboradorId: Number(r.cod_func),
-      colaboradorNome: String(r.nome_usu ?? '').trim(),
-      vendas: num(r.total_comissao),
-      totalOperacao: num(r.total_operacao),
-      quantidade: Number(r.vendas ?? 0),
-    }))
-
-    // Quem só tem certificado no período não aparece na consulta acima.
-    for (const [usuarioId, dados] of porAgente) {
-      if (base.some((b) => b.colaboradorId === usuarioId)) continue
-      const linha = agentes.find((a) => a.usuarioId === usuarioId)
-      base.push({
-        colaboradorId: usuarioId,
-        colaboradorNome: linha?.usuario ?? `Usuário ${usuarioId}`,
-        vendas: 0, totalOperacao: 0, quantidade: 0,
-      })
-      void dados
-    }
-
-    const itens = base.map((b) => {
-      const cert = porAgente.get(b.colaboradorId) ?? { comissao: 0, certificados: 0 }
-      return {
-        colaboradorId: b.colaboradorId,
-        colaboradorNome: b.colaboradorNome,
-        vendas: b.quantidade,
-        totalOperacao: b.totalOperacao,
-        comissaoVendas: b.vendas,
-        comissaoCertificados: Number(cert.comissao.toFixed(2)),
-        certificados: cert.certificados,
-        total: Number((b.vendas + cert.comissao).toFixed(2)),
-      }
-    }).sort((a, b) => b.total - a.total)
+    // Só os upgrades lançados: o certificado digital tem a sua própria aba e o seu próprio
+    // rateio, e misturar os dois num ranking só esconde quem vendeu de quem emitiu.
+    const itens = linhas
+      .map((r) => ({
+        colaboradorId: Number(r.cod_func),
+        colaboradorNome: String(r.nome_usu ?? '').trim(),
+        vendas: Number(r.vendas ?? 0),
+        totalOperacao: num(r.total_operacao),
+        comissaoVendas: num(r.total_comissao),
+        comissaoCertificados: 0,
+        certificados: 0,
+        total: num(r.total_comissao),
+      }))
+      .sort((a, b) => b.total - a.total)
       .map((x, i) => ({ ...x, posicao: i + 1 }))
 
     return { inicio, fim, itens }
@@ -275,12 +245,16 @@ export async function comissoesLancamentosRoutes(app: FastifyInstance) {
   // ── Percentuais de comissão dos upgrades ──
 
   app.get('/upgrade-regras', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } },
-    async () => listarRegrasUpgrade())
+    async () => ({ regras: await listarRegrasUpgrade(), premioCampeao: await valorPremioCampeao() }))
 
   app.put('/upgrade-regras', { preHandler: [authMiddleware, exigirPermissaoDeLancamento], schema: { tags: ['Comissões'] } }, async (request, reply) => {
-    const b = request.body as { regras?: Array<{ termo: string | null; percentual: number; ordem?: number; ativo?: boolean }> }
+    const b = request.body as {
+      regras?: Array<{ termo: string | null; percentual: number; ordem?: number; ativo?: boolean }>
+      premioCampeao?: number
+    }
     try {
       await salvarRegrasUpgrade(b.regras ?? [])
+      if (b.premioCampeao !== undefined) await salvarPremioCampeao(Number(b.premioCampeao))
     } catch (e: any) {
       return reply.status(400).send({ error: String(e?.message ?? e) })
     }

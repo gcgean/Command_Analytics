@@ -1930,6 +1930,8 @@ export interface LinhaComissao {
   } | null
   /** Comissão dos upgrades já lançados na tela Comissões, no período. */
   comissaoUpgrades: { quantidade: number; valorOperacao: number; valor: number }
+  /** Prêmio de quem liderou a comissão de upgrades no mês; zero para os demais. */
+  premioCampeaoUpgrade: number
   /** Prêmios lançados à mão para a competência. */
   avulsas: {
     total: number

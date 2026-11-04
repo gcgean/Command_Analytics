@@ -74,6 +74,7 @@ export function MeuDesempenho() {
   const somaBonus = (v?.bonusMeta?.valor ?? 0) + (v?.bonusTreinamento?.valor ?? 0)
     + (v?.comissaoUpgrades?.valor ?? 0) + (v?.comissaoCertificado?.comissao ?? 0)
     + (v?.comissaoCanais?.total ?? 0) + (v?.avulsas?.total ?? 0)
+    + (v?.premioCampeaoUpgrade ?? 0)
 
   return (
     <div className="space-y-5 pb-10">
@@ -157,6 +158,9 @@ export function MeuDesempenho() {
                   {v.comissaoUpgrades.valor > 0 && (
                     <p>Comissão dos upgrades: {brl(v.comissaoUpgrades.valor)}</p>
                   )}
+                  {v.premioCampeaoUpgrade > 0 && (
+                    <p>Campeão de upgrades: {brl(v.premioCampeaoUpgrade)}</p>
+                  )}
                   {v.avulsas && v.avulsas.total > 0 && (
                     <p>Prêmios: {brl(v.avulsas.total)}</p>
                   )}
@@ -233,12 +237,24 @@ export function MeuDesempenho() {
           {/* Bônus por meta batida e por treinamento bem avaliado. Só aparece para quem tem
               esses bônus no cadastro — para os demais seria ruído. */}
           {(v.bonusMeta || v.bonusTreinamento || v.comissaoUpgrades.valor > 0
-            || v.comissaoCertificado || v.comissaoCanais || v.avulsas) && (
+            || v.comissaoCertificado || v.comissaoCanais || v.avulsas
+            || v.premioCampeaoUpgrade > 0) && (
             <Card>
               <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-2 mb-3">
                 <Award className="w-4 h-4" /> O que eu recebo no mês
               </h2>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {v.premioCampeaoUpgrade > 0 && (
+                  <div className="rounded-xl border border-amber-300 dark:border-amber-600/50 bg-amber-50 dark:bg-amber-500/10 p-3">
+                    <p className="text-xs text-amber-700 dark:text-amber-400">🏆 Campeão de upgrades</p>
+                    <p className="text-2xl font-black text-amber-700 dark:text-amber-400 mt-0.5">
+                      {brl(v.premioCampeaoUpgrade)}
+                    </p>
+                    <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-1">
+                      Você liderou a comissão de upgrades no mês.
+                    </p>
+                  </div>
+                )}
                 {v.avulsas && (
                   <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
                     <p className="text-xs text-slate-500">Prêmios do mês</p>

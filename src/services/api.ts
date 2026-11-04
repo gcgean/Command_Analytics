@@ -708,9 +708,14 @@ export const api = {
     fetchApi<{ ok: boolean }>('/comissoes/canais', { method: 'POST', body: JSON.stringify(dados) }),
   excluirRegraCanal: (id: number) =>
     fetchApi<{ ok: boolean }>(`/comissoes/canais/${id}`, { method: 'DELETE' }),
-  getRegrasUpgrade: () => fetchApi<RegraUpgrade[]>('/comissoes/upgrade-regras'),
-  salvarRegrasUpgrade: (regras: Array<{ termo: string | null; percentual: number; ordem?: number; ativo?: boolean }>) =>
-    fetchApi<{ ok: boolean }>('/comissoes/upgrade-regras', { method: 'PUT', body: JSON.stringify({ regras }) }),
+  getRegrasUpgrade: () =>
+    fetchApi<{ regras: RegraUpgrade[]; premioCampeao: number }>('/comissoes/upgrade-regras'),
+  salvarRegrasUpgrade: (
+    regras: Array<{ termo: string | null; percentual: number; ordem?: number; ativo?: boolean }>,
+    premioCampeao?: number,
+  ) => fetchApi<{ ok: boolean }>('/comissoes/upgrade-regras', {
+    method: 'PUT', body: JSON.stringify({ regras, premioCampeao }),
+  }),
   getComissaoCertificados: (p: { inicio: string; fim: string }) =>
     fetchApi<{
       inicio: string; fim: string; total: number; valorComissao: number; valorEmitido: number
