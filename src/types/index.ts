@@ -1981,7 +1981,12 @@ export interface MeuDesempenhoComissao {
       codigo: number; cliente: string; cidade: string | null; segmento: string | null
       valor: number; data: string | null
     }>
-    upgrades: Array<{ cliente: string; descricao: string; valor: number; data: string | null }>
+    upgrades: Array<{
+      cliente: string; descricao: string; valor: number
+      /** Comissão já decidida no lançamento, e o percentual que ela representa. */
+      comissao: number; percentual: number
+      data: string | null
+    }>
     assinaturas: Array<{
       cliente: string; produto: string | null; plano: string | null
       periodicidade: string | null; servidor: string | null; valor: number; data: string | null

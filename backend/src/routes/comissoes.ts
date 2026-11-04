@@ -406,7 +406,7 @@ export async function comissoesRoutes(app: FastifyInstance) {
               c.valor_migracao * (COALESCE(r.percentual, 100) / 100) AS valor_migracao,
               c.valor_mensalidade * (COALESCE(r.percentual, 100) / 100) AS valor_mensalidade,
               COALESCE(r.percentual, 100) AS percentual,
-              DATE(${colunaData}) AS data
+              DATE_FORMAT(${colunaData}, '%Y-%m-%d') AS data
          FROM processo_implantacao_comercial c
          LEFT JOIN processo_implantacao pi ON pi.id = c.id_processo
          LEFT JOIN cliente cli ON cli.cod_cli = pi.id_cli
@@ -424,7 +424,7 @@ export async function comissoesRoutes(app: FastifyInstance) {
     const clientesNovos = minha ? await prisma.$queryRawUnsafe<any[]>(
       `SELECT c.cod_cli, CASE WHEN c.NOME_FANTASIA REGEXP '[A-Za-z]' THEN c.NOME_FANTASIA
                    ELSE COALESCE(NULLIF(c.NOME_CLI, ''), c.NOME_FANTASIA) END AS cliente, c.CIDRES_CLI AS cidade,
-              c.valor_mensalidade AS valor, DATE(c.DATACADASTRO_CLI) AS data,
+              c.valor_mensalidade AS valor, DATE_FORMAT(c.DATACADASTRO_CLI, '%Y-%m-%d') AS data,
               COALESCE(cc.NOME_CLA, 'Sem classificação') AS segmento
          FROM cliente c
          LEFT JOIN classif_cliente cc ON cc.COD_CLA = c.cod_cla
@@ -445,7 +445,8 @@ export async function comissoesRoutes(app: FastifyInstance) {
     const upgrades = minha ? await prisma.$queryRawUnsafe<any[]>(
       `SELECT co.descricao, CASE WHEN cli.NOME_FANTASIA REGEXP '[A-Za-z]' THEN cli.NOME_FANTASIA
                    ELSE COALESCE(NULLIF(cli.NOME_CLI, ''), cli.NOME_FANTASIA) END AS cliente, co.Valor_operacao AS valor,
-              CAST(co.data_venda AS DATE) AS data
+              co.valor_comissao AS comissao,
+              DATE_FORMAT(co.data_venda, '%Y-%m-%d') AS data
          FROM comissoes_funcionario co
          INNER JOIN cliente cli ON cli.cod_cli = co.cod_cli
         WHERE co.cod_func = ? AND CAST(co.data_venda AS DATE) BETWEEN ? AND ?
@@ -456,7 +457,7 @@ export async function comissoesRoutes(app: FastifyInstance) {
 
     const assinaturas = minha ? await prisma.$queryRawUnsafe<any[]>(
       `SELECT a.cliente_nome AS cliente, a.app_nome AS produto, a.plano, a.periodicidade,
-              (a.mensal + a.valor_modulos) AS valor, DATE(a.inicio) AS data,
+              (a.mensal + a.valor_modulos) AS valor, DATE_FORMAT(a.inicio, '%Y-%m-%d') AS data,
               s.nome AS servidor
          FROM paycore_assinatura a
          INNER JOIN paycore_cliente pc
@@ -503,12 +504,19 @@ export async function comissoesRoutes(app: FastifyInstance) {
           valor: Number(c.valor ?? 0),
           data: dataTexto(c.data),
         })),
-        upgrades: upgrades.map((u2) => ({
-          cliente: u2.cliente ?? '—',
-          descricao: u2.descricao ?? '—',
-          valor: Number(u2.valor ?? 0),
-          data: dataTexto(u2.data),
-        })),
+        upgrades: upgrades.map((u2) => {
+          const operacao = Number(u2.valor ?? 0)
+          const comissao = Number(u2.comissao ?? 0)
+          return {
+            cliente: u2.cliente ?? '—',
+            descricao: u2.descricao ?? '—',
+            valor: operacao,
+            comissao,
+            // O percentual não é guardado: sai da razão entre os dois, como no relatório antigo.
+            percentual: operacao > 0 ? Number(((comissao / operacao) * 100).toFixed(2)) : 0,
+            data: dataTexto(u2.data),
+          }
+        }),
         assinaturas: assinaturas.map((a4) => ({
           cliente: a4.cliente ?? '—',
           produto: a4.produto ?? null,

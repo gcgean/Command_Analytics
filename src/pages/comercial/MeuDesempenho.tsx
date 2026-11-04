@@ -667,15 +667,22 @@ export function MeuDesempenho() {
                     <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                       Upgrades e módulos ({dados.detalhe.upgrades.length})
                     </h3>
-                    <span className="text-xs text-slate-500">{brl(v.composicao.upgrades)} na base</span>
+                    <span className="text-xs text-slate-500">
+                      {brl(v.composicao.upgrades)} na base ·{' '}
+                      <strong className="text-emerald-600 dark:text-emerald-400">
+                        {brl(dados.detalhe.upgrades.reduce((t, u) => t + u.comissao, 0))}
+                      </strong> de comissão
+                    </span>
                   </div>
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm min-w-[520px]">
+                    <table className="w-full text-sm min-w-[620px]">
                       <thead className="bg-slate-50 dark:bg-slate-900/50">
                         <tr className="text-left text-slate-600 dark:text-slate-400">
                           <th className="px-4 py-2 font-medium">Cliente</th>
                           <th className="px-3 py-2 font-medium">Produto / módulo</th>
                           <th className="px-3 py-2 font-medium text-right">Valor</th>
+                          <th className="px-3 py-2 font-medium text-right">%</th>
+                          <th className="px-3 py-2 font-medium text-right">Comissão</th>
                           <th className="px-4 py-2 font-medium text-center">Data</th>
                         </tr>
                       </thead>
@@ -684,7 +691,14 @@ export function MeuDesempenho() {
                           <tr key={i} className="border-t border-slate-200 dark:border-slate-700">
                             <td className="px-4 py-2 text-slate-800 dark:text-slate-200">{u.cliente}</td>
                             <td className="px-3 py-2 text-slate-600 dark:text-slate-300">{u.descricao}</td>
-                            <td className="px-3 py-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">{brl(u.valor)}</td>
+                            <td className="px-3 py-2 text-right text-slate-700 dark:text-slate-300">{brl(u.valor)}</td>
+                            <td className="px-3 py-2 text-right text-slate-500">
+                              {u.percentual > 0 ? `${u.percentual}%` : '—'}
+                            </td>
+                            <td className={clsx('px-3 py-2 text-right font-medium',
+                              u.comissao > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400')}>
+                              {brl(u.comissao)}
+                            </td>
                             <td className="px-4 py-2 text-center text-slate-500 text-xs whitespace-nowrap">{dataBR(u.data)}</td>
                           </tr>
                         ))}
