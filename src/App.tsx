@@ -115,6 +115,7 @@ import { Perfil } from './pages/perfil/Perfil'
 
 // Grupos de Acesso
 import { GruposAcesso } from './pages/grupos/GruposAcesso'
+import { ChavesApi } from './pages/configuracoes/ChavesApi'
 
 // 404
 import { NotFound } from './pages/NotFound'
@@ -290,6 +291,7 @@ export default function App() {
         <Route path="cadastro-servicos" element={<PermissionRoute recurso={['cadastro-servicos', 'cadastro-servicos-editar']}><CadastroServicos /></PermissionRoute>} />
         <Route path="usuarios" element={<PermissionRoute recurso="usuarios"><Usuarios /></PermissionRoute>} />
         <Route path="grupos-acesso" element={<PermissionRoute recurso="grupos-acesso"><GruposAcesso /></PermissionRoute>} />
+        <Route path="chaves-api" element={<PermissionRoute recurso="chaves-api"><ChavesApi /></PermissionRoute>} />
         <Route path="perfil" element={<Perfil />} />
       </Route>
 

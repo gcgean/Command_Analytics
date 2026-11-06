@@ -1867,6 +1867,15 @@ export interface ComissaoAvulsa {
   criadoPor: string | null
 }
 
+export interface ChaveApi {
+  id: number
+  nome: string
+  ativo: boolean
+  criadoEm: string | null
+  ultimoUsoEm: string | null
+  chamadas: number
+}
+
 export interface RateioVenda {
   idProcesso: number
   cliente: string | null

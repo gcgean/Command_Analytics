@@ -80,6 +80,8 @@ import { initArquivoSolicitacoes } from './utils/arquivoSolicitacoes'
 import { initDemandaPublica } from './utils/demandaPublica'
 import { ensureConfiguracaoEmail } from './utils/email'
 import { publicoRoutes } from './routes/publico'
+import { integracaoAgendaRoutes, chavesApiRoutes } from './routes/integracaoAgenda'
+import { initApiChaves } from './utils/apiChaves'
 import { emailRoutes } from './routes/email'
 import { metasDevRoutes, initMetasDev } from './routes/metasDev'
 import { orcamentosRoutes, initOrcamentos } from './routes/orcamentos'
@@ -219,6 +221,9 @@ app.register(async (api) => {
   api.register(atendimentosRoutes, { prefix: '/atendimentos' })
   api.register(solicitacoesRoutes, { prefix: '/solicitacoes' })
   api.register(agendaRoutes,       { prefix: '/agenda' })
+  // Porta para aplicações externas: chave de API própria, sem sessão de usuário.
+  api.register(integracaoAgendaRoutes, { prefix: '/integracao/agenda' })
+  api.register(chavesApiRoutes,    { prefix: '/integracao/chaves' })
   api.register(planosRoutes,       { prefix: '/planos' })
   api.register(pipelineRoutes,     { prefix: '/pipeline' })
   api.register(crmRoutes,          { prefix: '/crm' })
@@ -320,6 +325,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
   initPrecificacaoPublica()
     .then(() => console.log('✓ Tabela de links de precificação verificada'))
     .catch(e => console.warn('⚠ Precificação pública init:', e.message))
+  initApiChaves()
+    .then(() => console.log('✓ Tabela de chaves de API verificada'))
+    .catch(e => console.warn('⚠ Chaves de API init:', e.message))
   initComunicados()
     .then(() => console.log('✓ Tabelas de comunicados verificadas'))
     .catch(e => console.warn('⚠ Comunicados init:', e.message))

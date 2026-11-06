@@ -74,6 +74,7 @@ export const SYSTEM_RESOURCES = [
   { id: 'cadastro-servicos-editar', label: 'Cadastro de Serviços — Criar/Editar', grupo: 'INFRAESTRUTURA' },
   { id: 'usuarios',                 label: 'Usuários',                        grupo: 'INFRAESTRUTURA' },
   { id: 'grupos-acesso',            label: 'Grupos de Acesso',                grupo: 'INFRAESTRUTURA' },
+  { id: 'chaves-api',               label: 'Chaves de API',                   grupo: 'INFRAESTRUTURA' },
 ]
 
 // ─── Helper: busca permissões efetivas de um usuário ─────────

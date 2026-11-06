@@ -6,7 +6,7 @@ import type {
   PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
   PlanoComissao, VendedorComissao, CandidatoComissao, RegraCanalComissao, ComissaoAvulsa, RateioVenda, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
   ListaLancamentosComissao, ListaPendentesComissao, RankingComissao, RankingTreinamento,
-  RegraUpgrade, RankingAtendimento,
+  RegraUpgrade, RankingAtendimento, ChaveApi,
   Cancelamento, ListaCancelamentos,
   IndicacaoCertificado, ListaIndicacoesCertificado, ContadorComissaoCertificado, AgenteCertificado, Contador, Versao, Servidor, Conexao, ConexoesResposta, EtapaCadastro,
   ChecklistCadastro, ServicoCadastro, ImplantacaoChecklistDetalhe, ImplantacaoPainel, ImplantacaoConfiguracaoCliente, ImplantacaoConcluidosResposta, Usuario,
@@ -700,6 +700,13 @@ export const api = {
     fetchApi<{ ok: boolean }>('/comissoes/avulsas', { method: 'POST', body: JSON.stringify(dados) }),
   excluirComissaoAvulsa: (id: number) =>
     fetchApi<{ ok: boolean }>(`/comissoes/avulsas/${id}`, { method: 'DELETE' }),
+  getChavesApi: () => fetchApi<ChaveApi[]>('/integracao/chaves'),
+  criarChaveApi: (nome: string) =>
+    fetchApi<{ id: number; token: string }>('/integracao/chaves', {
+      method: 'POST', body: JSON.stringify({ nome }),
+    }),
+  revogarChaveApi: (id: number) =>
+    fetchApi<{ ok: boolean }>(`/integracao/chaves/${id}`, { method: 'DELETE' }),
   getRegrasCanal: () => fetchApi<RegraCanalComissao[]>('/comissoes/canais'),
   getOpcoesCanais: () =>
     fetchApi<Array<{ canal: string; negocios: number; faturamento: number }>>('/comissoes/canais/opcoes'),
