@@ -196,17 +196,25 @@ export function RemuneracaoComercial() {
       toast.error('Escolha a pessoa, descreva o prêmio e informe o valor.')
       return
     }
+    // A competência sai da DATA do lançamento, não do mês aberto na tela. Lançar em
+    // novembro um prêmio datado de outubro já jogou onze registros no mês errado: o mês
+    // que a pessoa está olhando não diz nada sobre quando o prêmio foi conquistado. Para
+    // pagar num mês diferente do da conquista, o campo existe na edição da linha.
+    const dataEscolhida = novoPremio.data || dataPadrao(competencia)
+    const compDoLancamento = dataEscolhida.slice(0, 7)
     try {
       await api.criarComissaoAvulsa({
         usuarioId: Number(novoPremio.usuarioId),
-        competencia,
-        data: novoPremio.data || dataPadrao(competencia),
+        competencia: compDoLancamento,
+        data: dataEscolhida,
         tipo: novoPremio.tipo,
         descricao: novoPremio.descricao.trim(),
         observacao: novoPremio.observacao.trim(),
         valor: Number(novoPremio.valor),
       })
-      toast.success('Lançamento registrado.')
+      toast.success(compDoLancamento === competencia
+        ? 'Lançamento registrado.'
+        : `Lançamento registrado em ${rotuloComp(compDoLancamento)}, pela data informada.`)
       // O tipo fica: quem lança treinamento costuma lançar vários seguidos.
       setNovoPremio({
         usuarioId: '', data: '', tipo: novoPremio.tipo,
@@ -426,6 +434,14 @@ export function RemuneracaoComercial() {
               placeholder="Observação (opcional) — o contexto que explica o lançamento depois"
               value={novoPremio.observacao}
               onChange={(e) => setNovoPremio({ ...novoPremio, observacao: e.target.value })} />
+            {(novoPremio.data || dataPadrao(competencia)).slice(0, 7) !== competencia && (
+              <p className="md:col-span-2 xl:col-span-6 text-[11px] text-amber-600 dark:text-amber-400">
+                Pela data informada, este lançamento entra em{' '}
+                {rotuloComp((novoPremio.data || dataPadrao(competencia)).slice(0, 7))} — não
+                aparecerá nesta lista. Para pagar noutro mês, lance e ajuste o mês de pagamento
+                na edição da linha.
+              </p>
+            )}
           </div>
 
           {avulsas.length > 0 && (
