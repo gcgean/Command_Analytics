@@ -4,7 +4,7 @@ import type {
   ChaveIaExterna, ConsumoIaExterna, InstalacaoPendenteIa, PoliticaProvisionamentoIa, DestinatarioComunicado, ComunicadoHistorico, EntregaComunicado,
   MetaDev, PropostaOrcamento, ParametrosPrecificacao, MigracaoTabelada,
   PrecificacaoPublicaResposta, LinkPrecificacao, ClientePaycore, ServidorPaycore, ResultadoSyncPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, ConfigCrm, CanalCrm, ConfigRevendas, TesteRevendas, MapaRevendas, DashboardRevendas,
-  PlanoComissao, VendedorComissao, CandidatoComissao, RegraCanalComissao, ComissaoAvulsa, RateioVenda, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
+  PlanoComissao, VendedorComissao, CandidatoComissao, RegraCanalComissao, ComissaoAvulsa, TipoAvulsa, RateioVenda, ApuracaoComissao, MeuDesempenhoComissao, PainelCrm, NegocioFunil, ListaNegociosFunil, FiltrosFunil, NegocioCrm, VendedorCrm, ResultadoSyncCrm, AvaliacaoNPS, MonitorAtendimento, Campanha, CampanhaPayload, CampanhaCliente, FiltroClientesCampanha,
   ListaLancamentosComissao, ListaPendentesComissao, RankingComissao, RankingTreinamento,
   RegraUpgrade, RankingAtendimento, ChaveApi,
   Cancelamento, ListaCancelamentos,
@@ -695,9 +695,17 @@ export const api = {
   getComissoesAvulsas: (competencia?: string) =>
     fetchApi<ComissaoAvulsa[]>(`/comissoes/avulsas${competencia ? `?competencia=${competencia}` : ''}`),
   criarComissaoAvulsa: (dados: {
-    usuarioId: number; competencia: string; data?: string; descricao: string; valor: number
+    usuarioId: number; competencia: string; data?: string; tipo: TipoAvulsa
+    descricao: string; observacao?: string; valor: number
   }) =>
     fetchApi<{ ok: boolean }>('/comissoes/avulsas', { method: 'POST', body: JSON.stringify(dados) }),
+  atualizarComissaoAvulsa: (id: number, dados: {
+    usuarioId: number; competencia: string; data?: string; tipo: TipoAvulsa
+    descricao: string; observacao?: string; valor: number
+  }) =>
+    fetchApi<{ ok: boolean }>(`/comissoes/avulsas/${id}`, {
+      method: 'PUT', body: JSON.stringify(dados),
+    }),
   excluirComissaoAvulsa: (id: number) =>
     fetchApi<{ ok: boolean }>(`/comissoes/avulsas/${id}`, { method: 'DELETE' }),
   getChavesApi: () => fetchApi<ChaveApi[]>('/integracao/chaves'),

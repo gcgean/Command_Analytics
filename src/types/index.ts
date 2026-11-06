@@ -1854,6 +1854,9 @@ export interface VendedorComissao {
   ativo: boolean
 }
 
+/** Natureza do lançamento avulso. Lançamentos antigos, sem tipo, contam como 'premio'. */
+export type TipoAvulsa = 'premio' | 'treinamento' | 'pagamento-cliente'
+
 export interface ComissaoAvulsa {
   id: number
   usuarioId: number
@@ -1861,7 +1864,9 @@ export interface ComissaoAvulsa {
   competencia: string
   /** Data da premiação (AAAA-MM-DD). Nula nos lançamentos feitos antes do campo existir. */
   data: string | null
+  tipo: TipoAvulsa
   descricao: string
+  observacao: string | null
   valor: number
   criadoEm: string | null
   criadoPor: string | null
@@ -1959,10 +1964,7 @@ export interface LinhaComissao {
   /** Prêmios lançados à mão para a competência. */
   avulsas: {
     total: number
-    itens: Array<{
-      id: number; usuarioId: number; usuario: string | null; competencia: string
-      descricao: string; valor: number; criadoEm: string | null; criadoPor: string | null
-    }>
+    itens: ComissaoAvulsa[]
   } | null
   /** Comissão por canal de aquisição: a cada bloco fechado no canal, um valor fixo. */
   comissaoCanais: {

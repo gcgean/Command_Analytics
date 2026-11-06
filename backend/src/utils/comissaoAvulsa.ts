@@ -10,6 +10,15 @@ import { prisma } from '../database/client'
  * Guarda quem lançou e quando: dinheiro lançado à mão é o que mais gera pergunta depois.
  */
 
+/**
+ * Natureza do lançamento. Nem tudo que entra aqui é prêmio: treinamento e repasse de
+ * pagamento feito pelo cliente têm outra origem e outra conversa com o contábil, e sem o
+ * tipo tudo virava texto livre na descrição.
+ */
+export type TipoAvulsa = 'premio' | 'treinamento' | 'pagamento-cliente'
+
+export const TIPOS_AVULSA: TipoAvulsa[] = ['premio', 'treinamento', 'pagamento-cliente']
+
 export interface ComissaoAvulsa {
   id: number
   usuarioId: number
@@ -17,7 +26,9 @@ export interface ComissaoAvulsa {
   competencia: string
   /** Quando a premiação aconteceu. Pode cair fora da competência em que o valor entra. */
   data: string | null
+  tipo: TipoAvulsa
   descricao: string
+  observacao: string | null
   valor: number
   criadoEm: string | null
   criadoPor: string | null
@@ -50,7 +61,27 @@ export async function initComissaoAvulsa(): Promise<void> {
     await prisma.$executeRawUnsafe(
       `ALTER TABLE comissao_avulsa ADD COLUMN data_premiacao DATE NULL`).catch(() => {})
   }
+
+  // Tipo e observação chegaram depois. O padrão 'premio' mantém os lançamentos antigos
+  // coerentes: até existir o campo, tudo que se lançava aqui era prêmio.
+  await adicionarColuna('tipo', `VARCHAR(20) NOT NULL DEFAULT 'premio'`)
+  await adicionarColuna('observacao', 'VARCHAR(500) NULL')
 }
+
+/** ALTER só quando a coluna não existe — o init roda a cada boot do servidor. */
+async function adicionarColuna(nome: string, definicao: string): Promise<void> {
+  const [ja] = await prisma.$queryRawUnsafe<Array<{ total: number }>>(`
+    SELECT COUNT(*) AS total FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'comissao_avulsa'
+       AND COLUMN_NAME = ?`, nome)
+  if (Number(ja?.total ?? 0)) return
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE comissao_avulsa ADD COLUMN ${nome} ${definicao}`).catch(() => {})
+}
+
+/** Texto vindo do banco pode ser qualquer coisa; fora da lista, vale o padrão. */
+export const normalizarTipo = (v: any): TipoAvulsa =>
+  (TIPOS_AVULSA as string[]).includes(String(v)) ? (String(v) as TipoAvulsa) : 'premio'
 
 const num = (v: any) => (v == null ? 0 : Number(v))
 
@@ -71,7 +102,9 @@ export async function listarAvulsas(competencia?: string): Promise<ComissaoAvuls
     usuario: r.usuario ?? null,
     competencia: String(r.competencia),
     data: r.data_fmt ?? null,
+    tipo: normalizarTipo(r.tipo),
     descricao: String(r.descricao ?? ''),
+    observacao: r.observacao ? String(r.observacao) : null,
     valor: num(r.valor),
     criadoEm: r.criado_em ?? null,
     criadoPor: r.criado_por_nome ?? null,

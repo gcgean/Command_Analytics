@@ -4,7 +4,7 @@ import { authMiddleware } from '../middleware/auth'
 import { listarPlanos, apurar, fechar, reabrir, nomesCrmDoVendedor } from '../utils/comissoes'
 import { getUserPermissions } from './grupos'
 import { listarRegrasCanal, faturamentoPorCanal } from '../utils/comissaoCanal'
-import { listarAvulsas } from '../utils/comissaoAvulsa'
+import { listarAvulsas, normalizarTipo } from '../utils/comissaoAvulsa'
 import { listarVendasParaRateio, salvarRateio } from '../utils/rateioVenda'
 
 /** Plano de remuneração comercial: planos, faixas, vendedores e apuração mensal. */
@@ -177,6 +177,8 @@ export async function comissoesRoutes(app: FastifyInstance) {
     const competencia = String(b.competencia ?? '')
     const descricao = String(b.descricao ?? '').trim()
     const valor = Number(b.valor ?? 0)
+    const tipo = normalizarTipo(b.tipo)
+    const observacao = String(b.observacao ?? '').trim().slice(0, 500)
     // Data da premiação: opcional no corpo, mas registrada sempre. Sem ela, assume o
     // primeiro dia da competência — nunca "hoje", que mentiria num lançamento retroativo.
     const dataInformada = String(b.data ?? '').trim()
@@ -201,11 +203,64 @@ export async function comissoesRoutes(app: FastifyInstance) {
     const data = dataInformada || `${competencia}-01`
     await prisma.$executeRawUnsafe(
       `INSERT INTO comissao_avulsa
-         (usuario_id, competencia, data_premiacao, descricao, valor, criado_por)
-       VALUES (?,?,?,?,?,?)`,
-      usuarioId, competencia, data, descricao.slice(0, 200), valor,
+         (usuario_id, competencia, data_premiacao, tipo, descricao, observacao, valor, criado_por)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      usuarioId, competencia, data, tipo, descricao.slice(0, 200), observacao || null, valor,
       Number((request.user as any)?.id || 0) || null)
     return reply.status(201).send({ ok: true })
+  })
+
+  // Edição do lançamento. O caso que a motivou: prêmio conquistado num mês e pago no
+  // seguinte, lançado na competência errada. Sem isso o conserto era apagar e relançar,
+  // perdendo o registro de quem lançou e quando.
+  app.put('/avulsas/:id', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const b = request.body as Record<string, any>
+    const usuarioId = Number(b.usuarioId ?? 0)
+    const competencia = String(b.competencia ?? '')
+    const descricao = String(b.descricao ?? '').trim()
+    const valor = Number(b.valor ?? 0)
+    const tipo = normalizarTipo(b.tipo)
+    const observacao = String(b.observacao ?? '').trim().slice(0, 500)
+    const dataInformada = String(b.data ?? '').trim()
+
+    if (!usuarioId) return reply.status(400).send({ error: 'Escolha quem recebe.' })
+    if (!/^\d{4}-\d{2}$/.test(competencia)) return reply.status(400).send({ error: 'Competência inválida. Use AAAA-MM.' })
+    if (dataInformada && !/^\d{4}-\d{2}-\d{2}$/.test(dataInformada)) {
+      return reply.status(400).send({ error: 'Data da premiação inválida.' })
+    }
+    if (!descricao) return reply.status(400).send({ error: 'Descreva o que está sendo pago.' })
+    if (!(valor > 0)) return reply.status(400).send({ error: 'O valor precisa ser maior que zero.' })
+
+    const [atual] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT usuario_id, competencia FROM comissao_avulsa WHERE id = ?`, Number(id))
+    if (!atual) return reply.status(404).send({ error: 'Lançamento não encontrado.' })
+
+    // Nem o mês de origem nem o de destino podem estar fechados: mover o valor mudaria um
+    // total já pago, de um lado ou do outro.
+    const paresUnicos = new Map<string, [number, string]>()
+    paresUnicos.set(`${Number(atual.usuario_id)}|${String(atual.competencia)}`,
+      [Number(atual.usuario_id), String(atual.competencia)])
+    paresUnicos.set(`${usuarioId}|${competencia}`, [usuarioId, competencia])
+    for (const [usu, comp] of paresUnicos.values()) {
+      const [fechado] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT 1 AS x FROM comissao_apuracao WHERE competencia = ? AND usuario_id = ? LIMIT 1`,
+        comp, usu)
+      if (fechado) {
+        return reply.status(400).send({
+          error: `A competência ${comp} dessa pessoa já foi fechada. Reabra antes de alterar.`,
+        })
+      }
+    }
+
+    await prisma.$executeRawUnsafe(
+      `UPDATE comissao_avulsa
+          SET usuario_id = ?, competencia = ?, data_premiacao = ?, tipo = ?,
+              descricao = ?, observacao = ?, valor = ?
+        WHERE id = ?`,
+      usuarioId, competencia, dataInformada || `${competencia}-01`, tipo,
+      descricao.slice(0, 200), observacao || null, valor, Number(id))
+    return { ok: true }
   })
 
   app.delete('/avulsas/:id', { preHandler: authMiddleware, schema: { tags: ['Comissões'] } }, async (request) => {

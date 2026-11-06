@@ -2,15 +2,16 @@ import { useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
 import {
   Loader2, Save, Plus, Trash2, Lock, Unlock, ChevronLeft, ChevronRight,
-  Percent, Wallet, TrendingUp, Users, Target, Search,
+  Percent, Wallet, TrendingUp, Users, Target, Search, Pencil, X,
 } from 'lucide-react'
 import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { useToast } from '../../components/ui/Toast'
+import { TIPOS_AVULSA, tipoInfo } from '../../components/comercial/avulsas'
 import type {
-  ApuracaoComissao, CandidatoComissao, ComissaoAvulsa, PlanoComissao, RateioVenda,
+  ApuracaoComissao, CandidatoComissao, ComissaoAvulsa, TipoAvulsa, PlanoComissao, RateioVenda,
   RegraCanalComissao,
   VendedorComissao,
 } from '../../types'
@@ -65,7 +66,16 @@ export function RemuneracaoComercial() {
   const [carregandoVendas, setCarregandoVendas] = useState(false)
   const [editandoRateio, setEditandoRateio] = useState<
     { venda: RateioVenda; linhas: Array<{ usuarioId: string; percentual: string }> } | null>(null)
-  const [novoPremio, setNovoPremio] = useState({ usuarioId: '', data: '', descricao: '', valor: '' })
+  const [novoPremio, setNovoPremio] = useState<{
+    usuarioId: string; data: string; tipo: TipoAvulsa
+    descricao: string; observacao: string; valor: string
+  }>({ usuarioId: '', data: '', tipo: 'premio', descricao: '', observacao: '', valor: '' })
+  /** Lançamento aberto para edição. O motivo mais comum é a competência errada:
+   *  prêmio conquistado num mês e pago no seguinte. */
+  const [editandoPremio, setEditandoPremio] = useState<{
+    id: number; usuarioId: string; competencia: string; data: string; tipo: TipoAvulsa
+    descricao: string; observacao: string; valor: string
+  } | null>(null)
   const [opcoesCanais, setOpcoesCanais] = useState<Array<{ canal: string; faturamento: number }>>([])
   const [novoCanal, setNovoCanal] = useState({ usuarioId: '', canal: '', blocoValor: '1000', valorPorBloco: '' })
   const [candidatos, setCandidatos] = useState<CandidatoComissao[]>([])
@@ -191,14 +201,65 @@ export function RemuneracaoComercial() {
         usuarioId: Number(novoPremio.usuarioId),
         competencia,
         data: novoPremio.data || dataPadrao(competencia),
+        tipo: novoPremio.tipo,
         descricao: novoPremio.descricao.trim(),
+        observacao: novoPremio.observacao.trim(),
         valor: Number(novoPremio.valor),
       })
-      toast.success('Prêmio lançado.')
-      setNovoPremio({ usuarioId: '', data: '', descricao: '', valor: '' })
+      toast.success('Lançamento registrado.')
+      // O tipo fica: quem lança treinamento costuma lançar vários seguidos.
+      setNovoPremio({
+        usuarioId: '', data: '', tipo: novoPremio.tipo,
+        descricao: '', observacao: '', valor: '',
+      })
       await Promise.all([carregarAvulsas(), carregar()])
     } catch (e: any) {
       toast.error(e?.message || 'Não foi possível lançar.')
+    }
+  }
+
+  function abrirEdicaoPremio(a: ComissaoAvulsa) {
+    setEditandoPremio({
+      id: a.id,
+      usuarioId: String(a.usuarioId),
+      competencia: a.competencia,
+      data: a.data ?? '',
+      tipo: a.tipo,
+      descricao: a.descricao,
+      observacao: a.observacao ?? '',
+      valor: String(a.valor),
+    })
+  }
+
+  async function salvarPremioEditado() {
+    if (!editandoPremio) return
+    const e = editandoPremio
+    if (!e.usuarioId || !e.descricao.trim() || !(Number(e.valor) > 0)) {
+      toast.error('Escolha a pessoa, descreva o prêmio e informe o valor.')
+      return
+    }
+    if (!/^\d{4}-\d{2}$/.test(e.competencia)) {
+      toast.error('Informe o mês de pagamento.')
+      return
+    }
+    try {
+      await api.atualizarComissaoAvulsa(e.id, {
+        usuarioId: Number(e.usuarioId),
+        competencia: e.competencia,
+        data: e.data || `${e.competencia}-01`,
+        tipo: e.tipo,
+        descricao: e.descricao.trim(),
+        observacao: e.observacao.trim(),
+        valor: Number(e.valor),
+      })
+      // Mudar a competência tira o lançamento desta lista — por isso o aviso diz para onde foi.
+      toast.success(e.competencia === competencia
+        ? 'Lançamento atualizado.'
+        : `Lançamento movido para ${rotuloComp(e.competencia)}.`)
+      setEditandoPremio(null)
+      await Promise.all([carregarAvulsas(), carregar()])
+    } catch (err: any) {
+      toast.error(err?.message || 'Não foi possível salvar.')
     }
   }
 
@@ -336,7 +397,11 @@ export function RemuneracaoComercial() {
             Para o que não tem regra no sistema — melhor nota do suporte, campanha pontual. Entra
             no total da pessoa no mês informado. Competência já fechada não aceita lançamento.
           </p>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+            <select className="input-field" value={novoPremio.tipo} title="Tipo do lançamento"
+              onChange={(e) => setNovoPremio({ ...novoPremio, tipo: e.target.value as TipoAvulsa })}>
+              {TIPOS_AVULSA.map((t) => <option key={t.valor} value={t.valor}>{t.rotulo}</option>)}
+            </select>
             <select className="input-field" value={novoPremio.usuarioId}
               onChange={(e) => setNovoPremio({ ...novoPremio, usuarioId: e.target.value })}>
               <option value="">Quem recebe...</option>
@@ -354,28 +419,87 @@ export function RemuneracaoComercial() {
                 onChange={(e) => setNovoPremio({ ...novoPremio, valor: e.target.value })} />
               <Button onClick={adicionarPremio}><Plus className="w-4 h-4" /></Button>
             </div>
+            <input className="input-field md:col-span-2 xl:col-span-6" maxLength={500}
+              placeholder="Observação (opcional) — o contexto que explica o lançamento depois"
+              value={novoPremio.observacao}
+              onChange={(e) => setNovoPremio({ ...novoPremio, observacao: e.target.value })} />
           </div>
 
           {avulsas.length > 0 && (
             <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-700 divide-y divide-slate-100 dark:divide-slate-700">
-              {avulsas.map((a) => (
+              {avulsas.map((a) => (editandoPremio?.id === a.id ? (
+                /* Edição no lugar da linha: o conserto mais comum é a competência, e trocar
+                   de tela para isso fazia perder de vista o resto da lista. */
+                <div key={a.id} className="px-3 py-3 bg-slate-50 dark:bg-slate-800/60">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                    <select className="input-field" value={editandoPremio.tipo} title="Tipo do lançamento"
+                      onChange={(e) => setEditandoPremio({ ...editandoPremio, tipo: e.target.value as TipoAvulsa })}>
+                      {TIPOS_AVULSA.map((t) => <option key={t.valor} value={t.valor}>{t.rotulo}</option>)}
+                    </select>
+                    <select className="input-field" value={editandoPremio.usuarioId}
+                      onChange={(e) => setEditandoPremio({ ...editandoPremio, usuarioId: e.target.value })}>
+                      <option value="">Quem recebe...</option>
+                      {candidatos.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                    </select>
+                    <input type="date" className="input-field" title="Data da premiação"
+                      value={editandoPremio.data}
+                      onChange={(e) => setEditandoPremio({ ...editandoPremio, data: e.target.value })} />
+                    <input type="month" className="input-field" title="Mês em que o valor é pago"
+                      value={editandoPremio.competencia}
+                      onChange={(e) => setEditandoPremio({ ...editandoPremio, competencia: e.target.value })} />
+                    <input className="input-field" placeholder="Motivo"
+                      value={editandoPremio.descricao}
+                      onChange={(e) => setEditandoPremio({ ...editandoPremio, descricao: e.target.value })} />
+                    <input type="number" step="0.01" className="input-field" placeholder="Valor R$"
+                      value={editandoPremio.valor}
+                      onChange={(e) => setEditandoPremio({ ...editandoPremio, valor: e.target.value })} />
+                    <input className="input-field md:col-span-2 xl:col-span-6" maxLength={500}
+                      placeholder="Observação (opcional)"
+                      value={editandoPremio.observacao}
+                      onChange={(e) => setEditandoPremio({ ...editandoPremio, observacao: e.target.value })} />
+                  </div>
+                  <div className="flex items-center gap-2 mt-3">
+                    <Button onClick={salvarPremioEditado}><Save className="w-4 h-4" /> Salvar</Button>
+                    <Button variant="secondary" onClick={() => setEditandoPremio(null)}>
+                      <X className="w-4 h-4" /> Cancelar
+                    </Button>
+                    {editandoPremio.competencia !== competencia && (
+                      <span className="text-[11px] text-amber-600 dark:text-amber-400">
+                        Sai desta lista: passa a ser pago em {rotuloComp(editandoPremio.competencia)}.
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : (
                 <div key={a.id} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
                   <span className="min-w-0">
-                    <span className="block text-slate-800 dark:text-slate-100 truncate">
-                      {a.usuario} — {a.descricao}
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span className={clsx('badge shrink-0', tipoInfo(a.tipo).classe)}>
+                        {tipoInfo(a.tipo).rotulo}
+                      </span>
+                      <span className="text-slate-800 dark:text-slate-100 truncate">
+                        {a.usuario} — {a.descricao}
+                      </span>
                     </span>
                     <span className="block text-[11px] text-slate-400">
                       {dataBr(a.data) ? `premiado em ${dataBr(a.data)}` : 'sem data informada'}
                       {a.criadoPor ? ` · lançado por ${a.criadoPor}` : ''}
                     </span>
+                    {a.observacao && (
+                      <span className="block text-[11px] text-slate-500 dark:text-slate-400 italic">
+                        {a.observacao}
+                      </span>
+                    )}
                   </span>
                   <span className="flex items-center gap-3 shrink-0">
                     <span className="font-semibold text-emerald-600 dark:text-emerald-400">{brl(a.valor)}</span>
+                    <button onClick={() => abrirEdicaoPremio(a)} title="Editar"
+                      className="text-slate-400 hover:text-blue-500"><Pencil className="w-4 h-4" /></button>
                     <button onClick={() => removerPremio(a)} title="Remover"
                       className="text-slate-400 hover:text-red-500"><Trash2 className="w-4 h-4" /></button>
                   </span>
                 </div>
-              ))}
+              )))}
             </div>
           )}
         </Card>

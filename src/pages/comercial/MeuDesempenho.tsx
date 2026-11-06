@@ -10,6 +10,7 @@ import { api } from '../../services/api'
 import { Card } from '../../components/ui/Card'
 import { useToast } from '../../components/ui/Toast'
 import { useThemeStore } from '../../store/themeStore'
+import { tipoInfo } from '../../components/comercial/avulsas'
 import type { MeuDesempenhoComissao } from '../../types'
 
 const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -271,13 +272,30 @@ export function MeuDesempenho() {
                 )}
                 {v.avulsas && (
                   <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-                    <p className="text-xs text-slate-500">Prêmios do mês</p>
+                    <p className="text-xs text-slate-500">Prêmios e avulsos do mês</p>
                     <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
                       {brl(v.avulsas.total)}
                     </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {v.avulsas.itens.map((x) => x.descricao).join(' · ')}
-                    </p>
+                    {/* Um por linha, com o tipo: prêmio, treinamento e repasse do cliente
+                        entram no mesmo total, mas têm origens diferentes. */}
+                    <ul className="mt-2 space-y-1">
+                      {v.avulsas.itens.map((x) => (
+                        <li key={x.id} className="text-xs">
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            <span className={clsx('badge', tipoInfo(x.tipo).classe)}>
+                              {tipoInfo(x.tipo).rotulo}
+                            </span>
+                            <span className="text-slate-600 dark:text-slate-300">{x.descricao}</span>
+                            <span className="text-slate-400">{brl(x.valor)}</span>
+                          </span>
+                          {x.observacao && (
+                            <span className="block text-[11px] text-slate-400 italic">
+                              {x.observacao}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 )}
                 {v.comissaoCanais && (
