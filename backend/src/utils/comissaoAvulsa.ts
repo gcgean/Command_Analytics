@@ -15,9 +15,11 @@ import { prisma } from '../database/client'
  * pagamento feito pelo cliente têm outra origem e outra conversa com o contábil, e sem o
  * tipo tudo virava texto livre na descrição.
  */
-export type TipoAvulsa = 'premio' | 'treinamento' | 'pagamento-cliente'
+export type TipoAvulsa = 'premio' | 'treinamento' | 'pagamento-cliente' | 'migracao'
 
-export const TIPOS_AVULSA: TipoAvulsa[] = ['premio', 'treinamento', 'pagamento-cliente']
+export const TIPOS_AVULSA: TipoAvulsa[] = [
+  'premio', 'treinamento', 'pagamento-cliente', 'migracao',
+]
 
 export interface ComissaoAvulsa {
   id: number

@@ -23,6 +23,11 @@ export const TIPOS_AVULSA: Array<{ valor: TipoAvulsa; rotulo: string; classe: st
     rotulo: 'Pagamento do cliente',
     classe: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
   },
+  {
+    valor: 'migracao',
+    rotulo: 'Migração',
+    classe: 'bg-violet-500/15 text-violet-700 dark:text-violet-400',
+  },
 ]
 
 /** Lançamento antigo, ou tipo que o banco não conhece, conta como prêmio. */

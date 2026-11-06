@@ -1855,7 +1855,7 @@ export interface VendedorComissao {
 }
 
 /** Natureza do lançamento avulso. Lançamentos antigos, sem tipo, contam como 'premio'. */
-export type TipoAvulsa = 'premio' | 'treinamento' | 'pagamento-cliente'
+export type TipoAvulsa = 'premio' | 'treinamento' | 'pagamento-cliente' | 'migracao'
 
 export interface ComissaoAvulsa {
   id: number
