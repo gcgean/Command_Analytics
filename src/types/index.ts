@@ -1909,6 +1909,8 @@ export interface CandidatoComissao { id: number; nome: string; processos: number
 
 /** De onde veio cada parte da base — o vendedor precisa poder conferir a conta. */
 export interface ComposicaoBaseComissao {
+  /** Avulsos que são produção (treinamento, pagamento do cliente), não prêmio. */
+  avulsos: number
   implantacao: number
   migracao: number
   mensalidadeVenda: number
@@ -1963,6 +1965,11 @@ export interface LinhaComissao {
   premioMelhorAtendente: number
   /** Prêmios lançados à mão para a competência. */
   avulsas: {
+    total: number
+    itens: ComissaoAvulsa[]
+  } | null
+  /** Avulsos que entraram na base em vez de cair direto no total. */
+  avulsosBase: {
     total: number
     itens: ComissaoAvulsa[]
   } | null

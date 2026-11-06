@@ -279,6 +279,12 @@ export interface ComposicaoBase {
   mensalidadeNova: number
   upgrades: number
   paycore: number
+  /**
+   * Lançamentos avulsos que NÃO são prêmio — treinamento e pagamento feito pelo cliente.
+   * Eles não são dinheiro no bolso: são produção, e por isso entram na base, movendo a
+   * faixa da escada como qualquer outra venda. Só o prêmio cai direto no total.
+   */
+  avulsos: number
 }
 
 export interface LinhaApuracao {
@@ -334,8 +340,10 @@ export interface LinhaApuracao {
   premioCampeaoUpgrade: number
   /** Prêmio do melhor atendente do mês. Zero quando o prêmio está desligado. */
   premioMelhorAtendente: number
-  /** Prêmios lançados à mão para a competência. */
+  /** Prêmios lançados à mão para a competência: pagos direto, fora da escada. */
   avulsas: { total: number; itens: ComissaoAvulsa[] } | null
+  /** Avulsos que compõem a base (treinamento, pagamento do cliente), não o total. */
+  avulsosBase: { total: number; itens: ComissaoAvulsa[] } | null
   /** Comissão por canal de aquisição: a cada bloco fechado no canal, um valor. */
   comissaoCanais: { total: number; itens: ApuracaoCanal[] } | null
   /**
@@ -570,6 +578,12 @@ export async function apurar(
 
     // Com escopo 'cilos' só o PayCore da Cilos conta: implantação, mensalidade e upgrades são
     // todos da operação Command.
+    // Prêmio é pagamento; treinamento e pagamento do cliente são produção. A separação
+    // vem antes da base porque muda a faixa da escada, não só o valor final.
+    const todosAvulsos = avulsasDoMes.get(usuarioId) ?? []
+    const premiosAvulsos = todosAvulsos.filter((a) => a.tipo === 'premio')
+    const producaoAvulsa = todosAvulsos.filter((a) => a.tipo !== 'premio')
+
     const soCilos = plano.escopoProduto === 'cilos'
     const composicao: ComposicaoBase = {
       implantacao: soCilos ? 0 : Number(b?.implantacao ?? 0),
@@ -578,15 +592,21 @@ export async function apurar(
       mensalidadeNova: soCilos ? 0 : Number(mens?.valor ?? 0),
       upgrades: soCilos ? 0 : Number(upg?.valor ?? 0),
       paycore: Number(pay?.valor ?? 0),
+      // Lançado à mão, vale em qualquer escopo de produto: quem lança já sabe de onde veio.
+      avulsos: Number(producaoAvulsa.reduce((t, a) => t + a.valor, 0).toFixed(2)),
     }
     let base = composicao.implantacao + composicao.migracao + composicao.mensalidadeVenda
       + composicao.mensalidadeNova + composicao.upgrades + composicao.paycore
+      + composicao.avulsos
 
     // No plano proporcional a pessoa não é medida pelo que ela mesma vendeu: o que vale é o
     // quanto a EMPRESA bateu da meta, no mesmo escopo de produto.
     const proporcional = plano.tipo === 'proporcional'
     if (proporcional) {
+      // Aqui a base é o resultado da EMPRESA. Somar o avulso de uma pessoa a ela seria
+      // comparar coisas de ordens diferentes, então a parcela sai da conta e da exibição.
       base = await baseDaEmpresa(inicio, fim, plano.escopoProduto, coluna)
+      composicao.avulsos = 0
     }
     /**
      * Sistemas fechados no mês: processo comercial lançado ou cliente novo atribuído pelo
@@ -595,7 +615,9 @@ export async function apurar(
      * isso o mesmo upgrade pagava duas vezes: pelo percentual da escada e pelo lançamento.
      */
     const sistemasFechados = Number(b?.q ?? 0) + Number(mens?.q ?? 0)
-    const naEscada = proporcional || sistemasFechados > 0
+    // Produção avulsa também é venda: sem isso ela entraria na base de alguém que, por não
+    // ter processo lançado, fica fora da escada — e o valor sumiria da conta sem pagar nada.
+    const naEscada = proporcional || sistemasFechados > 0 || composicao.avulsos > 0
 
     const faixa = proporcional || !naEscada ? null : faixaDe(base, plano.faixas)
     const percentual = faixa?.percentual ?? 0
@@ -701,12 +723,15 @@ export async function apurar(
       : null
 
     // ── Avulsos ──
-    const listaAvulsas = avulsasDoMes.get(usuarioId) ?? []
-    const avulsas = listaAvulsas.length > 0
+    const avulsas = premiosAvulsos.length > 0
       ? {
-          total: Number(listaAvulsas.reduce((s, a) => s + a.valor, 0).toFixed(2)),
-          itens: listaAvulsas,
+          total: Number(premiosAvulsos.reduce((s, a) => s + a.valor, 0).toFixed(2)),
+          itens: premiosAvulsos,
         }
+      : null
+    // Já contabilizados dentro da base; viajam separados só para a tela poder detalhar.
+    const avulsosBase = producaoAvulsa.length > 0
+      ? { total: composicao.avulsos, itens: producaoAvulsa }
       : null
 
     const premioCampeaoUpgrade = campeoes.includes(usuarioId) ? premioCampeao : 0
@@ -751,6 +776,7 @@ export async function apurar(
       premioCampeaoUpgrade,
       premioMelhorAtendente,
       avulsas,
+      avulsosBase,
       usaMetaValor: meta > 0,
       fechado: !!fechado,
       fechadoEm: fechado?.fechado_em ?? null,

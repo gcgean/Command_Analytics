@@ -394,8 +394,11 @@ export function RemuneracaoComercial() {
             Prêmios e comissões avulsas de {rotuloComp(competencia)}
           </h3>
           <p className="text-xs text-slate-500 mb-3">
-            Para o que não tem regra no sistema — melhor nota do suporte, campanha pontual. Entra
-            no total da pessoa no mês informado. Competência já fechada não aceita lançamento.
+            Para o que não tem regra no sistema. <strong>Prêmio</strong> é pago direto, somado ao
+            total da pessoa no mês informado. <strong>Treinamento</strong> e{' '}
+            <strong>pagamento do cliente</strong> entram na base de comissão: não são pagos à
+            parte, sobem a produção e rendem pelo percentual da faixa. Competência já fechada
+            não aceita lançamento.
           </p>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <select className="input-field" value={novoPremio.tipo} title="Tipo do lançamento"
@@ -608,6 +611,7 @@ export function RemuneracaoComercial() {
                           ['Mensalidade nova', l.composicao.mensalidadeNova],
                           ['Upgrades', l.composicao.upgrades],
                           ['PayCore', l.composicao.paycore],
+                          ['Avulsos', l.composicao.avulsos],
                         ] as const).filter(([, v]) => v > 0).map(([rotulo, v]) => (
                           <span key={rotulo} className="text-slate-500">
                             {rotulo}: <strong className="text-slate-700 dark:text-slate-300">{brl(v)}</strong>

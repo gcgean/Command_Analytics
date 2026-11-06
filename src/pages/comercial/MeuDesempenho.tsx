@@ -272,7 +272,7 @@ export function MeuDesempenho() {
                 )}
                 {v.avulsas && (
                   <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
-                    <p className="text-xs text-slate-500">Prêmios e avulsos do mês</p>
+                    <p className="text-xs text-slate-500">Prêmios do mês</p>
                     <p className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5">
                       {brl(v.avulsas.total)}
                     </p>
@@ -280,6 +280,37 @@ export function MeuDesempenho() {
                         entram no mesmo total, mas têm origens diferentes. */}
                     <ul className="mt-2 space-y-1">
                       {v.avulsas.itens.map((x) => (
+                        <li key={x.id} className="text-xs">
+                          <span className="flex items-center gap-1.5 flex-wrap">
+                            <span className={clsx('badge', tipoInfo(x.tipo).classe)}>
+                              {tipoInfo(x.tipo).rotulo}
+                            </span>
+                            <span className="text-slate-600 dark:text-slate-300">{x.descricao}</span>
+                            <span className="text-slate-400">{brl(x.valor)}</span>
+                          </span>
+                          {x.observacao && (
+                            <span className="block text-[11px] text-slate-400 italic">
+                              {x.observacao}
+                            </span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {v.avulsosBase && (
+                  <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3">
+                    <p className="text-xs text-slate-500">Avulsos na base</p>
+                    <p className="text-2xl font-black text-slate-700 dark:text-slate-200 mt-0.5">
+                      {brl(v.avulsosBase.total)}
+                    </p>
+                    {/* Diferente do prêmio: aqui o valor não é recebido: ele entra na produção
+                        e rende pelo percentual da faixa, como qualquer venda. */}
+                    <p className="text-[11px] text-slate-500 mt-0.5">
+                      Não é pago direto — soma na sua produção e rende pelo percentual da faixa.
+                    </p>
+                    <ul className="mt-2 space-y-1">
+                      {v.avulsosBase.itens.map((x) => (
                         <li key={x.id} className="text-xs">
                           <span className="flex items-center gap-1.5 flex-wrap">
                             <span className={clsx('badge', tipoInfo(x.tipo).classe)}>
@@ -515,6 +546,7 @@ export function MeuDesempenho() {
                 ['Mensalidade nova', v.composicao.mensalidadeNova],
                 ['Upgrades', v.composicao.upgrades],
                 ['PayCore', v.composicao.paycore],
+                ['Avulsos', v.composicao.avulsos],
               ] as const).filter(([, n]) => n > 0).map(([r, n]) => (
                 <span key={r} className="text-slate-500">
                   {r}: <strong className="text-slate-700 dark:text-slate-300">{brl(n)}</strong>
