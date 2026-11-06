@@ -366,7 +366,9 @@ export function RemuneracaoComercial() {
             </p>
           </div>
         </div>
-        {aba === 'apuracao' && (
+        {/* Prêmios avulsos também trabalha por competência: sem o seletor aqui, um
+            lançamento que caiu noutro mês ficava inalcançável pela tela. */}
+        {(aba === 'apuracao' || aba === 'premios') && (
           <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1">
             <button onClick={() => setCompetencia(mover(competencia, -1))}
               className="p-1 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"><ChevronLeft className="w-4 h-4" /></button>
