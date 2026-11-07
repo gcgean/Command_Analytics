@@ -1,4 +1,5 @@
 import { prisma } from '../database/client'
+import { sqlSemProcedimentoIrrelevante } from './procedimentosIrrelevantes'
 
 /**
  * Ranking de atendimentos, para premiar o melhor atendente do mês.
@@ -10,6 +11,9 @@ import { prisma } from '../database/client'
  * Classifica pela nota média, e o desempate é o volume: entre duas médias iguais, ganha
  * quem atendeu mais. Quem não alcança o mínimo de atendimentos não entra — média de poucas
  * avaliações não diz nada sobre consistência.
+ *
+ * Procedimentos que não são atendimento ficam fora da conta inteira, inclusive do mínimo
+ * de elegibilidade: ver `procedimentosIrrelevantes`.
  */
 
 /** Filas que entram no ranking. Ids de `departamento`. */
@@ -48,6 +52,7 @@ export async function rankingAtendimentos(
         AND a.departamento IN (${DEPARTAMENTOS_ATENDIMENTO.join(',')})
         AND DATE(COALESCE(a.Data_hora_finalizacao, a.data_hora_lanc)) BETWEEN ? AND ?
         AND a.cod_tecnico IS NOT NULL
+        AND ${sqlSemProcedimentoIrrelevante('a')}
       GROUP BY a.cod_tecnico, tecnico`, inicio, fim).catch(() => [])
 
   return linhas

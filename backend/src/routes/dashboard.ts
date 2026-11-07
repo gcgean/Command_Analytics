@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
+import { semProcedimentoIrrelevante } from '../utils/procedimentosIrrelevantes'
 
 // Status de fechamento: 7=Finalizado, 8=Cancelado, 14=Finalizado confirmado
 const STATUS_FECHADOS = [7, 8, 14]
@@ -610,6 +611,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
           FROM atendimentos a
           LEFT JOIN usuario u ON u.COD_USU = a.cod_tecnico
           WHERE a.data_hora_lanc >= ${corte} AND a.cod_tecnico IS NOT NULL
+            AND ${semProcedimentoIrrelevante('a')}
           GROUP BY a.cod_tecnico
           ORDER BY total DESC
         `,
@@ -618,6 +620,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
           SELECT a.departamento AS departamento, COUNT(*) AS total
           FROM atendimentos a
           WHERE a.data_hora_lanc >= ${corte}
+            AND ${semProcedimentoIrrelevante('a')}
           GROUP BY a.departamento
           ORDER BY total DESC
         `,
@@ -626,6 +629,7 @@ export async function dashboardRoutes(app: FastifyInstance) {
           SELECT DATE_FORMAT(a.data_hora_lanc, '%Y-%m') AS mes, COUNT(*) AS total
           FROM atendimentos a
           WHERE a.data_hora_lanc >= ${corte}
+            AND ${semProcedimentoIrrelevante('a')}
           GROUP BY mes
           ORDER BY mes
         `,
