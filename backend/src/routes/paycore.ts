@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify'
 import { prisma } from '../database/client'
 import { authMiddleware } from '../middleware/auth'
 import { sincronizarServidor, sincronizarTodos, normalizarBaseUrl, extrairLista, type ServidorPaycore } from '../utils/paycoreSync'
+import { sqlValorMensalAssinatura } from '../utils/paycoreValor'
 
 /**
  * Consulta e administração dos dados vindos das plataformas PayCore. A carga em si é feita pela
@@ -224,7 +225,7 @@ export async function paycoreRoutes(app: FastifyInstance) {
              COALESCE(a.app_nome, 'Sem produto') AS produto,
              a.status,
              COUNT(*) AS assinaturas,
-             COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS mensal
+             COALESCE(SUM(${sqlValorMensalAssinatura('a')}), 0) AS mensal
         FROM paycore_assinatura a
         LEFT JOIN paycore_servidor s ON s.id = a.servidor_id
        WHERE NOT EXISTS (

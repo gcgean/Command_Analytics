@@ -1,4 +1,6 @@
 import { prisma } from '../database/client'
+import { sqlValorMensalAssinatura } from './paycoreValor'
+import { sqlSemExcluidosDaMeta } from './metaExcluido'
 
 /**
  * Meta geral da empresa no mes, em receita recorrente nova.
@@ -39,13 +41,14 @@ export async function receitaNovaDoPeriodo(dataIni: string, dataFim: string) {
           AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8`,
       dataIni, dataFim, dataIni, dataFim).catch(() => [{ qtd: 0, valor: 0 }]),
     prisma.$queryRawUnsafe<any[]>(
-      `SELECT COUNT(*) AS qtd, COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+      `SELECT COUNT(*) AS qtd, COALESCE(SUM(${sqlValorMensalAssinatura('a')}), 0) AS valor
          FROM paycore_assinatura a
          LEFT JOIN paycore_cliente pc
            ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
          LEFT JOIN cliente c ON c.cod_cli = pc.cod_cli
         WHERE DATE(a.inicio) BETWEEN ? AND ?
-          AND (c.cod_cli IS NULL OR DATE(c.DATACADASTRO_CLI) NOT BETWEEN ? AND ?)`,
+          AND (c.cod_cli IS NULL OR DATE(c.DATACADASTRO_CLI) NOT BETWEEN ? AND ?)
+          AND ${sqlSemExcluidosDaMeta('a')}`,
       dataIni, dataFim, dataIni, dataFim).catch(() => [{ qtd: 0, valor: 0 }]),
   ])
   const valor = (r: any[]) => Number(r[0]?.valor ?? 0)

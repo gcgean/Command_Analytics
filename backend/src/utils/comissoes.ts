@@ -7,6 +7,7 @@ import { avulsasPorUsuario, type ComissaoAvulsa } from './comissaoAvulsa'
 import { campeoesDeUpgrade, valorPremioCampeao, valorPremioAtendente,
   minimoAtendimentos } from './comissaoUpgrade'
 import { rankingAtendimentos, melhoresAtendentes } from './rankingAtendimentos'
+import { sqlValorMensalAssinatura } from './paycoreValor'
 
 /**
  * Plano de remuneração comercial: fixo por fase + comissão progressiva sobre a implantação.
@@ -563,7 +564,7 @@ export async function apurar(
 
     // No PayCore o vendedor já vem resolvido para o nosso COD_USU na sincronização.
     const pPay = prisma.$queryRawUnsafe<any[]>(
-      `SELECT COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+      `SELECT COALESCE(SUM(${sqlValorMensalAssinatura('a')}), 0) AS valor
          FROM paycore_assinatura a
          INNER JOIN paycore_cliente pc
            ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
@@ -799,7 +800,7 @@ async function baseDaEmpresa(
     : soCilos ? "AND COALESCE(s.nome, '') LIKE '%cilos%'" : ''
 
   const [pay] = await prisma.$queryRawUnsafe<any[]>(
-    `SELECT COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+    `SELECT COALESCE(SUM(${sqlValorMensalAssinatura('a')}), 0) AS valor
        FROM paycore_assinatura a
        LEFT JOIN paycore_servidor s ON s.id = a.servidor_id
       WHERE DATE(a.inicio) BETWEEN ? AND ? ${filtroServidor}`,

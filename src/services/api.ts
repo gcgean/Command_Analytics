@@ -708,6 +708,13 @@ export const api = {
     }),
   excluirComissaoAvulsa: (id: number) =>
     fetchApi<{ ok: boolean }>(`/comissoes/avulsas/${id}`, { method: 'DELETE' }),
+  excluirLancamentoDaMeta: (dados: { chave: string; descricao?: string; motivo?: string }) =>
+    fetchApi<{ ok: boolean }>('/metas/excluidos', {
+      method: 'POST', body: JSON.stringify(dados),
+    }),
+  restaurarLancamentoNaMeta: (chave: string) =>
+    fetchApi<{ ok: boolean }>(`/metas/excluidos/${encodeURIComponent(chave)}`,
+      { method: 'DELETE' }),
   getChavesApi: () => fetchApi<ChaveApi[]>('/integracao/chaves'),
   criarChaveApi: (nome: string) =>
     fetchApi<{ id: number; token: string }>('/integracao/chaves', {

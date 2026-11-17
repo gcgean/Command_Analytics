@@ -82,6 +82,7 @@ import { ensureConfiguracaoEmail } from './utils/email'
 import { publicoRoutes } from './routes/publico'
 import { integracaoAgendaRoutes, chavesApiRoutes } from './routes/integracaoAgenda'
 import { initApiChaves } from './utils/apiChaves'
+import { initMetaExcluido } from './utils/metaExcluido'
 import { emailRoutes } from './routes/email'
 import { metasDevRoutes, initMetasDev } from './routes/metasDev'
 import { orcamentosRoutes, initOrcamentos } from './routes/orcamentos'
@@ -326,6 +327,7 @@ app.listen({ port: PORT, host: '0.0.0.0' }, async (err) => {
     .then(() => console.log('✓ Tabela de links de precificação verificada'))
     .catch(e => console.warn('⚠ Precificação pública init:', e.message))
   initApiChaves()
+  initMetaExcluido()
     .then(() => console.log('✓ Tabela de chaves de API verificada'))
     .catch(e => console.warn('⚠ Chaves de API init:', e.message))
   initComunicados()

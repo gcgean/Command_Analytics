@@ -90,6 +90,7 @@ interface DadosComercial {
       id: string; cliente: string | null; produto: string | null; plano: string | null
       valor: number; inicio: string | null; status: string | null
       servidor: string | null; vendedor: string | null; jaContado: boolean
+      excluido: boolean
     }>
   }
   clientesPerdidos: ClientePerdido[]
@@ -170,6 +171,7 @@ function ChartTooltip({ active, payload, label }: any) {
 
 // ── componente principal ───────────────────────────────────────────
 function BoletimComercialTab() {
+  const { toast } = useToast()
   const now = new Date()
   const theme = useThemeStore(s => s.theme)
   const isDark = theme === 'dark'
@@ -193,12 +195,52 @@ function BoletimComercialTab() {
     setMes(m); setAno(a)
   }
 
-  useEffect(() => {
+  const recarregar = () => {
     setLoading(true); setErro(false)
     ;(api.getMetasComercial as any)(mesKey)
       .then((d: DadosComercial) => { setDados(d); setLoading(false) })
       .catch(() => { setErro(true); setLoading(false) })
-  }, [mesKey])
+  }
+
+  useEffect(recarregar, [mesKey])
+
+  type Assinatura = NonNullable<DadosComercial['paycore']>['detalhe'][number]
+
+  /**
+   * Tira uma assinatura da conta da meta.
+   *
+   * O caso que motivou foi uma duplicata do PayCore — mesmo cliente, mesmo produto, mesmo
+   * valor, três dias de diferença. O sistema não tem como separar isso de uma
+   * recontratação legítima, então quem conhece a venda decide, e o motivo fica gravado.
+   */
+  async function tirarDaMeta(a: Assinatura) {
+    const motivo = prompt(
+      `Tirar "${a.cliente ?? 'esta assinatura'}" (${brl(a.valor)}) da meta?\n\n`
+      + 'A assinatura continua no PayCore e nas telas de carteira — muda só a contagem '
+      + 'da meta.\n\nMotivo (ex.: lançamento duplicado):')
+    if (motivo === null) return
+    try {
+      await api.excluirLancamentoDaMeta({
+        chave: a.id,
+        descricao: [a.cliente, a.produto].filter(Boolean).join(' — '),
+        motivo: motivo.trim(),
+      })
+      toast.success('Lançamento fora da meta.')
+      recarregar()
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível excluir.')
+    }
+  }
+
+  async function devolverAMeta(a: Assinatura) {
+    try {
+      await api.restaurarLancamentoNaMeta(a.id)
+      toast.success('Lançamento de volta na meta.')
+      recarregar()
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível devolver.')
+    }
+  }
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -1332,6 +1374,7 @@ function BoletimComercialTab() {
               <th className="text-left px-3 py-2 text-slate-500 dark:text-slate-400">Vendedor</th>
               <th className="text-right px-3 py-2 text-slate-500 dark:text-slate-400">Valor Mensal</th>
               <th className="text-center px-3 py-2 text-slate-500 dark:text-slate-400">Início</th>
+              <th className="text-right px-3 py-2 text-slate-500 dark:text-slate-400">Meta</th>
             </tr></thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">{dados.paycore!.detalhe.map((a) => (
               <tr key={a.id} className="hover:bg-slate-100/60 dark:hover:bg-slate-700/30">
@@ -1342,6 +1385,11 @@ function BoletimComercialTab() {
                       já contado em clientes novos — fora da meta
                     </span>
                   )}
+                  {a.excluido && (
+                    <span className="block text-[10px] text-red-500 dark:text-red-400">
+                      tirado da meta à mão
+                    </span>
+                  )}
                 </td>
                 <td className="px-3 py-2 text-slate-600 dark:text-slate-300">
                   {a.produto ?? '—'}
@@ -1349,10 +1397,26 @@ function BoletimComercialTab() {
                 </td>
                 <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-xs">{a.servidor ?? '—'}</td>
                 <td className="px-3 py-2 text-slate-500 dark:text-slate-400 text-xs">{a.vendedor ?? '—'}</td>
-                <td className={`text-right px-3 py-2 font-semibold ${a.jaContado ? 'text-slate-400 line-through' : 'text-violet-400'}`}>
+                <td className={`text-right px-3 py-2 font-semibold ${a.jaContado || a.excluido ? 'text-slate-400 line-through' : 'text-violet-400'}`}>
                   {brl(a.valor)}
                 </td>
                 <td className="text-center px-3 py-2 text-slate-500 text-xs">{dataBR(a.inicio)}</td>
+                <td className="text-right px-3 py-2">
+                  {/* Já fora da meta por ser cliente novo: nada a decidir aqui. */}
+                  {a.jaContado ? (
+                    <span className="text-[10px] text-slate-400">—</span>
+                  ) : a.excluido ? (
+                    <button onClick={() => devolverAMeta(a)}
+                      className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline">
+                      devolver
+                    </button>
+                  ) : (
+                    <button onClick={() => tirarDaMeta(a)}
+                      className="text-[11px] text-slate-400 hover:text-red-500 hover:underline">
+                      tirar da meta
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}</tbody>
           </table>

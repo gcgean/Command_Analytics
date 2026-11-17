@@ -2,6 +2,11 @@ import type { FastifyInstance } from 'fastify'
 import { authMiddleware } from '../middleware/auth'
 import { prisma } from '../database/client'
 import { META_GERAL, receitaNovaDoPeriodo } from '../utils/metaGeral'
+import {
+  initMetaExcluido, listarExcluidos, excluirDaMeta, restaurarNaMeta,
+  sqlSemExcluidosDaMeta, semExcluidosDaMeta,
+} from '../utils/metaExcluido'
+import { sqlValorMensalAssinatura, valorMensalAssinatura } from '../utils/paycoreValor'
 
 const META_LIMOEIRO = 2000
 const META_ARACATI  = 6333
@@ -213,13 +218,14 @@ export async function metasRoutes(app: FastifyInstance) {
         `.catch(() => [{ vReat: 0 }]),
         // PayCore: mesma regra do realizado, para a tendência não contradizer o topo da tela.
         prisma.$queryRaw<any[]>`
-          SELECT COALESCE(SUM(a.mensal + a.valor_modulos),0) AS vPay
+          SELECT COALESCE(SUM(${valorMensalAssinatura('a')}),0) AS vPay
           FROM paycore_assinatura a
           LEFT JOIN paycore_cliente pc
             ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
           LEFT JOIN cliente c ON c.cod_cli = pc.cod_cli
           WHERE DATE(a.inicio) BETWEEN ${ini} AND ${fim}
             AND (c.cod_cli IS NULL OR NOT (DATE(c.DATACADASTRO_CLI) BETWEEN ${ini} AND ${fim}))
+            AND ${semExcluidosDaMeta('a')}
         `.catch(() => [{ vPay: 0 }]),
       ])
 
@@ -297,13 +303,14 @@ export async function metasRoutes(app: FastifyInstance) {
     // Assinatura de cliente que já foi contado como "novo" aqui fica de fora, senão a mesma
     // receita entraria duas vezes na meta.
     const [paycoreRow] = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT COUNT(*) AS qtd, COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+      `SELECT COUNT(*) AS qtd, COALESCE(SUM(${sqlValorMensalAssinatura('a')}), 0) AS valor
          FROM paycore_assinatura a
          LEFT JOIN paycore_cliente pc
            ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
          LEFT JOIN cliente c ON c.cod_cli = pc.cod_cli
         WHERE DATE(a.inicio) BETWEEN ? AND ?
-          AND (c.cod_cli IS NULL OR DATE(c.DATACADASTRO_CLI) NOT BETWEEN ? AND ?)`,
+          AND (c.cod_cli IS NULL OR DATE(c.DATACADASTRO_CLI) NOT BETWEEN ? AND ?)
+          AND ${sqlSemExcluidosDaMeta('a')}`,
       dataIni, dataFim, dataIni, dataFim,
     ).catch((err) => { console.error('Erro PayCore (meta):', err); return [{ qtd: 0, valor: 0 }] })
 
@@ -318,9 +325,10 @@ export async function metasRoutes(app: FastifyInstance) {
 
     const paycoreDetail = await prisma.$queryRawUnsafe<any[]>(
       `SELECT a.subscription_id, a.cliente_nome, a.app_nome, a.plano,
-              (a.mensal + a.valor_modulos) AS valor, a.inicio, a.status,
+              ${sqlValorMensalAssinatura('a')} AS valor, a.inicio, a.status,
               s.nome AS servidor, pc.cod_cli, pc.vendedor_nome,
-              (c.cod_cli IS NOT NULL AND DATE(c.DATACADASTRO_CLI) BETWEEN ? AND ?) AS jaContado
+              (c.cod_cli IS NOT NULL AND DATE(c.DATACADASTRO_CLI) BETWEEN ? AND ?) AS jaContado,
+              NOT (${sqlSemExcluidosDaMeta('a')}) AS excluido
          FROM paycore_assinatura a
          LEFT JOIN paycore_servidor s ON s.id = a.servidor_id
          LEFT JOIN paycore_cliente pc
@@ -353,13 +361,14 @@ export async function metasRoutes(app: FastifyInstance) {
             AND NOT (c.DATACADASTRO_CLI BETWEEN ? AND ?)
             AND c.cod_cla <> 30 AND COALESCE(c.STATUS_INSTAL, 0) <> 8
          UNION ALL
-         SELECT DATE(a.inicio) AS dia, (a.mensal + a.valor_modulos) AS valor
+         SELECT DATE(a.inicio) AS dia, ${sqlValorMensalAssinatura('a')} AS valor
            FROM paycore_assinatura a
            LEFT JOIN paycore_cliente pc
              ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
            LEFT JOIN cliente c ON c.cod_cli = pc.cod_cli
           WHERE DATE(a.inicio) BETWEEN ? AND ?
             AND (c.cod_cli IS NULL OR DATE(c.DATACADASTRO_CLI) NOT BETWEEN ? AND ?)
+            AND ${sqlSemExcluidosDaMeta('a')}
        ) x WHERE dia IS NOT NULL GROUP BY dia ORDER BY dia`,
       dataIni, dataFim, dataIni, dataFim, dataIni, dataFim, dataIni, dataFim,
       dataIni, dataFim, dataIni, dataFim,
@@ -375,7 +384,7 @@ export async function metasRoutes(app: FastifyInstance) {
               COALESCE(NULLIF(a.plano, ''), 'Sem plano') AS plano,
               a.periodicidade,
               COUNT(*) AS assinaturas,
-              COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+              COALESCE(SUM(${sqlValorMensalAssinatura('a')}), 0) AS valor
          FROM paycore_assinatura a
          LEFT JOIN paycore_servidor s ON s.id = a.servidor_id
          LEFT JOIN paycore_cliente pc
@@ -391,7 +400,7 @@ export async function metasRoutes(app: FastifyInstance) {
     // Vendedor das assinaturas do PayCore (vem do CRM / precificação, via paycore_cliente).
     const paycorePorVendedor = await prisma.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(NULLIF(pc.vendedor_nome, ''), 'Sem vendedor') AS vendedor,
-              COUNT(*) AS qtd, COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+              COUNT(*) AS qtd, COALESCE(SUM(${sqlValorMensalAssinatura('a')}), 0) AS valor
          FROM paycore_assinatura a
          LEFT JOIN paycore_cliente pc
            ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
@@ -453,7 +462,7 @@ export async function metasRoutes(app: FastifyInstance) {
     // Receita em risco: assinatura suspensa ainda ocupa a base mas pode nunca mais pagar.
     const paycoreSaude = await prisma.$queryRawUnsafe<any[]>(
       `SELECT COALESCE(a.status, 'desconhecido') AS status, COUNT(*) AS qtd,
-              COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+              COALESCE(SUM(${sqlValorMensalAssinatura('a')}), 0) AS valor
          FROM paycore_assinatura a GROUP BY a.status`,
     ).catch(() => [] as any[])
 
@@ -496,7 +505,7 @@ export async function metasRoutes(app: FastifyInstance) {
     `.catch(() => [] as any[])
 
     const paycorePorFilial = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT c.COD_CON AS codCon, COALESCE(SUM(a.mensal + a.valor_modulos), 0) AS valor
+      `SELECT c.COD_CON AS codCon, COALESCE(SUM(${sqlValorMensalAssinatura('a')}), 0) AS valor
          FROM paycore_assinatura a
          INNER JOIN paycore_cliente pc
            ON pc.servidor_id = a.servidor_id AND pc.customer_id = a.customer_id
@@ -991,6 +1000,9 @@ export async function metasRoutes(app: FastifyInstance) {
           vendedor: a.vendedor_nome,
           // Já contado como cliente novo na base — não soma de novo na meta.
           jaContado: Number(a.jaContado ?? 0) === 1,
+          // Tirado da meta à mão. Continua listado: o usuário precisa ver o que excluiu
+          // para poder devolver.
+          excluido: Number(a.excluido ?? 0) === 1,
         })),
       },
       porFilial,
@@ -1073,4 +1085,31 @@ export async function metasRoutes(app: FastifyInstance) {
     reply.status(503).send({ error: 'disabled' }))
   app.post('/nps', { preHandler: authMiddleware }, async (_req, reply) =>
     reply.status(503).send({ error: 'disabled' }))
+
+  // ── Lançamentos tirados da meta à mão ──
+  // Para a assinatura duplicada que o sistema não tem como distinguir de uma recontratação
+  // legítima. Quem conhece a venda decide, e fica registrado quem decidiu.
+  app.get('/excluidos', { preHandler: authMiddleware, schema: { tags: ['Metas'] } },
+    async () => listarExcluidos())
+
+  app.post('/excluidos', { preHandler: authMiddleware, schema: { tags: ['Metas'] } },
+    async (request, reply) => {
+      const b = request.body as Record<string, any>
+      const chave = String(b.chave ?? '').trim()
+      if (!chave) return reply.status(400).send({ error: 'Informe qual lançamento sair da meta.' })
+      try {
+        await excluirDaMeta(chave, b.descricao ?? null, b.motivo ?? null,
+          Number((request.user as any)?.id || 0) || null)
+      } catch (e: any) {
+        return reply.status(400).send({ error: String(e?.message ?? e) })
+      }
+      return reply.status(201).send({ ok: true })
+    })
+
+  app.delete('/excluidos/:chave', { preHandler: authMiddleware, schema: { tags: ['Metas'] } },
+    async (request) => {
+      const { chave } = request.params as { chave: string }
+      await restaurarNaMeta(chave)
+      return { ok: true }
+    })
 }

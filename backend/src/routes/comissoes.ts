@@ -6,6 +6,7 @@ import { getUserPermissions } from './grupos'
 import { listarRegrasCanal, faturamentoPorCanal } from '../utils/comissaoCanal'
 import { listarAvulsas, normalizarTipo } from '../utils/comissaoAvulsa'
 import { listarVendasParaRateio, salvarRateio } from '../utils/rateioVenda'
+import { sqlValorMensalAssinatura } from '../utils/paycoreValor'
 
 /** Plano de remuneração comercial: planos, faixas, vendedores e apuração mensal. */
 export async function comissoesRoutes(app: FastifyInstance) {
@@ -520,7 +521,7 @@ export async function comissoesRoutes(app: FastifyInstance) {
 
     const assinaturas = minha ? await prisma.$queryRawUnsafe<any[]>(
       `SELECT a.cliente_nome AS cliente, a.app_nome AS produto, a.plano, a.periodicidade,
-              (a.mensal + a.valor_modulos) AS valor, DATE_FORMAT(a.inicio, '%Y-%m-%d') AS data,
+              ${sqlValorMensalAssinatura('a')} AS valor, DATE_FORMAT(a.inicio, '%Y-%m-%d') AS data,
               s.nome AS servidor
          FROM paycore_assinatura a
          INNER JOIN paycore_cliente pc
