@@ -1719,9 +1719,13 @@ function MetasPagina({ modo }: { modo: 'cadastro' | 'boletim' }) {
     }
   }
 
+  // Só no modo cadastro. A rota /metas monta este componente como 'boletim', que nunca
+  // desenha a tela de cadastro — mas o carregamento rodava assim mesmo, disparando três
+  // requisições inúteis a cada abertura do Boletim e um toast "Not Found" no canto, porque
+  // /metas/tipos e /metas/cadastro não existem no backend.
   useEffect(() => {
-    carregarCadastros()
-  }, [])
+    if (modo === 'cadastro') carregarCadastros()
+  }, [modo])
 
   const editarTipo = (tipo: TipoMetaCadastro) => {
     setTipoForm({
