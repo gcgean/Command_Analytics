@@ -1062,6 +1062,11 @@ export const api = {
     const q = qs.toString()
     return fetchApi<ClientePaycore[]>(`/paycore/clientes${q ? `?${q}` : ''}`)
   },
+  /** usuarioId nulo devolve o cliente ao vendedor que o CRM apontar. */
+  definirVendedorPaycore: (customerId: string, usuarioId: number | null, motivo?: string) =>
+    fetchApi<{ ok: boolean; vendedorId: number | null; vendedorNome: string | null; origem: string | null }>(
+      `/paycore/clientes/${customerId}/vendedor`,
+      { method: 'PUT', body: JSON.stringify({ usuarioId, motivo }) }),
   getFaturamentoPaycore: (inicio?: string, fim?: string) => {
     const qs = new URLSearchParams()
     if (inicio) qs.set('inicio', inicio)

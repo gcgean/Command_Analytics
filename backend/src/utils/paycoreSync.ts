@@ -82,6 +82,25 @@ export async function initPaycoreSync(): Promise<void> {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `)
 
+  /**
+   * Vendedor corrigido a mao, por documento.
+   *
+   * Existe porque o CRM guarda quem abriu o negocio, e nem sempre e quem fechou: cadastro
+   * antigo de uma pessoa, venda concluida por outra. Sem este registro a correcao duraria uma
+   * hora — a sincronizacao sobrescreve o vendedor a cada passada —, entao ela mora aqui e
+   * ganha precedencia sobre o CRM.
+   */
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS paycore_vendedor_manual (
+      documento   VARCHAR(20) NOT NULL,
+      usuario_id  INT NOT NULL,
+      motivo      VARCHAR(300) NULL,
+      criado_em   DATETIME NOT NULL DEFAULT NOW(),
+      criado_por  INT NULL,
+      PRIMARY KEY (documento)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `)
+
   await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS paycore_cliente (
       servidor_id     INT NOT NULL,
@@ -269,8 +288,46 @@ async function buscarTudo(servidor: ServidorPaycore, rota: string, params: Recor
 }
 
 /**
- * Quem vendeu, procurando pelo documento na nossa base: primeiro a precificação feita para o
- * cliente, depois o negócio no CRM. A plataforma não informa vendedor — só revenda.
+ * O COD_USU de quem o CRM nomeou.
+ *
+ * O CRM guarda o nome como a pessoa assina — "Ariany Kessia Bezerra" —, e o cadastro de
+ * usuário guarda como ela entra no sistema — "ARIANY". A igualdade exata não via as duas como
+ * a mesma pessoa, e sem código a venda não entra na comissão nem no desempenho de ninguém:
+ * fica só o nome escrito na linha. Por isso, quando o nome inteiro não bate, vale o primeiro
+ * nome — desde que ele aponte para uma pessoa ativa só. Com dois "Luana" ativos não há palpite:
+ * fica sem vínculo, e a tela diz isso.
+ */
+async function acharUsuarioPorNome(nome: string | null | undefined): Promise<number | null> {
+  const limpo = String(nome ?? '').trim()
+  if (!limpo) return null
+
+  const [exato] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COD_USU FROM usuario
+      WHERE UPPER(TRIM(COALESCE(NOME_USUARIO_COMPLETO, NOME_USU))) = UPPER(TRIM(?))
+         OR UPPER(TRIM(NOME_USU)) = UPPER(TRIM(?))
+      ORDER BY CASE WHEN COALESCE(ATIVO,'S') = 'S' THEN 0 ELSE 1 END LIMIT 1`,
+    limpo, limpo,
+  )
+  if (exato?.COD_USU) return Number(exato.COD_USU)
+
+  // Primeiro nome curto demais vira ruído: "Ana" casaria com meia equipe.
+  const primeiro = limpo.split(/\s+/)[0] ?? ''
+  if (primeiro.length < 3) return null
+
+  const candidatos = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT COD_USU FROM usuario
+      WHERE COALESCE(ATIVO, 'S') = 'S'
+        AND (SUBSTRING_INDEX(UPPER(TRIM(COALESCE(NOME_USUARIO_COMPLETO, NOME_USU))), ' ', 1) = UPPER(?)
+          OR SUBSTRING_INDEX(UPPER(TRIM(NOME_USU)), ' ', 1) = UPPER(?))`,
+    primeiro, primeiro,
+  )
+  return candidatos.length === 1 ? Number(candidatos[0].COD_USU) : null
+}
+
+/**
+ * Quem vendeu, procurando pelo documento na nossa base: primeiro a correção feita à mão, depois
+ * a precificação feita para o cliente, depois o negócio no CRM. A plataforma não informa
+ * vendedor — só revenda.
  */
 async function descobrirVendedor(documento: string) {
   const doc = soDigitos(documento)
@@ -284,19 +341,23 @@ async function descobrirVendedor(documento: string) {
   )
   const codCli = cli?.cod_cli ? Number(cli.cod_cli) : null
 
+  // Antes de tudo, a correção manual: quem mexeu ali sabia de algo que o CRM não sabe.
+  const [manual] = await prisma.$queryRawUnsafe<any[]>(
+    `SELECT m.usuario_id, COALESCE(u.NOME_USUARIO_COMPLETO, u.NOME_USU) AS nome
+       FROM paycore_vendedor_manual m
+       LEFT JOIN usuario u ON u.COD_USU = m.usuario_id
+      WHERE m.documento = ?`, doc,
+  ).catch(() => [])
+  if (manual?.usuario_id) {
+    return { codCli, id: Number(manual.usuario_id), nome: manual.nome ?? null, origem: 'manual' }
+  }
+
   // 1ª opção: o CRM sincronizado — é onde o comercial de fato registra de quem é o negócio, e
   // traz o vendedor com código próprio, não só o nome solto.
   const doCrm = await vendedorDoDocumento(doc)
   if (doCrm?.vendedorNome) {
-    let id = doCrm.vendedorId
-    // O código do vendedor é do CRM, não do nosso cadastro: tenta casar pelo nome.
-    const [u] = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT COD_USU FROM usuario
-        WHERE UPPER(TRIM(COALESCE(NOME_USUARIO_COMPLETO, NOME_USU))) = UPPER(TRIM(?))
-           OR UPPER(TRIM(NOME_USU)) = UPPER(TRIM(?)) LIMIT 1`,
-      doCrm.vendedorNome, doCrm.vendedorNome,
-    )
-    id = u?.COD_USU ? Number(u.COD_USU) : null
+    // O código que vem do CRM é do cadastro dele, não do nosso: o vínculo é pelo nome.
+    const id = await acharUsuarioPorNome(doCrm.vendedorNome)
     return { codCli, id, nome: doCrm.vendedorNome, origem: doCrm.origem ?? 'crm' }
   }
 
@@ -323,15 +384,7 @@ async function descobrirVendedor(documento: string) {
     let id = negocio.id_usu ? Number(negocio.id_usu) : null
     const nome = negocio.nome ?? null
     // No CRM o código do vendedor costuma vir nulo e só o nome é preenchido; quando dá, resolve.
-    if (!id && nome) {
-      const [u] = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT COD_USU FROM usuario
-          WHERE UPPER(TRIM(COALESCE(NOME_USUARIO_COMPLETO, NOME_USU))) = UPPER(TRIM(?))
-             OR UPPER(TRIM(NOME_USU)) = UPPER(TRIM(?)) LIMIT 1`,
-        nome, nome,
-      )
-      if (u?.COD_USU) id = Number(u.COD_USU)
-    }
+    if (!id && nome) id = await acharUsuarioPorNome(nome)
     return { codCli, id, nome, origem: 'crm' }
   }
   return { codCli, id: null, nome: null, origem: null }
@@ -379,7 +432,10 @@ export async function sincronizarServidor(servidor: ServidorPaycore): Promise<Re
            email=VALUES(email), telefone=VALUES(telefone), segmento=VALUES(segmento), status=VALUES(status),
            total_gasto=VALUES(total_gasto), cod_cli=COALESCE(VALUES(cod_cli), cod_cli),
            vendedor_id=COALESCE(VALUES(vendedor_id), vendedor_id),
-           vendedor_nome=COALESCE(VALUES(vendedor_nome), vendedor_nome),
+           -- O nome acompanha o código: sem isso, corrigir o vendedor deixaria o nome antigo
+           -- na tela, com o código novo por baixo.
+           vendedor_nome=CASE WHEN VALUES(vendedor_id) IS NOT NULL
+                              THEN VALUES(vendedor_nome) ELSE COALESCE(vendedor_nome, VALUES(vendedor_nome)) END,
            vendedor_origem=COALESCE(VALUES(vendedor_origem), vendedor_origem)`,
         servidor.id, texto(c.id, 80), documento || null, texto(c.legalName, 200), texto(c.tradeName, 200),
         texto(c.email, 150), texto(c.mobilePhone ?? c.phone ?? responsavel?.phone, 30),

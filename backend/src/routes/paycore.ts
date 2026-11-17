@@ -330,4 +330,56 @@ export async function paycoreRoutes(app: FastifyInstance) {
       total: porProduto.reduce((soma, l) => soma + n(l.bruto), 0),
     }
   })
+
+  /**
+   * Corrige o vendedor de um cliente.
+   *
+   * O CRM registra quem abriu o negócio, que nem sempre é quem fechou — cadastro antigo de uma
+   * pessoa, venda concluída por outra. A correção vale por documento, não por assinatura: o
+   * cliente é o mesmo nos dois servidores, e quem corrige está corrigindo a venda, não a linha.
+   * Fica gravada para a sincronização da hora seguinte não desfazer.
+   */
+  app.put('/clientes/:customerId/vendedor', { preHandler: authMiddleware, schema: { tags: ['PayCore'] } },
+    async (request, reply) => {
+      const { customerId } = request.params as { customerId: string }
+      const { usuarioId, motivo } = request.body as { usuarioId?: number | null; motivo?: string }
+
+      const [cli] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT documento FROM paycore_cliente WHERE customer_id = ? LIMIT 1`, customerId)
+      const doc = String(cli?.documento ?? '').replace(/\D/g, '')
+      if (!doc) {
+        return reply.status(400).send({
+          error: 'Este cliente está sem CNPJ no PayCore, e é o documento que liga a venda à pessoa.',
+        })
+      }
+
+      // usuarioId nulo = voltar ao automático.
+      if (!usuarioId) {
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM paycore_vendedor_manual WHERE documento = ?`, doc)
+        return { ok: true, vendedorId: null, vendedorNome: null, origem: null }
+      }
+
+      const [u] = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT COD_USU, COALESCE(NOME_USUARIO_COMPLETO, NOME_USU) AS nome
+           FROM usuario WHERE COD_USU = ?`, Number(usuarioId))
+      if (!u) return reply.status(400).send({ error: 'Pessoa não encontrada no cadastro.' })
+
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO paycore_vendedor_manual (documento, usuario_id, motivo, criado_por)
+         VALUES (?,?,?,?)
+         ON DUPLICATE KEY UPDATE usuario_id = VALUES(usuario_id), motivo = VALUES(motivo),
+                                 criado_por = VALUES(criado_por), criado_em = NOW()`,
+        doc, Number(u.COD_USU), String(motivo ?? '').slice(0, 300) || null,
+        Number((request.user as any)?.id || 0) || null)
+
+      // Aplica já, sem esperar a sincronização: quem corrigiu quer ver corrigido.
+      await prisma.$executeRawUnsafe(
+        `UPDATE paycore_cliente
+            SET vendedor_id = ?, vendedor_nome = ?, vendedor_origem = 'manual'
+          WHERE REPLACE(REPLACE(REPLACE(REPLACE(documento,'.',''),'/',''),'-',''),' ','') = ?`,
+        Number(u.COD_USU), String(u.nome ?? '').slice(0, 150), doc)
+
+      return { ok: true, vendedorId: Number(u.COD_USU), vendedorNome: u.nome, origem: 'manual' }
+    })
 }

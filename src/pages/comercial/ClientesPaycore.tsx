@@ -9,7 +9,7 @@ import { Card } from '../../components/ui/Card'
 import { Button } from '../../components/ui/Button'
 import { Modal } from '../../components/ui/Modal'
 import { useToast } from '../../components/ui/Toast'
-import type { ClientePaycore, ServidorPaycore, FaturamentoPaycore, SaudeCobrancaPaycore } from '../../types'
+import type { ClientePaycore, ServidorPaycore, FaturamentoPaycore, SaudeCobrancaPaycore, Usuario } from '../../types'
 
 const brl = (v: number) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
@@ -35,6 +35,9 @@ export function ClientesPaycore() {
   const [busca, setBusca] = useState('')
   const [filtroServidor, setFiltroServidor] = useState<number | ''>('')
   const [form, setForm] = useState<FormServidor | null>(null)
+  // Quem pode receber a venda, e qual linha está com o seletor aberto.
+  const [pessoas, setPessoas] = useState<Usuario[]>([])
+  const [trocando, setTrocando] = useState<string | null>(null)
   const [salvando, setSalvando] = useState(false)
   // Resultado do teste de conexão: mostra o que a API devolveu, campo por campo.
   const [teste, setTeste] = useState<{ servidor: string; ok: boolean; testes: Array<{ rota: string; status: number | string; total: number | null; campos: string[]; amostra: Record<string, unknown> | null; erro?: string }> } | null>(null)
@@ -61,6 +64,36 @@ export function ClientesPaycore() {
   }, [toast, filtroServidor])
 
   useEffect(() => { void carregar() }, [carregar])
+
+  // Só os ativos: a lista serve para corrigir venda de hoje, não para reatribuir a quem saiu.
+  useEffect(() => {
+    api.getUsuariosTodos()
+      .then((us) => setPessoas(us.filter((u) => u.ativo).sort((a, b) => a.nome.localeCompare(b.nome))))
+      .catch(() => setPessoas([]))
+  }, [])
+
+  /**
+   * Troca o vendedor do cliente.
+   *
+   * Atualiza a linha na hora em vez de recarregar a tela inteira: a lista tem mil clientes e o
+   * que mudou foi um nome. A sincronização da hora seguinte respeita a escolha.
+   */
+  async function definirVendedor(c: ClientePaycore, usuarioId: number | null) {
+    setTrocando(null)
+    try {
+      const r = await api.definirVendedorPaycore(c.customerId, usuarioId)
+      setClientes((atual) => atual.map((x) => (
+        x.documento && x.documento === c.documento
+          ? { ...x, vendedorId: r.vendedorId, vendedorNome: r.vendedorNome, vendedorOrigem: r.origem }
+          : x
+      )))
+      toast.success(usuarioId
+        ? `Venda atribuída a ${r.vendedorNome}.`
+        : 'Vendedor de volta ao automático — vale na próxima sincronização.')
+    } catch (e: any) {
+      toast.error(e?.message || 'Não foi possível trocar o vendedor.')
+    }
+  }
 
   async function sincronizar(servidorId?: number) {
     setSincronizando(true)
@@ -239,18 +272,42 @@ export function ClientesPaycore() {
                             : <span className="text-xs text-slate-400">sem assinatura</span>}
                         </td>
                         <td className="px-4 py-3">
-                          {c.vendedorNome ? (
+                          {trocando === c.customerId ? (
+                            <div className="flex items-center gap-1">
+                              <select autoFocus className="input-field py-1 text-xs min-w-[11rem]"
+                                defaultValue={c.vendedorId ?? ''}
+                                onChange={(e) => definirVendedor(c, e.target.value ? Number(e.target.value) : null)}>
+                                <option value="">— voltar ao automático —</option>
+                                {pessoas.map((u) => (
+                                  <option key={u.id} value={u.id}>{u.nome}</option>
+                                ))}
+                              </select>
+                              <button onClick={() => setTrocando(null)}
+                                className="text-[11px] text-slate-400 hover:underline">cancelar</button>
+                            </div>
+                          ) : c.vendedorNome ? (
                             <>
                               <span className="text-slate-700 dark:text-slate-300">{c.vendedorNome}</span>
+                              <button onClick={() => setTrocando(c.customerId)}
+                                className="ml-2 text-[11px] text-slate-400 hover:text-violet-500 hover:underline">
+                                trocar
+                              </button>
                               <span className="block text-[11px] text-slate-400">
-                                {c.vendedorOrigem === 'precificacao' ? 'da precificação' : 'do CRM'}
+                                {c.vendedorOrigem === 'manual' ? 'definido à mão'
+                                  : c.vendedorOrigem === 'precificacao' ? 'da precificação' : 'do CRM'}
                                 {!c.vendedorId && ' · usuário não vinculado'}
                               </span>
                             </>
                           ) : (
-                            <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-                              <AlertTriangle className="w-3.5 h-3.5" /> não identificado
-                            </span>
+                            <>
+                              <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                                <AlertTriangle className="w-3.5 h-3.5" /> não identificado
+                              </span>
+                              <button onClick={() => setTrocando(c.customerId)}
+                                className="ml-2 text-[11px] text-slate-400 hover:text-violet-500 hover:underline">
+                                definir
+                              </button>
+                            </>
                           )}
                         </td>
                         <td className="px-4 py-3">
