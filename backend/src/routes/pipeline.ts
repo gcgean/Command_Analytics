@@ -2252,18 +2252,24 @@ export async function pipelineRoutes(app: FastifyInstance) {
         }
         const nomeServicoNovo = servicoRows[0].nome
 
-        // Não deixa a troca gerar duplicata com outro processo ativo do mesmo serviço.
+        // Não deixa a troca gerar duplicata com outro processo EM ANDAMENTO do mesmo serviço.
+        // Concluído e desistência não contam — mesma razão da criação, logo abaixo: `ativo` só
+        // diz que ninguém desativou o processo à mão, e quase ninguém desativa o que terminou
+        // bem. Sem esta ressalva, um serviço entregue meses atrás trancava para sempre a troca
+        // para aquele mesmo serviço, e o caminho que sobrava era criar um processo novo — a
+        // duplicata que esta trava existe para evitar.
         const conflito = await prisma.$queryRaw<Array<{ id: number }>>`
           SELECT id FROM implantacao_processos
           WHERE cliente_id = ${id}
             AND servico_id = ${idServicoNovo}
             AND id <> ${contexto.processoId}
             AND COALESCE(ativo, 1) = 1
+            AND status_atual NOT IN (${STATUS_CONCLUIDO}, ${STATUS_DESISTENCIA})
           LIMIT 1
         `
         if (conflito.length) {
           return reply.status(409).send({
-            error: `Este cliente já possui outro processo ativo do serviço "${nomeServicoNovo}". Encerre ou desative aquele processo antes de trocar este.`,
+            error: `Este cliente já possui um processo em andamento do serviço "${nomeServicoNovo}" (nº ${conflito[0].id}). Conclua ou desative aquele antes de trocar este.`,
           })
         }
 
